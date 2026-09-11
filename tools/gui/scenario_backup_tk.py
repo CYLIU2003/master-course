@@ -1830,6 +1830,9 @@ class App:
         self.day_type_var = tk.StringVar(value="WEEKDAY")
         self.service_date_var = tk.StringVar(value="")
         self.planning_days_var = tk.StringVar(value="1")
+        self.rolling_lookahead_hours_var = tk.StringVar(value='残り期間')
+        self.bess_balance_period_var = tk.StringVar(value='daily')
+        self.pv_information_mode_var = tk.StringVar(value='履歴推定PVを事前既知とする参照')
         # The operation-time window is an optional *energy/SOC optimization*
         # horizon control.  New interactive runs use the whole calendar day by
         # default; the explicit boolean travels with the prepared input so the
@@ -1882,7 +1885,31 @@ class App:
         )
         self._sync_operation_time_window_controls()
 
+        continuous_row = ttk.Frame(scope)
+        continuous_row.pack(fill=tk.X, pady=(2,2))
+        ttk.Label(continuous_row,text='毎時更新の先読み').pack(side=tk.LEFT)
+        ttk.Combobox(continuous_row,textvariable=self.rolling_lookahead_hours_var,state='readonly',
+                     values=('残り期間','24','48','72','168'),width=9).pack(side=tk.LEFT,padx=(4,12))
+        ttk.Label(continuous_row,text='BESS残量を初期値へ戻す境界').pack(side=tk.LEFT)
+        ttk.Combobox(continuous_row,textvariable=self.bess_balance_period_var,state='readonly',
+                     values=('daily','evaluation_period'),width=19).pack(side=tk.LEFT,padx=4)
+        ttk.Label(continuous_row,text='daily=各日末 / evaluation_period=期間末。先読み窓の末端も初期残量を確保。',
+                  foreground='#555').pack(side=tk.LEFT,padx=4)
+        pv_information_row = ttk.Frame(scope)
+        pv_information_row.pack(fill=tk.X, pady=(2, 2))
+        ttk.Label(pv_information_row, text='複数日のPV情報').pack(side=tk.LEFT)
+        ttk.Combobox(pv_information_row, textvariable=self.pv_information_mode_var, state='readonly',
+                     values=('履歴推定PVを事前既知とする参照', '2024年学習の予測代理＋履歴推定PVで実行'),
+                     width=52).pack(side=tk.LEFT, padx=4)
+        ttk.Label(pv_information_row, text='予測代理は当時の気象予報ではありません。',
+                  foreground='#555').pack(side=tk.LEFT, padx=4)
         day_table = ttk.LabelFrame(scope, text="運行種別サマリ", padding=(4, 2))
+        ttk.Label(
+            scope,
+            text=("2日以上: 日付別の平日・土曜・休日ダイヤと各日のPVを使用（弦巻・複製ケース）。"
+                  "2026年9月の固定ダイヤに過去気象を適用。建屋負荷は0 kWhの仮定。"),
+            foreground="#555", wraplength=850,
+        ).pack(anchor="w", fill=tk.X)
         day_table.pack(fill=tk.X, pady=(2, 4))
         ttk.Label(
             day_table,
@@ -4999,6 +5026,15 @@ class App:
             return None
 
         selected_depot_ids = self._selected_depot_ids()
+        if self._planning_days_value() > 1:
+            if selected_depot_ids != ['tsurumaki']:
+                raise ValueError('日付別の複数日入力は、検証済みの弦巻営業所を選択してください')
+            # BFF reads and validates the archived source for every requested day.
+            # Preserve equipment settings; the old single-day file sync is inapplicable.
+            if announce:
+                self.log_line('日付別PVは Prepare 時に検証済みSolcast原本から取得します: '
+                              + _format_service_dates_summary(service_dates))
+            return current_rows
         depot_area_by_id = {
             str(item.get("id") or "").strip(): item.get("depotAreaM2", item.get("depot_area_m2"))
             for item in self.scope_depots
@@ -7021,6 +7057,10 @@ class App:
             self.planning_days_var.set(
                 str(self._first_present_value(planning_days, default=1))
             )
+            self.rolling_lookahead_hours_var.set(str(sim.get('rollingLookaheadHours') or '残り期間'))
+            self.bess_balance_period_var.set(str(sim.get('bessBalancePeriod') or 'daily'))
+            self.pv_information_mode_var.set('2024年学習の予測代理＋履歴推定PVで実行'
+                if sim.get('pvInformationMode') == 'training_only_forecast_proxy' else '履歴推定PVを事前既知とする参照')
             self.operation_time_window_enabled_var.set(
                 bool(sim.get("operationTimeWindowEnabled", False))
             )
@@ -8872,9 +8912,9 @@ class App:
         allow_intra_depot_swap = (
             False if fixed_route_band_mode else self.allow_intra_var.get()
         )
-        if not self._ensure_weather_proxy_ready_for_optimization():
+        if planning_days <= 1 and not self._ensure_weather_proxy_ready_for_optimization():
             raise ValueError("invalid_weather_proxy")
-        weather_proxy_payload = self._weather_proxy_prepare_payload()
+        weather_proxy_payload = self._weather_proxy_prepare_payload() if planning_days <= 1 else {}
         allow_fixed_weekday_timetable_pv_counterfactual = (
             self._allows_fixed_weekday_timetable_pv_counterfactual(service_dates)
         )
@@ -8941,6 +8981,13 @@ class App:
                 "time_step_min": self._timestep_min_value(),
                 "timestep_min": self._timestep_min_value(),
                 "planning_days": planning_days,
+                "multi_day_input_mode": 'dated_timetable_and_pv_v1' if planning_days > 1 else 'single_day',
+                "date_series_source_id": 'tsurumaki_20260901_solcast_history_v1',
+                "rolling_lookahead_hours": self._parse_int(self.rolling_lookahead_hours_var.get(), None),
+                "bess_balance_period": self.bess_balance_period_var.get(),
+                "pv_information_mode": ('training_only_forecast_proxy'
+                    if self.pv_information_mode_var.get() == '2024年学習の予測代理＋履歴推定PVで実行'
+                    else 'historical_perfect_information'),
                 "service_dates": service_dates,
                 "fixed_route_band_mode": fixed_route_band_mode,
                 "enable_vehicle_diagram_output": (

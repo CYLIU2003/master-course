@@ -56,7 +56,7 @@ class MILPOptimizer:
             plan_metadata["executed_phase_source"] = "milp_adapter_branch"
             plan = replace(plan, metadata=plan_metadata)
         stage2_failed = bool(
-            phase == "phase3_two_stage"
+            phase in {"phase3_two_stage", "phase1_charging_only"}
             and plan_metadata.get("stage1_feasible") is True
             and plan_metadata.get("stage2_feasible") is False
         )
@@ -73,10 +73,15 @@ class MILPOptimizer:
             plan_metadata["assignment_candidate_available"] = True
             plan_metadata["assignment_candidate_trip_ids"] = tuple(plan.served_trip_ids)
             plan_metadata["assignment_candidate_trip_count"] = len(plan.served_trip_ids)
+            plan_metadata["canonical_source_flow_context"] = {}
+            plan_metadata["source_provenance_exact"] = False
+            plan_metadata["vehicle_source_provenance_exact"] = False
+            plan_metadata["stage2_exact_optimality_certified"] = False
             plan = replace(
                 plan,
                 duties=(),
                 charging_slots=(),
+                refuel_slots=(),
                 served_trip_ids=(),
                 unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
                 grid_to_bus_kwh_by_depot_slot={},
@@ -85,6 +90,8 @@ class MILPOptimizer:
                 pv_to_bess_kwh_by_depot_slot={},
                 grid_to_bess_kwh_by_depot_slot={},
                 pv_curtail_kwh_by_depot_slot={},
+                bess_soc_kwh_by_depot_slot={},
+                contract_over_limit_kwh_by_depot_slot={},
                 vehicle_soc_kwh_by_vehicle_slot={},
                 vehicle_cost_ledger=(),
                 daily_cost_ledger=(),
@@ -629,6 +636,8 @@ class MILPOptimizer:
                 "rolling_start_slot_index": (plan.metadata or {}).get(
                     "rolling_start_slot_index"
                 ),
+                "rolling_stop_slot_index": (plan.metadata or {}).get('rolling_stop_slot_index'),
+                "rolling_lookahead_hours": (plan.metadata or {}).get('rolling_lookahead_hours'),
                 "rolling_execution_minutes": (plan.metadata or {}).get(
                     "rolling_execution_minutes"
                 ),

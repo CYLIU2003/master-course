@@ -58,7 +58,7 @@ def _problem(*, service_date: str = "2025-08-05") -> CanonicalOptimizationProble
             "service_date": service_date,
             "bev_terminal_soc_policy": "return_to_initial",
             "scenario_fleet_contract": {
-                "schema_version": "scenario_fleet_contract_v2",
+                "schema_version": "scenario_fleet_contract_v3",
                 "active_vehicle_ids": ["bev-1"],
                 "active_vehicle_id_hash": "vehicle-id-hash",
                 "vehicle_parameter_hash": "vehicle-parameter-hash",

@@ -556,6 +556,19 @@ def test_executed_day_accounting_rejects_missing_slot() -> None:
     assert accounting["cost_breakdown"] is None
 
 
+def test_executed_accounting_uses_refueling_prefixes_instead_of_day_ahead_plan() -> None:
+    from src.optimization.common.problem import RefuelSlot
+    problem = _hourly_result_problem()
+    reference = AssignmentPlan(refuel_slots=(RefuelSlot('ice-1', 0, 99),))
+    first = SimpleNamespace(feasible=True, solver_metadata={}, plan=AssignmentPlan(
+        refuel_slots=(RefuelSlot('ice-1', 0, 2), RefuelSlot('ice-1', 1, 999))))
+    second = SimpleNamespace(feasible=True, solver_metadata={}, plan=AssignmentPlan(
+        refuel_slots=(RefuelSlot('ice-1', 0, 888), RefuelSlot('ice-1', 1, 3))))
+    accounting = hourly_runner._build_executed_day_accounting(
+        problem, reference, [(problem, first, 0, 1), (problem, second, 1, 2)])
+    assert accounting['executed_refuel_liters'] == 5
+
+
 def test_day_ahead_assignment_hash_is_constant_for_same_plan() -> None:
     plan = AssignmentPlan(
         duties=(_duty_with_trips(("t1", "t2")),),

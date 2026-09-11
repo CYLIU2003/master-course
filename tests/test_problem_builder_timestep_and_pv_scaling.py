@@ -138,8 +138,10 @@ def test_problem_builder_preserves_additive_turnaround_buffer_and_metadata() -> 
 
 
 def test_problem_builder_build_from_scenario_forwards_planning_days() -> None:
+    scenario = _scenario(60)
+    scenario['simulation_config']['multi_day_input_mode']='repeat_day_diagnostic'
     problem = ProblemBuilder().build_from_scenario(
-        _scenario(60),
+        scenario,
         depot_id="dep-1",
         service_id="WEEKDAY",
         planning_days=2,

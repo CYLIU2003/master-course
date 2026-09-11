@@ -169,16 +169,16 @@ def _read_solcast_records(
             if selected_irr_col is None:
                 selected_irr_col = _pick_column(_DEFAULT_IRRADIANCE_COLUMNS, row)
             if not selected_time_col or not selected_irr_col:
-                continue
+                raise ValueError('Solcast CSV is missing required time/irradiance columns')
             dt = _parse_dt(str(row.get(selected_time_col) or ""), fallback_tz=local_tz)
             if dt is None:
-                continue
+                raise ValueError('Solcast CSV contains an invalid timestamp')
             try:
-                irr = float(row.get(selected_irr_col) or 0.0)
-            except (TypeError, ValueError):
-                continue
-            if irr < 0.0:
-                irr = 0.0
+                irr = float(row[selected_irr_col])
+            except (TypeError, ValueError, KeyError) as exc:
+                raise ValueError('Solcast CSV contains missing/invalid irradiance') from exc
+            if not math.isfinite(irr) or irr < 0.0:
+                raise ValueError('Solcast irradiance must be finite and nonnegative')
             period_min = _parse_minutes_from_period(row.get("period")) or fallback_period_min
             records.append((dt.astimezone(local_tz), irr, period_min))
 
@@ -242,6 +242,7 @@ def _build_daily_profile(
     slot_minutes: int,
     pv_capacity_kw: float,
     performance_ratio: float = DEFAULT_PERFORMANCE_RATIO,
+    require_complete_day: bool = True,
 ) -> Dict[str, List[float]]:
     if slot_minutes <= 0 or (24 * 60) % slot_minutes != 0:
         raise ValueError(
@@ -262,10 +263,11 @@ def _build_daily_profile(
     slot_count = int(24 * 60 / slot_minutes)
     capacity_factor_hours = [0.0] * slot_count
     covered_hours = 0.0
+    covered_intervals = []
 
     for dt_end, irradiance_wm2, period_min in records:
         if period_min <= 0:
-            continue
+            raise ValueError('Solcast interval duration must be positive')
         if not math.isfinite(float(irradiance_wm2)):
             raise ValueError("Solcast irradiance values must be finite")
         interval_start = dt_end - timedelta(minutes=period_min)
@@ -273,6 +275,7 @@ def _build_daily_profile(
         overlap_end = min(dt_end, date_end)
         if overlap_end <= overlap_start:
             continue
+        covered_intervals.append((overlap_start, overlap_end))
         cf = max(
             0.0,
             min(
@@ -301,6 +304,15 @@ def _build_daily_profile(
 
     if covered_hours <= 0.0:
         raise ValueError(f"no Solcast records overlap target_date={target_date}")
+    cursor = date_start
+    for lower, upper in sorted(covered_intervals):
+        if lower < cursor:
+            raise ValueError(f'Solcast intervals overlap or are duplicated on {target_date}')
+        if require_complete_day and lower != cursor:
+            raise ValueError(f'Incomplete Solcast day: gap on {target_date}')
+        cursor = upper
+    if require_complete_day and cursor != date_end:
+        raise ValueError(f'Incomplete Solcast day: missing end of {target_date}')
 
     capacity_factor_by_slot: List[float] = []
     pv_generation_kwh_by_slot: List[float] = []
@@ -332,6 +344,7 @@ def build_daily_profiles_from_csv(
     performance_ratio: float = DEFAULT_PERFORMANCE_RATIO,
     time_column: Optional[str] = None,
     irradiance_column: Optional[str] = None,
+    require_complete_day: bool = True,
 ) -> List[Path]:
     local_tz = parse_utc_offset(timezone_offset)
     records, selected_time_col, selected_irr_col = _read_solcast_records(
@@ -351,6 +364,7 @@ def build_daily_profiles_from_csv(
             slot_minutes=slot_minutes,
             pv_capacity_kw=pv_capacity_kw,
             performance_ratio=performance_ratio,
+            require_complete_day=require_complete_day,
         )
         payload = {
             "depot_id": depot_id,
@@ -366,6 +380,7 @@ def build_daily_profiles_from_csv(
             "capacity_factor_by_slot": profile["capacity_factor_by_slot"],
             "pv_generation_kwh_by_slot": profile["pv_generation_kwh_by_slot"],
             "metadata": {
+                "coverage_contract": "complete_day_no_gaps_no_overlaps" if require_complete_day else "DIAGNOSTIC_partial_day_zero_filled",
                 "system_efficiency": float(performance_ratio),
                 "note": "PV generation estimated from Solcast irradiance using CF=min(1, irradiance/1000*performance_ratio).",
             },

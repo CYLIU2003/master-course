@@ -155,7 +155,7 @@ def _vehicle_initial_soc_kwh(vehicle: Any, capacity_kwh: float) -> float:
     if value is None:
         return capacity_kwh
     parsed = float(value)
-    if parsed <= 1.0 and capacity_kwh > 0.0:
+    if getattr(vehicle, "soc_input_unit", "legacy_ratio_or_kwh") != "kwh" and parsed <= 1.0 and capacity_kwh > 0.0:
         return parsed * capacity_kwh
     return parsed
 
@@ -346,7 +346,7 @@ def _build_vehicle_slot_ledger(
             key = (vehicle_id, slot_date, slot_index)
             bucket = rows_by_key[key]
             distance_km = max(float(event.get("distance_km", 0.0) or 0.0), 0.0)
-            if event_type == "terminal_return":
+            if event_type in {"terminal_return", "daily_return"}:
                 bucket["deadhead_after_km"] += distance_km * share
             else:
                 bucket["deadhead_before_km"] += distance_km * share

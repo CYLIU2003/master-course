@@ -1,5 +1,166 @@
 # Development Notes
 
+## 2026-09-11 気象データ取得の再確認
+
+2022〜2024年の取得済み23か月・67,200件を再検証し、月内連続性、7項目の有限値、弦巻の地点、PT15M、リクエストと原データのSHA-256が一致した。残りは2022年12月と2023年1〜12月の13か月。今回の定期実行では前回の認証を再利用できず、SOLCAST_API_KEYの既存設定も確認できなかったため、APIリクエストは0件である。利用枠の回復有無は未確認。認証設定の復旧を要する旨を一度だけ通知し、同じ状態での再通知を抑止する。取得済み原データ、2024年学習モデル、四季診断結果は保持した。
+
+[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)と `solcast_heartbeat_20260911.json` に記録した。
+
+通常の `python -m pytest` は `pytest.ini` により `tests/` を収集します。同名の互換入口と手動実験スクリプトの import 衝突を解消し、状態を変更する手動実験を回帰収集から除外しました。
+
+## 2026-09-10 現在の検証状態
+
+### 四季の診断結果
+
+修正後のattempt_07で四季の診断を終了した。冬16/168時間・春161/168時間・夏168/168時間・秋161/168時間。事前計画の独立物理検証は4/4週、168時間の実行は1/4週、物理検証と最終会計までの成立は1/4週。目標gap 10%の達成は0/4週。
+
+冬は日末までの予測PVを全量充電する楽観的上限でも2945.307 kWhで、日末目標3,000 kWhへ届かない。 春は日末までの予測PVを全量充電する楽観的上限でも2980.112 kWhで、日末目標3,000 kWhへ届かない。 秋は日末までの予測PVを全量充電する楽観的上限でも2994.617 kWhで、日末目標3,000 kWhへ届かない。
+
+[評価表・状態推移・日射比較・再現ファイル](output/seven_day_extension_20260910/SHIBU21_SEASONAL_EVALUATION.md)へ集約した。12 solver threadsで順次実行し、プロセスの最大working setは17.645 GiB、ホスト空きメモリーの最小値は2.817 GiB。実行前後と報告生成時にコード・設定のSHA-256一致を確認した。
+
+不成立の週には週総費用や削減率を付与しない。全結果はDIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS。独立レビュー、旧2ケースの正式再実行、正式7日検証は別途必要であり、研究リリースはBLOCKED。
+
+### 途中SOC目標の許容幅が累積する不具合の修正
+
+attempt_06では、冬17時間・春161時間でBESS日末復元が不成立となった。夏は144時間目に別の不具合を検出した。事前計画が持つ科学的許容幅を含んだSOC参照値へ、途中窓でもさらに1e-6 kWhの上積みを許したため、残りの運行がない車両が評価末の上限を約1e-6 kWh超えた。放電できない車両では、この余剰を後から解消できない。IISの95本の残量遷移は全て消費ゼロ、96個の充電変数は非負であることを確認した。
+
+途中窓は `SOC(t+H) = day_ahead_SOC(t+H)` として参照値へ一致させる。評価末の科学的許容幅1e-6 kWh、物理上下限、日末BESS目標、Gurobi数値許容値は変更しない。実行状態の丸め・補正も行わない。負の電力価格で許容上限まで充電する2日人工例を用い、余剰が積み上がらず、運行のない最終日へ接続できることを検査した。関連61回帰が通過した。
+
+旧attempt_06は秋の73時間までの実行後に中断した。中断時に348ファイルのソース・設定ハッシュ一致を確認し、各結果とIIS、`abort_summary.json` を保存した。修正後の四季比較には採用せず、新しいattempt_07で全4週の事前計画から再計算した（結果は冒頭）。
+
+全体回帰は **2,009 passed / 2 failed（145.48秒）**。失敗2件は作業前からあるPowerPoint証拠のハッシュ・部品同一性であり、正式研究リリースは引き続きBLOCKED。
+新しい渋21入力v2は全4週ともPrepareを通過し、各35 BEVの終端目標が各車両の初期SOCに一致することを再読込後のcanonical入力で確認した。親の固定目標80%・許容幅20ポイントは新規派生入力の両設定層から除去した。期間末の復元条件は厳密に維持する。
+
+利用者の指示で12 solver threadsへ拡張した（実機12コア/20論理CPU、RAM 31.7 GiB）。構築込み900秒、Stage 1探索120秒、Stage 2探索30秒、毎時Rolling15秒を4週へ共通適用する。週を順番に実行し、修正後のattempt_07で再計算した。旧attempt_01〜06は中断・条件不一致の診断資料であり、新しい比較結果に採用しない。
+
+SOC累積式は毎日帰庫の経路だけ逐次状態 `SOC[t+1] = SOC[t] + η charge[t] Δt - load[t]` へ等価変形し、2日間のA/Bで費用・全便被覆・独立物理検証の一致を確認した。接続網と物理量は維持する。最終会計の給油は実行済みprefixから集計し、未実行の事前計画を残さない。
+2022年以降の祝日源は別版で検証し、2024年以降の既存入力は元の版を維持する。取得済みの2022-01-10〜16について209便と7日分の日射入力の生成を確認した。未取得月は停止する。
+
+
+途中窓のBESS終端床は物理下限とし、元の日末3,000 kWh条件と期間末条件を別に保持する不具合修正を追加した。Phase 1の充電再最適化が失敗した場合は、入力の旧計画に含まれる充電・SOC・源別フロー・最適性証明を最終出力へ持ち越さず、`STAGE2_NO_INCUMBENT` とIISを公開する。エネルギー量やSOC許容値の変更はない。
+
+旧attempt_05の事前計画を失敗再現専用fixtureとして検証すると、冬の初日17時にBESS=2,999.714294768145 kWhとなり、その後の日射0・系統からBESSへの充電禁止により日末3,000 kWhに戻せないことをIISで確認した。これは新しい四季試験の結果ではなく、制約を保った回帰診断である。attempt_07では全4週の事前計画から再計算した。未成立の週に最終週費用や最適性を付与しない。
+
+## 2026-09-10 追補: 渋21の四季テストと毎日の帰庫条件
+
+ユーザーは各運行日終了後の弦巻営業所への帰庫を指定した。未確定の運用条件ではない。
+明示設定 `daily_return_depot_id=tsurumaki` の経路では、運行日を跨ぐ接続を帰庫と翌朝の出庫に分ける。
+回送・折返しの所要時間と消費量を計上し、車両が営業所にいる全区間を含むslotだけ充電可能とする。
+既存の接続不等式は維持する。複数dutyでも初期SOCは車両ごとに一度だけ使用する。
+独立検証の接続回送と最終帰庫にはICE燃料の欠落もあったため、消費を追加した。
+
+途中のRolling窓に週の初期SOCを強制すると、帰庫直後に窓が切れる時点で充電時間がなくなる。
+2日人工例の11時更新で再現した。新しい四季テストは、途中窓を固定した事前計画の同時刻の
+BEV/BESS残量に接続する `day_ahead_boundary_state` を明示する。将来実績を参照しない。
+評価週末は元の初期残量への復元、BESS日次中立は元の日次目標を維持する。
+2日間のBEV消費74 kWh、ICE消費22.2 L、48回の毎時更新・位置/燃料引継ぎ、配車から充電までのPhase 3・SOC表現A/B・終端設定検査を含む14回帰が通過した。
+UTF-8指定の全体回帰は2,009 passed / 2 failed（145.48秒）。失敗2件は既存のPowerPoint証拠ハッシュ・部品同一性で、新しい最適化回帰の失敗ではない。実路線の四季診断は終了した（成立時間と失敗理由は冒頭）。
+
+2022〜2024年は36か月中23か月、67,200件を検証済み。2022年12月と2023年全12か月はHTTP 402で停止した。
+ユーザー指示に従い利用枠回復を待つ。毎日12時の確認 `solcast-13` を登録済みで、契約変更・購入は行わない。
+2022年1〜11月の334日・32,064件は `data/derived/seasonal_irradiance/tsurumaki/cy2022_jan_nov_partial`
+へ15分/60分CSVと標準カーブを保存した。2022年通年または3年学習済みとは呼ばない。
+4週間のテストは学習を2024年に限る暫定評価で、設計を `config/shibu21_2025_seasonal_test.json` に保存した。
+2/3、5/5、8/4、11/3から各7日、渋21の検証済み6系統パターン、親の60台を保持する。
+入力Prepareは4週とも完了した。冬240便・春178便・夏240便・秋209便で、5月と11月の祝日による便数差を考慮する。四季の診断結果は冒頭に集約した。正式な研究結論はまだない。診断CLIは `scripts/benchmarks/run_shibu21_seasonal_diagnostic.py`。新規出力先と実行前後のソースハッシュを必須とし、正式研究ゲートは解除しない。
+
+未解決: 実路線のStage 1/2・168時間の実行と最終会計、旧2ケースの正式再実行、独立レビュー。
+日別台帳の初日への期間残量集中・翌日の初期値復帰を修正した。SOCと燃料は物理イベントの時刻から連続計算し、未補給在庫評価は期間末に一度だけ計上する。期間費用の日別配賦は明示的な金額配分であり、車両別電源のsolver-native証拠ではない。回帰で日別合計と期間費用の一致を確認した。
+これらが終わるまで正式研究の `MULTIDAY_RESEARCH_BLOCKED` を維持する。
+
+
+## 2026-09-10: causal PV replay and executed-period asset accounting
+
+Tk/Prepare now distinguish historical perfect-information reference inputs from
+a 2024-only climatology forecast. Actual profiles are stored separately and
+hash-bound to dates, timestep and prepared PV equipment before hourly replay.
+The rolling runner preserves issued vehicle charging/BESS discharge/grid-charge
+commands and applies a declared current-slot PV allocation policy. Actual BESS
+SOC and grid peaks feed the next solve. Forecast solutions and executed prefixes
+have separate artifacts; future actual observations are rejected by the prefix
+interface. The control preserves existing hard-import versus soft-contract rules.
+Daily BESS neutrality is rechecked on executed prefixes, independently of the
+forecast's terminal flag. PV/BESS amortization now covers the evaluation days,
+including periods with no charging, separately from operating purchases.
+
+The new controller/binding/period-cost regressions pass 15 tests, including complete
+JST forecast-day boundaries. The final local suite has 1,993 passes and the two
+pre-existing presentation/hash failures (104.44 s). This does not resolve the continuous vehicle/fuel/location
+handoff or clean-commit formal acceptance blockers. The engine explicitly rejects
+formal multiday solves with `MULTIDAY_RESEARCH_BLOCKED` while those contracts are
+incomplete. Original scenarios and frozen research outputs remain preserved.
+
+The old August CSV omitted the final day (720 versus 744 hourly intervals).
+On common intervals old/new GHI irradiation is 158.154/158.15425 kWh/m2. The
+original GTI column is not treated as equivalent to the new GHI proxy.
+
+Dated Prepare audits route counts against the pinned source templates (unique
+template trip IDs per day type), rather than the unrelated global timetable
+version. The graph adjacency path still checks every pair but no longer keeps
+all rejected ConnectionArc diagnostics in memory; the full analyze API remains
+available. Boundary/cross-day regressions preserve the complete successor graph.
+`scripts/catalog/prepare_seven_day_candidates.py` creates reviewable parent-derived
+inputs and persists parent hashes without starting a solver experiment.
+Derivation provenance is stored in the existing persisted `meta` object, and
+Prepare receives the reloaded scenario. Dated inputs remove inherited single-day
+PV identifiers and keep gross-generation semantics consistent in the cost overlay.
+Tk labels explicitly say historical estimated PV; the existing 89 Tk-related
+tests pass after the label change. Native widget visual inspection remains open.
+Both persisted derived candidates now pass Prepare: 1,704 trips, 60 vehicles,
+seven days at 15 minutes. Reloaded scenario hashes match their prepared inputs;
+both parent hashes and non-PV controls, including cost coefficients, are unchanged.
+The status is `INPUTS_PREPARED_RESEARCH_BLOCKED`, not formal operational acceptance.
+
+## Earlier 2026-09-10 checkpoint: dated input and initial rolling baseline (superseded above)
+
+Verified ODPT/browser templates now materialize explicit consecutive service dates,
+including Saturday and public-holiday service, without changing the parent cases.
+The real seven-day input builds 1,704 trips and 60 vehicles. Dated PV uses verified
+source intervals and an explicit zero nontraction-building-load assumption.
+Tk Prepare selects this source for multi-day operation; 24/48/72/168-hour rolling
+windows and daily versus evaluation-period BESS neutrality have explicit controls.
+The window terminal target remains the evaluation-start inventory. Small Gurobi
+regressions test the new window and daily boundary constraints, not formal runs.
+The reachable drive-ledger helper also required a missing vehicle lookup fix.
+
+The 2024-only climatology proxy uses 364 eligible days and five calendar-selected
+evaluation weeks, without realized future classes or weather in its prediction
+interface. Forecast artifacts are separate from full-year descriptive curves.
+The earlier 43,680-interval count below is the original 15-month acquisition;
+the current archive includes 2024 and contains 78,816 intervals over 27 months.
+FY2025 winter/rain remains a disclosed seven-day SMALL_SAMPLE_DESCRIPTIVE curve,
+which the user explicitly requested to retain. It is not blocked solely by count.
+
+Night parking policy, explicit return/startup movements between duties, ICE fuel
+and location handoff, full executed-week validation and
+clean-commit formal acceptance remain open. See the dated extension record.
+
+## 2026-09-10: begin continuous-operation and seasonal-weather extension
+
+The user approved Tsurumaki only, both CY2025 and FY2025, and a single audited
+weekday/Saturday/holiday timetable version paired with date-specific 2025 weather.
+This is a fixed-timetable weather counterfactual, not a reconstruction of 2025
+historical operations. Unknown source calendar values no longer become WEEKDAY;
+SAT_HOL applicability is retained for both Saturday and holiday selection.
+
+Solcast acquisition validated 43,680 native 15-minute estimated-actual intervals
+over 2025-01-01 through 2026-03-31. Each 365-day export contains 35,040 intervals.
+The new precipitation/clear-sky classification is versioned independently of the
+legacy energy-tercile labels. CY2025 has at least 10 days in all twelve cells;
+FY2025 winter/rainy has 7 and remains INSUFFICIENT_SAMPLE. Suspected solid
+precipitation is explicitly excluded. No forecast skill or long-term climatic
+normal is claimed. JSON/CSV and PNG/SVG/PDF artifacts retain dates and source hashes.
+
+The SOC contract now carries maximum_soc_kwh and an explicit canonical unit.
+Prepared minSoc/maxSoc are converted to kWh, preserved through Stage 1 resource
+bounds, Stage 2, integrated MILP and rolling measured states, and checked from
+Prepare source records in the independent event validator. Initial/terminal
+inputs outside the bounds fail rather than being clipped. Fleet and event
+validation schemas advance to v3. This changes feasible sets and invalidates
+reuse of pre-change solver outputs. Focused real Gurobi tests cover both solver
+paths. Formal legacy-pair and multi-day acceptance remain pending; see the
+[extension record](docs/notes/SEVEN_DAY_SEASONAL_EXTENSION_20260910.md).
+
 ## 2026-09-08: explain slide 11 candidate scatter plot
 
 Rebuilt slide 11 with two editable charts: all 22 dispatches and a disclosed
@@ -9520,3 +9681,9 @@ locks this distinction in place.
   Published packages, final slides, prepared inputs and research outputs retained.
 - No formulas, constraints, acceptance gates, timetable/operator/fleet contracts changed.
   No commit, push, formal run, external review or research-readiness claim.
+2026-09-10 追記: 最新ODPTの弦巻16パターン648便（264/203/181）を公式サイトの全停留所時刻と照合済み。
+2024年のSolcastも追加し、2025単独・年度・2年補助・2024学習参照を分離。少数標本7日の曲線も
+日数を表示して記述用に作成した。日付別時刻表/PVのmaterializationをBFF Prepareからcanonical builderへ接続し、
+初日の暗黙複製は明示diagnostic以外で拒否する。関連33テスト通過。実際の2025-08-04～10では1704便をmaterialize。
+発電総量を使うため建屋負荷の明示が必要と判明し、入力モデルの確認中。正式solveは未実施。
+詳細・出典: [拡張記録](docs/notes/SEVEN_DAY_SEASONAL_EXTENSION_20260910.md)。

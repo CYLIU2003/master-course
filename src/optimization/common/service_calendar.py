@@ -6,6 +6,8 @@ from datetime import date
 import re
 from typing import Any, Mapping, Sequence
 
+from src.service_day_types import normalize_service_day_type
+
 
 _DAY_TOKEN = re.compile(
     r"(?:^|[.:_-])(Weekday|Saturday|Sunday|Holiday|SaturdayHoliday)(?:[.:_-]|$)",
@@ -19,29 +21,17 @@ FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL = (
 
 
 def _normalize_day_type(value: Any) -> str | None:
-    text = str(value or "").strip().lower().replace("-", "").replace("_", "")
-    if not text:
-        return None
-    if text in {"weekday", "weekdays", "平日"}:
-        return "weekday"
-    if text in {"saturday", "sat", "土曜", "土曜日"}:
-        return "saturday"
-    if text in {
-        "sunday",
-        "sun",
-        "holiday",
-        "日曜",
-        "日曜日",
-        "休日",
-        "祝日",
-    }:
-        return "sunday_or_holiday"
-    if text in {"saturdayholiday", "weekendholiday", "土休日"}:
-        return "weekend_or_holiday"
-    return None
+    return normalize_service_day_type(value)
 
 
 def _trip_day_type(row: Mapping[str, Any]) -> str | None:
+    types, unknown = _trip_day_type_evidence(row)
+    return next(iter(types)) if len(types) == 1 and not unknown else None
+
+
+def _trip_day_type_evidence(row: Mapping[str, Any]) -> tuple[set[str], list[str]]:
+    types: set[str] = set()
+    unknown: list[str] = []
     for key in (
         "service_day_type",
         "serviceDayType",
@@ -52,12 +42,18 @@ def _trip_day_type(row: Mapping[str, Any]) -> str | None:
         "service_id",
         "serviceId",
     ):
-        normalized = _normalize_day_type(row.get(key))
+        if row.get(key) in (None, ""):
+            continue
+        normalized = _normalize_day_type(row[key])
         if normalized:
-            return normalized
+            types.add(normalized)
+        else:
+            unknown.append(key)
     trip_id = str(row.get("trip_id") or row.get("tripId") or "")
     match = _DAY_TOKEN.search(trip_id)
-    return _normalize_day_type(match.group(1)) if match else None
+    if match:
+        types.add(_normalize_day_type(match.group(1)))
+    return types, unknown
 
 
 def _declared_holiday_dates(
@@ -164,15 +160,17 @@ def validate_service_calendar_contract(
     simulation_config = dict(
         scenario_metadata.get("simulation_config") or {}
     )
-    observed_types = sorted(
-        {
-            day_type
-            for row in timetable_rows
-            if isinstance(row, Mapping)
-            for day_type in [_trip_day_type(row)]
-            if day_type
-        }
-    )
+    observed: set[str] = set()
+    unknown_rows: list[int] = []
+    conflicting_rows: list[int] = []
+    for index, row in enumerate(timetable_rows):
+        types, unknown = _trip_day_type_evidence(row) if isinstance(row, Mapping) else (set(), ["row"])
+        observed.update(types)
+        if unknown or not types:
+            unknown_rows.append(index)
+        if len(types) > 1:
+            conflicting_rows.append(index)
+    observed_types = sorted(observed)
     declared_holiday_dates = _declared_holiday_dates(simulation_config)
     expected_type = _calendar_day_type(
         service_date,
@@ -192,6 +190,10 @@ def validate_service_calendar_contract(
         or ""
     ).strip()
     errors: list[str] = []
+    if unknown_rows:
+        errors.append("timetable_service_day_type_unknown_rows")
+    if conflicting_rows:
+        errors.append("timetable_service_day_type_conflicting_fields")
     waiver = _fixed_weekday_timetable_pv_counterfactual_waiver(
         service_date=service_date,
         observed_types=observed_types,
@@ -236,6 +238,9 @@ def validate_service_calendar_contract(
         "expected_service_day_type": expected_type,
         "observed_timetable_day_types": observed_types,
         "timetable_row_count": len(timetable_rows),
+        "unknown_timetable_row_count": len(unknown_rows),
+        "unknown_timetable_row_indices": unknown_rows,
+        "conflicting_timetable_row_indices": conflicting_rows,
         "comparison_type": effective_comparison_type,
         "weather_observation_date": weather_observation_date,
         "weather_profile_source": weather_profile_source or None,

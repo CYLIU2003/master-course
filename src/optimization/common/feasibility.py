@@ -40,6 +40,9 @@ from .soc_helpers import (
     trip_active_slot_indices,
     trip_energy_kwh,
     trip_slot_energy_fraction,
+    vehicle_initial_soc_kwh,
+    vehicle_reserve_soc_kwh,
+    vehicle_maximum_soc_kwh,
 )
 
 
@@ -66,6 +69,17 @@ class FeasibilityChecker:
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
     ) -> FeasibilityReport:
+        if plan.metadata.get("stage2_feasible") is False:
+            # A failed charging solve has no physical trajectory to replay.
+            # In Phase 1 the supplied reference can contain a complete old
+            # schedule; validating it against the new state invents errors.
+            return FeasibilityReport(
+                feasible=False,
+                errors=("[STAGE2_NO_INCUMBENT] Charging optimization returned "
+                        f"{plan.metadata.get('stage2_solver_status', 'no feasible solution')}; "
+                        "no operating plan is available. Inspect the saved IIS diagnostics.",),
+                metrics={"stage2_feasible": False, "physical_trajectory_available": False},
+            )
         eligible_trip_ids = set(problem.eligible_trip_ids())
         service_coverage_mode = normalize_service_coverage_mode(
             getattr(problem.scenario, "service_coverage_mode", None)
@@ -429,15 +443,13 @@ class FeasibilityChecker:
             )
             if capacity <= 0.0:
                 continue
-            reserve = getattr(vehicle, "reserve_soc", None) if vehicle is not None else None
-            if reserve is None and vtype is not None:
-                reserve = getattr(vtype, "reserve_soc", None)
-            soc_min = 0.15 * capacity if reserve is None else (float(reserve) * capacity if float(reserve) <= 1.0 else float(reserve))
+            soc_min = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity)
+            soc_max = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity)
             for value in dict(slot_map or {}).values():
                 soc = float(value or 0.0)
                 if soc + 1.0e-6 < soc_min:
                     lower += 1
-                if soc > capacity + 1.0e-6:
+                if not math.isfinite(soc) or soc > soc_max + 1.0e-6:
                     upper += 1
         return {"lower": lower, "upper": upper}
 
@@ -452,6 +464,11 @@ class FeasibilityChecker:
         tolerance = float((problem.metadata or {}).get("bess_terminal_soc_tolerance_kwh", 1.0e-6) or 1.0e-6)
         assets = dict(getattr(problem, "depot_energy_assets", {}) or {})
         timestep_slots = sorted({int(slot.slot_index) for slot in list(getattr(problem, "price_slots", ()) or ())})
+        rolling_start = plan.metadata.get('rolling_start_slot_index')
+        rolling_stop = plan.metadata.get('rolling_stop_slot_index')
+        if rolling_start is not None:
+            timestep_slots = [slot for slot in timestep_slots if slot >= int(rolling_start)
+                              and (rolling_stop is None or slot < int(rolling_stop))]
         for depot_id, asset in assets.items():
             if not bool(getattr(asset, "bess_enabled", False)):
                 continue
@@ -466,6 +483,11 @@ class FeasibilityChecker:
             charge_eff = max(float(getattr(asset, "bess_charge_efficiency", 0.95) or 0.95), 1.0e-9)
             discharge_eff = max(float(getattr(asset, "bess_discharge_efficiency", 0.95) or 0.95), 1.0e-9)
             depot_key = str(depot_id)
+            daily_target = resolve_bess_terminal_soc_target_kwh(
+                policy=asset.bess_terminal_soc_policy, initial_soc_kwh=asset.bess_initial_soc_kwh,
+                configured_target_kwh=asset.bess_terminal_soc_target_kwh,
+                terminal_soc_floor_kwh=max(asset.bess_terminal_soc_min_kwh,min_soc), maximum_soc_kwh=max_soc)
+            daily_target = (problem.metadata.get('bess_daily_balance_target_kwh_by_depot') or {}).get(depot_key,daily_target)
             slot_indices = set(timestep_slots)
             for mapping in (
                 plan.pv_to_bess_kwh_by_depot_slot,
@@ -482,6 +504,10 @@ class FeasibilityChecker:
                 charge_in += float(dict(plan.grid_to_bess_kwh_by_depot_slot or {}).get(depot_key, {}).get(slot_idx, 0.0) or 0.0)
                 discharge = float(dict(plan.bess_to_bus_kwh_by_depot_slot or {}).get(depot_key, {}).get(slot_idx, 0.0) or 0.0)
                 soc = soc + charge_eff * max(charge_in, 0.0) - max(discharge, 0.0) / discharge_eff
+                if asset.bess_balance_period == 'daily' and daily_target is not None:
+                    absolute_end = self._horizon_start_min(problem)+(slot_idx+1)*problem.scenario.timestep_min
+                    if absolute_end % 1440 == 0:
+                        terminal_deviation = max(terminal_deviation,abs(soc-daily_target))
                 if soc + 1.0e-6 < min_soc:
                     lower += 1
                 if soc > max_soc + 1.0e-6:
@@ -613,11 +639,97 @@ class FeasibilityChecker:
                 violations += 1
         return violations
 
+    def _evaluate_daily_return_resources(
+        self, problem: CanonicalOptimizationProblem, plan: AssignmentPlan,
+    ) -> List[str]:
+        """Replay each vehicle once, across native duties and operating dates."""
+        from .vehicle_timeline import build_vehicle_timeline, complete_home_slots, fixed_path_slot_loads
+        from .soc_helpers import is_electric_vehicle, vehicle_capacity_kwh
+
+        errors: List[str] = []
+        step = int(problem.scenario.timestep_min)
+        start_slot = int(plan.metadata.get("rolling_start_slot_index") or 0)
+        stop_slot = int(plan.metadata.get("rolling_stop_slot_index") or (problem.scenario.planning_days * 1440 // step))
+        slots = list(range(start_slot, stop_slot))
+        try:
+            timelines = build_vehicle_timeline(problem, plan)
+            loads = fixed_path_slot_loads(problem, plan, slots)
+        except (KeyError, ValueError) as exc:
+            return [f"[DAILY_RETURN] {exc}"]
+        charges: Dict[tuple[str, int], float] = {}
+        for charge in plan.charging_slots:
+            key = (str(charge.vehicle_id), int(charge.slot_index))
+            charges[key] = charges.get(key, 0.0) + float(charge.charge_kw)
+        start_min = self._horizon_start_min(problem)
+        trips = problem.trip_by_id()
+        for vehicle in problem.vehicles:
+            vid = str(vehicle.vehicle_id)
+            events = timelines.get(vid, ())
+            if not events:
+                continue
+            allowed = complete_home_slots(problem, vehicle, events)
+            if is_electric_vehicle(problem, vehicle):
+                capacity = vehicle_capacity_kwh(problem, vehicle)
+                minimum = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity)
+                maximum = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity)
+                try:
+                    soc = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity)
+                except ValueError as exc:
+                    errors.append(f"[SOC] vehicle={vid}: {exc}")
+                    continue
+                departures = {}
+                for event in events:
+                    if event.event_type == "service_trip":
+                        departures.setdefault((event.start_min-start_min)//step, []).append(trips[event.trip_id])
+                for slot in slots:
+                    for trip in departures.get(slot, ()):
+                        required = required_departure_soc_kwh(problem, vehicle, trip, cap_kwh=capacity,
+                                                             final_soc_floor_kwh=minimum)
+                        required += loads.energy_before_departure.get((vid, trip.trip_id), 0.0)
+                        if soc < required - 1e-6:
+                            errors.append(f"[SOC] vehicle={vid} trip={trip.trip_id} departure={soc} required={required}")
+                    kw = charges.get((vid, slot), 0.0)
+                    if kw > 1e-9 and slot not in allowed:
+                        errors.append(f"[SOC] vehicle={vid} charges outside a complete depot-residence slot {slot}")
+                    soc += kw * step / 60.0 * 0.95 - loads.energy_kwh.get((vid, slot), 0.0)
+                    if not minimum - 1e-6 <= soc <= maximum + 1e-6:
+                        errors.append(f"[SOC] vehicle={vid} slot={slot} SOC={soc} bounds={minimum}..{maximum}")
+                target = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
+                if target is not None and soc < target - 1e-6:
+                    errors.append(f"[SOC_TARGET] vehicle={vid} terminal={soc} target={target}")
+            else:
+                fuel = float(vehicle.initial_fuel_l or 0.0)
+                reserve = float(vehicle.fuel_reserve_l or 0.0)
+                capacity = float(vehicle.fuel_tank_capacity_l or 0.0)
+                fuel_events = []
+                lower, upper = start_min + start_slot * step, start_min + stop_slot * step
+                for event in events:
+                    if event.fuel_l <= 0:
+                        continue
+                    overlap = max(0, min(event.end_min, upper)-max(event.start_min, lower))
+                    if overlap:
+                        fuel_events.append((min(event.end_min, upper), -event.fuel_l * overlap/(event.end_min-event.start_min)))
+                for refuel in plan.refuel_slots:
+                    if refuel.vehicle_id != vid or not start_slot <= refuel.slot_index < stop_slot:
+                        continue
+                    if refuel.slot_index not in allowed:
+                        errors.append(f"[FUEL] vehicle={vid} refuels away from the depot")
+                    fuel_events.append((start_min+(refuel.slot_index+1)*step, float(refuel.refuel_liters)))
+                if capacity <= 0 or not reserve <= fuel <= capacity:
+                    errors.append(f"[FUEL] vehicle={vid} invalid initial fuel inventory")
+                for time_min, change in sorted(fuel_events):
+                    fuel += change
+                    if not reserve - 1e-6 <= fuel <= capacity + 1e-6:
+                        errors.append(f"[FUEL] vehicle={vid} minute={time_min} fuel={fuel} bounds={reserve}..{capacity}")
+        return errors
+
     def _evaluate_soc(
         self,
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
     ) -> List[str]:
+        if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
+            return self._evaluate_daily_return_resources(problem, plan)
         errors: List[str] = []
         if not plan.duties:
             return errors
@@ -643,6 +755,7 @@ class FeasibilityChecker:
             if rolling_start_slot is not None
             else None
         )
+        rolling_stop_slot = (plan.metadata or {}).get('rolling_stop_slot_index')
 
         charge_by_vehicle: Dict[str, Dict[int, float]] = {}
         for slot in plan.charging_slots:
@@ -718,15 +831,13 @@ class FeasibilityChecker:
             if capacity <= 0.0:
                 continue
 
-            reserve = float(
-                (vehicle.reserve_soc if vehicle else None)
-                or (vtype.reserve_soc if vtype else None)
-                or (0.15 * capacity)
-            )
-            soc = float((vehicle.initial_soc if vehicle else None) or (0.8 * capacity))
-            if soc <= 1.0:
-                soc = soc * capacity
-            soc = min(max(soc, 0.0), capacity)
+            reserve = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity)
+            soc_max = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity)
+            try:
+                soc = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity)
+            except ValueError as exc:
+                errors.append(f"[SOC] vehicle={vehicle_id} invalid initial state: {exc}")
+                continue
 
             active_legs: List[tuple[int, object, object, tuple[int, ...]]] = []
             for duty_leg_index, leg in enumerate(duty.legs):
@@ -738,7 +849,7 @@ class FeasibilityChecker:
                     slots = tuple(
                         slot_idx
                         for slot_idx in slots
-                        if slot_idx >= rolling_start_slot
+                        if slot_idx >= rolling_start_slot and (rolling_stop_slot is None or slot_idx < int(rolling_stop_slot))
                     )
                 if not slots:
                     continue
@@ -767,6 +878,7 @@ class FeasibilityChecker:
             if (
                 target_enabled
                 and last_duty_by_vehicle_day.get((vehicle_id, day_idx)) == str(duty.duty_id)
+                and (rolling_stop_slot is None or self._slot_index(problem,int(duty.legs[-1].trip.arrival_min)) < int(rolling_stop_slot))
             ):
                 target_kwh = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
                 last_problem_trip = trip_by_id.get(duty.legs[-1].trip.trip_id)
@@ -846,7 +958,9 @@ class FeasibilityChecker:
                     errors.append(
                         f"[SOC_TARGET] duty={duty.duty_id} vehicle={vehicle_id} charges before return deadhead completion at slot {slot_idx}"
                     )
-                soc = min(capacity, soc + charge_kwh)
+                soc += charge_kwh
+                if soc > soc_max+1e-6:
+                    errors.append(f"[SOC] duty={duty.duty_id} vehicle={vehicle_id} SOC {soc:.6f} exceeds maximum {soc_max:.6f} kWh at slot {slot_idx}")
 
                 for duty_leg_index, leg, trip, slots in active_legs:
                     if slot_idx not in slots:

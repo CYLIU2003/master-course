@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from bff.services.service_ids import canonical_service_id
+from bff.services.date_series_inputs import prepare_date_series_scenario, SOURCE_ID
+from src.optimization.common.date_series import DATE_SERIES_INPUT_MODE, consecutive_service_dates
 from bff.store import scenario_store as store
 from src.objective_modes import (
     legacy_objective_weights_for_mode,
@@ -58,6 +60,8 @@ def _normalized_service_dates(
     planning_days: int,
     explicit_dates: Any = None,
 ) -> list[str]:
+    if planning_days > 1:
+        return consecutive_service_dates(service_date,planning_days,explicit_dates)
     normalized: list[str] = []
     seen: set[str] = set()
     for item in list(explicit_dates or []):
@@ -320,6 +324,12 @@ def apply_builder_configuration(
     body: Any,
 ) -> Dict[str, Any]:
     doc = store.get_scenario_document_shallow(scenario_id)
+    settings = body.simulation_settings
+    requested_days = max(int(getattr(settings, 'planning_days', 1) or 1), 1)
+    requested_input_mode = getattr(settings, 'multi_day_input_mode', None) or (
+        DATE_SERIES_INPUT_MODE if requested_days > 1 else 'single_day'
+    )
+    dated_input = requested_input_mode == DATE_SERIES_INPUT_MODE
     valid_depot_ids = {
         str(item.get("id") or item.get("depotId") or "").strip()
         for item in doc.get("depots") or []
@@ -330,7 +340,9 @@ def apply_builder_configuration(
         for depot_id in body.selected_depot_ids
         if str(depot_id or "").strip() in valid_depot_ids
     ]
-    if not selected_depot_ids and valid_depot_ids:
+    if dated_input and selected_depot_ids != list(body.selected_depot_ids):
+        raise ValueError('Dated preparation cannot replace an unknown selected depot')
+    if not selected_depot_ids and valid_depot_ids and not dated_input:
         selected_depot_ids = [sorted(valid_depot_ids)[0]]
     if not selected_depot_ids:
         raise ValueError("No valid depot is selected.")
@@ -366,6 +378,12 @@ def apply_builder_configuration(
     # フォールバック: 選択ルートがどれも候補に含まれない場合は候補全体を使う
     if not selected_route_ids and candidate_route_ids:
         selected_route_ids = list(candidate_route_ids)
+    if dated_input:
+        # Validate the exact selection against the sealed source at materialization.
+        # A route with zero departures on the first day may operate later in the week.
+        selected_route_ids = list(body.selected_route_ids)
+        if not selected_route_ids or len(selected_route_ids) != len(set(selected_route_ids)):
+            raise ValueError('Dated preparation requires an explicit unique route selection')
 
     settings = body.simulation_settings
     current_simulation_config = dict(doc.get("simulation_config") or {})
@@ -920,6 +938,14 @@ def apply_builder_configuration(
         "service_date": service_date,
         "service_dates": list(service_dates),
         "planning_days": planning_days,
+        "rolling_lookahead_hours": getattr(settings, 'rolling_lookahead_hours', None),
+        "bess_balance_period": getattr(settings, 'bess_balance_period', 'daily'),
+        "pv_information_mode": getattr(settings, 'pv_information_mode', 'historical_perfect_information'),
+        "multi_day_input_mode": (
+            getattr(body.simulation_settings,'multi_day_input_mode',None)
+            or (DATE_SERIES_INPUT_MODE if planning_days>1 else 'single_day')
+        ),
+        "date_series_source_id": getattr(body.simulation_settings,'date_series_source_id',None) or SOURCE_ID,
         "day_type": selected_day_type,
         "allow_fixed_weekday_timetable_pv_counterfactual": (
             allow_fixed_weekday_timetable_pv_counterfactual
@@ -1070,6 +1096,9 @@ def apply_builder_configuration(
         ]
     store._normalize_dispatch_scope(doc)
     store._invalidate_dispatch_artifacts(doc)
+    if doc['simulation_config']['multi_day_input_mode'] == DATE_SERIES_INPUT_MODE:
+        doc = prepare_date_series_scenario(doc)
+        store._normalize_dispatch_scope(doc)
     doc["meta"]["updatedAt"] = store._now_iso()
     store._save(doc)
     return doc

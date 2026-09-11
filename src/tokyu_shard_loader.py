@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 import unicodedata
 
+from src.service_day_types import SERVICE_ID_BY_DAY_TYPE, normalize_service_day_type
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TOKYU_SHARD_ROOT = REPO_ROOT / "outputs" / "built" / "tokyu"
@@ -14,8 +16,8 @@ _DEFAULT_DAY_TYPES = ("weekday", "saturday", "holiday")
 _DAY_TYPE_BY_SERVICE_ID = {
     "WEEKDAY": "weekday",
     "SAT": "saturday",
-    "SAT_HOL": "saturday",
-    "SAT_HOLIDAY": "saturday",
+    "SAT_HOL": "weekend_or_holiday",
+    "SAT_HOLIDAY": "weekend_or_holiday",
     "SUN_HOL": "holiday",
     "SUN_HOLIDAY": "holiday",
     "HOLIDAY": "holiday",
@@ -56,13 +58,17 @@ def depot_id_from_scoped_route_id(route_id: str) -> str:
 
 
 def service_id_to_day_type(service_id: str | None) -> str:
-    normalized = str(service_id or "WEEKDAY").strip().upper() or "WEEKDAY"
-    return _DAY_TYPE_BY_SERVICE_ID.get(normalized, "weekday")
+    normalized = normalize_service_day_type(service_id)
+    if normalized is None:
+        raise ValueError(f"Unknown service_id: {service_id!r}")
+    return "holiday" if normalized == "sunday_or_holiday" else normalized
 
 
 def day_type_to_service_id(day_type: str | None) -> str:
-    normalized = str(day_type or "weekday").strip().lower() or "weekday"
-    return _SERVICE_ID_BY_DAY_TYPE.get(normalized, "WEEKDAY")
+    normalized = normalize_service_day_type(day_type)
+    if normalized is None:
+        raise ValueError(f"Unknown day_type: {day_type!r}")
+    return SERVICE_ID_BY_DAY_TYPE[normalized]
 
 
 def _normalize_clock_string(value: Any) -> str:
@@ -81,8 +87,10 @@ def selected_day_types(service_ids: Iterable[str] | None) -> List[str]:
     seen: list[str] = []
     for service_id in service_ids:
         day_type = service_id_to_day_type(service_id)
-        if day_type not in seen:
-            seen.append(day_type)
+        expanded = ("saturday", "holiday") if day_type == "weekend_or_holiday" else (day_type,)
+        for item in expanded:
+            if item not in seen:
+                seen.append(item)
     return seen or list(_DEFAULT_DAY_TYPES)
 
 
@@ -489,7 +497,8 @@ def build_timetable_summary_from_rows(
     stop_counts: Dict[str, int] = {}
 
     for row in materialized_rows:
-        service_id = str(row.get("service_id") or "WEEKDAY")
+        # Summaries must expose missing source labels rather than invent a weekday.
+        service_id = str(row.get("service_id") or "UNKNOWN")
         route_id = str(row.get("route_id") or "")
         departure = str(row.get("departure") or "")
         arrival = str(row.get("arrival") or "")

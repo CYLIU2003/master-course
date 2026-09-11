@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from bff.services.route_family import RawRoute, extract_route_family_code
 from bff.services.service_ids import canonical_service_id
 from src.tokyu_bus_data import route_trip_counts_by_day_type, tokyu_bus_data_ready
+from src.optimization.common.date_series import DATE_SERIES_INPUT_MODE, validate_dated_timetable
 
 
 def _dataset_id(scenario: Dict[str, Any]) -> str:
@@ -48,7 +49,21 @@ def audit_route_catalog_consistency(
     dataset_id = _dataset_id(scenario)
     actual_counts_by_route: Dict[str, Dict[str, int]] = {}
     actual_counts_source = "unavailable"
-    if route_ids and tokyu_bus_data_ready(dataset_id):
+    dated_services = None
+    config = scenario.get('simulation_config') or {}
+    if config.get('multi_day_input_mode') == DATE_SERIES_INPUT_MODE:
+        rows = scenario.get('timetable_rows') or []
+        validate_dated_timetable(rows, config.get('date_series_contract') or {})
+        dated_services = {canonical_service_id(row['service_id']) for row in rows}
+        templates = defaultdict(set)
+        for row in rows:
+            templates[(row['route_id'], canonical_service_id(row['service_id']))].add(row['template_trip_id'])
+        actual_counts_by_route = {
+            route: {service: len(templates[(route, service)]) for service in sorted(dated_services)}
+            for route in route_ids
+        }
+        actual_counts_source = 'verified_dated_timetable_templates'
+    elif route_ids and tokyu_bus_data_ready(dataset_id):
         actual_counts_by_route = route_trip_counts_by_day_type(
             dataset_id=dataset_id,
             route_ids=route_ids,
@@ -97,6 +112,8 @@ def audit_route_catalog_consistency(
 
         if actual_counts_by_route:
             stored_counts = _normalize_counts(route.get("tripCountsByDayType"))
+            if dated_services is not None:
+                stored_counts = {service: stored_counts.get(service, 0) for service in dated_services}
             actual_counts = _normalize_counts(actual_counts_by_route.get(route_id) or {})
             if stored_counts != actual_counts:
                 issues.append(

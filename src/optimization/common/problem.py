@@ -118,6 +118,10 @@ class ProblemTrip:
     fuel_l_by_vehicle_type: Mapping[str, float] = field(default_factory=dict)
     energy_model_id: str = "distance_average_v0"
     energy_model_provenance: Mapping[str, Any] = field(default_factory=dict)
+    service_date: str = ""
+    template_trip_id: str = ""
+    day_index: int = 0
+    operator_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -179,6 +183,10 @@ class ProblemVehicle:
     # Empty means that every charger at the home depot is compatible.  When
     # populated, the formal MILP may use only the listed physical chargers.
     compatible_charger_ids: Tuple[str, ...] = ()
+    # Explicit physical upper bound, independent of the optional soft buffer.
+    maximum_soc_kwh: Optional[float] = None
+    # Legacy direct callers may use ratios; prepared and rolling states use kWh.
+    soc_input_unit: str = "legacy_ratio_or_kwh"
 
 
 @dataclass(frozen=True)
@@ -250,6 +258,12 @@ class DepotEnergyAsset:
     bess_terminal_soc_target_kwh: float = 0.0
     bess_terminal_soc_deviation_penalty_yen_per_kwh: float = 20.0
     provisional_energy_cost_yen_per_kwh: float = 0.0
+    # Gross PV can only enter the current transport-energy balance when the
+    # nontraction load is explicitly declared zero; nonzero loads need a
+    # separate building/grid balance and are rejected by the builder.
+    depot_load_model: str = "not_declared_legacy_surplus"
+    depot_load_kwh_by_slot: Tuple[float, ...] = ()
+    bess_balance_period: str = "evaluation_period"
 
 
 @dataclass(frozen=True)
@@ -528,6 +542,7 @@ class OptimizationConfig:
     # the first remaining planned slot.  The first slot of the next rolling
     # horizon continues those sessions, so setup time must not be charged twice.
     rolling_active_charge_session_vehicle_ids: Tuple[str, ...] = ()
+    rolling_connected_charger_by_vehicle: Mapping[str, str] = field(default_factory=dict)
     target_gap_to_baseline: Optional[float] = None
     warm_start: bool = True
     acceptance: str = "simulated_annealing"
@@ -546,6 +561,7 @@ class OptimizationConfig:
     executed_phase: str = ""
     diagnostic_mode: bool = False
     fixed_assignment: Optional["AssignmentPlan"] = None
+    rolling_lookahead_hours: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -599,6 +615,8 @@ class DailyCostLedgerEntry:
     ice_leftover_provisional_cost_jpy: float = 0.0
     demand_charge_jpy: float = 0.0
     total_cost_jpy: float = 0.0
+    other_operating_cost_allocated_jpy: float = 0.0
+    cost_attribution_policy: str = "legacy"
 
 
 @dataclass(frozen=True)
@@ -879,6 +897,8 @@ class CanonicalOptimizationProblem:
                     f"Depot {depot_id} BESS maximum SOC exceeds energy capacity"
                 )
             if asset.bess_enabled:
+                if asset.bess_balance_period not in ('daily','evaluation_period'):
+                    raise ValueError(f'Depot {depot_id} has an invalid BESS balance period')
                 if bess_energy_kwh <= 0.0:
                     raise ValueError(
                         f"Depot {depot_id} enabled BESS requires positive energy capacity"

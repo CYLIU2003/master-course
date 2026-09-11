@@ -52,6 +52,10 @@ class Trip:
     route_variant_type: str = "unknown"   # "main_outbound" | "main_inbound"
                                           # | "short_turn" | "branch"
                                           # | "depot_in" | "depot_out" | "unknown"
+    service_date: str = ""
+    service_id: str = ""
+    template_trip_id: str = ""
+    day_index: int = 0
 
     @property
     def departure_min(self) -> int:
@@ -231,6 +235,8 @@ class DispatchContext:
     # preserves the provenance of the base operating rule during sensitivity
     # analysis.
     turnaround_buffer_min: int = 0
+    # Explicit operating rule; empty preserves the legacy single-day policy.
+    daily_return_depot_id: str = ""
 
     def __post_init__(self) -> None:
         alias_sets: Dict[str, set[str]] = {}

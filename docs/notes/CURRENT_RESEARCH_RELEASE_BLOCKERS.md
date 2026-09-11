@@ -1,5 +1,111 @@
 # Current research release blockers
 
+## 2026-09-11 気象データ取得の再確認
+
+2022〜2024年の取得済み23か月・67,200件を再検証し、月内連続性、7項目の有限値、弦巻の地点、PT15M、リクエストと原データのSHA-256が一致した。残りは2022年12月と2023年1〜12月の13か月。今回の定期実行では前回の認証を再利用できず、SOLCAST_API_KEYの既存設定も確認できなかったため、APIリクエストは0件である。利用枠の回復有無は未確認。認証設定の復旧を要する旨を一度だけ通知し、同じ状態での再通知を抑止する。取得済み原データ、2024年学習モデル、四季診断結果は保持した。
+
+[取得状況](../../output/seven_day_extension_20260910/training_history_acquisition_status.json)と `solcast_heartbeat_20260911.json` に記録した。
+
+通常の `python -m pytest` は `pytest.ini` により `tests/` を収集します。同名の互換入口と手動実験スクリプトの import 衝突を解消し、状態を変更する手動実験を回帰収集から除外しました。
+
+## 2026-09-10 現在の検証状態
+
+### 四季の診断結果
+
+修正後のattempt_07で四季の診断を終了した。冬16/168時間・春161/168時間・夏168/168時間・秋161/168時間。事前計画の独立物理検証は4/4週、168時間の実行は1/4週、物理検証と最終会計までの成立は1/4週。目標gap 10%の達成は0/4週。
+
+冬は日末までの予測PVを全量充電する楽観的上限でも2945.307 kWhで、日末目標3,000 kWhへ届かない。 春は日末までの予測PVを全量充電する楽観的上限でも2980.112 kWhで、日末目標3,000 kWhへ届かない。 秋は日末までの予測PVを全量充電する楽観的上限でも2994.617 kWhで、日末目標3,000 kWhへ届かない。
+
+[評価表・状態推移・日射比較・再現ファイル](../../output/seven_day_extension_20260910/SHIBU21_SEASONAL_EVALUATION.md)へ集約した。12 solver threadsで順次実行し、プロセスの最大working setは17.645 GiB、ホスト空きメモリーの最小値は2.817 GiB。実行前後と報告生成時にコード・設定のSHA-256一致を確認した。
+
+不成立の週には週総費用や削減率を付与しない。全結果はDIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS。独立レビュー、旧2ケースの正式再実行、正式7日検証は別途必要であり、研究リリースはBLOCKED。
+
+### 途中SOC目標の許容幅が累積する不具合の修正
+
+attempt_06では、冬17時間・春161時間でBESS日末復元が不成立となった。夏は144時間目に別の不具合を検出した。事前計画が持つ科学的許容幅を含んだSOC参照値へ、途中窓でもさらに1e-6 kWhの上積みを許したため、残りの運行がない車両が評価末の上限を約1e-6 kWh超えた。放電できない車両では、この余剰を後から解消できない。IISの95本の残量遷移は全て消費ゼロ、96個の充電変数は非負であることを確認した。
+
+途中窓は `SOC(t+H) = day_ahead_SOC(t+H)` として参照値へ一致させる。評価末の科学的許容幅1e-6 kWh、物理上下限、日末BESS目標、Gurobi数値許容値は変更しない。実行状態の丸め・補正も行わない。負の電力価格で許容上限まで充電する2日人工例を用い、余剰が積み上がらず、運行のない最終日へ接続できることを検査した。関連61回帰が通過した。
+
+旧attempt_06は秋の73時間までの実行後に中断した。中断時に348ファイルのソース・設定ハッシュ一致を確認し、各結果とIIS、`abort_summary.json` を保存した。修正後の四季比較には採用せず、新しいattempt_07で全4週の事前計画から再計算した（結果は冒頭）。
+
+全体回帰は **2,009 passed / 2 failed（145.48秒）**。失敗2件は作業前からあるPowerPoint証拠のハッシュ・部品同一性であり、正式研究リリースは引き続きBLOCKED。
+新しい渋21入力v2は全4週ともPrepareを通過し、各35 BEVの終端目標が各車両の初期SOCに一致することを再読込後のcanonical入力で確認した。親の固定目標80%・許容幅20ポイントは新規派生入力の両設定層から除去した。期間末の復元条件は厳密に維持する。
+
+利用者の指示で12 solver threadsへ拡張した（実機12コア/20論理CPU、RAM 31.7 GiB）。構築込み900秒、Stage 1探索120秒、Stage 2探索30秒、毎時Rolling15秒を4週へ共通適用する。週を順番に実行し、修正後のattempt_07で再計算した。旧attempt_01〜06は中断・条件不一致の診断資料であり、新しい比較結果に採用しない。
+
+SOC累積式は毎日帰庫の経路だけ逐次状態 `SOC[t+1] = SOC[t] + η charge[t] Δt - load[t]` へ等価変形し、2日間のA/Bで費用・全便被覆・独立物理検証の一致を確認した。接続網と物理量は維持する。最終会計の給油は実行済みprefixから集計し、未実行の事前計画を残さない。
+2022年以降の祝日源は別版で検証し、2024年以降の既存入力は元の版を維持する。取得済みの2022-01-10〜16について209便と7日分の日射入力の生成を確認した。未取得月は停止する。
+
+
+途中窓のBESS終端床は物理下限とし、元の日末3,000 kWh条件と期間末条件を別に保持する不具合修正を追加した。Phase 1の充電再最適化が失敗した場合は、入力の旧計画に含まれる充電・SOC・源別フロー・最適性証明を最終出力へ持ち越さず、`STAGE2_NO_INCUMBENT` とIISを公開する。エネルギー量やSOC許容値の変更はない。
+
+旧attempt_05の事前計画を失敗再現専用fixtureとして検証すると、冬の初日17時にBESS=2,999.714294768145 kWhとなり、その後の日射0・系統からBESSへの充電禁止により日末3,000 kWhに戻せないことをIISで確認した。これは新しい四季試験の結果ではなく、制約を保った回帰診断である。attempt_07では全4週の事前計画から再計算した。未成立の週に最終週費用や最適性を付与しない。
+
+## 2026-09-10 追補: 渋21の四季テストと毎日の帰庫条件
+
+ユーザーは各運行日終了後の弦巻営業所への帰庫を指定した。未確定の運用条件ではない。
+明示設定 `daily_return_depot_id=tsurumaki` の経路では、運行日を跨ぐ接続を帰庫と翌朝の出庫に分ける。
+回送・折返しの所要時間と消費量を計上し、車両が営業所にいる全区間を含むslotだけ充電可能とする。
+既存の接続不等式は維持する。複数dutyでも初期SOCは車両ごとに一度だけ使用する。
+独立検証の接続回送と最終帰庫にはICE燃料の欠落もあったため、消費を追加した。
+
+途中のRolling窓に週の初期SOCを強制すると、帰庫直後に窓が切れる時点で充電時間がなくなる。
+2日人工例の11時更新で再現した。新しい四季テストは、途中窓を固定した事前計画の同時刻の
+BEV/BESS残量に接続する `day_ahead_boundary_state` を明示する。将来実績を参照しない。
+評価週末は元の初期残量への復元、BESS日次中立は元の日次目標を維持する。
+2日間のBEV消費74 kWh、ICE消費22.2 L、48回の毎時更新・位置/燃料引継ぎ、配車から充電までのPhase 3・SOC表現A/B・終端設定検査を含む14回帰が通過した。
+UTF-8指定の全体回帰は2,009 passed / 2 failed（145.48秒）。失敗2件は既存のPowerPoint証拠ハッシュ・部品同一性で、新しい最適化回帰の失敗ではない。実路線の四季診断は終了した（成立時間と失敗理由は冒頭）。
+
+2022〜2024年は36か月中23か月、67,200件を検証済み。2022年12月と2023年全12か月はHTTP 402で停止した。
+ユーザー指示に従い利用枠回復を待つ。毎日12時の確認 `solcast-13` を登録済みで、契約変更・購入は行わない。
+2022年1〜11月の334日・32,064件は `data/derived/seasonal_irradiance/tsurumaki/cy2022_jan_nov_partial`
+へ15分/60分CSVと標準カーブを保存した。2022年通年または3年学習済みとは呼ばない。
+4週間のテストは学習を2024年に限る暫定評価で、設計を `config/shibu21_2025_seasonal_test.json` に保存した。
+2/3、5/5、8/4、11/3から各7日、渋21の検証済み6系統パターン、親の60台を保持する。
+入力Prepareは4週とも完了した。冬240便・春178便・夏240便・秋209便で、5月と11月の祝日による便数差を考慮する。四季の診断結果は冒頭に集約した。正式な研究結論はまだない。診断CLIは `scripts/benchmarks/run_shibu21_seasonal_diagnostic.py`。新規出力先と実行前後のソースハッシュを必須とし、正式研究ゲートは解除しない。
+
+未解決: 実路線のStage 1/2・168時間の実行と最終会計、旧2ケースの正式再実行、独立レビュー。
+日別台帳の初日への期間残量集中・翌日の初期値復帰を修正した。SOCと燃料は物理イベントの時刻から連続計算し、未補給在庫評価は期間末に一度だけ計上する。期間費用の日別配賦は明示的な金額配分であり、車両別電源のsolver-native証拠ではない。回帰で日別合計と期間費用の一致を確認した。
+これらが終わるまで正式研究の `MULTIDAY_RESEARCH_BLOCKED` を維持する。
+
+
+## Earlier 2026-09-10 checkpoint (superseded by the current state above)
+
+Dated timetable/PV input builds 1,704 trips and 60 vehicles for 2025-08-04--10.
+Bounded rolling lookahead and BESS daily/period terminal constraints have small
+Gurobi regressions. This is not seven-day operational acceptance. Night parking
+policy is awaiting clarification: the existing path must account for actual
+depot-return/startup movements and must not infer overnight charging from mere
+reachability. Current-slot PV replay is connected to the hourly runner with
+separate forecast/actual artifacts and bounded-state regression tests. Multi-duty
+SOC, ICE fuel/location and 168-hour executed accounting are not yet fully
+validated together. `OptimizationEngine.solve` rejects formal multiday requests
+with `MULTIDAY_RESEARCH_BLOCKED` while these contracts remain incomplete. No formal seven-day
+result may be presented as accepted while these gates remain open.
+
+The final local suite reports 1,993 passed / 2 failed, both failures present
+before this work in frozen presentation/source checks. The earlier one-off
+first-incumbent timing failure did not recur in the final full suite.
+Forecast inputs pass complete JST-day regression; derived metadata is reloaded
+from scenario storage before Prepare. These checks do not certify seven-day
+physical execution or authorize a research conclusion.
+Both parent-derived candidates have completed Prepare through persisted/reloaded
+scenario data. Input hashes and original parent hashes match, with identical
+non-PV controls. They remain `INPUTS_PREPARED_RESEARCH_BLOCKED`.
+
+## 2026-09-10: SOC remediation in progress; formal release remains BLOCKED
+
+The reachable canonical/Stage 2/integrated/Rolling/event-validation paths now
+carry vehicle-specific maximum SOC and preserve kWh units. Small Gurobi
+regressions enforce 90% upper bounds, and independent replay rejects an injected
+93.375% state, including invalid initial states of unused vehicles. The event
+validator independently checks that Prepared maxSoc survives canonicalization.
+These are local regression results, not a replacement for the frozen SUNNY/RAIN
+experiment. Full regressions, fresh clean-commit pair acceptance, independent
+review, and seven-day state/accounting acceptance remain open. No old manifest
+or numerical evidence was rewritten. Progress and data limits are recorded in
+[the extension record](SEVEN_DAY_SEASONAL_EXTENSION_20260910.md).
+
 2026-09-08: Slide 11 distinguishes candidate total-fleet changes (32 versus 47–53 buses). This explanatory chart edit does not establish a BEV-count causal effect or resolve any research gate.
 
 2026-09-08: Slides 8/9 now distinguish within-PV plan cost differences from repair gains. The diagnostic values do not resolve the SOC upper-bound mismatch or upgrade any release gate.
@@ -5178,3 +5284,7 @@ or validation rule will be relaxed to promote it.
 - Advisor approval remains mandatory and must name the exact four profiles, adapter/planning/reference SHAs, request/profile hashes, percent threshold, date, budgets, and claim boundary.
 - Release remains blocked until full regression, independent review, a clean committed adapter SHA, and a separately approved execution window are complete.
 - Any profile lacking 264/264 service, physical validation, 24/24 Rolling, accounting reconciliation, no-fallback/no-repair evidence, fixed-input hash parity, or clean-SHA continuity is `REJECTED`/`INTERRUPTED`, not research evidence.
+2026-09-10 入力拡張: ODPT/公式サイトの全停留所時刻一致648便と、2024-01～2026-03 Solcast 78,816区間を取得。
+日付別の7日入力（平日・土曜・休日と当日PV）をBFF/canonicalへ接続する局所回帰33件が通過。
+これはWP0旧2ケースの正式再実験・168時間rolling・実行済み会計の受入を意味しない。
+元の年単独曲線と前年追加の補助曲線を区別し、少数標本曲線は日数を開示して使用可能とする。

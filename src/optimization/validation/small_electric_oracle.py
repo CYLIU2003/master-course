@@ -590,7 +590,8 @@ def _dispatch_feasible_paths(
             capacity = _vehicle_capacity_kwh(problem, vehicle)
             initial = _vehicle_initial_soc_kwh(vehicle, capacity)
             reserve = _vehicle_reserve_kwh(vehicle, capacity)
-            if capacity <= 0.0 or not (reserve <= initial <= capacity):
+            maximum = capacity if vehicle.maximum_soc_kwh is None else float(vehicle.maximum_soc_kwh)
+            if capacity <= 0.0 or not (0 <= reserve <= initial <= maximum <= capacity):
                 return None
         else:
             fuel_required = sum(_trip_fuel_l(trip, vehicle) for trip in ordered)
@@ -751,13 +752,13 @@ def _solve_electric_subproblem(
     load_by_vehicle_slot: dict[tuple[str, int], float] = {}
     trip_energy_by_vehicle_trip: dict[tuple[str, str], float] = {}
     active_by_vehicle_slot: set[tuple[str, int]] = set()
-    capacity_by_vehicle: dict[str, float] = {}
+    maximum_soc_by_vehicle: dict[str, float] = {}
     initial_by_vehicle: dict[str, float] = {}
     reserve_by_vehicle: dict[str, float] = {}
     for vehicle_id, path in paths.items():
         vehicle = vehicle_by_id[vehicle_id]
         capacity = _vehicle_capacity_kwh(problem, vehicle)
-        capacity_by_vehicle[vehicle_id] = capacity
+        maximum_soc_by_vehicle[vehicle_id] = capacity if vehicle.maximum_soc_kwh is None else float(vehicle.maximum_soc_kwh)
         initial_by_vehicle[vehicle_id] = _vehicle_initial_soc_kwh(
             vehicle, capacity
         )
@@ -833,7 +834,7 @@ def _solve_electric_subproblem(
     for vehicle_id, path in paths.items():
         initial = initial_by_vehicle[vehicle_id]
         reserve = reserve_by_vehicle[vehicle_id]
-        capacity = capacity_by_vehicle[vehicle_id]
+        maximum_soc = maximum_soc_by_vehicle[vehicle_id]
         cumulative_load = 0.0
         previous_charge_indices: list[int] = []
         for slot_idx in slot_indices:
@@ -843,7 +844,7 @@ def _solve_electric_subproblem(
             add_row(
                 coefficients,
                 reserve - initial + cumulative_load,
-                capacity - initial + cumulative_load,
+                maximum_soc - initial + cumulative_load,
             )
             for trip in path:
                 if _slot_index(problem, int(trip.departure_min)) != slot_idx:
@@ -1066,18 +1067,20 @@ def _vehicle_initial_soc_kwh(
     vehicle: ProblemVehicle,
     capacity_kwh: float,
 ) -> float:
-    value = float(
-        vehicle.initial_soc if vehicle.initial_soc is not None else 0.8
-    )
-    return min(max(value * capacity_kwh if value <= 1.0 else value, 0.0), capacity_kwh)
+    if vehicle.initial_soc is None:
+        return .8 * capacity_kwh
+    value = float(vehicle.initial_soc)
+    return value * capacity_kwh if vehicle.soc_input_unit != "kwh" and value <= 1.0 else value
 
 
 def _vehicle_reserve_kwh(
     vehicle: ProblemVehicle,
     capacity_kwh: float,
 ) -> float:
-    value = float(vehicle.reserve_soc if vehicle.reserve_soc is not None else 0.15)
-    return min(max(value * capacity_kwh if value <= 1.0 else value, 0.0), capacity_kwh)
+    if vehicle.reserve_soc is None:
+        return .15 * capacity_kwh
+    value = float(vehicle.reserve_soc)
+    return value * capacity_kwh if vehicle.soc_input_unit != "kwh" and value <= 1.0 else value
 
 
 def _is_electric(vehicle: ProblemVehicle) -> bool:

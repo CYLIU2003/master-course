@@ -11,6 +11,7 @@ from .bev_terminal_policy import (
     resolve_bev_terminal_soc_target_kwh,
 )
 from .problem import CanonicalOptimizationProblem, ProblemTrip, normalize_required_soc_departure_ratio
+from .vehicle_soc_contract import canonical_soc_energy, finite_soc_value
 
 ELECTRIC_POWERTRAINS = {"BEV", "PHEV", "FCEV"}
 DAY_MINUTES = 24 * 60
@@ -202,11 +203,27 @@ def vehicle_reserve_soc_kwh(
     if reserve is None:
         reserve = getattr(vt, "reserve_soc", None)
     if reserve is None:
-        reserve = 0.15 * cap
-    reserve_kwh = float(reserve or 0.0)
+        return 0.15 * cap
+    if getattr(vehicle, "reserve_soc", None) is not None:
+        return canonical_soc_energy(vehicle, "reserve_soc", cap, .15)
+    reserve_kwh = finite_soc_value(reserve, field="reserve_soc")
     if cap > 0.0 and reserve_kwh <= 1.0:
         reserve_kwh *= cap
-    return min(max(reserve_kwh, 0.0), cap) if cap > 0.0 else max(reserve_kwh, 0.0)
+    if not 0 <= reserve_kwh <= cap:
+        raise ValueError("Vehicle reserve SOC is outside battery capacity")
+    return reserve_kwh
+
+
+def vehicle_maximum_soc_kwh(problem: CanonicalOptimizationProblem, vehicle: Any,
+                            *, cap_kwh: float | None = None) -> float:
+    cap = float(cap_kwh if cap_kwh is not None else vehicle_capacity_kwh(problem, vehicle))
+    raw = getattr(vehicle, "maximum_soc_kwh", None)
+    maximum = cap if raw is None else finite_soc_value(raw, field="maximum_soc_kwh")
+    if not 0 <= maximum <= cap:
+        raise ValueError("Maximum SOC is outside battery capacity")
+    if vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=cap) > maximum:
+        raise ValueError("Vehicle minimum SOC exceeds maximum SOC")
+    return maximum
 
 
 def vehicle_initial_soc_kwh(
@@ -216,13 +233,12 @@ def vehicle_initial_soc_kwh(
     cap_kwh: float | None = None,
 ) -> float:
     cap = max(float(cap_kwh if cap_kwh is not None else vehicle_capacity_kwh(problem, vehicle)), 0.0)
-    initial = getattr(vehicle, "initial_soc", None)
-    if initial is None:
-        return 0.8 * cap
-    value = float(initial or 0.0)
-    if cap > 0.0 and value <= 1.0:
-        value *= cap
-    return min(max(value, 0.0), cap) if cap > 0.0 else max(value, 0.0)
+    value = canonical_soc_energy(vehicle, "initial_soc", cap, .8)
+    minimum = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=cap)
+    maximum = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=cap)
+    if not minimum-1e-6 <= value <= maximum+1e-6:
+        raise ValueError(f"Initial SOC for {getattr(vehicle, 'vehicle_id', '')} is outside [{minimum}, {maximum}] kWh")
+    return value
 
 
 def final_soc_floor_kwh(
@@ -236,7 +252,9 @@ def final_soc_floor_kwh(
     floor_ratio = percent_like_to_ratio((problem.metadata or {}).get("final_soc_floor_percent"))
     if floor_ratio is not None:
         floor = max(floor, floor_ratio * cap)
-    return min(max(floor, 0.0), cap) if cap > 0.0 else max(floor, 0.0)
+    if floor > vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=cap):
+        raise ValueError("Final SOC floor exceeds physical maximum SOC")
+    return floor
 
 
 def effective_final_soc_target_kwh(
@@ -250,6 +268,7 @@ def effective_final_soc_target_kwh(
     cap = max(float(cap_kwh if cap_kwh is not None else vehicle_capacity_kwh(problem, vehicle)), 0.0)
     if cap <= 0.0:
         return None
+    maximum = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=cap)
     policy = normalize_bev_terminal_soc_policy(
         metadata.get("bev_terminal_soc_policy"),
         has_explicit_target=target_ratio is not None,
@@ -265,7 +284,9 @@ def effective_final_soc_target_kwh(
                 f"Frozen BEV terminal SOC target for {vehicle_id!r} must be finite"
             )
         floor = final_soc_floor_kwh(problem, vehicle, cap_kwh=cap)
-        return min(max(frozen_target, floor), cap)
+        if not floor <= frozen_target <= maximum:
+            raise ValueError("Frozen terminal SOC target violates physical bounds")
+        return frozen_target
     tolerance_ratio = percent_like_to_ratio(
         metadata.get("final_soc_target_tolerance_percent")
     )
@@ -275,12 +296,14 @@ def effective_final_soc_target_kwh(
         if target_ratio is not None
         else None
     )
+    if configured_target is not None and configured_target > maximum:
+        raise ValueError("Configured terminal SOC target exceeds physical maximum SOC")
     return resolve_bev_terminal_soc_target_kwh(
         policy=policy,
         initial_soc_kwh=vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=cap),
         configured_target_kwh=configured_target,
         terminal_soc_floor_kwh=final_soc_floor_kwh(problem, vehicle, cap_kwh=cap),
-        maximum_soc_kwh=cap,
+        maximum_soc_kwh=maximum,
     )
 
 
@@ -354,10 +377,11 @@ def deadhead_energy_kwh(
     from_trip: ProblemTrip,
     to_trip: ProblemTrip,
 ) -> float:
-    deadhead_min = problem.dispatch_context.get_deadhead_min(
-        from_trip.destination,
-        to_trip.origin,
-    )
+    from src.dispatch.daily_return import connection_deadhead_minutes, requires_daily_return
+    if requires_daily_return(problem.dispatch_context, from_trip, to_trip):
+        deadhead_min = connection_deadhead_minutes(problem.dispatch_context, from_trip, to_trip)
+    else:
+        deadhead_min = problem.dispatch_context.get_deadhead_min(from_trip.destination, to_trip.origin)
     return deadhead_energy_from_minutes_kwh(
         problem,
         vehicle,

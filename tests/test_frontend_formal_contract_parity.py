@@ -139,7 +139,7 @@ def test_problem_builder_preserves_exact_fleet_contract_for_rolling(
 
     contract = problem.metadata["scenario_fleet_contract"]
     assert contract == expected.to_dict(include_source_records=True)
-    assert contract["schema_version"] == "scenario_fleet_contract_v2"
+    assert contract["schema_version"] == "scenario_fleet_contract_v3"
     assert problem.metadata["scenario_fleet_contract_hash"] == (
         expected.fleet_contract_hash
     )

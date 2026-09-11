@@ -250,7 +250,7 @@ def test_child_fleet_contract_must_match_the_prepared_fleet(tmp_path: Path) -> N
     source_run = tmp_path / "source-run"
     source_run.mkdir()
     contract = {
-        "schema_version": "scenario_fleet_contract_v2",
+        "schema_version": "scenario_fleet_contract_v3",
         "validation_status": "OK",
         "fleet_contract_hash": "fleet",
         "active_vehicle_id_hash": "vehicle-ids",

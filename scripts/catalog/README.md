@@ -18,6 +18,7 @@
 - [query_engine_bus.py](query_engine_bus.py): 車両データの検索
 - [fast_catalog_ingest.py](fast_catalog_ingest.py): カタログ取り込み
 - [update_tokyu_depots.py](update_tokyu_depots.py): 営業所データ更新
+- [prepare_seven_day_candidates.py](prepare_seven_day_candidates.py): 旧SUNNY/RAINを保持し、弦巻の7日入力候補を複製・Prepareする。最適化は実行しない。日付別ダイヤ、15分PV、60台の元在庫、元ケースの前後ハッシュを記録する。
 
 旧 `scripts/extract_engine_bus.py`、`scripts/query_engine_bus.py`、
 `tools/fast_catalog_ingest.py`、`tools/update_tokyu_depots.py` は互換入口です。

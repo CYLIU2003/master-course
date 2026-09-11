@@ -8,7 +8,7 @@ import json
 from typing import Any, Mapping
 
 from .problem import CanonicalOptimizationProblem, ProblemVehicle
-from .soc_helpers import effective_final_soc_target_kwh
+from .soc_helpers import effective_final_soc_target_kwh, vehicle_maximum_soc_kwh
 
 
 class InitialSocPolicy(StrEnum):
@@ -82,6 +82,7 @@ def initial_soc_input_metadata(
                 "initial_soc_percent": initial_kwh / capacity if capacity > 0.0 else None,
                 "battery_capacity_kwh": capacity,
                 "minimum_soc_kwh": minimum_kwh,
+                "maximum_soc_kwh": vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity),
                 # The controlled case clears optional terminal floors/targets,
                 # so the physical reserve is also the effective terminal
                 # lower bound.  Record it separately to prevent a semantic
@@ -126,7 +127,7 @@ def _vehicle_initial_soc_kwh(vehicle: ProblemVehicle, capacity: float) -> float:
     if value is None:
         return 0.8 * capacity
     numeric = float(value)
-    if numeric <= 1.0:
+    if vehicle.soc_input_unit != "kwh" and numeric <= 1.0:
         numeric *= capacity
     return min(max(numeric, 0.0), capacity)
 
@@ -136,6 +137,6 @@ def _vehicle_minimum_soc_kwh(vehicle: ProblemVehicle, capacity: float) -> float:
     if value is None:
         return 0.15 * capacity
     numeric = float(value)
-    if numeric <= 1.0:
+    if vehicle.soc_input_unit != "kwh" and numeric <= 1.0:
         numeric *= capacity
     return min(max(numeric, 0.0), capacity)

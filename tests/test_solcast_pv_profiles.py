@@ -35,7 +35,9 @@ def test_build_daily_profiles_from_csv_creates_24_slots(tmp_path: Path) -> None:
         "period_end,period,gti\n"
         "2025-08-01T01:00:00+09:00,PT60M,0\n"
         "2025-08-01T02:00:00+09:00,PT60M,200\n"
-        "2025-08-01T03:00:00+09:00,PT60M,500\n",
+        "2025-08-01T03:00:00+09:00,PT60M,500\n"
+        + ''.join(f"2025-08-01T{hour:02d}:00:00+09:00,PT60M,0\n" for hour in range(4,24))
+        + "2025-08-02T00:00:00+09:00,PT60M,0\n",
         encoding="utf-8",
     )
 
@@ -73,6 +75,7 @@ def test_solcast_resampling_preserves_interval_energy(slot_minutes: int) -> None
         slot_minutes=slot_minutes,
         pv_capacity_kw=100.0,
         performance_ratio=0.85,
+        require_complete_day=False,
     )
 
     assert sum(profile["pv_generation_kwh_by_slot"]) == pytest.approx(85.0)
@@ -90,6 +93,20 @@ def test_daily_profile_rejects_date_missing_from_solcast_records() -> None:
             slot_minutes=15,
             pv_capacity_kw=100.0,
         )
+
+
+@pytest.mark.parametrize('corruption', ['missing', 'duplicated', 'overlap_and_gap'])
+def test_daily_profile_requires_complete_nonoverlapping_source_intervals(corruption: str) -> None:
+    start = datetime(2025,8,1,tzinfo=timezone(timedelta(hours=9)))
+    records = [(start+timedelta(hours=i+1), 0.0, 60) for i in range(24)]
+    if corruption == 'missing':
+        records.pop(2)
+    elif corruption == 'duplicated':
+        records.append(records[2])
+    else:
+        records[3] = records[2]  # Total covered hours still appears to be 24.
+    with pytest.raises(ValueError, match='Incomplete|overlap|duplicated'):
+        _build_daily_profile(records, target_date='2025-08-01',slot_minutes=15,pv_capacity_kw=100)
 
 
 @pytest.mark.parametrize(

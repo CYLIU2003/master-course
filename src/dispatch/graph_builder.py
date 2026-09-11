@@ -32,15 +32,18 @@ class ConnectionGraphBuilder:
         All trips that are *allowed* for *vehicle_type* appear as nodes
         (even if they have no outgoing edges).
         """
-        graph: Dict[str, List[str]] = {
-            t.trip_id: []
-            for t in context.trips
-            if vehicle_type in t.allowed_vehicle_types
-        }
-
-        for arc in self.analyze(context, vehicle_type):
-            if arc.feasible:
-                graph[arc.from_trip_id].append(arc.to_trip_id)
+        trips = [trip for trip in context.trips if vehicle_type in trip.allowed_vehicle_types]
+        graph: Dict[str, List[str]] = {trip.trip_id: [] for trip in trips}
+        # Multi-day inputs create millions of rejected pairs. The adjacency
+        # builder still checks every pair, but need not retain the diagnostic
+        # ConnectionArc objects that analyze() deliberately returns to callers.
+        for trip_i in trips:
+            for trip_j in trips:
+                if trip_i.trip_id == trip_j.trip_id:
+                    continue
+                result = self._engine.can_connect(trip_i, trip_j, context, vehicle_type)
+                if result.feasible:
+                    graph[trip_i.trip_id].append(trip_j.trip_id)
 
         return graph
 

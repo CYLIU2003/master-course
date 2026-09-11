@@ -6,9 +6,10 @@ import hashlib
 import json
 import math
 from typing import Any, Dict, Literal, Mapping, Optional, Sequence, Tuple
+from .vehicle_soc_contract import resolve_vehicle_soc_contract
 
 
-SCENARIO_FLEET_CONTRACT_SCHEMA_VERSION = "scenario_fleet_contract_v2"
+SCENARIO_FLEET_CONTRACT_SCHEMA_VERSION = "scenario_fleet_contract_v3"
 SUPPORTED_RESEARCH_POWERTRAINS = frozenset({"BEV", "ICE"})
 
 _TRUE_VALUES = frozenset({"true", "1", "yes", "on"})
@@ -390,6 +391,14 @@ def _canonical_record_payload(
         )
         initial_soc_kwh = initial_soc_ratio * battery_capacity_kwh
     merged_fuel_record = {**dict(catalog_record), **dict(record)}
+    soc_contract = None
+    soc_contract_error = None
+    if powertrain == "BEV" and battery_capacity_kwh is not None:
+        try:
+            soc_contract = resolve_vehicle_soc_contract(merged_fuel_record, battery_capacity_kwh)
+            initial_soc_kwh = soc_contract.initial_kwh
+        except ValueError as exc:
+            soc_contract_error = str(exc)
     return {
         "vehicle_id": vehicle_id,
         "vehicle_type": vehicle_type,
@@ -398,6 +407,9 @@ def _canonical_record_payload(
         "available": available,
         "initial_soc_raw": raw_initial_soc,
         "initial_soc": initial_soc_kwh,
+        "minimum_soc_kwh": soc_contract.minimum_kwh if soc_contract else None,
+        "maximum_soc_kwh": soc_contract.maximum_kwh if soc_contract else None,
+        "soc_contract_error": soc_contract_error,
         "initial_soc_declared": any(
             key in record for key in ("initialSoc", "initial_soc", "initial_soc_kwh")
         ),
@@ -456,6 +468,8 @@ def _validate_research_parameters(payload: Mapping[str, Any]) -> list[str]:
     vehicle_id = str(payload["vehicle_id"])
     powertrain = str(payload["powertrain"])
     if powertrain == "BEV":
+        if payload.get("soc_contract_error"):
+            errors.append(f"{vehicle_id}:invalid_soc_contract:{payload['soc_contract_error']}")
         if float(payload.get("battery_capacity_kwh") or 0.0) <= 0.0:
             errors.append(f"{vehicle_id}:missing_or_invalid_battery_capacity_kwh")
         if float(payload.get("energy_consumption_kwh_per_km") or 0.0) <= 0.0:
@@ -468,7 +482,10 @@ def _validate_research_parameters(payload: Mapping[str, Any]) -> list[str]:
         elif (
             raw_initial_soc is None
             or float(raw_initial_soc) < 0.0
-            or float(raw_initial_soc) > 100.0
+            or (
+                "initial_soc_kwh" not in payload.get("source_record", {})
+                and float(raw_initial_soc) > 100.0
+            )
         ):
             errors.append(f"{vehicle_id}:invalid_initial_soc")
         if float(payload.get("charge_power_max_kw") or 0.0) <= 0.0:
@@ -690,6 +707,12 @@ def resolve_scenario_fleet_contract(
                 if value is not None
             }
         )
+        for aliases in (("minSoc", "min_soc", "minimum_soc_kwh"),
+                        ("maxSoc", "max_soc", "maximum_soc_kwh")):
+            if not any(record.get(key) is not None for key in aliases):
+                for key in aliases:
+                    if catalog_record.get(key) is not None:
+                        normalized_record[key] = catalog_record[key]
         active_records.append(normalized_record)
         active_parameters.append(payload)
 

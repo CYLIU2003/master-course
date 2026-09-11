@@ -644,6 +644,8 @@ def _load_optional_stops(
     trips_df: pd.DataFrame,
     timetables_df: pd.DataFrame,
 ) -> list[dict[str, Any]]:
+    if (scenario.get('simulation_config') or {}).get('multi_day_input_mode') == 'dated_timetable_and_pv_v1':
+        return [dict(row) for row in scenario.get('stops') or []]
     referenced_stop_ids = _collect_referenced_stop_ids(trips_df, timetables_df)
     stops_path = built_dir / "stops.parquet"
     if not stops_path.exists():
@@ -732,6 +734,18 @@ def _load_scope_frames(
     built_dir: Path,
     scope,
 ) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    config = scenario.get('simulation_config') or {}
+    if config.get('multi_day_input_mode') == 'dated_timetable_and_pv_v1':
+        from src.optimization.common.date_series import validate_dated_timetable
+        rows = list(scenario.get('timetable_rows') or [])
+        validate_dated_timetable(rows,config.get('date_series_contract') or {})
+        contract = config.get('date_series_contract') or {}
+        selected_routes = set(contract.get('selected_route_ids') or {row['route_id'] for row in rows})
+        if set(scope.route_ids) != selected_routes or not {row['route_id'] for row in rows}.issubset(selected_routes):
+            raise ValueError('Route scope changed after dated timetable preparation')
+        if set(scope.service_ids) != {row['service_id'] for row in rows}:
+            raise ValueError('Service scope changed after dated timetable preparation')
+        return (_rows_to_frame(rows),_rows_to_frame(scenario.get('stop_timetables') or []),'verified_dated_timetable')
     try:
         from src import tokyu_bus_data, tokyu_shard_loader
 
@@ -2883,7 +2897,7 @@ def materialize_scenario_from_prepared_input(
             if stop_id:
                 referenced_stop_ids.add(stop_id)
 
-    if referenced_stop_ids:
+    if referenced_stop_ids and (hydrated.get('simulation_config') or {}).get('multi_day_input_mode') != 'dated_timetable_and_pv_v1':
         catalog_stops = _load_catalog_stops(hydrated, referenced_stop_ids)
         if catalog_stops:
             hydrated["stops"] = _merge_stop_records(
@@ -3030,7 +3044,11 @@ def _build_run_preparation(
         )
         service_dates = list(simulation_config.get("service_dates") or [])
         planning_days = max(int(simulation_config.get("planning_days") or 1), 1)
-        stop_sequences = _load_stop_sequences(built_dir)
+        stop_sequences = (
+            list(scenario.get('stop_timetables') or [])
+            if simulation_config.get('multi_day_input_mode') == 'dated_timetable_and_pv_v1'
+            else _load_stop_sequences(built_dir)
+        )
         solver_input = normalize_for_python(_build_canonical_input(
             scenario=scenario,
             prepared_input_id=prepared_input_id,

@@ -38,6 +38,8 @@ def trip_route_band_key(trip_like: Any, fallback_route_id: str = "") -> str:
 
 
 def trip_service_day_index(trip_like: Any, *, horizon_start_min: int = 0) -> int:
+    if getattr(trip_like, "service_date", ""):
+        return int(getattr(trip_like, "day_index", 0))
     departure_min = int(getattr(trip_like, "departure_min", 0) or 0)
     adjusted = departure_min - int(horizon_start_min or 0)
     if adjusted < 0:

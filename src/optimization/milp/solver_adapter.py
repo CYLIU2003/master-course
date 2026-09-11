@@ -14,6 +14,8 @@ from typing import Any, Callable, Collection, Dict, Iterable, Iterator, List, Li
 
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
+from src.dispatch.daily_return import checked_deadhead_minutes, connection_deadhead_minutes, requires_daily_return
+from src.optimization.common.vehicle_timeline import fixed_path_slot_loads
 from src.dispatch.route_band import duty_route_band_ids, fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
@@ -62,6 +64,8 @@ from src.optimization.common.soc_helpers import (
     slot_index,
     slot_index_ceil,
     vehicle_initial_soc_kwh,
+    vehicle_reserve_soc_kwh,
+    vehicle_maximum_soc_kwh,
 )
 
 
@@ -716,6 +720,8 @@ def _problem_vehicle_symmetry_signature(vehicle: Any) -> Tuple[Any, ...]:
         getattr(vehicle, "initial_soc", None),
         getattr(vehicle, "battery_capacity_kwh", None),
         getattr(vehicle, "reserve_soc", None),
+        getattr(vehicle, "maximum_soc_kwh", None),
+        getattr(vehicle, "soc_input_unit", "legacy_ratio_or_kwh"),
         bool(getattr(vehicle, "available", True)),
         getattr(vehicle, "initial_fuel_l", None),
         getattr(vehicle, "fuel_tank_capacity_l", None),
@@ -4033,7 +4039,11 @@ def _stage2_slot_indices(
     if current_min is None:
         raise ValueError("rolling_current_min is required for remaining-day re-optimization")
     start_slot = slot_index(problem, int(current_min))
-    return tuple(item for item in ordered if item >= start_slot)
+    hours = getattr(config, 'rolling_lookahead_hours', None)
+    if hours is not None and hours not in (24,48,72,168):
+        raise ValueError('Unsupported rolling lookahead hours')
+    stop_slot = start_slot + int(hours)*60//int(problem.scenario.timestep_min) if hours is not None else None
+    return tuple(item for item in ordered if item >= start_slot and (stop_slot is None or item < stop_slot))
 
 
 def _pv_generation_kwh_at_slot(asset: DepotEnergyAsset, slot_idx: int) -> float:
@@ -8806,13 +8816,8 @@ class GurobiMILPAdapter:
                     continue
                 vehicle_available = bool(getattr(vehicle, "available", True))
                 cap = max(vehicle.battery_capacity_kwh or 300.0, 1.0)
-                reserve = vehicle.reserve_soc
-                if reserve is None:
-                    soc_min = 0.15 * cap
-                elif reserve <= 1.0:
-                    soc_min = reserve * cap
-                else:
-                    soc_min = reserve
+                soc_min = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=cap)
+                soc_max = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=cap)
 
                 charge_max_kw = self._vehicle_charge_power_max_kw(problem, vehicle)
                 if problem.chargers:
@@ -8850,9 +8855,9 @@ class GurobiMILPAdapter:
                         soc_bound_violation_var[(vehicle.vehicle_id, slot_idx, "lower")] = soc_lower_deficit
                         soc_bound_violation_var[(vehicle.vehicle_id, slot_idx, "upper")] = soc_upper_excess
                         model.addConstr(s_var[(vehicle.vehicle_id, slot_idx)] + soc_lower_deficit >= soc_min)
-                        model.addConstr(s_var[(vehicle.vehicle_id, slot_idx)] - soc_upper_excess <= cap)
+                        model.addConstr(s_var[(vehicle.vehicle_id, slot_idx)] - soc_upper_excess <= soc_max)
                     else:
-                        s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=soc_min, ub=cap, vtype=GRB.CONTINUOUS)
+                        s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=soc_min, ub=soc_max, vtype=GRB.CONTINUOUS)
 
                 # ProblemBuilder has already resolved the selected initial-SOC
                 # policy into each vehicle. Re-reading the scenario-wide
@@ -8862,7 +8867,6 @@ class GurobiMILPAdapter:
                     vehicle,
                     cap_kwh=cap,
                 )
-                initial_kwh = min(max(initial_kwh, soc_min), cap)
                 integrated_vehicle_initial_soc_kwh[vehicle.vehicle_id] = float(
                     initial_kwh
                 )
@@ -8956,7 +8960,7 @@ class GurobiMILPAdapter:
                     final_slot_end_soc
                     >= final_soc_floor_kwh * used_vehicle[vehicle.vehicle_id]
                 )
-                model.addConstr(final_slot_end_soc <= cap)
+                model.addConstr(final_slot_end_soc <= soc_max)
 
                 # Apply day-end SOC floor/target for each planning day to support multi-day overnight operations.
                 for day_idx in day_indices:
@@ -9713,6 +9717,12 @@ class GurobiMILPAdapter:
                     )
                     if terminal_soc_target is not None:
                         model.addConstr(final_soc_expr == terminal_soc_target)
+                        if asset.bess_balance_period == 'daily':
+                            for boundary_slot in slot_indices:
+                                if (slot_absolute_min(problem,boundary_slot)+problem.scenario.timestep_min) % 1440 == 0:
+                                    boundary_key = (depot_id,boundary_slot)
+                                    model.addConstr(bess_soc_var[boundary_key] + eta_ch*(pv2bess_var[boundary_key]+g2bess_var[boundary_key])
+                                                    - bess2bus_var[boundary_key]/eta_dis == terminal_soc_target)
                         dev_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
                         bess_terminal_soc_deviation_var[depot_id] = dev_var
                         model.addConstr(dev_var >= final_soc_expr - terminal_soc_target)
@@ -21610,6 +21620,10 @@ class GurobiMILPAdapter:
             if is_remaining_day_reoptimization and slot_indices
             else None
         )
+        rolling_stop_abs_min = (
+            slot_absolute_min(problem, slot_indices[-1]) + problem.scenario.timestep_min
+            if is_remaining_day_reoptimization and slot_indices else None
+        )
         vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
         bev_vehicle_ids = {
             str(vehicle.vehicle_id)
@@ -21655,6 +21669,8 @@ class GurobiMILPAdapter:
                     )
                 ),
                 "rolling_horizon_policy": rolling_policy,
+                "rolling_stop_slot_index": (slot_indices[-1]+1 if slot_indices else None),
+                "rolling_lookahead_hours": getattr(config, "rolling_lookahead_hours", None),
                 "rolling_start_slot_index": (
                     slot_indices[0] if is_remaining_day_reoptimization and slot_indices else None
                 ),
@@ -21797,7 +21813,7 @@ class GurobiMILPAdapter:
         operation_end_min = self._operation_end_min(problem)
         planning_days = max(int(problem.metadata.get("planning_days") or problem.scenario.planning_days or 1), 1)
 
-        for duty in stage1_plan.duties:
+        for duty in (() if getattr(problem.dispatch_context, "daily_return_depot_id", "") else stage1_plan.duties):
             vehicle_id = str(stage1_plan.vehicle_id_for_duty(duty.duty_id))
             if vehicle_id not in assigned_bev_ids:
                 continue
@@ -21851,6 +21867,8 @@ class GurobiMILPAdapter:
                 else:
                     unallocated_fraction = max(1.0 - allocated_fraction, 0.0)
                 if unallocated_fraction > 1.0e-9:
+                    if rolling_stop_abs_min is not None and self._service_minute(problem,int(trip.departure_min)) >= rolling_stop_abs_min:
+                        unallocated_fraction = 0.0
                     terminal_out_of_horizon_load_by_vehicle[vehicle_id] = (
                         terminal_out_of_horizon_load_by_vehicle.get(vehicle_id, 0.0)
                         + self._trip_energy_kwh(problem, vehicle, trip.trip_id)
@@ -22009,6 +22027,8 @@ class GurobiMILPAdapter:
                                 event_end_min=return_end_min,
                                 rolling_start_abs_min=rolling_start_abs_min,
                             )
+                        if rolling_stop_abs_min is not None and return_start_min >= rolling_stop_abs_min:
+                            return_kwh = 0.0
                         if return_transition_slot is None and return_kwh > 1.0e-9:
                             terminal_out_of_horizon_load_by_vehicle[vehicle_id] = (
                                 terminal_out_of_horizon_load_by_vehicle.get(vehicle_id, 0.0)
@@ -22065,6 +22085,14 @@ class GurobiMILPAdapter:
                 )
             )
 
+        if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
+            timeline_loads = fixed_path_slot_loads(problem, stage1_plan, slot_indices)
+            trip_load_by_vehicle_slot = timeline_loads.energy_kwh
+            active_slot_by_vehicle = timeline_loads.service_active
+            deadhead_active_slot_by_vehicle = timeline_loads.movement_active
+            allowed_charge_slots_by_vehicle = timeline_loads.home_slots
+            deadhead_energy_before_trip = timeline_loads.energy_before_departure
+
         rolling_active_charge_session_vehicle_ids = frozenset(
             str(vehicle_id)
             for vehicle_id in (
@@ -22079,20 +22107,18 @@ class GurobiMILPAdapter:
         for vehicle_id in assigned_bev_ids:
             vehicle = vehicle_by_id[vehicle_id]
             cap = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
-            reserve = vehicle.reserve_soc
-            soc_min = 0.15 * cap if reserve is None else (float(reserve) * cap if float(reserve) <= 1.0 else float(reserve))
+            soc_min = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=cap)
+            soc_max = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=cap)
             charge_max_kw = self._vehicle_charge_power_max_kw(problem, vehicle)
             if problem.chargers:
                 max_charger_kw = max(float(charger.power_kw or 0.0) for charger in problem.chargers)
                 if max_charger_kw > 0.0:
                     charge_max_kw = min(charge_max_kw, max_charger_kw)
-            initial_soc = vehicle.initial_soc
-            initial_kwh = 0.8 * cap if initial_soc is None else (float(initial_soc) * cap if float(initial_soc) <= 1.0 else float(initial_soc))
-            initial_kwh = min(max(initial_kwh, 0.0), cap)
+            initial_kwh = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=cap)
             for slot_idx in slot_indices:
                 charge_on_var[(vehicle_id, slot_idx)] = stage2.addVar(vtype=GRB.BINARY, name=f"charge_on_{vehicle_id}_{slot_idx}")
                 c_var[(vehicle_id, slot_idx)] = stage2.addVar(lb=0.0, ub=charge_max_kw, vtype=GRB.CONTINUOUS, name=f"c_{vehicle_id}_{slot_idx}")
-                s_var[(vehicle_id, slot_idx)] = stage2.addVar(lb=0.0, ub=cap, vtype=GRB.CONTINUOUS, name=f"soc_{vehicle_id}_{slot_idx}")
+                s_var[(vehicle_id, slot_idx)] = stage2.addVar(lb=0.0, ub=soc_max, vtype=GRB.CONTINUOUS, name=f"soc_{vehicle_id}_{slot_idx}")
                 stage2.addConstr(
                     s_var[(vehicle_id, slot_idx)] >= soc_min,
                     name=f"soc_lower__{vehicle_id}__slot_{slot_idx}",
@@ -22173,7 +22199,7 @@ class GurobiMILPAdapter:
                 name=f"terminal_soc__{vehicle_id}__minimum",
             )
             stage2.addConstr(
-                terminal_soc_expr <= cap,
+                terminal_soc_expr <= soc_max,
                 name=f"soc_upper__{vehicle_id}__terminal",
             )
             target_kwh = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=cap)
@@ -22196,6 +22222,18 @@ class GurobiMILPAdapter:
                     tolerance_kwh = float(
                         terminal_contract["scientific_tolerance_kwh"]
                     )
+                    window_reference = problem.metadata.get(
+                        "rolling_window_terminal_reference"
+                    )
+                    if (
+                        isinstance(window_reference, Mapping)
+                        and window_reference.get("policy") == "day_ahead_boundary_state"
+                    ):
+                        # The reference already includes the day-ahead numerical
+                        # band. Adding it again can leave an idle vehicle above
+                        # the unchanged evaluation-end upper bound with no way
+                        # to discharge. Match intermediate boundary states.
+                        tolerance_kwh = 0.0
                     stage2.addConstr(
                         terminal_soc_expr <= target_kwh + tolerance_kwh,
                         name=f"terminal_soc__{vehicle_id}__return_to_initial_upper",
@@ -22265,6 +22303,16 @@ class GurobiMILPAdapter:
                 charge_on_var=charge_on_var,
                 name_prefix="stage2_physical_charger",
             )
+            for vehicle_id, charger_id in dict(config.rolling_connected_charger_by_vehicle or {}).items():
+                if vehicle_id not in rolling_active_charge_session_vehicle_ids:
+                    continue
+                key = (vehicle_id, charger_id, slot_indices[0])
+                if key not in physical_charger_assignment_var:
+                    raise ValueError("The ongoing physical charging connection cannot be represented")
+                # The controller can end the session at this boundary. If it
+                # continues charging, it keeps the already connected charger.
+                stage2.addConstr(physical_charger_assignment_var[key] == charge_on_var[(vehicle_id,slot_indices[0])],
+                                 name=f"rolling_charger_connection__{vehicle_id}")
 
         depot_by_id = {depot.depot_id: depot for depot in problem.depots}
         depot_energy_assets: Dict[str, DepotEnergyAsset] = dict(problem.depot_energy_assets or {})
@@ -22438,6 +22486,13 @@ class GurobiMILPAdapter:
                 terminal_target = _bess_terminal_soc_target_kwh(asset, terminal_soc_floor=terminal_floor)
                 if terminal_target is not None:
                     stage2.addConstr(terminal_expr == terminal_target)
+                    if asset.bess_balance_period == 'daily':
+                        daily_target = (problem.metadata.get('bess_daily_balance_target_kwh_by_depot') or {}).get(depot_id,terminal_target)
+                        for boundary_slot in slot_indices:
+                            if (slot_absolute_min(problem,boundary_slot)+problem.scenario.timestep_min) % 1440 == 0:
+                                boundary_key = (depot_id,boundary_slot)
+                                stage2.addConstr(bess_soc_var[boundary_key] + eta_ch*(pv2bess_var[boundary_key]+g2bess_var[boundary_key])
+                                                 - bess2bus_var[boundary_key]/eta_dis == daily_target)
         if w_on_depot_var:
             w_on_var = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_on")
             w_off_var = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_off")
@@ -22731,6 +22786,7 @@ class GurobiMILPAdapter:
                 "stage1_mip_gap_ratio": stage1_gap,
                 "stage1_runtime_seconds": stage1_runtime_sec,
                 "stage2_has_feasible_incumbent": False,
+                "stage2_exact_optimality_certified": False,
                 "stage2_objective": None,
                 "stage2_best_bound": stage2_bound,
                 "stage2_mip_gap_ratio": stage2_gap,
@@ -22764,6 +22820,8 @@ class GurobiMILPAdapter:
                     )
                 ),
                 "rolling_horizon_policy": rolling_policy,
+                "rolling_stop_slot_index": (slot_indices[-1]+1 if slot_indices else None),
+                "rolling_lookahead_hours": getattr(config, "rolling_lookahead_hours", None),
                 "rolling_start_slot_index": (
                     slot_indices[0] if is_remaining_day_reoptimization and slot_indices else None
                 ),
@@ -22806,7 +22864,14 @@ class GurobiMILPAdapter:
                         metadata.get("stage1_warm_start_source") or ""
                     ),
                 ),
-                replace(stage1_plan, metadata=metadata),
+                AssignmentPlan(
+                    duties=stage1_plan.duties,
+                    served_trip_ids=stage1_plan.served_trip_ids,
+                    unserved_trip_ids=stage1_plan.unserved_trip_ids,
+                    metadata={**metadata, "canonical_source_flow_context": {},
+                              "source_provenance_exact": False,
+                              "vehicle_source_provenance_exact": False},
+                ),
             )
 
         def _var_val(var: Any) -> float:
@@ -22942,6 +23007,13 @@ class GurobiMILPAdapter:
                 )
                 vehicle_terminal_soc_kwh_by_vehicle[vehicle_id] = max(
                     float(terminal_kwh), 0.0
+                )
+                # The boundary state excludes energy of a committed movement
+                # beyond the window. That commitment is a terminal reserve,
+                # and has not physically been consumed at this boundary yet.
+                vehicle_soc.setdefault(vehicle_id, {})[terminal_slot+1] = (
+                    float(terminal_kwh)
+                    + float(terminal_out_of_horizon_load_by_vehicle.get(vehicle_id, 0.0))
                 )
                 if target_kwh is not None:
                     vehicle_terminal_soc_target_kwh_by_vehicle[vehicle_id] = float(
@@ -23104,6 +23176,8 @@ class GurobiMILPAdapter:
                 )
             ),
             "rolling_horizon_policy": rolling_policy,
+                "rolling_stop_slot_index": (slot_indices[-1]+1 if slot_indices else None),
+                "rolling_lookahead_hours": getattr(config, "rolling_lookahead_hours", None),
             "rolling_start_slot_index": (
                 slot_indices[0] if is_remaining_day_reoptimization and slot_indices else None
             ),
@@ -23593,12 +23667,8 @@ class GurobiMILPAdapter:
                 dispatch_trip_by_id=dispatch_trip_by_id,
             )
             cap = max(float(vehicle.battery_capacity_kwh or 0.0), 1.0)
-            reserve = vehicle.reserve_soc
-            minimum = 0.15 * cap if reserve is None else float(reserve) * cap if float(reserve) <= 1.0 else float(reserve)
-            minimum = min(max(minimum, 0.0), cap)
-            initial = vehicle.initial_soc
-            initial_kwh = 0.8 * cap if initial is None else float(initial) * cap if float(initial) <= 1.0 else float(initial)
-            initial_kwh = min(max(initial_kwh, 0.0), cap)
+            minimum = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=cap)
+            initial_kwh = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=cap)
             charge_max_kw = self._charge_power_max_kw(problem, vehicle.vehicle_type)
             if problem.chargers:
                 charge_max_kw = min(
@@ -27759,28 +27829,8 @@ class GurobiMILPAdapter:
                 float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 300.0),
                 1.0,
             )
-            initial_soc = getattr(vehicle, "initial_soc", None)
-            initial_soc_kwh = (
-                0.8 * capacity_kwh
-                if initial_soc is None
-                else (
-                    float(initial_soc) * capacity_kwh
-                    if float(initial_soc) <= 1.0
-                    else float(initial_soc)
-                )
-            )
-            initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
-            reserve_soc = getattr(vehicle, "reserve_soc", None)
-            minimum_soc_kwh = (
-                0.15 * capacity_kwh
-                if reserve_soc is None
-                else (
-                    float(reserve_soc) * capacity_kwh
-                    if float(reserve_soc) <= 1.0
-                    else float(reserve_soc)
-                )
-            )
-            minimum_soc_kwh = min(max(minimum_soc_kwh, 0.0), capacity_kwh)
+            minimum_soc_kwh = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
+            initial_soc_kwh = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
             terminal_requirement_kwh = max(
                 minimum_soc_kwh,
                 final_soc_floor_kwh(problem, vehicle, cap_kwh=capacity_kwh),
@@ -28227,28 +28277,8 @@ class GurobiMILPAdapter:
                 continue
 
             capacity_kwh = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
-            reserve_soc = vehicle.reserve_soc
-            minimum_soc_kwh = (
-                0.15 * capacity_kwh
-                if reserve_soc is None
-                else (
-                    float(reserve_soc) * capacity_kwh
-                    if float(reserve_soc) <= 1.0
-                    else float(reserve_soc)
-                )
-            )
-            minimum_soc_kwh = min(max(minimum_soc_kwh, 0.0), capacity_kwh)
-            initial_soc = vehicle.initial_soc
-            initial_soc_kwh = (
-                0.8 * capacity_kwh
-                if initial_soc is None
-                else (
-                    float(initial_soc) * capacity_kwh
-                    if float(initial_soc) <= 1.0
-                    else float(initial_soc)
-                )
-            )
-            initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
+            minimum_soc_kwh = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
+            initial_soc_kwh = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
             terminal_requirement_kwh = max(
                 minimum_soc_kwh,
                 final_soc_floor_kwh(problem, vehicle, cap_kwh=capacity_kwh),
@@ -28453,6 +28483,10 @@ class GurobiMILPAdapter:
         these variables to the slot-level grid/PV/BESS recourse.  Binary
         charger assignment and binary BESS modes remain deferred to Stage 2.
         """
+        state_representation = str(problem.metadata.get("stage1_soc_state_representation") or (
+            "recursive" if getattr(problem.dispatch_context, "daily_return_depot_id", "") else "cumulative"))
+        if state_representation not in {"recursive", "cumulative"}:
+            raise ValueError("Unknown Stage 1 SOC state representation")
         slot_indices = tuple(
             sorted({slot.slot_index for slot in problem.price_slots})
         )
@@ -28506,28 +28540,8 @@ class GurobiMILPAdapter:
             capacity_kwh = max(
                 float(vehicle.battery_capacity_kwh or 300.0), 1.0
             )
-            reserve_soc = vehicle.reserve_soc
-            minimum_soc_kwh = (
-                0.15 * capacity_kwh
-                if reserve_soc is None
-                else (
-                    float(reserve_soc) * capacity_kwh
-                    if float(reserve_soc) <= 1.0
-                    else float(reserve_soc)
-                )
-            )
-            minimum_soc_kwh = min(max(minimum_soc_kwh, 0.0), capacity_kwh)
-            initial_soc = vehicle.initial_soc
-            initial_soc_kwh = (
-                0.8 * capacity_kwh
-                if initial_soc is None
-                else (
-                    float(initial_soc) * capacity_kwh
-                    if float(initial_soc) <= 1.0
-                    else float(initial_soc)
-                )
-            )
-            initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
+            minimum_soc_kwh = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
+            initial_soc_kwh = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
             charge_max_kw = self._charge_power_max_kw(
                 problem, str(vehicle.vehicle_type)
             )
@@ -28743,19 +28757,29 @@ class GurobiMILPAdapter:
             cumulative_load = 0.0
             cumulative_charge_energy = 0.0
             initial_energy = initial_soc_kwh * used_vehicle[vehicle_id]
-            maximum_energy = capacity_kwh * used_vehicle[vehicle_id]
+            maximum_energy = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh) * used_vehicle[vehicle_id]
+            previous_soc = initial_energy
             for slot_idx in slot_indices:
-                cumulative_load += sum(load_terms_by_slot[slot_idx])
-                cumulative_charge_energy += (
+                slot_load = gp.quicksum(load_terms_by_slot[slot_idx])
+                slot_charge_energy = (
                     stage1_charge_power_var[(vehicle_id, slot_idx)]
                     * timestep_h
                     * charge_efficiency
                 )
-                slot_end_soc = (
-                    initial_energy
-                    + cumulative_charge_energy
-                    - cumulative_load
-                )
+                if state_representation == "recursive":
+                    # A prefix sum repeated in every row creates a dense weekly
+                    # matrix. The recursive state has the identical projection
+                    # onto assignment/charging decisions, with sparse rows.
+                    slot_end_soc = model.addVar(lb=0.0, vtype=grb.CONTINUOUS,
+                        name=f"stage1_soc_state__{vehicle_id}__slot_{slot_idx}")
+                    model.addConstr(slot_end_soc == previous_soc + slot_charge_energy - slot_load,
+                        name=f"stage1_soc_transition__{vehicle_id}__slot_{slot_idx}")
+                    constraint_count += 1
+                    previous_soc = slot_end_soc
+                else:
+                    cumulative_load += slot_load
+                    cumulative_charge_energy += slot_charge_energy
+                    slot_end_soc = initial_energy + cumulative_charge_energy - cumulative_load
                 model.addConstr(
                     slot_end_soc
                     >= minimum_soc_kwh * used_vehicle[vehicle_id],
@@ -28789,11 +28813,9 @@ class GurobiMILPAdapter:
                     or 0.0
                 ),
             )
-            terminal_soc = (
-                initial_energy
-                + cumulative_charge_energy
-                - cumulative_load
-            )
+            terminal_soc = (previous_soc - gp.quicksum(terminal_load_terms)
+                            if state_representation == "recursive"
+                            else initial_energy + cumulative_charge_energy - cumulative_load)
             model.addConstr(
                 terminal_soc
                 >= terminal_requirement_kwh * used_vehicle[vehicle_id],
@@ -28839,6 +28861,7 @@ class GurobiMILPAdapter:
 
         shared_charger_metadata: Dict[str, Any] = {
             "enabled": bool(stage1_charge_power_var),
+            "soc_state_representation": state_representation,
             "relaxation_semantics": (
                 "continuous physical-charger assignment with exact vehicle, "
                 "charger, port, power, depot, and charging-window upper bounds; "
@@ -29791,28 +29814,8 @@ class GurobiMILPAdapter:
             )
 
         capacity_kwh = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
-        reserve = vehicle.reserve_soc
-        minimum_soc_kwh = (
-            0.15 * capacity_kwh
-            if reserve is None
-            else (
-                float(reserve) * capacity_kwh
-                if float(reserve) <= 1.0
-                else float(reserve)
-            )
-        )
-        minimum_soc_kwh = min(max(minimum_soc_kwh, 0.0), capacity_kwh)
-        initial = vehicle.initial_soc
-        initial_soc_kwh = (
-            0.8 * capacity_kwh
-            if initial is None
-            else (
-                float(initial) * capacity_kwh
-                if float(initial) <= 1.0
-                else float(initial)
-            )
-        )
-        initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
+        minimum_soc_kwh = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
+        initial_soc_kwh = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
         startup_deadhead_energy_kwh = deadhead_energy_from_minutes_kwh(
             problem,
             vehicle,
@@ -29835,7 +29838,7 @@ class GurobiMILPAdapter:
         )
         maximum_precharge_energy_kwh = min(
             max(theoretical_precharge_kwh, 0.0),
-            max(capacity_kwh - initial_soc_kwh, 0.0),
+            max(vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh) - initial_soc_kwh, 0.0),
         )
         final_floor_kwh = max(
             minimum_soc_kwh,
@@ -30579,6 +30582,8 @@ class GurobiMILPAdapter:
         previous_trip: ProblemTrip,
         next_trip: ProblemTrip,
     ) -> int:
+        if requires_daily_return(problem.dispatch_context, previous_trip, next_trip):
+            return connection_deadhead_minutes(problem.dispatch_context, previous_trip, next_trip)
         if self._locations_equivalent(
             problem, previous_trip.destination, next_trip.origin
         ):
@@ -30612,6 +30617,13 @@ class GurobiMILPAdapter:
     ) -> Optional[Tuple[int, int]]:
         """Return a confirmed at-home interval between connected trips."""
         home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+        if requires_daily_return(problem.dispatch_context, previous_trip, next_trip):
+            arrival = (self._trip_service_arrival_min(problem, previous_trip)
+                       + self._turnaround_min(problem, previous_trip.destination)
+                       + checked_deadhead_minutes(problem.dispatch_context, previous_trip.destination, home_depot_id))
+            departure = (self._service_minute(problem, int(next_trip.departure_min))
+                         - checked_deadhead_minutes(problem.dispatch_context, home_depot_id, next_trip.origin))
+            return (arrival, departure) if departure > arrival else None
         previous_at_home = self._locations_equivalent(
             problem, previous_trip.destination, home_depot_id
         )
@@ -31695,10 +31707,7 @@ class GurobiMILPAdapter:
         to_trip = problem.trip_by_id().get(to_trip_id)
         if from_trip is None or to_trip is None:
             return 0.0
-        deadhead_min = problem.dispatch_context.get_deadhead_min(
-            from_trip.destination,
-            to_trip.origin,
-        )
+        deadhead_min = self._connection_deadhead_min(problem, from_trip, to_trip)
         deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
         return max(deadhead_km, 0.0) * fuel_rate
 
@@ -31811,4 +31820,3 @@ class GurobiMILPAdapter:
         if required_ratio is not None and required_ratio > 0.0 and cap_kwh > 0.0:
             required_kwh = max(required_kwh, required_ratio * cap_kwh)
         return max(required_kwh, 0.0)
-

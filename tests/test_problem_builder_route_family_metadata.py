@@ -11,6 +11,7 @@ def _scenario(*, planning_days: int) -> dict:
             "max_depot_cycles_per_vehicle_per_day": 2,
             "service_coverage_mode": "strict",
             "planning_days": planning_days,
+            "multi_day_input_mode": "repeat_day_diagnostic",
         },
         "scenario_overlay": {
             "solver_config": {},

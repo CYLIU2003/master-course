@@ -7592,6 +7592,10 @@ def _canonical_movement_event_rows(
     }
     rows: List[Dict[str, Any]] = []
     seen_event_ids: set[str] = set()
+    daily_timelines = {}
+    if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
+        from src.optimization.common.vehicle_timeline import build_vehicle_timeline
+        daily_timelines = build_vehicle_timeline(problem, engine_result.plan)
     for vehicle_id, duties in sorted(engine_result.plan.duties_by_vehicle().items()):
         vehicle_id = str(vehicle_id)
         vehicle = vehicle_by_id.get(vehicle_id)
@@ -7670,6 +7674,20 @@ def _canonical_movement_event_rows(
                 }
             )
 
+        if daily_timelines:
+            timeline = daily_timelines.get(vehicle_id, ())
+            for sequence, event in enumerate(timeline):
+                if event.event_type in {"waiting", "turnaround", "service_trip"}:
+                    continue
+                previous = next((item.trip_id for item in reversed(timeline[:sequence]) if item.trip_id), "")
+                following = next((item.trip_id for item in timeline[sequence+1:] if item.trip_id), "")
+                reference = problem_trip_by_id[following or previous]
+                append_event(duty_id="continuous_vehicle_path", event_type=event.event_type,
+                             sequence=sequence, start_min=event.start_min, end_min=event.end_min,
+                             from_location_id=event.start_location, to_location_id=event.end_location,
+                             previous_trip_id=previous, next_trip_id=following, reference_trip=reference)
+                rows[-1]["provenance_mode"] = "native_duties_with_explicit_daily_return_policy"
+            continue
         for duty in duties:
             duty_id = str(getattr(duty, "duty_id", "") or "")
             duty_legs = list(getattr(duty, "legs", ()) or ())

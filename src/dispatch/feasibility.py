@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Sequence
 
 from .models import ConnectionResult, DispatchContext, Trip
 from .route_band import trip_route_band_key, trip_service_day_index
+from .daily_return import connection_deadhead_minutes, requires_daily_return
 
 
 @dataclass(frozen=True)
@@ -206,6 +207,17 @@ class FeasibilityEngine:
 
         # --- 3. Time continuity ---
         turnaround_min = context.get_turnaround_min(from_stop)
+        if requires_daily_return(context, trip_i, trip_j):
+            try:
+                via_depot_min = connection_deadhead_minutes(context, trip_i, trip_j)
+            except ValueError as exc:
+                return ConnectionResult(False, "missing_daily_return_deadhead", str(exc))
+            # Retain the original inequality; the new rule cannot admit an
+            # arc that previously failed the turnaround/deadhead constraint.
+            direct_ready = trip_i.arrival_min + turnaround_min + deadhead_min
+            if direct_ready > trip_j.departure_min:
+                return ConnectionResult(False, "insufficient_time", "The original direct transition is infeasible")
+            deadhead_min = via_depot_min
         earliest_departure_j = trip_i.arrival_min + turnaround_min + deadhead_min
         slack = trip_j.departure_min - earliest_departure_j
 

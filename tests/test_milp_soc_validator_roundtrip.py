@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from src.dispatch.models import (
@@ -118,6 +120,21 @@ def _soc_roundtrip_problem() -> CanonicalOptimizationProblem:
             "milp_max_successors_per_trip": None,
         },
     )
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+@pytest.mark.parametrize('phase', ['phase3_two_stage', 'phase4_integrated'])
+def test_both_solver_paths_honor_per_vehicle_maximum_soc(phase):
+    problem = _soc_roundtrip_problem()
+    problem = replace(problem, vehicles=(replace(problem.vehicles[0], maximum_soc_kwh=90, soc_input_unit='kwh'),),
+                      price_slots=tuple(EnergyPriceSlot(slot_index=i,grid_buy_yen_per_kwh=1 if i < 7 else 100) for i in range(24)))
+    result = MILPOptimizer().solve(problem, OptimizationConfig(mode=OptimizationMode.MILP,
+        phase=phase, time_limit_sec=30, mip_gap=0, gurobi_threads=1, random_seed=42, warm_start=False))
+    assert result.feasible, result.infeasibility_reasons
+    states = result.plan.vehicle_soc_kwh_by_vehicle_slot['bev-1']
+    assert max(states.values()) <= 90+1e-6
+    assert min(states.values()) >= 20-1e-6
+    assert FeasibilityChecker().evaluate(problem,result.plan).feasible
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")

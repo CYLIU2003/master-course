@@ -930,7 +930,16 @@ class OptimizationEngine:
         problem: CanonicalOptimizationProblem,
         config: OptimizationConfig,
     ) -> OptimizationEngineResult:
+        if bool(getattr(config,'research_run',False)) and problem.scenario.planning_days > 1:
+            raise ValueError(
+                'MULTIDAY_RESEARCH_BLOCKED: dated input is available, but overnight '
+                'movement, fuel/location handoff and executed-week acceptance are still under validation'
+            )
         problem, config = self._apply_phase_contract(problem, config)
+        if (getattr(problem.dispatch_context, "daily_return_depot_id", "")
+                and not str(config.phase).startswith("phase3_two_stage")
+                and str(config.phase) != "phase1_charging_only"):
+            raise ValueError("DAILY_RETURN_PHASE_UNSUPPORTED: use the validated Phase 3 fixed-path charging pipeline")
         phase4_shared_budget_started_at: float | None = None
         phase4_requested_time_limit_sec: float | None = None
         if (

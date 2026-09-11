@@ -1,0 +1,13 @@
+{
+  "request": {
+    "endpoint": "https://api.odpt.org/api/v4/odpt:BusroutePattern",
+    "query": {
+      "odpt:operator": "odpt.Operator:TokyuBus"
+    }
+  },
+  "sha256": "613dd05da4669087c5df8c028111ff63628796756c63cf6bed3e6f37153ce91e",
+  "retrieved_at_utc": "2026-09-10T05:30:41.366594+00:00",
+  "record_count": 747,
+  "path": "data/external/odpt/tsurumaki_20260910/odpt_BusroutePattern_4c665bc6a478b9aa.json",
+  "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+}

@@ -22,6 +22,9 @@ from src.optimization.common.soc_helpers import (
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
     slot_index_ceil,
+    vehicle_initial_soc_kwh,
+    vehicle_reserve_soc_kwh,
+    vehicle_maximum_soc_kwh,
 )
 from src.optimization.common.vehicle_assignment import (
     assign_duty_fragments_to_vehicles,
@@ -389,6 +392,7 @@ def soc_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> A
 
     repaired_slots = list(plan.charging_slots)
     existing_slot_keys = {(slot.vehicle_id, slot.slot_index) for slot in repaired_slots}
+    invalid_initial_states: Dict[str, str] = {}
 
     for duty in plan.duties:
         duty_vehicle_id = plan.vehicle_id_for_duty(duty.duty_id)
@@ -399,10 +403,13 @@ def soc_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> A
             continue
 
         capacity = max(vehicle.battery_capacity_kwh or 300.0, 1.0)
-        reserve = vehicle.reserve_soc if vehicle.reserve_soc is not None else 0.15 * capacity
-        current_soc = vehicle.initial_soc if vehicle.initial_soc is not None else 0.8 * capacity
-        if current_soc <= 1.0:
-            current_soc *= capacity
+        reserve = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity)
+        try:
+            current_soc = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity)
+        except ValueError as exc:
+            # Charging after time zero cannot repair an invalid initial state.
+            invalid_initial_states[str(vehicle.vehicle_id)] = str(exc)
+            continue
         active_slots = _duty_active_slot_indices(problem, duty)
 
         for leg in duty.legs:
@@ -434,7 +441,8 @@ def soc_repair(problem: CanonicalOptimizationProblem, plan: AssignmentPlan) -> A
         refuel_slots=plan.refuel_slots,
         served_trip_ids=plan.served_trip_ids,
         unserved_trip_ids=plan.unserved_trip_ids,
-        metadata={**dict(plan.metadata), "repair_operator": "soc_repair"},
+        metadata={**dict(plan.metadata), "repair_operator": "soc_repair",
+                  "soc_repair_invalid_initial_states": invalid_initial_states},
     )
 
 
@@ -532,11 +540,9 @@ def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: Assig
         )
 
         capacity = float((vehicle.battery_capacity_kwh if vehicle else None) or (vtype.battery_capacity_kwh if vtype else 0.0) or 300.0)
-        reserve = float((vehicle.reserve_soc if vehicle else None) or (vtype.reserve_soc if vtype else None) or (0.15 * capacity))
-        soc = float((vehicle.initial_soc if vehicle else None) or (0.8 * capacity))
-        if soc <= 1.0 and capacity > 1.0:
-            soc = soc * capacity
-        soc = min(max(soc, 0.0), capacity)
+        reserve = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity)
+        maximum_soc = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity)
+        soc = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity)
 
         prev_arrival = duty.legs[0].trip.departure_min if duty.legs else 0
         active_slots = _duty_active_slot_indices(problem, duty)
@@ -553,7 +559,7 @@ def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: Assig
                 deadhead_energy = max(dist_km * per_km, 0.0)
 
             needed_before_depart = reserve + trip_energy + deadhead_energy + max(trigger_margin_kwh, 0.0)
-            target_soc = min(capacity, needed_before_depart + max(target_extra_kwh, 0.0))
+            target_soc = min(maximum_soc, needed_before_depart + max(target_extra_kwh, 0.0))
             first_slot = _slot_index(problem, prev_arrival)
             last_slot = _slot_index(problem, trip.departure_min) - 1
             candidate_slots = [

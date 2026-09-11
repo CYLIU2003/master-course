@@ -5,6 +5,7 @@ import math
 from typing import Any, Dict, Mapping, Sequence
 
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
+from src.dispatch.daily_return import crosses_service_day
 from src.optimization.common.bev_terminal_policy import (
     BevTerminalSocPolicy,
     bev_terminal_numeric_acceptance_contract,
@@ -19,7 +20,7 @@ from src.optimization.common.soc_helpers import (
 from src.optimization.common.time_axis import normalize_horizon_start_min
 
 
-PHYSICAL_EVENT_VALIDATION_SCHEMA_VERSION = "physical_event_schedule_validation_v2"
+PHYSICAL_EVENT_VALIDATION_SCHEMA_VERSION = "physical_event_schedule_validation_v3"
 
 REQUIRED_ZERO_METRICS = (
     "unassigned_trip_count",
@@ -40,6 +41,7 @@ REQUIRED_ZERO_METRICS = (
     "refueling_powertrain_violation_count",
     "ev_soc_lower_violation_count",
     "ev_soc_upper_violation_count",
+    "ev_soc_contract_violation_count",
     "bev_terminal_soc_violation_count",
     "fuel_lower_violation_count",
     "fuel_upper_violation_count",
@@ -53,6 +55,8 @@ _EXCLUSIVE_EVENT_TYPES = frozenset(
         "charging",
         "refueling",
         "terminal_return",
+        "daily_return",
+        "daily_startup",
     }
 )
 
@@ -63,6 +67,117 @@ def _finite_float(value: Any, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return float(default)
     return parsed if math.isfinite(parsed) else float(default)
+
+
+def _independent_deadhead_quantities(problem: Any, vehicle: Any, reference_trip: Any,
+                                    minutes: int) -> tuple[float, float, float]:
+    """Recalculate both powertrains from the declared time/speed convention."""
+    distance = minutes * _finite_float(problem.metadata.get("deadhead_speed_kmh"), 18.0) / 60.0
+    if _vehicle_powertrain(problem, vehicle) == "BEV":
+        rate = _finite_float(getattr(vehicle, "energy_consumption_kwh_per_km", None))
+        if rate <= 0:
+            vehicle_type = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle.vehicle_type), None)
+            rate = _finite_float(getattr(vehicle_type, "energy_consumption_kwh_per_km", None))
+        if rate <= 0 and float(reference_trip.distance_km) > 0:
+            rate = float(reference_trip.energy_kwh) / float(reference_trip.distance_km)
+        return distance, distance * rate, 0.0
+    rate = _finite_float(getattr(vehicle, "fuel_consumption_l_per_km", None))
+    return distance, 0.0, distance * rate
+
+
+def _append_daily_return_events(problem: Any, vehicle: Any, previous: Any, following: Any,
+                                sequence: int, events: list, violations: list) -> None:
+    context = problem.dispatch_context
+    home = str(vehicle.home_depot_id)
+    return_ok, return_min = return_deadhead_min_to_home(problem, vehicle, previous)
+    startup = evaluate_startup_feasibility(following, context, home)
+    startup_min = int(startup.deadhead_time_min or 0)
+    return_start = int(previous.arrival_min) + context.get_turnaround_min(previous.destination)
+    home_arrival = return_start + return_min
+    leave = int(following.departure_min) - startup_min
+    if not return_ok or not startup.feasible or home_arrival > leave:
+        _record_violation(violations, code="infeasible_transition", vehicle_id=vehicle.vehicle_id,
+                          detail=f"mandatory depot visit: {previous.trip_id}->{following.trip_id}")
+    for kind, begin, end, origin, destination, reference, duration in (
+        ("daily_return", return_start, home_arrival, previous.destination, home, previous, return_min),
+        ("daily_startup", leave, int(following.departure_min), home, following.origin, following, startup_min),
+    ):
+        if duration > 0:
+            distance, energy, fuel = _independent_deadhead_quantities(problem, vehicle, reference, duration)
+            events.append(_event(event_id=f"{vehicle.vehicle_id}:{kind}:{sequence}", vehicle_id=vehicle.vehicle_id,
+                                 event_type=kind, start_min=begin, end_min=end, start_location=origin,
+                                 end_location=destination, energy_kwh=energy, fuel_l=fuel, distance_km=distance))
+    if home_arrival < leave:
+        events.append(_event(event_id=f"{vehicle.vehicle_id}:depot_waiting:{sequence}", vehicle_id=vehicle.vehicle_id,
+                             event_type="waiting", start_min=home_arrival, end_min=leave,
+                             start_location=home, end_location=home))
+
+
+def _independent_bev_bounds(problem: Any, vehicle: Any) -> tuple[float, float, float, float]:
+    """Reconstruct bounds from preserved Prepare records, without solver helpers."""
+    def number(value: Any) -> float:
+        if isinstance(value, bool):
+            raise ValueError('Boolean SOC parameter')
+        parsed = float(value)
+        if not math.isfinite(parsed):
+            raise ValueError('Non-finite SOC parameter')
+        return parsed
+
+    capacity = number(vehicle.battery_capacity_kwh)
+    if capacity <= 0:
+        raise ValueError('Invalid BEV capacity')
+    unit = getattr(vehicle, 'soc_input_unit', 'legacy_ratio_or_kwh')
+    if unit not in ('kwh','legacy_ratio_or_kwh'):
+        raise ValueError('Unknown canonical SOC unit')
+    initial = .8*capacity if vehicle.initial_soc is None else number(vehicle.initial_soc)
+    minimum = .15*capacity if vehicle.reserve_soc is None else number(vehicle.reserve_soc)
+    if unit != 'kwh':
+        if vehicle.initial_soc is not None and initial <= 1:
+            initial *= capacity
+        if vehicle.reserve_soc is not None and minimum <= 1:
+            minimum *= capacity
+    raw_maximum = getattr(vehicle, 'maximum_soc_kwh', None)
+    maximum = capacity if raw_maximum is None else number(raw_maximum)
+    fleet = (problem.metadata or {}).get('scenario_fleet_contract') or {}
+    prepared = next((row for row in fleet.get('active_vehicle_parameters', ())
+                     if row.get('vehicle_id') == vehicle.vehicle_id), None)
+    if prepared is not None:
+        source = {**prepared.get('source_vehicle_type_catalog_record', {}), **prepared.get('source_record', {})}
+        raw_capacity = source.get('batteryKwh', source.get('battery_capacity_kwh'))
+        if raw_capacity is not None and not math.isclose(number(raw_capacity), capacity, abs_tol=1e-9):
+            raise ValueError('Prepared and canonical battery capacities differ')
+        for aliases, energy_key, canonical in (
+            (('initialSoc','initial_soc'), 'initial_soc_kwh', initial),
+            (('minSoc','min_soc'), 'minimum_soc_kwh', minimum),
+            (('maxSoc','max_soc'), 'maximum_soc_kwh', maximum),
+        ):
+            declared = []
+            for alias in aliases:
+                if source.get(alias) is not None:
+                    raw = number(source[alias])
+                    ratio = raw/100 if raw > 1 else raw
+                    if not 0 <= ratio <= 1:
+                        raise ValueError('Invalid prepared SOC ratio')
+                    declared.append(ratio*capacity)
+            if source.get(energy_key) is not None:
+                declared.append(number(source[energy_key]))
+            if declared:
+                if any(abs(value-declared[0]) > 1e-9 for value in declared):
+                    raise ValueError('Conflicting prepared SOC fields')
+                if energy_key == 'initial_soc_kwh':
+                    measured = (problem.metadata or {}).get('rolling_actual_soc_kwh') or {}
+                    expected_initial = number(measured[vehicle.vehicle_id]) if vehicle.vehicle_id in measured else declared[0]
+                    if abs(canonical-expected_initial) > 1e-6:
+                        raise ValueError('Prepared or measured initial SOC was changed in the canonical vehicle')
+                elif energy_key == 'maximum_soc_kwh':
+                    if abs(canonical-declared[0]) > 1e-9:
+                        raise ValueError('Prepared maxSoc was lost or changed in the canonical vehicle')
+                    maximum = declared[0]
+                elif canonical < declared[0]-1e-9:
+                    raise ValueError('Prepared minSoc was weakened in the canonical vehicle')
+    if not 0 <= minimum <= maximum <= capacity:
+        raise ValueError('Invalid independent vehicle SOC bounds')
+    return capacity, minimum, maximum, initial
 
 
 def _event(
@@ -218,6 +333,10 @@ def validate_physical_event_schedule(
         str(item.charger_id): item for item in tuple(problem.chargers or ())
     }
     raw_paths = dict(serialized_result.get("vehicle_paths") or {})
+    duty_for_trip = {str(trip_id): str(duty["duty_id"])
+                     for duty in serialized_result.get("duties", ())
+                     for trip_id in duty.get("trip_ids", ())}
+    daily_return_depot = str(getattr(problem.dispatch_context, "daily_return_depot_id", "") or "")
     events: list[Dict[str, Any]] = []
     violations: list[Dict[str, Any]] = []
     assigned_trip_ids: list[str] = []
@@ -319,6 +438,12 @@ def validate_physical_event_schedule(
                             fuel_l=startup_fuel,
                         )
                     )
+            elif daily_return_depot and (
+                crosses_service_day(previous_problem_trip, problem_trip)
+                or duty_for_trip.get(previous_problem_trip.trip_id) != duty_for_trip.get(problem_trip.trip_id)
+            ):
+                _append_daily_return_events(problem, vehicle, previous_problem_trip, problem_trip,
+                                            sequence, events, violations)
             else:
                 connection = feasibility_engine.can_connect(
                     previous_dispatch_trip,
@@ -349,6 +474,14 @@ def validate_physical_event_schedule(
                     int(previous_problem_trip.arrival_min) + turnaround_min
                 )
                 if deadhead_min > 0:
+                    movement_start = (
+                        int(problem_trip.departure_min) - deadhead_min
+                        if daily_return_depot and problem.dispatch_context.locations_equivalent(
+                            previous_problem_trip.destination, vehicle.home_depot_id)
+                        else ready_after_turnaround
+                    )
+                    deadhead_distance, _energy_check, deadhead_fuel = _independent_deadhead_quantities(
+                        problem, vehicle, previous_problem_trip, deadhead_min)
                     deadhead_energy = (
                         deadhead_before_trip_energy_kwh(
                             problem,
@@ -364,16 +497,18 @@ def validate_physical_event_schedule(
                             event_id=f"{vehicle_key}:connection:{sequence}",
                             vehicle_id=vehicle_key,
                             event_type="connection_deadhead",
-                            start_min=ready_after_turnaround,
-                            end_min=ready_after_turnaround + deadhead_min,
+                            start_min=movement_start,
+                            end_min=movement_start + deadhead_min,
                             start_location=_trip_endpoint(
                                 previous_dispatch_trip, origin=False
                             ),
                             end_location=origin,
                             energy_kwh=deadhead_energy,
+                            fuel_l=deadhead_fuel,
+                            distance_km=deadhead_distance,
                         )
                     )
-                previous_ready_min = ready_after_turnaround + deadhead_min
+                previous_ready_min = (movement_start if deadhead_min > 0 else ready_after_turnaround) + deadhead_min
                 if previous_ready_min < int(problem_trip.departure_min):
                     events.append(
                         _event(
@@ -420,6 +555,10 @@ def validate_physical_event_schedule(
                 )
             if return_min > 0:
                 return_start = int(previous_problem_trip.arrival_min)
+                if daily_return_depot:
+                    return_start += problem.dispatch_context.get_turnaround_min(previous_problem_trip.destination)
+                return_distance, _energy_check, return_fuel = _independent_deadhead_quantities(
+                    problem, vehicle, previous_problem_trip, return_min)
                 return_energy = (
                     return_deadhead_energy_kwh(
                         problem, vehicle, previous_problem_trip
@@ -439,6 +578,8 @@ def validate_physical_event_schedule(
                         ),
                         end_location=str(vehicle.home_depot_id),
                         energy_kwh=return_energy,
+                        fuel_l=return_fuel,
+                        distance_km=return_distance,
                     )
                 )
 
@@ -661,6 +802,8 @@ def validate_physical_event_schedule(
         "service_trip",
         "connection_deadhead",
         "terminal_return",
+        "daily_return",
+        "daily_startup",
     }
     for vehicle_id, vehicle_events in events_by_vehicle.items():
         vehicle = vehicle_by_id.get(vehicle_id)
@@ -754,10 +897,18 @@ def validate_physical_event_schedule(
         )
         powertrain = _vehicle_powertrain(problem, vehicle)
         if powertrain == "BEV":
-            initial_soc = _finite_float(vehicle.initial_soc)
+            try:
+                capacity, reserve, maximum_soc, initial_soc = _independent_bev_bounds(problem, vehicle)
+            except (ValueError, TypeError) as exc:
+                _record_violation(violations, code="ev_soc_contract_violation", vehicle_id=vehicle_id, detail=str(exc))
+                continue
             soc = initial_soc
-            capacity = _finite_float(vehicle.battery_capacity_kwh)
-            reserve = _finite_float(vehicle.reserve_soc)
+            if initial_soc < reserve-1e-6:
+                _record_violation(violations, code="ev_soc_lower_violation", vehicle_id=vehicle_id,
+                                  event_id=f"{vehicle_id}:initial_state", detail=f"soc={initial_soc},minimum={reserve}")
+            if initial_soc > maximum_soc+1e-6:
+                _record_violation(violations, code="ev_soc_upper_violation", vehicle_id=vehicle_id,
+                                  event_id=f"{vehicle_id}:initial_state", detail=f"soc={initial_soc},maximum={maximum_soc}")
             vehicle_soc_events.append(
                 {
                     "vehicle_id": vehicle_id,
@@ -783,6 +934,7 @@ def validate_physical_event_schedule(
                         else 0.0
                     ),
                     "battery_capacity_kwh": capacity,
+                    "maximum_soc_kwh": maximum_soc,
                     "charging_efficiency": charging_efficiency,
                     "source_artifact": "scenario_fleet_contract",
                 }
@@ -818,6 +970,7 @@ def validate_physical_event_schedule(
                             else 0.0
                         ),
                         "battery_capacity_kwh": capacity,
+                        "maximum_soc_kwh": maximum_soc,
                         "charging_efficiency": charging_efficiency,
                         "source_artifact": str(item["source_artifact"]),
                     }
@@ -830,13 +983,13 @@ def validate_physical_event_schedule(
                         event_id=str(item["event_id"]),
                         detail=f"soc={soc},reserve={reserve}",
                     )
-                if soc > capacity + 1.0e-6:
+                if soc > maximum_soc + 1.0e-6:
                     _record_violation(
                         violations,
                         code="ev_soc_upper_violation",
                         vehicle_id=vehicle_id,
                         event_id=str(item["event_id"]),
-                        detail=f"soc={soc},capacity={capacity}",
+                        detail=f"soc={soc},maximum={maximum_soc},capacity={capacity}",
                     )
             terminal_policy = normalize_bev_terminal_soc_policy(
                 problem.metadata.get("bev_terminal_soc_policy"),
@@ -937,6 +1090,7 @@ def validate_physical_event_schedule(
         "ev_soc_upper_violation_count": violation_counts[
             "ev_soc_upper_violation"
         ],
+        "ev_soc_contract_violation_count": violation_counts["ev_soc_contract_violation"],
         "bev_terminal_soc_violation_count": violation_counts[
             "bev_terminal_soc_violation"
         ],

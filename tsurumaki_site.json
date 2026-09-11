@@ -1,0 +1,10 @@
+{
+  "depot_id": "tsurumaki",
+  "latitude": 35.63514694444444,
+  "longitude": 139.6462427777778,
+  "coordinate_source": "CYLIU2003/master-course@5fac09d9a5775192ab8d3e507c5e72a6fd36afe2:data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json",
+  "coordinate_status": "REUSED_FROM_REPOSITORY_NOT_NEWLY_SURVEYED",
+  "tilt": null,
+  "azimuth": null,
+  "geometry_status": "UNCONFIRMED_GHI_ONLY_UNTIL_EXPLICIT_GEOMETRY_SET"
+}

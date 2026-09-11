@@ -164,6 +164,11 @@ class PrepareSimulationSettingsBody(BaseModel):
     service_date: Optional[str] = None
     service_dates: list[str] = Field(default_factory=list)
     planning_days: int = Field(default=1, ge=1)
+    multi_day_input_mode: Optional[Literal['single_day','dated_timetable_and_pv_v1','repeat_day_diagnostic']] = None
+    date_series_source_id: Optional[str] = None
+    rolling_lookahead_hours: Optional[Literal[24,48,72,168]] = None
+    bess_balance_period: Literal['daily','evaluation_period'] = 'daily'
+    pv_information_mode: Literal['historical_perfect_information','training_only_forecast_proxy'] = 'historical_perfect_information'
     # The paired clock values are binding only when this explicit flag is on.
     # Interactive Prepare defaults to a complete calendar day; older callers
     # can still opt into a scoped horizon by setting the flag to true.

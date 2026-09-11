@@ -33,6 +33,7 @@ from src.route_family_runtime import (
     normalize_variant_type,
 )
 from .soc_utils import normalize_soc_ratio_like, resolve_soc_kwh
+from .vehicle_soc_contract import resolve_vehicle_soc_contract
 from .time_axis import normalize_timestep_min
 from .trip_energy_proxy import (
     LITERATURE_PROXY_MODEL_ID,
@@ -84,6 +85,7 @@ from .weather_strategy import (
     weather_vehicle_type_sort_key,
 )
 from .service_calendar import validate_service_calendar_contract
+from .date_series import DATE_SERIES_INPUT_MODE, content_hash, dated_capacity_factors, validate_dated_timetable
 
 
 def _research_inventory_powertrain(value: Any) -> str:
@@ -809,7 +811,21 @@ class ProblemBuilder:
             or metadata_source.get("trips")
             or []
         )
+        input_config = dict(metadata_source.get('simulation_config') or {})
+        is_date_series = input_config.get('multi_day_input_mode') == DATE_SERIES_INPUT_MODE
+        date_contract = dict(input_config.get('date_series_contract') or {})
+        if planning_days > 1 and not is_date_series:
+            if bool(getattr(config,'research_run',False)) or input_config.get('multi_day_input_mode') != 'repeat_day_diagnostic':
+                raise ValueError('Multi-day operation requires verified date-specific timetable/PV inputs; repeated weekdays are diagnostic only')
+        if is_date_series:
+            if date_contract.get('planning_days') != planning_days:
+                raise ValueError('Dated contract planning_days differs from the solve horizon')
+            if operation_time_window_enabled or int(horizon_start_min or 0) != 0:
+                raise ValueError('Dated operation must start at local midnight over complete days')
+            if {trip.trip_id for trip in context.trips} != {row['trip_id'] for row in source_timetable_rows}:
+                raise ValueError('Canonical dispatch context lost or invented dated trips')
         service_calendar_validation = (
+            validate_dated_timetable(source_timetable_rows,date_contract) if is_date_series else
             validate_service_calendar_contract(
                 service_date_text=context.service_date,
                 timetable_rows=source_timetable_rows,
@@ -950,7 +966,11 @@ class ProblemBuilder:
                     allowed_vehicle_types=trip.allowed_vehicle_types,
                     energy_kwh=energy_kwh,
                     fuel_l=fuel_l,
-                    service_id=context.service_date,
+                    service_id=trip.service_id if is_date_series else context.service_date,
+                    service_date=trip.service_date or context.service_date,
+                    template_trip_id=trip.template_trip_id or trip.trip_id,
+                    day_index=trip.day_index,
+                    operator_id=trip.operator_id,
                     required_soc_departure_percent=required_soc_departure_percent,
                     route_family_code=str(getattr(trip, "route_family_code", "") or ""),
                     direction=str(getattr(trip, "direction", "") or ""),
@@ -973,7 +993,7 @@ class ProblemBuilder:
         # ===== Multi-day trip replication =====
         # When planning_days > 1, replicate base day trips for each additional day
         planning_days = max(1, planning_days)
-        if planning_days > 1:
+        if planning_days > 1 and not is_date_series:
             base_trip_nodes = list(trip_nodes_list)
             day_offset_min = 24 * 60  # 1440 minutes per day
             for day_idx in range(1, planning_days):
@@ -1255,7 +1275,7 @@ class ProblemBuilder:
             self._build_pv_slots(
                 time_slots,
                 pv_slots,
-                planning_days=planning_days,
+                planning_days=1 if is_date_series else planning_days,
                 align_to_time_slots=post_return_target_enabled,
                 allow_synthetic_fallback=allow_synthetic_pv_fallback,
             )
@@ -1271,6 +1291,8 @@ class ProblemBuilder:
             canonical_depot_id=canonical_depot_id,
             horizon_start_min=int(horizon_start_min or 0),
         )
+        if is_date_series:
+            pv_series = tuple(PVSlot(slot_index=i,pv_available_kw=sum(asset.pv_generation_kwh_by_slot[i] for asset in depot_energy_assets.values())/(timestep_min/60)) for i in range(len(time_slots)))
         feasible_connections: Dict[str, Tuple[str, ...]] = {}
         for vehicle_type in context.vehicle_profiles:
             graph = self._build_graph(context, vehicle_type)
@@ -1278,7 +1300,7 @@ class ProblemBuilder:
                 merged = set(feasible_connections.get(trip_id, ()))
                 merged.update(successors)
                 feasible_connections[trip_id] = tuple(sorted(merged))
-        if planning_days > 1:
+        if planning_days > 1 and not is_date_series:
             base_feasible_connections = dict(feasible_connections)
             for day_idx in range(1, planning_days):
                 prefix = f"d{day_idx}_"
@@ -1368,6 +1390,12 @@ class ProblemBuilder:
             baseline_plan=baseline,
             metadata={
                 "service_date": context.service_date,
+                "multi_day_input_mode": input_config.get('multi_day_input_mode','single_day'),
+                "service_dates": list(date_contract.get('service_dates') or [context.service_date]),
+                "date_series_contract": date_contract,
+                "daily_return_depot_id": str(input_config.get("daily_return_depot_id") or ""),
+                "rolling_lookahead_hours": input_config.get('rolling_lookahead_hours'),
+                "rolling_window_terminal_policy": input_config.get('rolling_window_terminal_policy','return_to_evaluation_initial'),
                 "service_calendar_validation": service_calendar_validation,
                 "comparison_type": service_calendar_validation.get(
                     "comparison_type",
@@ -1802,7 +1830,14 @@ class ProblemBuilder:
                 ),
                 slot_count,
             )
-            if self._depot_asset_has_full_day_pv_profile(raw):
+            if sim_cfg.get('multi_day_input_mode') == DATE_SERIES_INPUT_MODE:
+                contract = sim_cfg.get('date_series_contract') or {}
+                if content_hash(raw.get('pv_capacity_factor_by_date') or []) != contract.get('pv_capacity_factor_rows_sha256'):
+                    raise ValueError('Dated PV source changed after Prepare')
+                capacity_factor_series = dated_capacity_factors(raw,contract['service_dates'],timestep_min)
+                if len(capacity_factor_series)!=slot_count:
+                    raise ValueError('Dated PV slots do not exactly cover the solver horizon')
+            elif self._depot_asset_has_full_day_pv_profile(raw):
                 capacity_factor_series = self._rotate_daily_series_from_midnight_to_horizon(
                     capacity_factor_series,
                     timestep_min=timestep_min,
@@ -1986,22 +2021,28 @@ class ProblemBuilder:
                     f"{pv_input_semantics}"
                 )
             if pv_enabled and pv_input_semantics == "gross_generation_before_depot_load":
-                raise ValueError(
-                    "gross_generation_before_depot_load requires an explicit "
-                    "depot-load series; use available_surplus_after_depot_load "
-                    "for the current research model"
-                )
+                load_series = raw.get("depot_load_kwh_by_slot")
+                if (
+                    raw.get("depot_load_model") != "explicit_zero_nontraction_load"
+                    or not isinstance(load_series, (list, tuple))
+                    or len(load_series) != len(pv_series)
+                    or any(isinstance(value, bool) or float(value) != 0.0 for value in load_series)
+                ):
+                    raise ValueError(
+                        "gross_generation_before_depot_load requires an explicit "
+                        "depot-load series with explicit_zero_nontraction_load; "
+                        "nonzero building load is not modeled"
+                    )
 
             asset = DepotEnergyAsset(
                 depot_id=depot.depot_id,
                 pv_enabled=pv_enabled,
                 pv_generation_kwh_by_slot=pv_series,
-                available_pv_surplus_kwh_by_slot=(
-                    pv_series
-                    if pv_input_semantics == "available_surplus_after_depot_load"
-                    else ()
-                ),
+                available_pv_surplus_kwh_by_slot=pv_series,
                 pv_input_semantics=pv_input_semantics,
+                depot_load_model=str(raw.get("depot_load_model") or "not_declared_legacy_surplus"),
+                depot_load_kwh_by_slot=tuple(float(value) for value in raw.get("depot_load_kwh_by_slot", ())),
+                bess_balance_period=str(raw.get('bess_balance_period') or 'evaluation_period'),
                 capacity_factor_by_slot=capacity_factor_series,
                 pv_case_id=str(raw.get("pv_case_id") or "default"),
                 pv_capex_jpy_per_kw=float(raw.get("pv_capex_jpy_per_kw") or 0.0),
@@ -2531,7 +2572,7 @@ class ProblemBuilder:
         ).strip()
         for row in source_rows:
             row_service_id = row.get("service_id")
-            if row_service_id is not None and row_service_id != service_id:
+            if simulation_cfg.get('multi_day_input_mode') != DATE_SERIES_INPUT_MODE and row_service_id is not None and row_service_id != service_id:
                 continue
             route_id = str(row.get("route_id") or "")
             if allowed_route_ids is not None and route_id not in allowed_route_ids:
@@ -2596,6 +2637,10 @@ class ProblemBuilder:
                     ),
                     direction=direction,
                     route_variant_type=variant_type,
+                    service_date=str(row.get('service_date') or ''),
+                    service_id=str(row.get('service_id') or ''),
+                    template_trip_id=str(row.get('template_trip_id') or ''),
+                    day_index=int(row.get('day_index') or 0),
                 )
             )
 
@@ -2676,6 +2721,7 @@ class ProblemBuilder:
             vehicle_profiles=vehicle_profiles or {"BEV": VehicleProfile(vehicle_type="BEV")},
             default_turnaround_min=default_turnaround_min,
             turnaround_buffer_min=turnaround_buffer_min,
+            daily_return_depot_id=str(simulation_cfg.get("daily_return_depot_id") or ""),
             location_aliases=self._build_dispatch_location_aliases(
                 scenario=scenario,
                 trips=trips,
@@ -2830,6 +2876,8 @@ class ProblemBuilder:
                     fuel_consumption_l_per_km=profile.fuel_consumption_l_per_km,
                     energy_consumption_kwh_per_km=profile.energy_consumption_kwh_per_km,
                     fixed_use_cost_jpy=profile.fixed_use_cost_jpy,
+                    maximum_soc_kwh=battery_capacity_kwh,
+                    soc_input_unit="kwh",
                 )
 
     def _build_vehicles_from_records(
@@ -2889,6 +2937,17 @@ class ProblemBuilder:
                 reserve_soc = reserve_soc_ratio_override * battery_capacity_kwh
             if reserve_soc is None and battery_capacity_kwh is not None:
                 reserve_soc = battery_capacity_kwh * 0.1
+            maximum_soc_kwh = None
+            if vehicle_type in {"BEV", "PHEV", "FCEV"}:
+                soc_contract = resolve_vehicle_soc_contract(
+                    vehicle,
+                    battery_capacity_kwh,
+                    initial_ratio_fallback=initial_soc_ratio_override,
+                    reserve_ratio_floor=reserve_soc_ratio_override,
+                )
+                initial_soc_kwh = soc_contract.initial_kwh
+                reserve_soc = soc_contract.minimum_kwh
+                maximum_soc_kwh = soc_contract.maximum_kwh
 
             fuel_tank_capacity_l = self._safe_float(vehicle.get("fuelTankL"))
             if fuel_tank_capacity_l is None and profile is not None:
@@ -2987,6 +3046,8 @@ class ProblemBuilder:
                 fixed_use_cost_jpy=fixed_use_cost_jpy,
                 charge_power_max_kw=charge_power_max_kw,
                 compatible_charger_ids=compatible_charger_ids,
+                maximum_soc_kwh=maximum_soc_kwh,
+                soc_input_unit="kwh",
             )
 
     def _build_vehicle_profiles(
@@ -3620,7 +3681,7 @@ class ProblemBuilder:
             or getattr(profile, "reserve_soc", None)
             or (0.15 * capacity)
         )
-        if reserve <= 1.0:
+        if getattr(vehicle, "soc_input_unit", "legacy_ratio_or_kwh") != "kwh" and reserve <= 1.0:
             reserve = reserve * capacity
         reserve = min(max(reserve, 0.0), capacity)
         soc = getattr(vehicle, "initial_soc", None)
@@ -3628,9 +3689,12 @@ class ProblemBuilder:
             soc_kwh = 0.8 * capacity
         else:
             soc_kwh = float(soc)
-            if soc_kwh <= 1.0:
+            if getattr(vehicle, "soc_input_unit", "legacy_ratio_or_kwh") != "kwh" and soc_kwh <= 1.0:
                 soc_kwh = soc_kwh * capacity
         soc_kwh = min(max(soc_kwh, 0.0), capacity)
+        physical_maximum = capacity if vehicle.maximum_soc_kwh is None else float(vehicle.maximum_soc_kwh)
+        if not reserve <= soc_kwh <= physical_maximum <= capacity:
+            return 0
 
         energy_rate = max(
             float(
@@ -3665,6 +3729,8 @@ class ProblemBuilder:
             vehicle,
             chargers=chargers,
         )
+        if target_lower_kwh > physical_maximum:
+            return 0
 
         prefix_len = 0
         previous_trip: Optional[Trip] = None

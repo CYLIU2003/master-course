@@ -71,6 +71,7 @@ from src.optimization.rolling.reoptimizer import (  # noqa: E402
 from src.optimization.rolling.day_ahead_hourly import (  # noqa: E402
     build_next_execution_state,
 )
+from src.optimization.rolling.pv_execution import execute_pv_prefix  # noqa: E402
 from src.preprocess.weather.operation_policy import (  # noqa: E402
     apply_weather_policy_to_problem,
 )
@@ -98,8 +99,8 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _minute_label(minute: int) -> str:
-    minute_of_day = int(minute) % (24 * 60)
-    return f"{minute_of_day // 60:02d}:{minute_of_day % 60:02d}"
+    absolute_minute = int(minute)
+    return f"{absolute_minute // 60:02d}:{absolute_minute % 60:02d}"
 
 
 def _canonical_hash(value: Any) -> str:
@@ -190,6 +191,7 @@ def _build_executed_day_accounting(
     }
     vehicle_soc: dict[str, dict[int, float]] = {}
     charging_slots = []
+    refuel_slots = []
     seen_charging_slots: set[tuple[str, int, str, str]] = set()
     executed_pv_profiles = {
         str(depot_id): list(asset.pv_generation_kwh_by_slot or ())
@@ -201,6 +203,10 @@ def _build_executed_day_accounting(
             if slot in coverage_count:
                 coverage_count[slot] += 1
         plan = result.plan
+        # Refueling is part of the executed prefix, just like charging.
+        # Retaining the day-ahead schedule would charge for unexecuted fuel.
+        refuel_slots.extend(slot for slot in plan.refuel_slots
+                            if start_slot <= int(slot.slot_index) < stop_slot)
         for field_name in _EXECUTED_SLOT_MAP_FIELDS:
             _merge_executed_slot_values(
                 stitched_maps[field_name],
@@ -267,11 +273,17 @@ def _build_executed_day_accounting(
     accounting_plan = replace(
         day_ahead_plan,
         charging_slots=tuple(charging_slots),
+        refuel_slots=tuple(refuel_slots),
         vehicle_soc_kwh_by_vehicle_slot=vehicle_soc,
         metadata={
             **dict(day_ahead_plan.metadata or {}),
             "rolling_execution_accounting": True,
             "rolling_executed_slot_count": len(expected_slots),
+            'source_provenance_exact': all(
+                CostEvaluator()._source_provenance_is_exact(segment_result.plan)
+                for _, segment_result, _, _ in executed_segments
+            ),
+            'canonical_source_flow_context': {**stitched_maps},
         },
         **stitched_maps,
     )
@@ -287,6 +299,7 @@ def _build_executed_day_accounting(
     )
     bess_terminal_details: dict[str, dict[str, Any]] = {}
     bess_terminal_balanced = True
+    bess_daily_balanced = True
     for depot_id, asset in dict(problem.depot_energy_assets or {}).items():
         if not bool(getattr(asset, "bess_enabled", False)):
             continue
@@ -321,6 +334,16 @@ def _build_executed_day_accounting(
             else None
         )
         depot_balanced = deviation_kwh is not None and deviation_kwh <= 1.0e-6
+        daily_deviations = {}
+        if asset.bess_balance_period == 'daily':
+            start_minute = hhmm_to_min(problem.scenario.horizon_start)
+            for slot in sorted(expected_slots):
+                if (start_minute + (slot + 1) * problem.scenario.timestep_min) % 1440 == 0:
+                    actual = trajectory.get(slot)
+                    delta = abs(float(actual) - target_kwh) if actual is not None and target_kwh is not None else None
+                    daily_deviations[str(slot)] = delta
+                    if delta is None or delta > 1.0e-6:
+                        bess_daily_balanced = False
         bess_terminal_balanced = bess_terminal_balanced and depot_balanced
         bess_terminal_details[str(depot_id)] = {
             "policy": policy,
@@ -330,6 +353,8 @@ def _build_executed_day_accounting(
             "absolute_deviation_kwh": deviation_kwh,
             "balanced": depot_balanced,
         }
+        if asset.bess_balance_period == 'daily':
+            bess_terminal_details[str(depot_id)]['daily_boundary_deviations_kwh'] = daily_deviations
     unreplenished_kwh = float(
         breakdown.get("ev_unreplenished_drive_energy_kwh", 0.0) or 0.0
     )
@@ -338,6 +363,8 @@ def _build_executed_day_accounting(
         rejection_reasons.append("bev_terminal_energy_not_balanced")
     if not bess_terminal_balanced:
         rejection_reasons.append("bess_terminal_energy_not_balanced")
+    if not bess_daily_balanced:
+        rejection_reasons.append('bess_daily_energy_not_balanced')
     if unreplenished_kwh > 1.0e-6:
         rejection_reasons.append("unreplenished_drive_energy_remains")
     eligible = not rejection_reasons
@@ -358,8 +385,10 @@ def _build_executed_day_accounting(
         ),
         "bev_terminal_energy_balanced": bev_terminal_balanced,
         "bess_terminal_energy_balanced": bess_terminal_balanced,
+        "bess_daily_energy_balanced": bess_daily_balanced,
         "bess_terminal_soc_by_depot": bess_terminal_details,
         "cost_breakdown": breakdown,
+        "executed_refuel_liters": sum(float(slot.refuel_liters) for slot in refuel_slots),
         "executed_energy_flow_hash": _canonical_hash(
             {field_name: stitched_maps[field_name] for field_name in _EXECUTED_SLOT_MAP_FIELDS}
         ),
@@ -1079,6 +1108,8 @@ class RollingChainRequest:
     # sibling day-ahead result. CLI calls leave this unset and reconstruct from
     # the persisted, hash-pinned effective scenario.
     day_ahead_problem: Optional[Any] = None
+    lookahead_hours: Optional[int] = None
+    pv_actuals_json: Optional[str] = None
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "RollingChainRequest":
@@ -1100,6 +1131,8 @@ class RollingChainRequest:
             service_id=str(args.service_id),
             state_json=getattr(args, "state_json", None),
             pv_forecast_updates_json=getattr(args, "pv_forecast_updates_json", None),
+            lookahead_hours=getattr(args,'lookahead_hours',None),
+            pv_actuals_json=getattr(args, 'pv_actuals_json', None),
             bess_terminal_policy=str(args.bess_terminal_policy),
             bess_terminal_min_kwh=(
                 None if args.bess_terminal_min_kwh is None else float(args.bess_terminal_min_kwh)
@@ -1234,7 +1267,7 @@ def run_rolling_chain(
             depot_id=request.depot_id,
             service_id=request.service_id,
             config=config,
-            planning_days=1,
+            planning_days=int(simulation_config.get('planning_days') or 1),
         )
         if weather_forecast is not None and weather_profile is not None:
             problem = apply_weather_policy_to_problem(
@@ -1295,7 +1328,7 @@ def run_rolling_chain(
     state_current_min = state.get("current_min")
     if state_current_min is not None:
         absolute_state_min = int(state_current_min)
-        if absolute_state_min % (24 * 60) != current_min % (24 * 60):
+        if absolute_state_min != current_min:
             raise ValueError(
                 "state_json current_min does not match --current-time: "
                 f"state={state_current_min}, current={current_min}"
@@ -1306,7 +1339,7 @@ def run_rolling_chain(
     chain_requested = bool(request.full_chain or end_time)
     if request.full_chain:
         expected_start_min = hhmm_to_min(horizon_start_time)
-        if current_min % (24 * 60) != expected_start_min % (24 * 60):
+        if current_min != expected_start_min:
             raise ValueError(
                 "A formal rolling chain must begin at the day-ahead energy "
                 f"horizon start {horizon_start_time}, not {current_time}"
@@ -1344,6 +1377,34 @@ def run_rolling_chain(
         if request.pv_forecast_updates_json
         else None
     )
+    pv_actuals = None
+    pv_actuals_audit = None
+    if request.pv_actuals_json:
+        actuals_path = Path(request.pv_actuals_json)
+        actuals_document = _load_json(actuals_path)
+        if (actuals_document.get('schema_version') != 'historical_pv_execution_v1'
+                or actuals_document.get('unit') != 'kWh'
+                or not actuals_document.get('source_sha256')):
+            raise ValueError('PV actuals require a versioned kWh profile with source hashes')
+        expected_dates = problem.metadata.get('service_dates') or [service_date]
+        if (actuals_document.get('service_dates') != expected_dates
+                or actuals_document.get('timestep_minutes') != problem.scenario.timestep_min):
+            raise ValueError('PV actuals dates and timestep must match the exact evaluation horizon')
+        pv_actuals = actuals_document.get('depot_profiles')
+        expected_count = len(problem.price_slots)
+        if not isinstance(pv_actuals, dict) or set(pv_actuals) != set(problem.depot_energy_assets):
+            raise ValueError('PV actuals must cover the exact canonical depot set')
+        for values in pv_actuals.values():
+            if not isinstance(values, list) or len(values) != expected_count:
+                raise ValueError('PV actuals must cover exactly the evaluation horizon')
+            if any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(value) or value < 0 for value in values):
+                raise ValueError('PV actuals must be finite non-negative kWh')
+        pv_actuals_audit = {
+            'path': str(actuals_path), 'sha256': hashlib.sha256(actuals_path.read_bytes()).hexdigest(),
+            'source_sha256': actuals_document['source_sha256'],
+            'information_mode': 'forecast_plan_with_separate_historical_pv_replay',
+        }
 
     output_dir = Path(request.output_dir)
     rolling = RollingReoptimizer()
@@ -1383,6 +1444,9 @@ def run_rolling_chain(
                 current_min,
                 actual_soc=dict(state.get("actual_vehicle_soc_kwh") or {}),
                 actual_bess_soc_kwh=dict(state.get("actual_bess_soc_kwh") or {}),
+                actual_vehicle_fuel_l=dict(state.get("actual_vehicle_fuel_l") or {}),
+                actual_vehicle_positions=dict(state.get("actual_vehicle_positions") or {}),
+                connected_charger_by_vehicle=dict(state.get("connected_charger_by_vehicle") or {}),
                 observed_on_peak_kw_by_depot=dict(
                     state.get("observed_on_peak_kw_by_depot") or {}
                 ),
@@ -1397,6 +1461,7 @@ def run_rolling_chain(
                 ),
                 execution_minutes=int(request.execution_minutes),
                 bess_terminal_policy=request.bess_terminal_policy,
+                lookahead_hours=request.lookahead_hours,
             )
         except Exception as exc:
             elapsed = time.perf_counter() - started
@@ -1435,7 +1500,10 @@ def run_rolling_chain(
             "step_index": step_index,
             "current_time": current_label,
             "execution_minutes": int(request.execution_minutes),
-            "lookahead": "remaining_service_day",
+            "lookahead": request.lookahead_hours or 'remaining_evaluation_period',
+            "current_absolute_min": current_min,
+            "current_day_index": (current_min - hhmm_to_min(horizon_start_time)) // 1440,
+            "window_terminal_policy": problem.metadata.get("rolling_window_terminal_policy", "return_to_evaluation_initial"),
             "vehicle_assignment_policy": "fixed_to_persisted_day_ahead_result",
             "assignment_audit": assignment_audit,
             "day_ahead_assignment_hash": day_ahead_assignment_hash,
@@ -1508,6 +1576,35 @@ def run_rolling_chain(
             summaries.append(summary)
             chain_failure_reason = "fixed_assignment_changed"
             break
+        if pv_actuals is not None:
+            try:
+                initial_bess = dict(state.get('actual_bess_soc_kwh') or {})
+                if current_min == hhmm_to_min(horizon_start_time):
+                    initial_bess = {
+                        depot: initial_bess.get(depot, asset.bess_initial_soc_kwh)
+                        for depot, asset in step_problem.depot_energy_assets.items()
+                        if asset.bess_enabled
+                    }
+                step_problem, result, execution_audit = execute_pv_prefix(
+                    step_problem, result,
+                    actual_pv_by_depot_slot={
+                        depot: {slot: values[slot] for slot in range(start_slot, stop_slot)}
+                        for depot, values in pv_actuals.items()
+                    },
+                    actual_bess_soc_kwh=initial_bess, start_slot=start_slot, stop_slot=stop_slot,
+                )
+                summary['pv_execution'] = execution_audit
+                summary['pv_actuals_source'] = pv_actuals_audit
+                summary['cost_breakdown_basis'] = 'forecast_horizon_solve_not_executed_cost'
+                _write_json(step_output_dir / 'pv_execution.json', execution_audit)
+                _write_json(step_output_dir / 'hourly_execution_result.json', ResultSerializer.serialize_result(result))
+            except ValueError as exc:
+                summary['pv_execution_error'] = str(exc)
+                summary['feasible'] = False
+                _write_json(step_output_dir / 'hourly_summary.json', summary)
+                summaries.append(summary)
+                chain_failure_reason = 'actual_pv_execution_failed'
+                break
         executed_segments.append((step_problem, result, start_slot, stop_slot))
 
         next_min = current_min + int(request.execution_minutes)
@@ -1521,6 +1618,7 @@ def run_rolling_chain(
                     result,
                     current_min=current_min,
                     execution_minutes=int(request.execution_minutes),
+                    prior_vehicle_fuel_l=dict(state.get("actual_vehicle_fuel_l") or {}),
                     prior_on_peak_kw_by_depot=dict(
                         state.get("observed_on_peak_kw_by_depot") or {}
                     ),
@@ -1621,6 +1719,7 @@ def run_rolling_chain(
             "step_count": len(summaries),
             "all_steps_feasible": all_steps_feasible,
             "objective_aggregation": "not_additive_remaining_horizon_objectives",
+            "pv_actuals_source": pv_actuals_audit,
             "remaining_day_charging_only_fixed_assignment": True,
             "day_ahead_git_sha": input_audit.get("git_sha"),
             "rolling_runner_git_sha": rolling_git_sha,
@@ -1776,6 +1875,9 @@ def main() -> int:
         default="scenario",
     )
     parser.add_argument("--bess-terminal-min-kwh", type=float, default=None)
+    parser.add_argument('--lookahead-hours', type=int, choices=(24,48,72,168), default=None)
+    parser.add_argument('--pv-actuals-json', default=None,
+                        help='Separately sourced historical PV kWh for causal execution replay.')
     return run(parser.parse_args())
 
 

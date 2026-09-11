@@ -1,0 +1,665 @@
+{
+  "schema_version": "tsurumaki_odpt_source_capture_v1",
+  "status": "SOURCES_CAPTURED_COMPARISON_PENDING",
+  "original_route_ids": [
+    "odpt-route-0b2ab9e74da1",
+    "odpt-route-206aa2ef5f3a",
+    "odpt-route-3da308a5063b",
+    "odpt-route-4109a31659bc",
+    "odpt-route-495b9472e61b",
+    "odpt-route-5274690b4073",
+    "odpt-route-599baa9cb2fb",
+    "odpt-route-733dcb7dff82",
+    "odpt-route-844516ff5c40",
+    "odpt-route-a66f2ed85ff9",
+    "odpt-route-a6b5e7bf98f7",
+    "odpt-route-af678f3a3006",
+    "odpt-route-d398fae40154",
+    "odpt-route-e046125fefb1",
+    "odpt-route-e3a3088fd8ba",
+    "odpt-route-fb12ae43f5b0"
+  ],
+  "original_route_catalog_sha256": "d778f23aef5c3eb5596b86fb5aca7fddaabfa629183d731c1fc09364be91ae7c",
+  "original_patterns": [
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004600838",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602125",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602236",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602325",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602970",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602974",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602324",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602328",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602849",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602850",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602969",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004600088",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004600812",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004602174",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004602189",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004602972"
+  ],
+  "current_patterns": [
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004600838",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602125",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602236",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602325",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602970",
+    "odpt.BusroutePattern:TokyuBus.Shibu21.0004602974",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602318",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602324",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602328",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602849",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602850",
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602969",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004600088",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004600812",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004602164",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004602174",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004602189",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004602972"
+  ],
+  "original_patterns_absent_from_current": [],
+  "current_additional_patterns_for_same_route_codes": [
+    "odpt.BusroutePattern:TokyuBus.Shibu22.0004602318",
+    "odpt.BusroutePattern:TokyuBus.Shibu23.0004602164"
+  ],
+  "timetable_count": 654,
+  "pattern_count": 18,
+  "sources": [
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusroutePattern",
+        "query": {
+          "odpt:operator": "odpt.Operator:TokyuBus"
+        }
+      },
+      "sha256": "613dd05da4669087c5df8c028111ff63628796756c63cf6bed3e6f37153ce91e",
+      "retrieved_at_utc": "2026-09-10T05:30:41.366594+00:00",
+      "record_count": 747,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusroutePattern_4c665bc6a478b9aa.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu21.0004602125"
+        }
+      },
+      "sha256": "e872b3b476007f4b06a17fbf637a37469ade01bcf74cb4eb21ccfd84416288dd",
+      "retrieved_at_utc": "2026-09-10T05:30:41.956388+00:00",
+      "record_count": 15,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_6036f743813599cf.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu21.0004602236"
+        }
+      },
+      "sha256": "220282ffe3f599615362092703126fdb39cfab09e19862273c56cac4c3e7ef02",
+      "retrieved_at_utc": "2026-09-10T05:30:42.536147+00:00",
+      "record_count": 14,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_ca8c403d633831a7.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu21.0004600838"
+        }
+      },
+      "sha256": "2b219807de0d5f215a2db6ee876000010924f4c3dbf638af6b270f77c74bf5c9",
+      "retrieved_at_utc": "2026-09-10T05:30:43.165252+00:00",
+      "record_count": 22,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_8cac96f5315869c4.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu21.0004602970"
+        }
+      },
+      "sha256": "44c1d2a15d5158bb57df523b6c2fa99af4a02d6cdb40bf3b1529ecc2f793eb2d",
+      "retrieved_at_utc": "2026-09-10T05:30:43.747372+00:00",
+      "record_count": 2,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_7a9126bf4eb671a3.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu21.0004602974"
+        }
+      },
+      "sha256": "023d11041d77efee9896a9ba3d086d78b36b3989b3a8355b9236d6d312162e20",
+      "retrieved_at_utc": "2026-09-10T05:30:44.314059+00:00",
+      "record_count": 16,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_6d5133c7b30f50d4.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu21.0004602325"
+        }
+      },
+      "sha256": "966cf5eb5d1936628e741fbf3dc3d90c08afda69afad994e79c3e6a74a99784e",
+      "retrieved_at_utc": "2026-09-10T05:30:45.874944+00:00",
+      "record_count": 3,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_bca47f1daef61020.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu22.0004602850"
+        }
+      },
+      "sha256": "73124f649cbcc5ba04c81a480e09581596cb8432f77c7f81f6b1d02a5b25206a",
+      "retrieved_at_utc": "2026-09-10T05:30:46.520145+00:00",
+      "record_count": 10,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_9013662264071104.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu22.0004602328"
+        }
+      },
+      "sha256": "09e4c1442e23bc77c290d9b8afa18f1bc69c576c4de8d90baf76909698787bc4",
+      "retrieved_at_utc": "2026-09-10T05:30:47.146681+00:00",
+      "record_count": 7,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_c010b5b85bbc1c27.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu22.0004602318"
+        }
+      },
+      "sha256": "8e09d1dec7ae6e1be60c8eabac1d8f9045f210455381a92b38eb6964b6ce4b38",
+      "retrieved_at_utc": "2026-09-10T05:30:47.853851+00:00",
+      "record_count": 3,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_54aa658088c93188.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu22.0004602324"
+        }
+      },
+      "sha256": "10ac3dbb305b02bbe0dc6e0c32b0f23298a3011f8579166d51c0f010c889b166",
+      "retrieved_at_utc": "2026-09-10T05:30:48.423183+00:00",
+      "record_count": 10,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_a905b463f5ea3a35.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu22.0004602969"
+        }
+      },
+      "sha256": "fc168886a416d923f5481dd611aff6c36139ba431dc700b356cbd04f55af4a54",
+      "retrieved_at_utc": "2026-09-10T05:30:49.064185+00:00",
+      "record_count": 123,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_699445eef18d552b.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu22.0004602849"
+        }
+      },
+      "sha256": "def88066f8b4c32a2177a5028360eeb180b9beff071d9435a5bb24c1e07bcb2d",
+      "retrieved_at_utc": "2026-09-10T05:30:49.828105+00:00",
+      "record_count": 133,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_24e6f63148904d48.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu23.0004602164"
+        }
+      },
+      "sha256": "12085346806c72ba76b858dd4f2a04208ee51a194e4343c80c6daa1424c11f8a",
+      "retrieved_at_utc": "2026-09-10T05:30:50.498167+00:00",
+      "record_count": 3,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_59818352dc0e3666.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu23.0004600088"
+        }
+      },
+      "sha256": "4f3ffd11b5b005c6efb7f0cf27493f22b6b0987f4f8e1a13837a8ded5eb0d4ce",
+      "retrieved_at_utc": "2026-09-10T05:30:51.512925+00:00",
+      "record_count": 12,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_30dc0eb6d4dac4a2.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu23.0004602972"
+        }
+      },
+      "sha256": "2e5fed77aa5274f86aebd26e6faf662cabe1b06767038610922564613ab40ad8",
+      "retrieved_at_utc": "2026-09-10T05:30:52.180648+00:00",
+      "record_count": 125,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_aa2392e25acce7ae.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu23.0004602189"
+        }
+      },
+      "sha256": "c551d4b9c9bbff51be910e1f1448fcc2b181afa0e110cb389f226652a8e18957",
+      "retrieved_at_utc": "2026-09-10T05:30:52.748722+00:00",
+      "record_count": 8,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_ddf6d9ee71a3473b.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu23.0004602174"
+        }
+      },
+      "sha256": "f0ac25d5a02edb37b1a52a741e68b0e08b642e719d1ec132383d615df876bc87",
+      "retrieved_at_utc": "2026-09-10T05:30:53.334048+00:00",
+      "record_count": 17,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_cfe58f0b70a7aac4.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+        "query": {
+          "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu23.0004600812"
+        }
+      },
+      "sha256": "02a0169fd71f739e2799b63f4fbd09b9c3e508ae6ff081585a3f3255a7fca6b7",
+      "retrieved_at_utc": "2026-09-10T05:30:54.115097+00:00",
+      "record_count": 131,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_078fc520b4b4668a.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    },
+    {
+      "request": {
+        "endpoint": "https://api.odpt.org/api/v4/odpt:BusstopPole",
+        "query": {
+          "odpt:operator": "odpt.Operator:TokyuBus"
+        }
+      },
+      "sha256": "27ce5599ffa9d5a537d1078f9603b281f2dc552c78390119936d65daf8242471",
+      "retrieved_at_utc": "2026-09-10T05:30:55.157098+00:00",
+      "record_count": 3045,
+      "path": "data/external/odpt/tsurumaki_20260910/odpt_BusstopPole_3b705b54a0336c83.json",
+      "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+    }
+  ],
+  "source_dc_dates": [
+    "2026-09-01T12:54:22+09:00",
+    "2026-09-01T12:54:23+09:00",
+    "2026-09-01T12:54:24+09:00",
+    "2026-09-01T12:54:25+09:00",
+    "2026-09-01T12:54:26+09:00",
+    "2026-09-01T12:54:27+09:00",
+    "2026-09-01T12:54:28+09:00",
+    "2026-09-01T12:54:29+09:00",
+    "2026-09-01T12:54:30+09:00",
+    "2026-09-01T12:54:31+09:00",
+    "2026-09-01T12:54:32+09:00",
+    "2026-09-01T12:54:33+09:00",
+    "2026-09-01T12:54:34+09:00",
+    "2026-09-01T12:54:35+09:00",
+    "2026-09-01T12:54:36+09:00",
+    "2026-09-01T12:54:38+09:00",
+    "2026-09-01T12:54:39+09:00",
+    "2026-09-01T12:54:40+09:00",
+    "2026-09-01T12:54:41+09:00",
+    "2026-09-01T12:54:42+09:00",
+    "2026-09-01T12:54:43+09:00",
+    "2026-09-01T12:54:44+09:00",
+    "2026-09-01T12:54:45+09:00",
+    "2026-09-01T12:54:46+09:00",
+    "2026-09-01T12:54:47+09:00",
+    "2026-09-01T12:54:48+09:00",
+    "2026-09-01T12:54:49+09:00",
+    "2026-09-01T12:54:50+09:00",
+    "2026-09-01T12:54:51+09:00",
+    "2026-09-01T12:54:52+09:00",
+    "2026-09-01T12:54:53+09:00",
+    "2026-09-01T12:54:54+09:00",
+    "2026-09-01T12:54:55+09:00",
+    "2026-09-01T12:54:56+09:00",
+    "2026-09-01T12:54:57+09:00",
+    "2026-09-01T12:54:58+09:00",
+    "2026-09-01T12:55:00+09:00",
+    "2026-09-01T12:55:01+09:00",
+    "2026-09-01T12:55:03+09:00",
+    "2026-09-01T12:55:04+09:00",
+    "2026-09-01T12:55:05+09:00",
+    "2026-09-01T12:55:06+09:00",
+    "2026-09-01T12:55:07+09:00",
+    "2026-09-01T12:55:08+09:00",
+    "2026-09-01T12:55:09+09:00",
+    "2026-09-01T12:55:11+09:00",
+    "2026-09-01T12:55:13+09:00",
+    "2026-09-01T12:55:14+09:00",
+    "2026-09-01T12:55:16+09:00",
+    "2026-09-01T12:55:17+09:00",
+    "2026-09-01T12:55:18+09:00",
+    "2026-09-01T12:55:19+09:00",
+    "2026-09-01T12:55:20+09:00",
+    "2026-09-01T12:55:21+09:00",
+    "2026-09-01T12:55:22+09:00",
+    "2026-09-01T12:55:23+09:00",
+    "2026-09-01T12:55:24+09:00",
+    "2026-09-01T12:55:25+09:00",
+    "2026-09-01T12:55:26+09:00",
+    "2026-09-01T12:55:27+09:00",
+    "2026-09-01T12:55:28+09:00",
+    "2026-09-01T12:55:29+09:00",
+    "2026-09-01T12:55:30+09:00",
+    "2026-09-01T12:55:31+09:00",
+    "2026-09-01T12:55:32+09:00",
+    "2026-09-01T12:55:33+09:00",
+    "2026-09-01T12:55:34+09:00",
+    "2026-09-01T12:55:35+09:00",
+    "2026-09-01T12:55:36+09:00",
+    "2026-09-01T12:55:37+09:00",
+    "2026-09-01T12:55:38+09:00",
+    "2026-09-01T12:55:39+09:00",
+    "2026-09-01T12:55:41+09:00",
+    "2026-09-01T12:55:42+09:00",
+    "2026-09-01T12:55:44+09:00",
+    "2026-09-01T12:55:45+09:00",
+    "2026-09-01T12:55:47+09:00",
+    "2026-09-01T12:55:48+09:00",
+    "2026-09-01T12:55:49+09:00",
+    "2026-09-01T12:55:50+09:00",
+    "2026-09-01T12:55:51+09:00",
+    "2026-09-01T12:55:52+09:00",
+    "2026-09-01T12:55:53+09:00",
+    "2026-09-01T12:55:54+09:00",
+    "2026-09-01T12:55:55+09:00",
+    "2026-09-01T12:55:56+09:00",
+    "2026-09-01T12:55:57+09:00",
+    "2026-09-01T12:55:58+09:00",
+    "2026-09-01T12:55:59+09:00",
+    "2026-09-01T12:56:00+09:00",
+    "2026-09-01T12:56:01+09:00",
+    "2026-09-01T12:56:03+09:00",
+    "2026-09-01T12:56:04+09:00",
+    "2026-09-01T12:56:06+09:00",
+    "2026-09-01T12:56:08+09:00",
+    "2026-09-01T12:56:09+09:00",
+    "2026-09-01T12:56:10+09:00",
+    "2026-09-01T12:56:11+09:00",
+    "2026-09-01T12:56:12+09:00",
+    "2026-09-01T12:56:14+09:00",
+    "2026-09-01T12:56:15+09:00",
+    "2026-09-01T12:56:16+09:00",
+    "2026-09-01T12:56:17+09:00",
+    "2026-09-01T12:56:18+09:00",
+    "2026-09-01T12:56:19+09:00",
+    "2026-09-01T12:56:20+09:00",
+    "2026-09-01T12:56:22+09:00",
+    "2026-09-01T12:56:23+09:00",
+    "2026-09-01T12:56:25+09:00",
+    "2026-09-01T12:56:26+09:00",
+    "2026-09-01T12:56:28+09:00",
+    "2026-09-01T12:56:29+09:00",
+    "2026-09-01T12:56:31+09:00",
+    "2026-09-01T12:56:32+09:00",
+    "2026-09-01T12:56:34+09:00",
+    "2026-09-01T12:56:35+09:00",
+    "2026-09-01T12:56:36+09:00",
+    "2026-09-01T12:56:37+09:00",
+    "2026-09-01T12:56:38+09:00",
+    "2026-09-01T12:56:39+09:00",
+    "2026-09-01T12:56:40+09:00",
+    "2026-09-01T12:56:41+09:00",
+    "2026-09-01T12:56:42+09:00",
+    "2026-09-01T12:56:43+09:00",
+    "2026-09-01T12:56:45+09:00",
+    "2026-09-01T12:56:46+09:00",
+    "2026-09-01T12:56:47+09:00",
+    "2026-09-01T12:56:48+09:00",
+    "2026-09-01T12:56:49+09:00",
+    "2026-09-01T12:56:50+09:00",
+    "2026-09-01T12:56:51+09:00",
+    "2026-09-01T12:56:53+09:00",
+    "2026-09-01T12:56:54+09:00",
+    "2026-09-01T12:56:55+09:00",
+    "2026-09-01T12:56:57+09:00",
+    "2026-09-01T12:56:58+09:00",
+    "2026-09-01T12:57:00+09:00",
+    "2026-09-01T12:57:01+09:00",
+    "2026-09-01T12:57:02+09:00",
+    "2026-09-01T12:57:03+09:00",
+    "2026-09-01T12:57:04+09:00",
+    "2026-09-01T12:57:05+09:00",
+    "2026-09-01T12:57:06+09:00",
+    "2026-09-01T12:57:08+09:00",
+    "2026-09-01T12:57:09+09:00",
+    "2026-09-01T12:57:11+09:00",
+    "2026-09-01T12:57:12+09:00",
+    "2026-09-01T12:57:13+09:00",
+    "2026-09-01T12:57:14+09:00",
+    "2026-09-01T12:57:15+09:00",
+    "2026-09-01T12:57:16+09:00",
+    "2026-09-01T12:57:17+09:00",
+    "2026-09-01T12:57:18+09:00",
+    "2026-09-01T12:57:19+09:00",
+    "2026-09-01T12:57:20+09:00",
+    "2026-09-01T12:57:21+09:00",
+    "2026-09-01T12:57:23+09:00",
+    "2026-09-01T12:57:24+09:00",
+    "2026-09-01T12:57:25+09:00",
+    "2026-09-01T12:57:27+09:00",
+    "2026-09-01T12:57:28+09:00",
+    "2026-09-01T12:57:29+09:00",
+    "2026-09-01T12:57:31+09:00",
+    "2026-09-01T12:57:32+09:00",
+    "2026-09-01T12:57:33+09:00",
+    "2026-09-01T14:45:02+09:00",
+    "2026-09-01T14:45:03+09:00",
+    "2026-09-01T14:45:04+09:00",
+    "2026-09-01T14:45:06+09:00",
+    "2026-09-01T14:45:07+09:00",
+    "2026-09-01T14:45:08+09:00",
+    "2026-09-01T14:45:09+09:00",
+    "2026-09-01T14:45:11+09:00",
+    "2026-09-01T14:45:12+09:00",
+    "2026-09-01T14:45:13+09:00",
+    "2026-09-01T14:45:14+09:00",
+    "2026-09-01T14:45:15+09:00",
+    "2026-09-01T14:45:16+09:00",
+    "2026-09-01T14:45:17+09:00",
+    "2026-09-01T14:45:18+09:00",
+    "2026-09-01T14:45:19+09:00",
+    "2026-09-01T14:45:20+09:00",
+    "2026-09-01T14:45:21+09:00",
+    "2026-09-01T14:45:23+09:00",
+    "2026-09-01T14:45:24+09:00",
+    "2026-09-01T14:45:25+09:00",
+    "2026-09-01T14:45:26+09:00",
+    "2026-09-01T14:45:27+09:00",
+    "2026-09-01T14:45:28+09:00",
+    "2026-09-01T14:45:29+09:00",
+    "2026-09-01T14:45:30+09:00",
+    "2026-09-01T14:45:31+09:00",
+    "2026-09-01T14:45:32+09:00",
+    "2026-09-01T14:45:33+09:00",
+    "2026-09-01T14:45:34+09:00",
+    "2026-09-01T14:45:36+09:00",
+    "2026-09-01T14:45:37+09:00",
+    "2026-09-01T14:45:38+09:00",
+    "2026-09-01T14:45:40+09:00",
+    "2026-09-01T14:45:42+09:00",
+    "2026-09-01T14:45:43+09:00",
+    "2026-09-01T14:45:44+09:00",
+    "2026-09-01T14:45:45+09:00",
+    "2026-09-01T14:45:46+09:00",
+    "2026-09-01T14:45:48+09:00",
+    "2026-09-01T14:45:49+09:00",
+    "2026-09-01T14:45:51+09:00",
+    "2026-09-01T14:45:52+09:00",
+    "2026-09-01T14:45:53+09:00",
+    "2026-09-01T14:45:54+09:00",
+    "2026-09-01T14:45:56+09:00",
+    "2026-09-01T14:45:58+09:00",
+    "2026-09-01T14:45:59+09:00",
+    "2026-09-01T14:46:00+09:00",
+    "2026-09-01T14:46:01+09:00",
+    "2026-09-01T14:46:02+09:00",
+    "2026-09-01T14:46:04+09:00",
+    "2026-09-01T14:46:06+09:00",
+    "2026-09-01T14:46:08+09:00",
+    "2026-09-01T14:46:09+09:00",
+    "2026-09-01T14:46:10+09:00",
+    "2026-09-01T14:46:11+09:00",
+    "2026-09-01T14:46:12+09:00",
+    "2026-09-01T14:46:13+09:00",
+    "2026-09-01T14:46:15+09:00",
+    "2026-09-01T14:46:16+09:00",
+    "2026-09-01T14:46:17+09:00",
+    "2026-09-01T14:46:18+09:00",
+    "2026-09-01T14:46:19+09:00",
+    "2026-09-01T14:46:20+09:00",
+    "2026-09-01T14:46:21+09:00",
+    "2026-09-01T14:46:23+09:00",
+    "2026-09-01T14:46:49+09:00",
+    "2026-09-01T14:46:50+09:00",
+    "2026-09-01T14:46:52+09:00",
+    "2026-09-01T14:46:55+09:00",
+    "2026-09-01T14:46:56+09:00",
+    "2026-09-01T15:08:42+09:00",
+    "2026-09-01T15:08:44+09:00",
+    "2026-09-01T15:08:45+09:00",
+    "2026-09-01T15:08:46+09:00",
+    "2026-09-01T15:08:47+09:00",
+    "2026-09-01T15:08:48+09:00",
+    "2026-09-01T15:08:49+09:00",
+    "2026-09-01T15:08:50+09:00",
+    "2026-09-01T15:08:51+09:00",
+    "2026-09-01T15:08:53+09:00",
+    "2026-09-01T15:08:54+09:00",
+    "2026-09-01T15:08:55+09:00",
+    "2026-09-01T15:08:57+09:00",
+    "2026-09-01T15:08:58+09:00",
+    "2026-09-01T15:09:00+09:00",
+    "2026-09-01T15:09:01+09:00",
+    "2026-09-01T15:09:02+09:00",
+    "2026-09-01T15:09:03+09:00",
+    "2026-09-01T15:09:04+09:00",
+    "2026-09-01T15:09:05+09:00",
+    "2026-09-01T15:09:06+09:00",
+    "2026-09-01T15:09:07+09:00",
+    "2026-09-01T15:09:08+09:00",
+    "2026-09-01T15:09:10+09:00",
+    "2026-09-01T15:09:11+09:00",
+    "2026-09-01T15:09:12+09:00",
+    "2026-09-01T15:09:13+09:00",
+    "2026-09-01T15:09:15+09:00",
+    "2026-09-01T15:09:16+09:00",
+    "2026-09-01T15:09:18+09:00",
+    "2026-09-01T15:09:19+09:00",
+    "2026-09-01T15:09:20+09:00",
+    "2026-09-01T15:09:21+09:00",
+    "2026-09-01T15:09:23+09:00",
+    "2026-09-01T15:09:24+09:00",
+    "2026-09-01T15:09:25+09:00",
+    "2026-09-01T15:09:26+09:00",
+    "2026-09-01T15:09:27+09:00",
+    "2026-09-01T15:09:29+09:00",
+    "2026-09-01T15:09:30+09:00",
+    "2026-09-01T15:09:31+09:00",
+    "2026-09-01T15:09:32+09:00",
+    "2026-09-01T15:09:34+09:00",
+    "2026-09-01T15:09:35+09:00",
+    "2026-09-01T15:09:36+09:00",
+    "2026-09-01T15:09:37+09:00",
+    "2026-09-01T15:09:38+09:00",
+    "2026-09-01T15:09:39+09:00",
+    "2026-09-01T15:09:40+09:00",
+    "2026-09-01T15:09:41+09:00",
+    "2026-09-01T15:09:42+09:00",
+    "2026-09-01T15:09:43+09:00",
+    "2026-09-01T15:09:44+09:00",
+    "2026-09-01T15:09:45+09:00",
+    "2026-09-01T15:09:46+09:00",
+    "2026-09-01T15:09:47+09:00",
+    "2026-09-01T15:09:48+09:00",
+    "2026-09-01T15:09:49+09:00",
+    "2026-09-01T15:09:50+09:00",
+    "2026-09-01T15:09:51+09:00",
+    "2026-09-01T15:09:52+09:00",
+    "2026-09-01T15:09:53+09:00",
+    "2026-09-01T15:09:54+09:00",
+    "2026-09-01T15:09:55+09:00",
+    "2026-09-01T15:09:56+09:00",
+    "2026-09-01T15:09:57+09:00",
+    "2026-09-01T15:09:58+09:00",
+    "2026-09-01T15:09:59+09:00",
+    "2026-09-01T15:10:00+09:00",
+    "2026-09-01T15:10:01+09:00",
+    "2026-09-01T15:10:02+09:00",
+    "2026-09-01T15:10:03+09:00",
+    "2026-09-01T15:15:50+09:00",
+    "2026-09-01T15:15:51+09:00",
+    "2026-09-01T15:15:53+09:00",
+    "2026-09-01T15:15:54+09:00",
+    "2026-09-01T15:15:55+09:00",
+    "2026-09-01T15:15:56+09:00",
+    "2026-09-01T15:15:57+09:00",
+    "2026-09-01T15:15:58+09:00",
+    "2026-09-01T15:15:59+09:00",
+    "2026-09-01T15:16:00+09:00",
+    "2026-09-01T15:16:01+09:00",
+    "2026-09-01T15:16:02+09:00"
+  ],
+  "operator_ids": [
+    "odpt.Operator:TokyuBus"
+  ],
+  "calendars": {
+    "odpt.Calendar:Holiday": 185,
+    "odpt.Calendar:Saturday": 205,
+    "odpt.Calendar:Weekday": 264
+  },
+  "limits": [
+    "Current fixed timetable version; not a reconstruction of 2025 operations.",
+    "Additional route-code variants are captured for comparison and do not silently expand the selected scope."
+  ]
+}

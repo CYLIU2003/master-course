@@ -1,0 +1,49 @@
+{
+  "schema_version": "shibu21_2025_seasonal_diagnostic_design_v1",
+  "selection_rule": "First Monday of February, May, August and November 2025, selected before optimization outcomes",
+  "route_code": "渋21",
+  "evaluation_weeks": [
+    "2025-02-03",
+    "2025-05-05",
+    "2025-08-04",
+    "2025-11-03"
+  ],
+  "evaluation_days": 7,
+  "timestep_minutes": 15,
+  "daily_return_depot_id": "tsurumaki",
+  "fleet_policy": "Exact 60-vehicle inventory from the untouched SUNNY parent; solver selects used vehicles",
+  "training_start": "2024-01-01",
+  "training_end_exclusive": "2025-01-01",
+  "requested_training_start_after_quota_recovers": "2022-01-01",
+  "training_status": "PROVISIONAL_2024_ONLY; 2022-12 and all 2023 await quota recovery",
+  "forecast_kind": "training_only_seasonal_climatology_proxy",
+  "future_weather_class_known": false,
+  "lookahead_hours": [
+    24
+  ],
+  "execution_minutes": 60,
+  "bev_evaluation_terminal_policy": "return_to_initial",
+  "bess_balance_period": "daily",
+  "rolling_window_terminal_policy": "day_ahead_boundary_state; evaluation end retains the original initial-state target",
+  "terminal_reference_information": "Fixed day-ahead forecast plan; no future actual PV",
+  "phase": "phase3_two_stage",
+  "stage1_time_limit_sec": 120,
+  "stage2_time_limit_sec": 30,
+  "rolling_hour_time_limit_sec": 15,
+  "mip_gap": 0.1,
+  "threads": 12,
+  "seed": 42,
+  "successor_pruning": 0,
+  "postsolve_repair": false,
+  "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
+  "limitations": [
+    "May week includes Golden Week holidays; compare service counts and kilometers",
+    "Not historical 2025 bus operations",
+    "Not a forecast-skill claim or integrated global optimum",
+    "Independent review and clean-commit formal gates remain separate"
+  ],
+  "resource_policy": "User authorized increased CPU and memory use; 12 solver threads on 12 cores/20 logical CPUs with 31.7 GiB RAM; cases run sequentially",
+  "day_ahead_wall_time_limit_sec": 900,
+  "time_budget_semantics": "Shared 900-second wall budget includes construction; Stage 1 search at most 120 s and Stage 2 at most 30 s. Hourly rolling at most 15 s shared.",
+  "input_manifests_directory": "output/seven_day_extension_20260910/shibu21_seasonal_inputs_v2"
+}

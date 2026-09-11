@@ -149,6 +149,8 @@ class ResultSerializer:
                     "ice_leftover_provisional_cost_jpy": row.ice_leftover_provisional_cost_jpy,
                     "demand_charge_jpy": row.demand_charge_jpy,
                     "total_cost_jpy": row.total_cost_jpy,
+                    "other_operating_cost_allocated_jpy": row.other_operating_cost_allocated_jpy,
+                    "cost_attribution_policy": row.cost_attribution_policy,
                 }
                 for row in plan.daily_cost_ledger
             ],
@@ -324,6 +326,8 @@ class ResultSerializer:
                 ice_leftover_provisional_cost_jpy=_float(raw.get("ice_leftover_provisional_cost_jpy")),
                 demand_charge_jpy=_float(raw.get("demand_charge_jpy")),
                 total_cost_jpy=_float(raw.get("total_cost_jpy")),
+                other_operating_cost_allocated_jpy=_float(raw.get("other_operating_cost_allocated_jpy")),
+                cost_attribution_policy=str(raw.get("cost_attribution_policy") or "legacy"),
             )
             for raw in list(serialized_plan.get("daily_cost_ledger") or [])
             if isinstance(raw, Mapping)

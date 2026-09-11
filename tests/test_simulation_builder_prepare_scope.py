@@ -65,6 +65,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             deadhead_speed_kmh=18.0,
             objective_preset="cost",
             planning_days=2,
+            multi_day_input_mode='repeat_day_diagnostic',
             service_dates=["2025-08-01", "2025-08-02"],
             fixed_route_band_mode=True,
             milp_max_successors_per_trip=24,

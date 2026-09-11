@@ -73,6 +73,12 @@ def canonical_trip_input_hash(problem: Any) -> str:
         }
         for trip in sorted(problem.trips, key=lambda item: str(item.trip_id))
     ]
+    depot = str(getattr(getattr(problem, "dispatch_context", None), "daily_return_depot_id", "") or "")
+    if depot:
+        dates = {str(trip.trip_id): {"service_date":str(getattr(trip,"service_date","")),
+                                  "day_index":int(getattr(trip,"day_index",0))} for trip in problem.trips}
+        return _canonical_hash({"trips":payload,"dated_operating_days":dates,
+                                "daily_return_depot_id":depot,"schema":"dated_daily_return_trip_input_v1"})
     return _canonical_hash(payload)
 
 
@@ -88,6 +94,8 @@ def canonical_vehicle_input_hash(problem: Any) -> str:
             "initial_soc": vehicle.initial_soc,
             "battery_capacity_kwh": vehicle.battery_capacity_kwh,
             "reserve_soc": vehicle.reserve_soc,
+            "maximum_soc_kwh": vehicle.maximum_soc_kwh,
+            "soc_input_unit": vehicle.soc_input_unit,
             "energy_consumption_kwh_per_km": (
                 vehicle.energy_consumption_kwh_per_km
             ),

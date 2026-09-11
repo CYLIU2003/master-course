@@ -1,0 +1,13 @@
+{
+  "request": {
+    "endpoint": "https://api.odpt.org/api/v4/odpt:BusTimetable",
+    "query": {
+      "odpt:busroutePattern": "odpt.BusroutePattern:TokyuBus.Shibu21.0004602236"
+    }
+  },
+  "sha256": "220282ffe3f599615362092703126fdb39cfab09e19862273c56cac4c3e7ef02",
+  "retrieved_at_utc": "2026-09-10T05:30:42.536147+00:00",
+  "record_count": 14,
+  "path": "data/external/odpt/tsurumaki_20260910/odpt_BusTimetable_ca8c403d633831a7.json",
+  "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+}

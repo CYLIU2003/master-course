@@ -444,8 +444,7 @@ class CostEvaluator:
         stationary_battery_degradation_cost = float(
             energy_cost_components.get("stationary_battery_degradation_cost", 0.0)
         )
-        pv_asset_cost = float(energy_cost_components.get("pv_asset_cost", 0.0))
-        bess_asset_cost = float(energy_cost_components.get("bess_asset_cost", 0.0))
+        pv_asset_cost, bess_asset_cost = self._period_asset_costs(problem)
         fuel_cost_final = float(fuel_cost_components.get("fuel_cost_final", 0.0))
         ice_fuel_consumed_l = float(
             fuel_cost_components.get("ice_fuel_consumed_l", 0.0)
@@ -1020,21 +1019,7 @@ class CostEvaluator:
             else 0.0
         )
         stationary_battery_degradation_cost = 0.0
-        pv_asset_cost = 0.0
-        bess_asset_cost = 0.0
-        for asset in (problem.depot_energy_assets or {}).values():
-            pv_asset_cost += self._dailyized_capex_om(
-                capacity=asset.pv_capacity_kw,
-                capex_unit=asset.pv_capex_jpy_per_kw,
-                om_unit_year=asset.pv_om_jpy_per_kw_year,
-                life_years=asset.pv_life_years,
-            )
-            bess_asset_cost += self._dailyized_capex_om(
-                capacity=asset.bess_energy_kwh,
-                capex_unit=asset.bess_capex_jpy_per_kwh,
-                om_unit_year=asset.bess_om_jpy_per_kwh_year,
-                life_years=asset.bess_life_years,
-            )
+        pv_asset_cost, bess_asset_cost = self._period_asset_costs(problem)
 
         return {
             "electricity_cost_final": electricity_cost_final,
@@ -1071,11 +1056,25 @@ class CostEvaluator:
             "ev_leftover_by_vehicle": leftover_by_vehicle,
         }
 
+    def _daily_return_drive_events(self, problem, plan, *, fuel: bool):
+        from .vehicle_timeline import build_vehicle_timeline
+        homes = self._vehicle_to_depot(problem)
+        events = [
+            (vehicle_id, homes[vehicle_id], event.start_min,
+             event.fuel_l if fuel else event.energy_kwh)
+            for vehicle_id, timeline in build_vehicle_timeline(problem, plan).items()
+            for event in timeline
+            if (event.fuel_l if fuel else event.energy_kwh) > 0
+        ]
+        return sorted(events, key=lambda event: (event[2], event[0]))
+
     def _collect_drive_energy_events(
         self,
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
     ) -> list[tuple[str, str, int, float]]:
+        if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
+            return self._daily_return_drive_events(problem, plan, fuel=False)
         events: list[tuple[str, str, int, float]] = []
         trip_by_id = problem.trip_by_id()
         vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
@@ -1241,6 +1240,9 @@ class CostEvaluator:
         plan: AssignmentPlan,
         breakdown: CostBreakdown,
     ) -> tuple[Tuple[VehicleCostLedgerEntry, ...], Tuple[DailyCostLedgerEntry, ...]]:
+        if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
+            from .daily_return_ledger import build_daily_return_ledgers
+            return build_daily_return_ledgers(self, problem, plan, breakdown)
         day_count = max(int(problem.scenario.planning_days or 1), 1)
         timestep_min = max(problem.scenario.timestep_min, 1)
         slots_per_day = (24 * 60) // timestep_min
@@ -1450,6 +1452,8 @@ class CostEvaluator:
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
     ) -> List[Tuple[str, str, int, float]]:
+        if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
+            return self._daily_return_drive_events(problem, plan, fuel=True)
         events: List[Tuple[str, str, int, float]] = []
         vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
         vehicle_by_id = {
@@ -1561,7 +1565,7 @@ class CostEvaluator:
         if initial_soc is None:
             return None if cap <= 0.0 else cap
         value = float(initial_soc)
-        if cap > 0.0 and 0.0 <= value <= 1.0:
+        if getattr(vehicle, "soc_input_unit", "legacy_ratio_or_kwh") != "kwh" and cap > 0.0 and 0.0 <= value <= 1.0:
             value = value * cap
         if cap > 0.0:
             value = min(max(value, 0.0), cap)
@@ -1748,6 +1752,25 @@ class CostEvaluator:
         om = max(float(om_unit_year or 0.0), 0.0)
         life = max(int(life_years or 1), 1)
         return (cap * capex) / (365.0 * life) + (cap * om) / 365.0
+
+    def _period_asset_costs(self, problem: CanonicalOptimizationProblem) -> tuple[float, float]:
+        """Amortize declared equipment once over the evaluation service days.
+
+        Equipment still incurs asset cost when no energy happens to flow.
+        Asset valuation remains separate from executed operating purchases.
+        """
+        pv_cost = bess_cost = 0.0
+        for asset in (problem.depot_energy_assets or {}).values():
+            pv_cost += self._dailyized_capex_om(
+                asset.pv_capacity_kw, asset.pv_capex_jpy_per_kw,
+                asset.pv_om_jpy_per_kw_year, asset.pv_life_years,
+            )
+            bess_cost += self._dailyized_capex_om(
+                asset.bess_energy_kwh, asset.bess_capex_jpy_per_kwh,
+                asset.bess_om_jpy_per_kwh_year, asset.bess_life_years,
+            )
+        days = max(int(problem.scenario.planning_days), 1)
+        return pv_cost * days, bess_cost * days
 
     def _grid_import_kwh_by_depot_slot_from_plan(
         self,
@@ -2400,7 +2423,10 @@ class CostEvaluator:
         plan: AssignmentPlan,
     ) -> List[Tuple[str, str, int, float]]:
         """Collect EV drive events as (vehicle_id, depot_id, departure_min, energy_kwh)."""
+        if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
+            return self._daily_return_drive_events(problem, plan, fuel=False)
         events: List[Tuple[str, str, int, float]] = []
+        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
         vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
         vehicle_depot = self._vehicle_to_depot(problem)
         duty_vehicle_map = plan.duty_vehicle_map()

@@ -25,6 +25,8 @@ from src.optimization.common.initial_soc_policy import (
     InitialSocPolicy,
     initial_soc_input_metadata,
 )
+from src.optimization.common.fleet_contract import SCENARIO_FLEET_CONTRACT_SCHEMA_VERSION
+from src.optimization.common.date_series import dated_capacity_factors
 from src.optimization.common.input_fingerprints import (
     INPUT_FINGERPRINT_SCHEMA,
     canonical_trip_input_hash,
@@ -39,6 +41,43 @@ from src.optimization.validation.physical_event_schedule import (
 
 
 DEFAULT_FRONTEND_RUN_PROFILE = "day_ahead_and_hourly_rolling"
+
+
+def _prepare_actual_pv_execution_file(problem: Any, run_dir: Path, *, repo_root: Path | None = None) -> str | None:
+    """Bind separate actual irradiance to the exact prepared PV equipment."""
+    contract = dict(problem.metadata.get('date_series_contract') or {})
+    if contract.get('pv_information_mode') != 'training_only_forecast_proxy':
+        return None
+    reference = contract.get('pv_execution_input') or {}
+    root = (repo_root or Path(__file__).resolve().parents[3]).resolve()
+    path = (root / str(reference.get('path') or '')).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise ValueError('Actual-PV execution source must be a file within the repository')
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != reference.get('sha256'):
+        raise ValueError('Actual-PV execution source changed after Prepare')
+    document = json.loads(path.read_text(encoding='utf-8'))
+    dates = problem.metadata.get('service_dates')
+    step = problem.scenario.timestep_min
+    if (document.get('schema_version') != 'historical_pv_capacity_factor_execution_v1'
+            or document.get('service_dates') != dates or document.get('timestep_minutes') != step):
+        raise ValueError('Actual-PV execution dates/cadence/schema do not match the prepared horizon')
+    depot = document['depot_id']
+    if set(problem.depot_energy_assets) != {depot}:
+        raise ValueError('Actual-PV execution source must cover the exact prepared depot set')
+    asset = problem.depot_energy_assets[depot]
+    factors = dated_capacity_factors({'pv_capacity_factor_by_date': document['profiles']}, dates, step)
+    values = [round(asset.pv_capacity_kw * factor * step / 60 * asset.pv_supply_scale, 6)
+              if asset.pv_enabled else 0.0 for factor in factors]
+    payload = {'schema_version': 'historical_pv_execution_v1', 'unit': 'kWh',
+               'source_sha256': document['source_sha256'], 'capacity_factor_source_sha256': digest,
+               'service_dates': dates, 'timestep_minutes': step,
+               'depot_profiles': {depot: values},
+               'pv_capacity_kw': asset.pv_capacity_kw, 'pv_supply_scale': asset.pv_supply_scale,
+               'data_kind': 'historical_estimated_actuals_not_forecasts'}
+    output = Path(run_dir) / 'pv_actuals_for_execution.json'
+    _write_json(output, payload)
+    return str(output)
 DAY_AHEAD_EXPLORATORY_PROFILE = "day_ahead_exploratory"
 PHYSICAL_SCHEDULE_VALIDATION_ARTIFACT = "physical_schedule_validation.json"
 PHYSICAL_VALIDATION_INPUT_MANIFEST_ARTIFACT = (
@@ -1149,10 +1188,10 @@ def persist_frontend_day_ahead_rolling_contract(
     fleet_contract = dict(metadata.get("scenario_fleet_contract") or {})
     if (
         fleet_contract.get("schema_version")
-        != "scenario_fleet_contract_v2"
+        != SCENARIO_FLEET_CONTRACT_SCHEMA_VERSION
     ):
         raise ValueError(
-            "Canonical problem is missing scenario_fleet_contract_v2"
+            f"Canonical problem is missing {SCENARIO_FLEET_CONTRACT_SCHEMA_VERSION}"
         )
     _write_json(
         run_dir / "scenario_fleet_contract.json",
@@ -1587,6 +1626,8 @@ def execute_frontend_rolling_chain(
         depot_id=str(depot_id),
         service_id=str(service_id),
         day_ahead_problem=problem,
+        lookahead_hours=problem.metadata.get('rolling_lookahead_hours'),
+        pv_actuals_json=_prepare_actual_pv_execution_file(problem, Path(run_dir)),
     )
     exit_code = run_rolling_chain(request)
     chain_summary_path = Path(request.output_dir) / "rolling_chain_summary.json"

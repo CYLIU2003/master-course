@@ -1,0 +1,13 @@
+{
+  "request": {
+    "endpoint": "https://api.odpt.org/api/v4/odpt:BusstopPole",
+    "query": {
+      "odpt:operator": "odpt.Operator:TokyuBus"
+    }
+  },
+  "sha256": "27ce5599ffa9d5a537d1078f9603b281f2dc552c78390119936d65daf8242471",
+  "retrieved_at_utc": "2026-09-10T05:30:55.157098+00:00",
+  "record_count": 3045,
+  "path": "data/external/odpt/tsurumaki_20260910/odpt_BusstopPole_3b705b54a0336c83.json",
+  "data_kind": "official_current_scheduled_service_not_historical_actual_operations"
+}

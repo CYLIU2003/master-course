@@ -70,6 +70,9 @@ def test_milp_objective_matches_evaluator_on_tiny_case() -> None:
     assert result.feasible
     evaluator = CostEvaluator()
     breakdown = evaluator.evaluate(problem, result.plan)
+    assert "objective_value" in result.plan.metadata, (
+        result.solver_status, dict(result.plan.metadata)
+    )
     model_objective = float(result.plan.metadata["objective_value"])
 
     assert abs(breakdown.objective_value - model_objective) < 1.0e-6

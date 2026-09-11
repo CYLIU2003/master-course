@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import math
 from typing import Any, Mapping, Optional
 
@@ -33,11 +33,19 @@ class HourlyExecutionState:
     observed_on_peak_kw_by_depot: Mapping[str, float]
     observed_off_peak_kw_by_depot: Mapping[str, float]
     active_charge_session_vehicle_ids: tuple[str, ...] = ()
+    actual_vehicle_fuel_l: Mapping[str, float] = field(default_factory=dict)
+    actual_vehicle_positions: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    in_progress_events: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    connected_charger_by_vehicle: Mapping[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "current_min": int(self.current_min),
             "actual_vehicle_soc_kwh": dict(self.actual_vehicle_soc_kwh),
+            "actual_vehicle_fuel_l": dict(self.actual_vehicle_fuel_l),
+            "actual_vehicle_positions": dict(self.actual_vehicle_positions),
+            "in_progress_events": dict(self.in_progress_events),
+            "connected_charger_by_vehicle": dict(self.connected_charger_by_vehicle),
             "actual_bess_soc_kwh": dict(self.actual_bess_soc_kwh),
             "observed_on_peak_kw_by_depot": dict(
                 self.observed_on_peak_kw_by_depot
@@ -51,6 +59,9 @@ class HourlyExecutionState:
             "state_semantics": {
                 "vehicle_soc": "start_of_next_slot",
                 "bess_soc": "end_of_last_executed_slot",
+                "fuel": "executed_consumption_and_refueling_only; no_daily_reset",
+                "positions": "executed_prefix_endpoint_or_in_progress_motion",
+                "connected_charger": "physical_assignment_in_last_executed_slot",
                 "demand_peak": "maximum_grid_import_kw_over_executed_slots",
                 "active_charge_session_vehicle_ids": (
                     "positive_charge_power_in_last_executed_and_next_planned_slots"
@@ -67,6 +78,7 @@ def build_next_execution_state(
     execution_minutes: int,
     prior_on_peak_kw_by_depot: Optional[Mapping[str, float]] = None,
     prior_off_peak_kw_by_depot: Optional[Mapping[str, float]] = None,
+    prior_vehicle_fuel_l: Optional[Mapping[str, float]] = None,
 ) -> HourlyExecutionState:
     """Extract the exact state passed to the next receding-horizon solve.
 
@@ -216,10 +228,20 @@ def build_next_execution_state(
     service_current = int(current_min)
     if service_current < horizon_start_min(problem):
         service_current += 24 * 60
+    fuel, positions, unfinished, connected = {}, {}, {}, {}
+    if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
+        from .vehicle_execution import advance_vehicle_prefix
+        fuel, positions, unfinished, connected = advance_vehicle_prefix(
+            problem, plan, start_min=service_current, stop_min=service_current+execution_minutes,
+            prior_fuel_l=prior_vehicle_fuel_l)
     return HourlyExecutionState(
         current_min=service_current + execution_minutes,
         actual_vehicle_soc_kwh=vehicle_soc,
         actual_bess_soc_kwh=bess_soc,
+        actual_vehicle_fuel_l=fuel,
+        actual_vehicle_positions=positions,
+        in_progress_events=unfinished,
+        connected_charger_by_vehicle=connected,
         observed_on_peak_kw_by_depot=on_peak,
         observed_off_peak_kw_by_depot=off_peak,
         active_charge_session_vehicle_ids=(
@@ -267,6 +289,9 @@ class DayAheadHourlyOptimizer:
         *,
         actual_vehicle_soc_kwh: Optional[Mapping[str, float]] = None,
         actual_bess_soc_kwh: Optional[Mapping[str, float]] = None,
+        actual_vehicle_fuel_l: Optional[Mapping[str, float]] = None,
+        actual_vehicle_positions: Optional[Mapping[str, Mapping[str, Any]]] = None,
+        connected_charger_by_vehicle: Optional[Mapping[str, str]] = None,
         observed_on_peak_kw_by_depot: Optional[Mapping[str, float]] = None,
         observed_off_peak_kw_by_depot: Optional[Mapping[str, float]] = None,
         active_charge_session_vehicle_ids: tuple[str, ...] = (),
@@ -280,6 +305,9 @@ class DayAheadHourlyOptimizer:
             current_min,
             actual_soc=actual_vehicle_soc_kwh,
             actual_bess_soc_kwh=actual_bess_soc_kwh,
+            actual_vehicle_fuel_l=actual_vehicle_fuel_l,
+            actual_vehicle_positions=actual_vehicle_positions,
+            connected_charger_by_vehicle=connected_charger_by_vehicle,
             observed_on_peak_kw_by_depot=observed_on_peak_kw_by_depot,
             observed_off_peak_kw_by_depot=observed_off_peak_kw_by_depot,
             active_charge_session_vehicle_ids=(

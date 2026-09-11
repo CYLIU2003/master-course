@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from src.service_day_types import SERVICE_ID_BY_DAY_TYPE, normalize_service_day_type
+
 
 _SERVICE_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "WEEKDAY": {
@@ -53,7 +55,6 @@ _ODPT_SERVICE_ID_ALIASES = {
     "sunday": "SUN_HOL",
     "sundayholiday": "SUN_HOL",
     "saturdayholiday": "SAT_HOL",
-    "unknown": "WEEKDAY",
 }
 
 
@@ -65,6 +66,10 @@ def canonical_service_id(value: Any, default: str = "WEEKDAY") -> str:
     raw = str(value or "").strip()
     if not raw:
         return default
+
+    day_type = normalize_service_day_type(raw)
+    if day_type is not None:
+        return SERVICE_ID_BY_DAY_TYPE[day_type]
 
     short = raw.split(":")[-1].split("/")[-1].strip()
     compact_short = _compact_token(short)

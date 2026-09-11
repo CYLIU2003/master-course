@@ -191,6 +191,51 @@ def test_builder_persists_verified_service_calendar_contract() -> None:
     }
 
 
+@pytest.mark.parametrize("service_id,day", [("SAT", "2025-08-09"), ("SUN_HOL", "2025-08-10"), ("SAT_HOL", "2025-08-09"), ("SAT_HOL", "2025-08-10")])
+def test_service_aliases_accept_only_their_calendar(service_id: str, day: str) -> None:
+    result = validate_service_calendar_contract(
+        service_date_text=day,
+        timetable_rows=[{"trip_id": "source-trip", "service_id": service_id}],
+        scenario_metadata={}, strict=True,
+    )
+    assert result["status"] == "OK"
+
+
+@pytest.mark.parametrize("bad_row", [{"trip_id": "unknown"}, {"service_id": "unknown"}, {"service_id": "unknown", "trip_id": "bus.Weekday.0800"}])
+def test_known_weekday_does_not_hide_an_unknown_row(bad_row: dict) -> None:
+    rows = [_weekday_row(), bad_row]
+    result = validate_service_calendar_contract(
+        service_date_text="2025-08-05", timetable_rows=rows,
+        scenario_metadata={}, strict=False,
+    )
+    assert result["status"] == "ERROR"
+    assert result["unknown_timetable_row_indices"] == [1]
+    assert rows[1] == bad_row
+
+
+def test_conflicting_service_and_trip_token_are_rejected() -> None:
+    row = {**_weekday_row(), "service_id": "SUN_HOL"}
+    with pytest.raises(ValueError, match="conflicting_fields"):
+        validate_service_calendar_contract(
+            service_date_text="2025-08-10", timetable_rows=[row],
+            scenario_metadata={}, strict=True,
+        )
+
+
+def test_unknown_service_is_not_changed_to_weekday_upstream() -> None:
+    from bff.services.service_ids import canonical_service_id
+    from src.tokyu_shard_loader import service_id_to_day_type, day_type_to_service_id, selected_day_types
+
+    assert canonical_service_id("unknown") == "unknown"
+    assert canonical_service_id("odpt.Calendar:SaturdayHoliday") == "SAT_HOL"
+    assert selected_day_types(["SAT_HOL"]) == ["saturday", "holiday"]
+    for invalid in (None, "", "unknown", "invalid"):
+        with pytest.raises(ValueError, match="Unknown"):
+            service_id_to_day_type(invalid)
+        with pytest.raises(ValueError, match="Unknown"):
+            day_type_to_service_id(invalid)
+
+
 def test_research_builder_rejects_declared_fleet_inventory_mismatch() -> None:
     trip = Trip(
         trip_id=_weekday_row()["trip_id"],

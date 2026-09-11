@@ -22,6 +22,7 @@ from .soc_helpers import (
     deadhead_energy_kwh,
     vehicle_capacity_kwh,
     vehicle_initial_soc_kwh,
+    vehicle_maximum_soc_kwh,
 )
 
 
@@ -176,7 +177,8 @@ def apply_opportunistic_topup(
         if capacity <= 0.0:
             continue
         hard_target = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
-        target_kwh = max(float(hard_target or 0.0), upper_buffer_ratio * capacity)
+        target_kwh = min(vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity),
+                         max(float(hard_target or 0.0), upper_buffer_ratio * capacity))
         for day_idx in range(planning_days):
             day_key = (vehicle_id, day_idx)
             last_duty = vehicle_day_last_duty.get(day_key)
@@ -255,7 +257,7 @@ def apply_opportunistic_topup(
 
             charge_kwh = existing_charge_events.get((vehicle_id, slot_idx), 0.0)
             if charge_kwh > 0.0:
-                soc = min(capacity, soc + charge_kwh * 0.95)
+                soc += charge_kwh * 0.95
 
             trip_energy = trip_energy_by_vehicle_slot.get((vehicle_id, slot_idx), 0.0)
             if trip_energy > 0.0:
@@ -310,7 +312,7 @@ def apply_opportunistic_topup(
                                         )
                                         slot_port_usage[usage_key] = used_ports + 1
                                         slot_kw_usage[usage_key] = used_kw + (charge_kwh / timestep_h)
-                                        soc = min(capacity, soc + charge_kwh * 0.95)
+                                        soc += charge_kwh * 0.95
                                         added_kwh += charge_kwh
 
             soc_by_vehicle[vehicle_id] = soc

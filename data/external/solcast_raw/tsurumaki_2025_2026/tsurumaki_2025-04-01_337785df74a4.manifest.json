@@ -1,0 +1,26 @@
+{
+  "status": "RAW_COVERAGE_VALIDATED",
+  "request": {
+    "depot_id": "tsurumaki",
+    "start_jst": "2025-04-01T00:00:00+09:00",
+    "end_exclusive_jst": "2025-05-01T00:00:00+09:00",
+    "period_minutes": 15,
+    "expected_records": 2880,
+    "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+    "query": {
+      "latitude": 35.63514694444444,
+      "longitude": 139.6462427777778,
+      "start": "2025-04-01T00:00:00+09:00",
+      "duration": "P30D",
+      "period": "PT15M",
+      "time_zone": "utc",
+      "format": "json",
+      "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+    }
+  },
+  "request_sha256": "337785df74a4f5863a2231a08381ba1d726d19c1e24c87a8daf9490a85b1470e",
+  "raw_sha256": "7a705d4dcc430e880145403cff31bf3ab5a36a6d212966404fd3430e66ad882c",
+  "record_count": 2880,
+  "retrieved_at_utc": "2026-09-10T04:46:26.556642+00:00",
+  "data_kind": "satellite_model_estimated_actuals_not_forecasts"
+}
