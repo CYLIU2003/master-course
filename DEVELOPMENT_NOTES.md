@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-11 ICE有限燃料候補の週末SOC・充電検査
+
+全体回帰は2,169 passed / 既存PowerPoint証拠2 failed（110.40秒、`output/exact_depot_factor_validation/pytest-finite-fuel-seed-release.xml`）。候補選択の6件と燃料・native factorの13件が通過し、対象の独立レビューで残るP0/P1は0件。
+
+`0f217819` の新しい完全Prepareは通過したが、Stage 1は120秒内にincumbentを得られなかった。割当初期候補は構造上表現可能だった一方、固定候補の診断で週末SOC復元と充電taper/session条件の不成立を確認した。候補選択に車両別の時間順SOC上界と最大5秒の既存Stage 2検査を追加し、失敗した探索候補だけを不採用にする。全接続・主MILP・フリート・物理条件・Stage 1/2予算を保持する。更新候補は共有充電計算と独立物理検証に通過したが、fresh Prepareからの全MILP再実行・rolling・最終会計は未完了。[診断と変更の境界](docs/notes/PHASE3_FINITE_ICE_FUEL_20260911.md)。
+
 ## 2026-09-11 Phase 3の有限ICE燃料制約
 
 最終全体回帰は2,167 passed / 既存PowerPoint証拠2 failed（95.62秒）。対象の独立レビューでavailabilityのP1を解消し、残るP0/P1は0件。JUnitは `output/exact_depot_factor_validation/pytest-finite-fuel-release.xml`。新しいclean commitでの実データ再実行は未完了。

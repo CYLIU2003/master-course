@@ -3,6 +3,34 @@
 状態: 燃料不足を許す割当モデルを修正済み。新しいクリーンSHAからの週間再実行は未完了。
 研究リリースはBLOCKED。過去の違反結果はDIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS。
 
+## 0f217819の再実行と探索初期候補の追加修正
+
+新しい完全Prepare（232.16秒）を通過したが、Stage 1は121.34秒でTIME_LIMIT、
+incumbent 0件となった。モデル構築247.50秒、day-ahead全体399.13秒。
+25台分の128 L予算を含む1,059,458制約、6,767,874変数、81,374,748非ゼロ係数であり、
+全78,647,760接続候補は保持した。rollingは0/168、後続3季節は未実行。
+成果物は `C:/master-course-worktrees/shibu21-23-fuel-20260911/output/shibu21_23_exact_fuel_campaign_20260911/`。
+
+同じ入力から初期候補だけを固定した診断で、BEVの週末SOC復元が不可能な経路を確認した。
+初期SOCが大きい車両を優先するだけでは、最終便後の充電時間と自身の終端目標が整合しない。
+探索前の候補選択に、既存の物理event/slot負荷とSOC境界を用いる車両別上界を追加する。
+さらに既存Stage 2を車両1台の候補に対して最大5秒で実行し、充電taperとsession時間を検査する。
+各検査は共有wall deadline内で実施し、失敗時はその探索候補を採用しない。
+native TIME_LIMIT等の未確定判定はINCONCLUSIVEとして記録する。検証済み候補が
+得られない場合は未確定候補をMIP startとして保持し、主MILPへ判断を委ねる。
+共有deadline後は新しいnative検査を開始しない。
+主MILPの候補・変数・制約・目的・120/30秒のStage 1/2予算は変更しない。
+車両別検査は共有充電器の成立を保証せず、診断結果を運行解として返す処理もない。
+
+更新候補は保持入力による診断で、候補生成12.42秒、26 BEVの共有充電計算24.31秒、
+独立物理検証accepted=true・違反0件となった。これは初期候補の診断であり、
+新clean SHAの全候補MILP、168時間rolling、4季節の完了を代替しない。
+
+修正後の全体回帰は2,169 passed / 既存PowerPoint証拠2 failed（110.40秒、
+`output/exact_depot_factor_validation/pytest-finite-fuel-seed-release.xml`）。
+終端SOC不足とINCONCLUSIVE候補保持の回帰を含む6件、燃料・native factorの13件が通過。
+独立レビューで確認した未確定状態と期限の扱いを修正し、対象経路の残るP0/P1は0件。
+
 ## 実入力で確認した不成立
 
 凍結 `8a8b32724e19d4ccd87aa10fb1ff452cb5073385` の渋21/22/23・冬週は、

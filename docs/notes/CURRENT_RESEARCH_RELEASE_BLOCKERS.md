@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-11 燃料修正後の初期候補を再検査、全MILP再実行待ち
+
+`0f217819` は完全Prepare通過後、Stage 1がTIME_LIMIT・incumbent 0件で停止した。構造上有効な初期候補にも週末SOC復元と充電条件の不成立があった。候補選択へ車両別の時間順SOC・native充電検査を追加した。保持入力で更新候補の共有充電・独立物理検証は通過したが、新SHAの全接続MILP・168時間rolling・4季節は未完了。研究リリースBLOCKEDを維持する。[証拠](PHASE3_FINITE_ICE_FUEL_20260911.md)。
+
 ## 2026-09-11 3路線求解は到達、週間ICE燃料修正後の再実行待ち
 
 凍結 `8a8b3272` の冬週は全候補を保持した割当・充電計画を得たが、燃料在庫違反505件で物理受入を拒否した。rollingは0/168、他3季節は未実行、最終会計は未成立。Stage 1 gap86.10%も宣言10%を満たさない。Phase 3へmaterialized燃料の有限予算とStage 2/rolling窓検査を追加する。新しいclean SHAからの実行が通るまで計算完了・モデル完成・研究READYとは報告しない。[原因・制約・証拠](PHASE3_FINITE_ICE_FUEL_20260911.md)。

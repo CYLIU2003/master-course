@@ -6,7 +6,10 @@ import pytest
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.optimization.common.problem import AssignmentPlan, OptimizationConfig, OptimizationMode
 from src.optimization.engine import OptimizationEngine
-from src.optimization.milp.solver_adapter import GurobiMILPAdapter
+from src.optimization.milp.solver_adapter import (
+    GurobiMILPAdapter,
+    _FEEDBACK_GLOBAL_DEADLINE_KEY,
+)
 from test_daily_return_policy import daily_problem
 
 
@@ -33,6 +36,22 @@ def _mixed_problem_with_overdrawn_ice_baseline():
                                                        "max_end_fragments_per_vehicle": 100})
 
 
+def _mixed_problem_with_high_and_lower_initial_soc_bevs():
+    problem = _mixed_problem_with_overdrawn_ice_baseline()
+    high_initial = replace(
+        problem.vehicles[0],
+        initial_soc=100.0,
+        charge_power_max_kw=0.0,
+    )
+    lower_initial = replace(
+        problem.vehicles[0],
+        vehicle_id="bev-low",
+        initial_soc=50.0,
+        charge_power_max_kw=60.0,
+    )
+    return replace(problem, vehicles=(high_initial, lower_initial, problem.vehicles[1]))
+
+
 def test_pre_solve_seed_moves_whole_path_without_mutating_fleet_or_timetable():
     problem = _mixed_problem_with_overdrawn_ice_baseline()
     seeded = GurobiMILPAdapter()._problem_with_finite_fuel_warm_start(problem)
@@ -44,6 +63,57 @@ def test_pre_solve_seed_moves_whole_path_without_mutating_fleet_or_timetable():
     assert seeded.dispatch_context is problem.dispatch_context
     assert seeded.metadata["pre_solve_finite_fuel_seed"]["replacement_by_source_vehicle"] == {"ice-1": "bev-1"}
     assert not seeded.baseline_plan.charging_slots and not seeded.baseline_plan.refuel_slots
+
+
+def test_energy_audit_rejects_high_initial_terminal_deficit_and_selects_lower_initial_bev():
+    problem = _mixed_problem_with_high_and_lower_initial_soc_bevs()
+    seeded = GurobiMILPAdapter()._problem_with_finite_fuel_warm_start(problem)
+
+    assert seeded.baseline_plan.vehicle_paths() == {
+        "bev-low": tuple(trip.trip_id for trip in problem.trips),
+    }
+    seed_metadata = seeded.metadata["pre_solve_finite_fuel_seed"]
+    rejected = seed_metadata["rejected_energy_candidates"]
+    assert rejected[0]["candidate_vehicle_id"] == "bev-1"
+    assert rejected[0]["terminal_shortage_kwh"] == pytest.approx(74.0)
+    assert seed_metadata["accepted_energy_candidates"]["bev-low"]["screen_verdict"] == (
+        "OPTIMISTIC_BOUND_PASSED"
+    )
+
+    assert problem.baseline_plan.vehicle_paths() == {
+        "ice-1": tuple(trip.trip_id for trip in problem.trips),
+    }
+    assert seeded.trips is problem.trips
+    assert seeded.vehicles is problem.vehicles
+    assert seeded.dispatch_context is problem.dispatch_context
+
+
+def test_inconclusive_native_screen_retains_unverified_candidate_for_main_milp(monkeypatch):
+    problem = _mixed_problem_with_overdrawn_ice_baseline()
+    high_initial = replace(problem.vehicles[0], initial_soc=80.0, charge_power_max_kw=60.0)
+    lower_initial = replace(high_initial, vehicle_id="bev-low", initial_soc=70.0)
+    problem = replace(
+        problem,
+        vehicles=(high_initial, lower_initial, problem.vehicles[1]),
+        metadata={**problem.metadata, _FEEDBACK_GLOBAL_DEADLINE_KEY: 0.0},
+    )
+    monkeypatch.setattr(
+        "src.optimization.milp.solver_adapter.is_gurobi_available",
+        lambda: True,
+    )
+
+    seeded = GurobiMILPAdapter()._problem_with_finite_fuel_warm_start(
+        problem,
+        config=OptimizationConfig(time_limit_sec=5, stage2_time_limit_sec=5),
+    )
+
+    assert seeded.baseline_plan.vehicle_paths() == {
+        "bev-1": tuple(trip.trip_id for trip in problem.trips),
+    }
+    selected = seeded.metadata["pre_solve_finite_fuel_seed"]["accepted_energy_candidates"]["bev-1"]
+    assert selected["selection"] == "unverified_seed_retained_for_main_milp"
+    assert selected["screen_verdict"] == "INCONCLUSIVE"
+    assert selected["native_screen_status"] == "global_deadline_exhausted"
 
 
 def test_native_model_validates_the_finite_fuel_seed_with_original_resources():

@@ -13520,7 +13520,7 @@ class GurobiMILPAdapter:
         )
         problem = replace(problem, metadata=budget_metadata)
         if bool(getattr(config, "warm_start", True)) and config.fixed_assignment is None:
-            problem = self._problem_with_finite_fuel_warm_start(problem)
+            problem = self._problem_with_finite_fuel_warm_start(problem, config=config)
         if _remaining_stage_budget_sec(
             deadline_monotonic=feedback_global_deadline,
             requested_sec=feedback_global_limit_sec,
@@ -21559,6 +21559,7 @@ class GurobiMILPAdapter:
 
     def _problem_with_finite_fuel_warm_start(
         self, problem: CanonicalOptimizationProblem,
+        *, config: Optional[OptimizationConfig] = None,
     ) -> CanonicalOptimizationProblem:
         """Construct a pre-solve seed when an ICE path exceeds its finite stock.
 
@@ -21609,8 +21610,11 @@ class GurobiMILPAdapter:
         dispatch_trips = problem.dispatch_context.trips_by_id()
         by_vehicle = baseline.duties_by_vehicle()
         replacements: Dict[str, str] = {}
+        rejected_energy_candidates: List[Dict[str, Any]] = []
+        accepted_energy_candidates: Dict[str, Dict[str, Any]] = {}
         checker = FeasibilityEngine()
         for source in sorted(over_budget, key=lambda vehicle_id: (-len(paths[vehicle_id]), vehicle_id)):
+            inconclusive: List[Tuple[Any, Dict[str, Any]]] = []
             for candidate in list(candidates):
                 if not problem.dispatch_context.locations_equivalent(
                     vehicles[source].home_depot_id, candidate.home_depot_id
@@ -21635,14 +21639,34 @@ class GurobiMILPAdapter:
                         compatible = False
                         break
                 if compatible:
+                    energy_audit = self._finite_fuel_seed_energy_audit(
+                        problem, candidate, by_vehicle[source], config=config,
+                    )
+                    if not energy_audit["accepted"]:
+                        if energy_audit.get("screen_verdict") == "INCONCLUSIVE":
+                            inconclusive.append((candidate, energy_audit))
+                        rejected_energy_candidates.append({
+                            "source_vehicle_id": source, "candidate_vehicle_id": candidate.vehicle_id,
+                            **energy_audit,
+                        })
+                        continue
                     replacements[source] = str(candidate.vehicle_id)
+                    accepted_energy_candidates[str(candidate.vehicle_id)] = energy_audit
                     candidates.remove(candidate)
                     break
+            if source not in replacements and inconclusive:
+                candidate, energy_audit = inconclusive[0]
+                replacements[source] = str(candidate.vehicle_id)
+                accepted_energy_candidates[str(candidate.vehicle_id)] = {
+                    **energy_audit, "selection": "unverified_seed_retained_for_main_milp",
+                }
+                candidates.remove(candidate)
         if not replacements:
             return replace(problem, metadata={
                 **dict(problem.metadata), "pre_solve_finite_fuel_seed": {
                     "applied": False, "reason": "no_compatible_unused_bev",
                     "unresolved_vehicle_ids": sorted(over_budget),
+                    "rejected_energy_candidates": rejected_energy_candidates,
                 },
             })
         seed = _remap_plan_vehicle_ids(
@@ -21658,9 +21682,98 @@ class GurobiMILPAdapter:
             **dict(problem.metadata), "pre_solve_finite_fuel_seed": {
                 "applied": True, "replacement_by_source_vehicle": replacements,
                 "unresolved_vehicle_ids": sorted(set(over_budget) - set(replacements)),
+                "rejected_energy_candidates": rejected_energy_candidates,
+                "accepted_energy_candidates": accepted_energy_candidates,
                 "semantics": "whole_path_pre_solve_mip_start_only;not_fixed_assignments_or_postsolve_repair",
             },
         })
+
+    def _finite_fuel_seed_energy_audit(
+        self, problem: CanonicalOptimizationProblem, vehicle: Any,
+        duties: Sequence[VehicleDuty],
+        *, config: Optional[OptimizationConfig] = None,
+    ) -> Dict[str, Any]:
+        """Reject a seed path that fails even optimistic local charging.
+
+        This screens only MIP-start labels; the unrestricted assignment domain
+        stays intact. Shared charger capacity and charge taper remain for the
+        full solver, so passing this bound is not a feasibility certificate.
+        """
+        slots = sorted({slot.slot_index for slot in problem.price_slots})
+        if not slots:
+            return {"accepted": True, "checked": False, "reason": "no_price_slots"}
+        candidate = AssignmentPlan(
+            duties=tuple(replace(duty, vehicle_type=vehicle.vehicle_type) for duty in duties),
+            served_trip_ids=tuple(trip_id for duty in duties for trip_id in duty.trip_ids),
+            metadata={"duty_vehicle_map": {duty.duty_id: vehicle.vehicle_id for duty in duties}},
+        )
+        loads = fixed_path_slot_loads(problem, candidate, slots)
+        vehicle_id = str(vehicle.vehicle_id)
+        capacity = float(vehicle.battery_capacity_kwh or 0.0)
+        minimum = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity)
+        maximum = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity)
+        initial = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity)
+        target = max(minimum, final_soc_floor_kwh(problem, vehicle, cap_kwh=capacity),
+                     float(effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity) or 0.0))
+        power = self._vehicle_charge_power_max_kw(problem, vehicle)
+        if problem.chargers:
+            power = min(power, max(float(charger.power_kw or 0.0) for charger in problem.chargers))
+        charge_per_slot = power * problem.scenario.timestep_min / 60.0 * 0.95
+        upper_soc = initial
+        minimum_upper_soc = initial
+        for slot in slots:
+            if slot in loads.home_slots.get(vehicle_id, set()):
+                upper_soc = min(maximum, upper_soc + charge_per_slot)
+            upper_soc -= max(float(loads.energy_kwh.get((vehicle_id, slot), 0.0)), 0.0)
+            minimum_upper_soc = min(minimum_upper_soc, upper_soc)
+        reserve_shortage = max(minimum - minimum_upper_soc, 0.0)
+        terminal_shortage = max(target - upper_soc, 0.0)
+        audit = {
+            "checked": True,
+            "accepted": max(reserve_shortage, terminal_shortage) <= 1e-6,
+            "reserve_shortage_kwh": reserve_shortage,
+            "terminal_shortage_kwh": terminal_shortage,
+            "optimistic_terminal_soc_kwh": upper_soc,
+            "terminal_target_kwh": target,
+            "semantics": "optimistic_vehicle_local_soc_bound;not_shared_charger_feasibility",
+        }
+        audit["screen_verdict"] = "OPTIMISTIC_BOUND_PASSED" if audit["accepted"] else "OPTIMISTIC_BOUND_FAILED"
+        if not audit["accepted"] or config is None or not is_gurobi_available():
+            return audit
+        # Use the reachable charging formulation for taper and session timing.
+        # This candidate-only check cannot restrict the main model or return a
+        # fallback dispatch. The inherited global deadline includes its work.
+        local_problem = replace(problem, metadata={
+            **dict(problem.metadata), "phase3_diagnostics_dir": "",
+            "stage2_feedback_max_iterations": 0,
+        })
+        local_limit = min(float(config.stage2_time_limit_sec or config.time_limit_sec), 5.0)
+        deadline = problem.metadata.get(_FEEDBACK_GLOBAL_DEADLINE_KEY)
+        if deadline is not None:
+            local_limit = min(local_limit, max(float(deadline) - time.monotonic(), 0.0))
+        if local_limit <= 0.0:
+            return {**audit, "accepted": False, "screen_verdict": "INCONCLUSIVE",
+                    "native_screen_status": "global_deadline_exhausted"}
+        local_config = replace(config, time_limit_sec=local_limit,
+                               stage2_time_limit_sec=local_limit, fixed_assignment=None)
+        outcome, _ = self._solve_thesis_stage2_charging_dispatch(
+            local_problem, local_config, candidate,
+            stage1_status="pre_solve_vehicle_local_seed_screen",
+            stage1_gap=None, stage1_bound=None, stage1_objective_value=None,
+            stage1_runtime_sec=0.0,
+            slots_per_day=max(1, 1440 // int(problem.scenario.timestep_min)),
+        )
+        audit.update(
+            accepted=outcome.has_feasible_incumbent,
+            screen_verdict=("NATIVE_FEASIBLE" if outcome.has_feasible_incumbent
+                            else "NATIVE_INFEASIBLE" if outcome.solver_status == "infeasible"
+                            else "INCONCLUSIVE"),
+            native_screen_status=outcome.solver_status,
+            native_screen_seconds=outcome.runtime_sec,
+            native_screen_time_limit_sec=local_limit,
+            semantics="vehicle_local_native_charging_screen;not_shared_charger_feasibility",
+        )
+        return audit
 
     def _stage1_ice_fuel_expressions(
         self,
