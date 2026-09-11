@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-11 計算完走に向けた全接続表現の修正中
+
+全候補を維持した日跨ぎ接続の共有ノード表現を実装し、小規模nativeの元表現との差分と物理検証を確認した。実データの計測・週間実行・最終会計は未完了であり、研究リリースBLOCKEDを継続する。旧停止記録は旧SHAの証拠として保持する。[定式化と検証](EXACT_DEPOT_CONNECTION_FACTORS_20260911.md)。
+
 ## 2026-09-11 最終状態: 4週Prepare完了、4路線solverは資源不足で未完了
 
 凍結 `e8bd9d6c` の4週は完全Prepareを通過した。冬週のモデル構築でprivate memory 28.43 GiBとOS空きvirtual memory 0.58 GiBを観測し、診断プロセスを停止した。他3週は未実行。解・accepted rolling chain・物理検証・最終会計がなく、研究リリースは **BLOCKED**。これは数学的なINFEASIBLE判定ではない。[各週の監査値と停止記録](SHIBU21_24_RESOURCE_BLOCK_20260911.md)。

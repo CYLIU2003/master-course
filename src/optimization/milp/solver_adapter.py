@@ -34,6 +34,10 @@ from src.optimization.common.bev_terminal_policy import (
     normalize_bev_terminal_soc_policy,
 )
 from src.optimization.milp.model_builder import MILPModelBuilder
+from src.optimization.milp.depot_connection_factors import (
+    ArcDomain, SuccessorRow, FactoredConnectionVariables,
+    add_factor_soc_terms, create_factor_variables, factor_depot_connections,
+)
 from src.optimization.common.weather_strategy import weather_assignment_objective_bias
 from src.route_code_utils import extract_route_series_from_candidates
 
@@ -3520,6 +3524,8 @@ def _single_path_flow_implies_temporal_exclusivity(
         or int(max_end_fragments_per_vehicle) > 1
     ):
         return False
+    if isinstance(arc_pairs, ArcDomain):
+        return arc_pairs.is_acyclic(trip_by_id)
     for _vehicle_id, from_trip_id, to_trip_id in arc_pairs:
         from_trip = trip_by_id.get(str(from_trip_id))
         to_trip = trip_by_id.get(str(to_trip_id))
@@ -3543,6 +3549,8 @@ def _acyclic_flow_requires_path_start(
     node whose balance forces a path-start indicator to one.
     """
 
+    if isinstance(arc_pairs, ArcDomain):
+        return arc_pairs.is_acyclic(trip_by_id)
     for _vehicle_id, from_trip_id, to_trip_id in arc_pairs:
         from_trip = trip_by_id.get(str(from_trip_id))
         to_trip = trip_by_id.get(str(to_trip_id))
@@ -13753,7 +13761,35 @@ class GurobiMILPAdapter:
         trip_by_id = problem.trip_by_id()
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         assignment_pairs = builder.enumerate_assignment_pairs(problem)
-        arc_pairs = builder.enumerate_arc_pairs(problem, trip_by_id)
+        factor_connections_requested = bool(
+            problem.metadata.get("stage1_exact_depot_connection_factors", False)
+        )
+        if factor_connections_requested and _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE.get() not in {None, "discrete"}:
+            raise ValueError("Depot connection factors require vehicle-labelled Phase 3")
+        if factor_connections_requested:
+            arc_pairs = ArcDomain(tuple(
+                SuccessorRow(row.vehicle_id, row.from_trip_id, row.selected_successors)
+                for row in builder.iter_arc_successors(problem, trip_by_id)
+            ))
+            explicit_arc_pairs, depot_connection_factors = factor_depot_connections(
+                self, problem, arc_pairs.rows
+            )
+        else:
+            arc_pairs = builder.enumerate_arc_pairs(problem, trip_by_id)
+            explicit_arc_pairs, depot_connection_factors = arc_pairs, ()
+        depot_factor_audit = {
+            "requested": factor_connections_requested,
+            "applied": bool(depot_connection_factors),
+            "complete_candidate_arc_count": len(arc_pairs),
+            "explicit_arc_variable_count": len(explicit_arc_pairs),
+            "represented_arc_count": sum(len(f.origins) * len(f.targets) for f in depot_connection_factors),
+            "factor_incidence_variable_count": sum(len(f.origins) + len(f.targets) for f in depot_connection_factors),
+            "factor_count": len(depot_connection_factors),
+            "successor_candidates_removed": 0,
+            "vehicle_labels_preserved": True,
+        }
+        if len(explicit_arc_pairs) + depot_factor_audit["represented_arc_count"] != len(arc_pairs):
+            raise ValueError("Depot factor domain accounting mismatch")
         arc_pruning_summary = builder.arc_pruning_summary(problem, trip_by_id)
         vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
         assignment_trip_ids_by_vehicle: Dict[str, List[str]] = {}
@@ -13909,9 +13945,8 @@ class GurobiMILPAdapter:
             for key in assignment_pairs
             if str(key[0]) not in stage1_exact_clone_vehicle_ids
         )
-        stage1_connection_variable_keys = tuple(
-            key
-            for key in arc_pairs
+        stage1_connection_variable_keys = (
+            key for key in explicit_arc_pairs
             if str(key[0]) not in stage1_exact_clone_vehicle_ids
         )
 
@@ -13929,6 +13964,10 @@ class GurobiMILPAdapter:
             )
             for vehicle_id, from_trip_id, to_trip_id in stage1_connection_variable_keys
         }
+        if depot_connection_factors:
+            x = FactoredConnectionVariables(
+                x, create_factor_variables(stage1, gp, GRB, depot_connection_factors)
+            )
         start_arc: Dict[Tuple[str, str], Any] = {
             (vehicle_id, trip_id): stage1.addVar(
                 vtype=GRB.BINARY,
@@ -14685,6 +14724,13 @@ class GurobiMILPAdapter:
         for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
             outgoing_by_node.setdefault((vehicle_id, from_trip_id), []).append(var)
             incoming_by_node.setdefault((vehicle_id, to_trip_id), []).append(var)
+        if isinstance(x, FactoredConnectionVariables):
+            for variables in x.factors:
+                factor = variables.factor
+                for trip_id, var in zip(factor.origins, variables.origins):
+                    outgoing_by_node.setdefault((factor.vehicle_id, trip_id), []).append(var)
+                for trip_id, var in zip(factor.targets, variables.targets):
+                    incoming_by_node.setdefault((factor.vehicle_id, trip_id), []).append(var)
         # The node-flow equalities below imply both x[v,i,j] <= y[v,i] and
         # x[v,i,j] <= y[v,j]: every x is nonnegative and belongs to an
         # outgoing/incoming sum equal to y minus a nonnegative boundary arc.
@@ -15061,6 +15107,13 @@ class GurobiMILPAdapter:
                 if vehicle is None or str(vehicle.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}:
                     continue
                 objective1 += _ice_fuel_unit_cost(vehicle) * self._deadhead_fuel_l(problem, vehicle, from_trip_id, to_trip_id) * var
+            if isinstance(x, FactoredConnectionVariables):
+                for variables in x.factors:
+                    vehicle = vehicle_by_id[variables.factor.vehicle_id]
+                    if str(vehicle.vehicle_type).upper() not in {"BEV", "PHEV", "FCEV"}:
+                        objective1 += _ice_fuel_unit_cost(vehicle) * gp.quicksum(
+                            fuel * var for fuel, var in zip(variables.factor.target_fuel_l, variables.targets)
+                        )
             for assignment_key, var in start_arc.items():
                 vehicle_id, _trip_id = assignment_key
                 vehicle = vehicle_by_id.get(str(vehicle_id))
@@ -15435,6 +15488,7 @@ class GurobiMILPAdapter:
                 vehicle_by_id=vehicle_by_id,
                 component_flags=component_flags,
                 arc_pairs=arc_pairs,
+                include_path_cover_bound=not bool(depot_connection_factors),
             )
         )
         stage1_weather_energy_fuel_lower_bound = (
@@ -16057,6 +16111,7 @@ class GurobiMILPAdapter:
                         sorted(startup_energy_infeasible_vehicle_ids)
                     ),
                     "arc_pruning_summary": arc_pruning_summary,
+                "depot_connection_factor_audit": depot_factor_audit,
                     "stage1_redundant_arc_link_constraints_omitted": (
                         stage1_redundant_arc_link_constraints_omitted
                     ),
@@ -16436,6 +16491,7 @@ class GurobiMILPAdapter:
                     sorted(startup_energy_infeasible_vehicle_ids)
                 ),
                 "arc_pruning_summary": arc_pruning_summary,
+                "depot_connection_factor_audit": depot_factor_audit,
                 "stage1_redundant_arc_link_constraints_omitted": (
                     stage1_redundant_arc_link_constraints_omitted
                 ),
@@ -18088,7 +18144,7 @@ class GurobiMILPAdapter:
                                     or not source_suffix_arcs.issubset(
                                         selected_x
                                     )
-                                    or not target_suffix_arcs.issubset(x)
+                                    or not all(key in x for key in target_suffix_arcs)
                                 ):
                                     continue
 
@@ -18317,6 +18373,8 @@ class GurobiMILPAdapter:
 
             _set_start_values(y, set(start.get("selected_y") or ()))
             _set_start_values(x, set(start.get("selected_x") or ()))
+            if isinstance(x, FactoredConnectionVariables):
+                x.set_factor_starts(set(start.get("selected_x") or ()))
             _set_start_values(
                 start_arc,
                 set(start.get("selected_start") or ()),
@@ -24450,6 +24508,8 @@ class GurobiMILPAdapter:
             var.Start = 1.0 if key in selected_y else 0.0
         for key, var in x.items():
             var.Start = 1.0 if key in selected_x else 0.0
+        if isinstance(x, FactoredConnectionVariables):
+            x.set_factor_starts(selected_x)
         for key, var in start_arc.items():
             var.Start = 1.0 if key in selected_start else 0.0
         for key, var in end_arc.items():
@@ -26567,6 +26627,7 @@ class GurobiMILPAdapter:
         vehicle_by_id: Mapping[str, Any],
         component_flags: Mapping[str, bool],
         arc_pairs: Sequence[Tuple[str, str, str]] = (),
+        include_path_cover_bound: bool = True,
     ) -> Dict[str, Any]:
         """Certify an optimistic weather-aware service-energy cost floor.
 
@@ -26882,8 +26943,12 @@ class GurobiMILPAdapter:
         }
         path_source_lp_lower_bound_jpy: Optional[float] = None
         path_source_mip_lower_bound_jpy: Optional[float] = None
+        if not include_path_cover_bound:
+            path_source_lp_audit["status"] = "omitted_for_factored_connection_memory_budget"
+            path_source_mip_audit["status"] = "omitted_for_factored_connection_memory_budget"
         if (
-            not trip_without_compatible_assignment
+            include_path_cover_bound
+            and not trip_without_compatible_assignment
             and is_gurobi_available()
         ):
             path_source_lp_started = time.perf_counter()
@@ -27896,6 +27961,14 @@ class GurobiMILPAdapter:
                 net_battery_requirement += deadhead_energy_kwh * arc_var
                 positive_energy_bound_kwh += deadhead_energy_kwh
 
+            if isinstance(x, FactoredConnectionVariables):
+                for variables in x.by_vehicle.get(vehicle_id, ()):
+                    factor = variables.factor
+                    net_battery_requirement += gp.quicksum(
+                        energy * var for energy, var in zip(factor.target_energy_kwh, variables.targets)
+                    )
+                    positive_energy_bound_kwh += len(factor.origins) * sum(factor.target_energy_kwh)
+
             battery_big_m_kwh = max(
                 positive_energy_bound_kwh,
                 capacity_kwh,
@@ -28444,6 +28517,17 @@ class GurobiMILPAdapter:
                     charge_energy_per_slot_kwh * residence_slot_count * arc_var
                 )
 
+            if isinstance(x, FactoredConnectionVariables):
+                for variables in x.by_vehicle.get(vehicle_id, ()):
+                    factor = variables.factor
+                    for energy, count, var in zip(
+                        factor.target_energy_kwh, factor.target_envelope_counts, variables.targets
+                    ):
+                        consumed_energy += energy * var
+                        available_energy += charge_energy_per_slot_kwh * count * var
+                    for count, var in zip(factor.origin_envelope_counts, variables.origins):
+                        available_energy += charge_energy_per_slot_kwh * count * var
+
             model.addConstr(
                 consumed_energy <= available_energy,
                 name=f"stage1_energy_envelope__{vehicle_id}",
@@ -28715,6 +28799,17 @@ class GurobiMILPAdapter:
                     )
                 for slot_idx in residence_slots.intersection(valid_slots):
                     charge_terms_by_slot[slot_idx].append(arc_var)
+
+            if isinstance(x, FactoredConnectionVariables):
+                factor_support, factor_loads, factor_terminal, factor_count = add_factor_soc_terms(
+                    model, gp, grb, x, vehicle_id, slot_indices
+                )
+                constraint_count += factor_count
+                for slot_idx, term in factor_support.items():
+                    charge_terms_by_slot[slot_idx].append(term)
+                for slot_idx, terms in factor_loads.items():
+                    load_terms_by_slot[slot_idx].extend(terms)
+                terminal_load_terms.extend(factor_terminal)
 
             for slot_idx in slot_indices:
                 opportunity_terms = charge_terms_by_slot[slot_idx]
@@ -29160,6 +29255,10 @@ class GurobiMILPAdapter:
                 use_pool_solution=use_pool_solution,
             )
         }
+        if isinstance(x, FactoredConnectionVariables):
+            selected_x.update(x.expanded_selection(
+                self._binary_value, use_pool_solution=use_pool_solution
+            ))
         selected_start = {
             key
             for key, variable in start_arc.items()
@@ -30709,6 +30808,32 @@ class GurobiMILPAdapter:
             start_min = 0
         return start_min + slot_idx * timestep_min
 
+    def _cached_trip_lookup(
+        self,
+        problem: CanonicalOptimizationProblem,
+    ) -> Dict[str, ProblemTrip]:
+        """Return a vehicle-independent lookup for the current trip tuple.
+
+        The canonical problem already exposes a public mutable lookup for
+        compatibility.  These hot helpers use a private, one-entry cache keyed
+        by the immutable ``problem.trips`` tuple identity instead, so replacing
+        the tuple cannot leave stale trip objects behind.  The cache entry is
+        copied to local variables before it is inspected/returned; this keeps a
+        concurrent call from returning another problem's lookup while this
+        adapter instance is serving a different problem.
+        """
+
+        trips = problem.trips
+        cached = getattr(self, "_cached_trip_lookup_entry", None)
+        if cached is not None:
+            cached_trips, cached_lookup = cached
+            if cached_trips is trips:
+                return cached_lookup
+
+        lookup = {trip.trip_id: trip for trip in trips}
+        self._cached_trip_lookup_entry = (trips, lookup)
+        return lookup
+
     def _deadhead_energy_kwh(
         self,
         problem: CanonicalOptimizationProblem,
@@ -30716,8 +30841,9 @@ class GurobiMILPAdapter:
         from_trip_id: str,
         to_trip_id: str,
     ) -> float:
-        from_trip = problem.trip_by_id().get(from_trip_id)
-        to_trip = problem.trip_by_id().get(to_trip_id)
+        trip_lookup = self._cached_trip_lookup(problem)
+        from_trip = trip_lookup.get(from_trip_id)
+        to_trip = trip_lookup.get(to_trip_id)
         if from_trip is None or to_trip is None:
             return 0.0
         return deadhead_energy_kwh(problem, vehicle, from_trip, to_trip)
@@ -30728,7 +30854,7 @@ class GurobiMILPAdapter:
         vehicle: Any,
         trip_id: str,
     ) -> float:
-        trip = problem.trip_by_id().get(trip_id)
+        trip = self._cached_trip_lookup(problem).get(trip_id)
         if trip is None:
             return 0.0
         type_specific = getattr(trip, "energy_kwh_by_vehicle_type", {}) or {}
@@ -31028,7 +31154,7 @@ class GurobiMILPAdapter:
         vehicle: Any,
         trip_id: str,
     ) -> float:
-        trip = problem.trip_by_id().get(trip_id)
+        trip = self._cached_trip_lookup(problem).get(trip_id)
         if trip is None:
             return 0.0
         type_specific = getattr(trip, "fuel_l_by_vehicle_type", {}) or {}
@@ -31355,6 +31481,20 @@ class GurobiMILPAdapter:
         """
 
         audit_started_at = time.perf_counter()
+        if isinstance(arc_pairs, ArcDomain) and int(planning_days) != 1:
+            # This certificate only supports a one-day clone formulation.
+            # A known structural failure needs no enormous domain expansion.
+            return {
+                "schema_version": "exact_combustion_clone_flow_aggregation_audit_v3",
+                "enabled": True, "applied": False,
+                "integer_feasible_set_changed": False,
+                "certified_candidate_group_count": 0,
+                "potential_binary_variable_reduction": 0,
+                "groups": (),
+                "reason_not_applied": "planning_horizon_is_not_one_day",
+                "structural_blockers": ("planning_horizon_is_not_one_day",),
+                "wall_runtime_sec": time.perf_counter() - audit_started_at,
+            }
         vehicle_by_id = {
             str(vehicle.vehicle_id): vehicle
             for vehicle in problem.vehicles
@@ -31703,8 +31843,9 @@ class GurobiMILPAdapter:
         fuel_rate = max(float(vehicle.fuel_consumption_l_per_km or 0.0), 0.0)
         if fuel_rate <= 0.0:
             return 0.0
-        from_trip = problem.trip_by_id().get(from_trip_id)
-        to_trip = problem.trip_by_id().get(to_trip_id)
+        trip_lookup = self._cached_trip_lookup(problem)
+        from_trip = trip_lookup.get(from_trip_id)
+        to_trip = trip_lookup.get(to_trip_id)
         if from_trip is None or to_trip is None:
             return 0.0
         deadhead_min = self._connection_deadhead_min(problem, from_trip, to_trip)

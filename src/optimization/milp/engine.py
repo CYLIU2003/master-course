@@ -745,6 +745,9 @@ class MILPOptimizer:
                     or model_stats.get("arc_pruning_summary")
                     or {}
                 ),
+                "depot_connection_factor_audit": dict(
+                    (plan.metadata or {}).get("depot_connection_factor_audit") or {}
+                ),
                 "successor_pruning_enabled": bool(
                     ((plan.metadata or {}).get("arc_pruning_summary") or model_stats.get("arc_pruning_summary") or {}).get(
                         "successor_pruning_enabled",

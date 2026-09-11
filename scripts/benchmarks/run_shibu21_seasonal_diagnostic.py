@@ -103,7 +103,10 @@ def solve_week(
         research_run=False, allow_postsolve_repair=False, stage1_best_obj_stop_enabled=False)
     problem = ProblemBuilder().build_from_scenario(scenario, depot_id='tsurumaki',service_id='WEEKDAY',config=config,planning_days=7)
     problem = replace(problem, metadata={**problem.metadata,
-        'phase3_diagnostics_dir':str(output/'day_ahead_failure_diagnostics')})
+        'phase3_diagnostics_dir':str(output/'day_ahead_failure_diagnostics'),
+        'stage1_exact_depot_connection_factors': bool(
+            design.get('stage1_exact_depot_connection_factors', False)
+        )})
     validator = contract_validator or verify_evaluation_contract
     write_json(output/'evaluation_contract.json', validator(problem, design))
     if len(problem.trips) != case['timetable_row_count'] or len(problem.vehicles) != case['vehicle_count']:

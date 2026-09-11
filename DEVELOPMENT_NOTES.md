@@ -1,5 +1,9 @@
 # Development Notes
 
+## 2026-09-11 全候補を保持する日跨ぎ接続の縮約
+
+明示設定 `stage1_exact_depot_connection_factors` により、同一車両の完全二部接続群を出入incidenceとbalance式で表現する。電力・燃料・SOC充電窓の分離条件を満たす群だけを縮約し、元候補を全て保持する。初期解、解復元、Stage 1目的と制約、結果監査を接続した。successor iteratorとtrip lookupの反復も削減した。主モデルのfeasible setと目的を保持し、巨大な補助powertrain下界モデルだけは省略理由を記録する。関連48テストと2ケースのnative差分・物理検証を通過。全体回帰は2,140件通過・既存PowerPoint証拠2件失敗（100.98秒）。対象の独立レビューで接続欠落のP0/P1は0件。実データの計測・新しいclean commitからの週間実行は未完了。[証明条件と境界](docs/notes/EXACT_DEPOT_CONNECTION_FACTORS_20260911.md)。
+
 ## 2026-09-11 4路線の資源不足と統計用接続リストの重複生成
 
 clean frozen `e8bd9d6c` で4週すべての完全Prepare、路線来歴・親フリート・事業者・距離・遷移等の監査が完了した。冬週のモデル構築ではprivate memory 28.43 GiB、OS空きvirtual memory 0.58 GiBを観測したため、19:22 JSTにこの診断プロセスだけを停止した。他3週は未実行であり、物理的実行不能や最適化結果は得られていない。全4週でaccepted rolling chain・最終会計は未成立。[各週の状態と証拠](docs/notes/SHIBU21_24_RESOURCE_BLOCK_20260911.md)。
