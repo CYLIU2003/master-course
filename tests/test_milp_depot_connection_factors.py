@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from src.dispatch.models import DeadheadRule, DispatchContext, Trip, VehicleProfile
@@ -187,6 +189,24 @@ def test_complete_home_and_away_groups_preserve_domain_coefficients_and_windows(
                     + factor.target_soc_ranges[target_index][1]
                     - factor.target_soc_ranges[target_index][0]
                 )
+                valid_slots = {slot.slot_index for slot in problem.price_slots}
+                prefix = set(range(*factor.origin_soc_ranges[origin_index])) & valid_slots
+                tail = set(range(*factor.target_soc_ranges[target_index])) & valid_slots
+                assert not prefix.intersection(tail)
+                assert prefix | tail == set(range(*soc)) & valid_slots
+                origin, target = trips[origin_id], trips[target_id]
+                duration = adapter._connection_deadhead_min(problem, origin, target)
+                residence = adapter._home_depot_residence_interval(
+                    problem, vehicle, origin, target, deadhead_min=duration
+                )
+                canonical_slots = set(adapter._slot_indices_for_interval(problem, *residence))
+                assert canonical_slots & valid_slots == set(range(*envelope)) & valid_slots
+                if duration > 0:
+                    travel = adapter._connection_deadhead_interval(
+                        problem, vehicle, origin, target, deadhead_min=duration
+                    )
+                    canonical_slots.difference_update(adapter._slot_indices_for_interval(problem, *travel))
+                assert prefix | tail == canonical_slots & valid_slots
                 assert adapter._deadhead_energy_kwh(problem, vehicle, origin_id, target_id) == pytest.approx(
                     factor.target_energy_kwh[target_index]
                 )
@@ -226,6 +246,25 @@ def test_fallback_per_trip_rates_split_different_origin_rates() -> None:
 
     assert _factor_arcs(domain, factors) == set(domain)
     assert factors == ()
+
+
+def test_certificate_cache_preserves_vehicle_labels_and_powertrain_energy() -> None:
+    problem = _problem()
+    vehicle = problem.vehicles[0]
+    problem = replace(problem, vehicles=(
+        vehicle, replace(vehicle, vehicle_id="v2"),
+        replace(vehicle, vehicle_id="ice", vehicle_type="ICE"),
+    ))
+    original_rows = _rows(problem, ("h0", "h1", "h2"))
+    rows = tuple(replace(row, vehicle_id=item.vehicle_id)
+                 for item in problem.vehicles for row in original_rows)
+    domain, factors = factor_depot_connections(GurobiMILPAdapter(), problem, rows)
+    assert len(domain) == 0
+    by_vehicle = {factor.vehicle_id: factor for factor in factors}
+    assert set(by_vehicle) == {"v1", "v2", "ice"}
+    assert by_vehicle["v1"].target_energy_kwh == by_vehicle["v2"].target_energy_kwh
+    assert all(energy > 0 for energy in by_vehicle["v1"].target_energy_kwh)
+    assert by_vehicle["ice"].target_energy_kwh == (0.0, 0.0, 0.0)
 
 
 def test_multiple_days_and_fragment_rows_remain_reconstructible() -> None:

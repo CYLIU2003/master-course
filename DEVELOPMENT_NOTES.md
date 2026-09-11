@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-11 許可済み3路線への変更とfresh週間キャンペーン
+
+凍結 `3cfda00d` の4路線規模監査は、候補271,864,980本・除外0本、明示接続12,651,780個とfactor変数2,851,800個を確認した。これは列挙・縮約の計測であり、Gurobiモデル構築や週間求解の完了ではない。ユーザーの許可に基づき `config/shibu21_23_exact_seasonal_20260911.json` で渋21/22/23を選び、既存3路線原本の便・停留所列と来歴を保持する。NFKC完全一致と参照IDを検査し、4路線原本は保持する。60台のexact active fleet、7日間、四季の日付、SOC・BESS、12 threads、successor pruning=0は維持する。
+
+`run_exact_seasonal_campaign.py` はクリーンSHAを確認し、各週に新しい完全Prepareと既存のday-ahead/168-hour rolling経路を順次実行する。SHA変化や失敗時は後続週を明示的に未実行とする。準備・求解・rolling・物理・会計・研究採用を別々に記録する。新たなBEV/ICE×fragment上限の4ケースでは元表現とStage 1目的・最終費用が一致し、両表現の物理検証が通過した。全体回帰は2,154件通過・既存PowerPoint証拠2件失敗、97.85秒（`output/exact_depot_factor_validation/pytest-campaign-full.xml`）。新clean commitからの実データ実行を確認してから結果を更新する。研究採用は引き続きBLOCKED。[定式化・証拠・制限](docs/notes/EXACT_DEPOT_CONNECTION_FACTORS_20260911.md)。
+
 ## 2026-09-11 全候補を保持する日跨ぎ接続の縮約
 
 明示設定 `stage1_exact_depot_connection_factors` により、同一車両の完全二部接続群を出入incidenceとbalance式で表現する。電力・燃料・SOC充電窓の分離条件を満たす群だけを縮約し、元候補を全て保持する。初期解、解復元、Stage 1目的と制約、結果監査を接続した。successor iteratorとtrip lookupの反復も削減した。主モデルのfeasible setと目的を保持し、巨大な補助powertrain下界モデルだけは省略理由を記録する。関連48テストと2ケースのnative差分・物理検証を通過。全体回帰は2,140件通過・既存PowerPoint証拠2件失敗（100.98秒）。対象の独立レビューで接続欠落のP0/P1は0件。実データの計測・新しいclean commitからの週間実行は未完了。[証明条件と境界](docs/notes/EXACT_DEPOT_CONNECTION_FACTORS_20260911.md)。

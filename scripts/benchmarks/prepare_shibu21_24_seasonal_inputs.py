@@ -19,6 +19,8 @@ import json
 from pathlib import Path
 import sys
 import time
+from typing import Sequence
+import unicodedata
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -63,7 +65,11 @@ WEEKS = ("2025-02-03", "2025-05-12", "2025-08-04", "2025-11-03")
 OLD_SOURCE_DIR = ROOT / "data/derived/timetables/tsurumaki_20260901"
 SHIBU24_SOURCE_DIR = ROOT / "output/shibu21_24_seasonal_20260911/shibu24_source_audit"
 SOURCE_CANDIDATE_DIR = ROOT / "output/shibu21_24_seasonal_20260911/four_route_source_candidate"
+THREE_ROUTE_SOURCE_CANDIDATE_DIR = ROOT / "output/shibu21_23_exact_20260911/source_candidate"
 SOURCE_ID = "tsurumaki_shibu21_24_20260911_diagnostic_candidate_v1"
+THREE_ROUTE_SOURCE_ID = "tsurumaki_shibu21_23_exact_20260911_source_v1"
+DEFAULT_ROUTE_CODES = ("渋21", "渋22", "渋23", "渋24")
+THREE_ROUTE_CODES = ("渋21", "渋22", "渋23")
 BESS_SOC_MIN_RATIO = 0.20
 BESS_SOC_MAX_RATIO = 0.80
 
@@ -122,53 +128,137 @@ def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def build_source_candidate() -> dict:
-    """Join old verified rows and new route24 rows with immutable provenance."""
+def _matches_route_code(row: dict, route_code: str) -> bool:
+    """Match only an NFKC-normalized exact route-code field."""
+
+    normalized = unicodedata.normalize("NFKC", str(route_code or "")).strip()
+    return any(
+        unicodedata.normalize("NFKC", str(row.get(field) or "")).strip()
+        == normalized
+        for field in ("routeCode", "route_code", "routeSeriesCode", "routeFamilyCode")
+    )
+
+
+def _validated_route_codes(route_codes: Sequence[str]) -> tuple[str, ...]:
+    requested = tuple(str(value).strip() for value in route_codes)
+    if requested == DEFAULT_ROUTE_CODES:
+        return DEFAULT_ROUTE_CODES
+    if set(requested) == set(THREE_ROUTE_CODES) and len(requested) == len(THREE_ROUTE_CODES):
+        return THREE_ROUTE_CODES
+    raise ValueError(
+        "Only the declared four-route design or exact 渋21/渋22/渋23 scope is supported"
+    )
+
+
+def _source_directory_and_id(route_codes: tuple[str, ...]) -> tuple[Path, str]:
+    if route_codes == DEFAULT_ROUTE_CODES:
+        return SOURCE_CANDIDATE_DIR, SOURCE_ID
+    return THREE_ROUTE_SOURCE_CANDIDATE_DIR, THREE_ROUTE_SOURCE_ID
+
+
+def build_source_candidate(*, route_codes: Sequence[str] = DEFAULT_ROUTE_CODES) -> dict:
+    """Build the declared route scope with immutable source provenance."""
+
+    route_codes = _validated_route_codes(route_codes)
+    source_directory, source_id = _source_directory_and_id(route_codes)
     old_manifest_path = OLD_SOURCE_DIR / "manifest.json"
     route24_manifest_path = SHIBU24_SOURCE_DIR / "manifest.json"
-    old_routes = read_json(OLD_SOURCE_DIR / "selected_routes.json")
-    old_rows = read_json(OLD_SOURCE_DIR / "timetable_rows.json")
-    old_sequences = read_json(OLD_SOURCE_DIR / "stop_sequences.json")
-    old_stops = read_json(OLD_SOURCE_DIR / "stops.json")
-    route24_routes = read_json(SHIBU24_SOURCE_DIR / "selected_routes.json")
-    route24_rows = read_json(SHIBU24_SOURCE_DIR / "timetable_rows.json")
-    route24_sequences = read_json(SHIBU24_SOURCE_DIR / "stop_sequences.json")
-    route24_stops = read_json(SHIBU24_SOURCE_DIR / "stops.json")
-    route_ids = [row["id"] for row in old_routes + route24_routes]
-    trip_ids = [row["trip_id"] for row in old_rows + route24_rows]
+    old_routes_all = read_json(OLD_SOURCE_DIR / "selected_routes.json")
+    old_rows_all = read_json(OLD_SOURCE_DIR / "timetable_rows.json")
+    old_sequences_all = read_json(OLD_SOURCE_DIR / "stop_sequences.json")
+    old_stops_all = read_json(OLD_SOURCE_DIR / "stops.json")
+    if route_codes == DEFAULT_ROUTE_CODES:
+        route24_routes_all = read_json(SHIBU24_SOURCE_DIR / "selected_routes.json")
+        route24_rows_all = read_json(SHIBU24_SOURCE_DIR / "timetable_rows.json")
+        route24_sequences_all = read_json(SHIBU24_SOURCE_DIR / "stop_sequences.json")
+        route24_stops_all = read_json(SHIBU24_SOURCE_DIR / "stops.json")
+    else:
+        route24_routes_all = route24_rows_all = route24_sequences_all = route24_stops_all = []
+    if route_codes == THREE_ROUTE_CODES:
+        # The existing OLD source is already the exact three-route capture.
+        # Preserve every original row and stop; only validate its scope.
+        routes = old_routes_all
+        rows = old_rows_all
+        sequences = old_sequences_all
+        stops = old_stops_all
+        route24_routes = route24_rows = route24_sequences = route24_stops = []
+    else:
+        old_routes, old_rows, old_sequences, old_stops = (
+            old_routes_all, old_rows_all, old_sequences_all, old_stops_all
+        )
+        route24_routes, route24_rows, route24_sequences, route24_stops = (
+            route24_routes_all, route24_rows_all, route24_sequences_all, route24_stops_all
+        )
+        routes = old_routes + route24_routes
+        rows = old_rows + route24_rows
+        sequences = old_sequences + route24_sequences
+        stops = old_stops + route24_stops
+    route_ids = [row["id"] for row in routes]
+    trip_ids = [row["trip_id"] for row in rows]
+    present_codes = {
+        code for code in route_codes
+        if any(_matches_route_code(row, code) for row in routes)
+    }
+    if present_codes != set(route_codes):
+        raise ValueError(f"Source does not contain exactly the requested route scope: {route_codes}")
+    if any(
+        not any(_matches_route_code(row, code) for code in route_codes)
+        for row in routes
+    ):
+        raise ValueError("Source contains a route outside the requested exact scope")
+    route_id_set = set(route_ids)
+    unknown_route_ids = {
+        str(row.get("route_id") or "") for row in rows
+    } - route_id_set
+    if unknown_route_ids:
+        raise ValueError(
+            f"Source rows reference unknown route IDs: {sorted(unknown_route_ids)}"
+        )
+    if any(
+        not any(_matches_route_code(row, code) for code in route_codes)
+        for row in rows
+    ):
+        raise ValueError("Source contains timetable rows outside the requested exact scope")
     if len(route_ids) != len(set(route_ids)):
-        raise ValueError("Four-route candidate contains duplicate route IDs")
+        raise ValueError("Route candidate contains duplicate route IDs")
     if len(trip_ids) != len(set(trip_ids)):
-        raise ValueError("Four-route candidate contains duplicate timetable IDs")
+        raise ValueError("Route candidate contains duplicate timetable IDs")
     if any(not row.get("operator_id") or str(row["operator_id"]).upper() == "UNKNOWN"
-           for row in old_rows + route24_rows):
-        raise ValueError("Four-route candidate contains UNKNOWN or missing operator IDs")
+           for row in rows):
+        raise ValueError("Route candidate contains UNKNOWN or missing operator IDs")
     if any(float(row.get("distance_km") or 0) <= 0 or not row.get("distance_source")
-           for row in old_rows + route24_rows):
-        raise ValueError("Four-route candidate contains nonpositive or unproven distances")
+           for row in rows):
+        raise ValueError("Route candidate contains nonpositive or unproven distances")
     stops_by_id = {}
-    for row in old_stops + route24_stops:
+    for row in stops:
         prior = stops_by_id.setdefault(row["id"], row)
         comparable = ("name", "lat", "lon", "operator_id")
         if any(prior.get(key) != row.get(key) for key in comparable):
             raise ValueError(f"Conflicting stop provenance for {row['id']}")
-        if row.get("source_provenance") and not prior.get("source_provenance"):
+        if (route_codes == DEFAULT_ROUTE_CODES and row.get("source_provenance")
+                and not prior.get("source_provenance")):
             prior["source_provenance"] = row["source_provenance"]
-    routes = old_routes + route24_routes
-    rows = old_rows + route24_rows
-    sequences = old_sequences + route24_sequences
-    SOURCE_CANDIDATE_DIR.mkdir(parents=True, exist_ok=True)
+    if route_codes == THREE_ROUTE_CODES and source_directory.exists():
+        raise FileExistsError(f"Three-route source output already exists: {source_directory}")
+    source_directory.mkdir(parents=True, exist_ok=True)
     for name, payload in (("selected_routes.json", routes), ("timetable_rows.json", rows),
                           ("stop_sequences.json", sequences),
-                          ("stops.json", sorted(stops_by_id.values(), key=lambda row: row["id"]))):
-        write_json(SOURCE_CANDIDATE_DIR / name, payload)
+                          ("stops.json", stops if route_codes == THREE_ROUTE_CODES else
+                           sorted(stops_by_id.values(), key=lambda row: row["id"]))):
+        write_json(source_directory / name, payload)
     route_counts = defaultdict(int)
     for row in rows:
         route_counts[row["route_id"]] += 1
     manifest = {
-        "schema_version": "four_route_source_candidate_v1",
+        "schema_version": (
+            "four_route_source_candidate_v1"
+            if route_codes == DEFAULT_ROUTE_CODES
+            else "three_route_source_candidate_v1"
+        ),
         "status": "DIAGNOSTIC_SOURCE_CAPTURE_VALIDATED_DISTANCE_PROXY_DECLARED",
-        "route_codes": ["渋21", "渋22", "渋23", "渋24"],
+        "route_codes": list(route_codes),
+        "source_id": source_id,
+        "source_directory": source_directory.relative_to(ROOT).as_posix(),
         "route_count": len(routes), "trip_count": len(rows),
         "selected_route_ids": sorted(route_ids),
         "trip_count_by_route_id": dict(sorted(route_counts.items())),
@@ -178,23 +268,41 @@ def build_source_candidate() -> dict:
         "browser_comparison_policy": "Not required for this diagnostic because official API stop sequences and coordinates were validated; this remains a diagnostic source, not a research acceptance source.",
         "provenance": {
             "old_manifest": {"path": old_manifest_path.as_posix(), "sha256": sha256(old_manifest_path)},
-            "route24_manifest": {"path": route24_manifest_path.as_posix(), "sha256": sha256(route24_manifest_path)},
+            "route24_manifest": {"path": route24_manifest_path.as_posix(), "sha256": sha256(route24_manifest_path)} if route_codes == DEFAULT_ROUTE_CODES else None,
             "old_artifacts": {name: sha256(OLD_SOURCE_DIR / name) for name in
                                ("selected_routes.json", "timetable_rows.json", "stop_sequences.json", "stops.json")},
-            "route24_artifacts": {name: sha256(SHIBU24_SOURCE_DIR / name) for name in
-                                  ("selected_routes.json", "timetable_rows.json", "stop_sequences.json", "stops.json")},
+            "route24_artifacts": (
+                {
+                    name: sha256(SHIBU24_SOURCE_DIR / name)
+                    for name in (
+                        "selected_routes.json", "timetable_rows.json",
+                        "stop_sequences.json", "stops.json"
+                    )
+                }
+                if route_codes == DEFAULT_ROUTE_CODES
+                else None
+            ),
+        },
+        "input_source_sha256": {
+            name: sha256(OLD_SOURCE_DIR / name)
+            for name in ("selected_routes.json", "timetable_rows.json", "stop_sequences.json", "stops.json")
         },
         "artifacts": {},
     }
-    for path in sorted(SOURCE_CANDIDATE_DIR.iterdir()):
+    for path in sorted(source_directory.iterdir()):
         if path.name != "manifest.json":
             manifest["artifacts"][path.name] = {"sha256": sha256(path), "bytes": path.stat().st_size}
-    write_json(SOURCE_CANDIDATE_DIR / "manifest.json", manifest)
+    write_json(source_directory / "manifest.json", manifest)
     return manifest
 
 
 def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
     """Materialize one seven-day case from the immutable candidate source."""
+    source_directory = ROOT / str(
+        source.get("source_directory") or SOURCE_CANDIDATE_DIR.relative_to(ROOT)
+    )
+    source_id = str(source.get("source_id") or SOURCE_ID)
+    source_route_codes = list(source.get("route_codes") or DEFAULT_ROUTE_CODES)
     cfg = doc["simulation_config"]
     cfg.update(multi_day_input_mode=DATE_SERIES_INPUT_MODE, service_date=start_date,
                service_dates=[], planning_days=7, planning_horizon_hours=168,
@@ -210,18 +318,18 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
                 "final_soc_target_percent": None, "final_soc_target_tolerance_percent": 0.0}
     cfg.update(terminal)
     doc.setdefault("scenario_overlay", {}).setdefault("charging_constraints", {}).update(terminal)
-    selected_routes = read_json(SOURCE_CANDIDATE_DIR / "selected_routes.json")
+    selected_routes = read_json(source_directory / "selected_routes.json")
     selected_ids = [row["id"] for row in selected_routes]
     doc["dispatch_scope"]["routeSelection"].update(includeRouteIds=selected_ids, excludeRouteIds=[])
     doc["dispatch_scope"]["serviceSelection"] = {"serviceIds": ["WEEKDAY", "SAT", "SUN_HOL"]}
     dates = consecutive_service_dates(start_date, 7, [])
     holiday_manifest = _verified_holiday_manifest(ROOT, dates, cfg.get("holiday_source_id"))
-    templates = [row for row in read_json(SOURCE_CANDIDATE_DIR / "timetable_rows.json")
+    templates = [row for row in read_json(source_directory / "timetable_rows.json")
                  if row["route_id"] in set(selected_ids)]
     rows, contract = materialize_dated_timetable(
         templates, service_dates=dates, holiday_dates=list(holiday_manifest["holiday_dates"]),
-        source_provenance={"source_id": SOURCE_ID,
-                           "source_candidate_manifest_sha256": sha256(SOURCE_CANDIDATE_DIR / "manifest.json"),
+        source_provenance={"source_id": source_id,
+                           "source_candidate_manifest_sha256": sha256(source_directory / "manifest.json"),
                            "holiday_source_sha256": holiday_manifest["sha256"],
                            "distance_semantics": source["distance_semantics"]},
     )
@@ -239,7 +347,7 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
         route["tripCountsByDayType"] = {day: sum(row["service_id"] == day for row in route_templates)
                                          for day in ("WEEKDAY", "SAT", "SUN_HOL")}
     template_sequences = defaultdict(list)
-    for row in read_json(SOURCE_CANDIDATE_DIR / "stop_sequences.json"):
+    for row in read_json(source_directory / "stop_sequences.json"):
         template_sequences[row["trip_id"]].append(row)
     doc["stop_timetables"] = []
     for trip in rows:
@@ -252,7 +360,7 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
                     stop_row[key] = offset_clock(stop_row[key], trip["day_index"] * 1440)
             doc["stop_timetables"].append(stop_row)
     used_stops = {row["stop_id"] for row in doc["stop_timetables"]}
-    all_stops = {row["id"]: row for row in read_json(SOURCE_CANDIDATE_DIR / "stops.json")}
+    all_stops = {row["id"]: row for row in read_json(source_directory / "stops.json")}
     doc["stops"] = [deepcopy(all_stops[stop_id]) for stop_id in sorted(used_stops)]
     assets = cfg.get("depot_energy_assets") or []
     if isinstance(assets, dict):
@@ -292,9 +400,9 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
                     bev_terminal_soc_policy="return_to_initial", final_soc_target_tolerance_percent=0.0,
                     solar_semantics="training_only_forecast_for_planning_separate_actuals_for_execution")
     cfg.update(service_dates=dates, service_date=dates[0], date_series_contract=contract,
-               date_series_source_id=SOURCE_ID, holiday_dates=list(holiday_manifest["holiday_dates"]),
+               date_series_source_id=source_id, holiday_dates=list(holiday_manifest["holiday_dates"]),
                pv_input_semantics="gross_generation_before_depot_load", weather_observation_date=dates[0],
-               weather_profile_source=SOURCE_ID, comparison_type="fixed_timetable_with_date_specific_historical_pv",
+               weather_profile_source=source_id, comparison_type="fixed_timetable_with_date_specific_historical_pv",
                comparison_role=None, counterfactual_pv_source_date=None, pv_profile_id=None,
                planning_horizon_hours=168, start_time="00:00", end_time="23:59")
     cfg["pv_information_mode"] = "training_only_forecast_proxy"
@@ -303,12 +411,15 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
     doc["dispatch_scope"]["serviceDates"] = dates
     doc["dispatch_scope"]["serviceId"] = rows[0]["service_id"]
     cfg["day_type"] = rows[0]["service_id"]
-    doc["meta"]["four_route_source_candidate"] = {
-        "source_id": SOURCE_ID, "source_manifest_sha256": sha256(SOURCE_CANDIDATE_DIR / "manifest.json"),
-        "route_codes": ["渋21", "渋22", "渋23", "渋24"],
+    source_metadata = {
+        "source_id": source_id, "source_manifest_sha256": sha256(source_directory / "manifest.json"),
+        "route_codes": source_route_codes,
         "distance_semantics": source["distance_semantics"],
         "diagnostic_only": True,
     }
+    doc["meta"]["route_scope_source_candidate"] = source_metadata
+    if tuple(source_route_codes) == DEFAULT_ROUTE_CODES:
+        doc["meta"]["four_route_source_candidate"] = deepcopy(source_metadata)
     validate_dated_timetable(rows, contract)
     return doc
 
@@ -412,8 +523,9 @@ def prepare_week(
     if record.get("scenario_id"):
         scenario_id = record["scenario_id"]
     else:
+        route_scope_label = "-".join(source.get("route_codes") or DEFAULT_ROUTE_CODES)
         scenario_id = scenario_store.duplicate_scenario(
-            PARENT_SCENARIO_ID, name=f"渋21-24 7日入力候補 {start_date} diagnostic"
+            PARENT_SCENARIO_ID, name=f"{route_scope_label} 7日入力候補 {start_date} diagnostic"
         )["id"]
     doc = scenario_store._load(scenario_id, skip_graph_arcs=True)
     doc = configure_doc(doc, start_date, source)
@@ -473,7 +585,12 @@ def prepare_week(
         "days": [{key: day[key] for key in ("service_date", "day_type", "trip_count")}
                  for day in contract["days"]],
         "scope_summary": prepared.scope_summary,
-        "source_candidate_manifest_sha256": sha256(SOURCE_CANDIDATE_DIR / "manifest.json"),
+        "source_candidate_manifest_sha256": sha256(
+            ROOT / str(
+                source.get("source_directory")
+                or SOURCE_CANDIDATE_DIR.relative_to(ROOT)
+            ) / "manifest.json"
+        ),
         "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
     }
     manifest_status = (

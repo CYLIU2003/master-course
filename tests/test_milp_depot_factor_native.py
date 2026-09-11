@@ -51,9 +51,29 @@ def factor_native_problem():
 
 
 @pytest.mark.parametrize("fragment_limit", [1, 100])
-def test_native_factored_and_explicit_phase3_match_cost_and_physical_gates(fragment_limit):
+@pytest.mark.parametrize("powertrain", ["BEV", "ICE"])
+def test_native_factored_and_explicit_phase3_match_cost_and_physical_gates(fragment_limit, powertrain):
     pytest.importorskip("gurobipy")
     original = factor_native_problem()
+    if powertrain == "ICE":
+        original = replace(
+            original,
+            trips=tuple(replace(trip, allowed_vehicle_types=("ICE",)) for trip in original.trips),
+            vehicles=tuple(replace(vehicle, vehicle_type="ICE", initial_fuel_l=200.0,
+                                   fuel_tank_capacity_l=300.0, fuel_consumption_l_per_km=0.3)
+                           for vehicle in original.vehicles),
+            vehicle_types=tuple(replace(kind, vehicle_type_id="ICE", powertrain_type="ICE",
+                                        fuel_tank_capacity_l=300.0, fuel_consumption_l_per_km=0.3)
+                                for kind in original.vehicle_types),
+            dispatch_context=replace(
+                original.dispatch_context,
+                trips=[replace(trip, allowed_vehicle_types=("ICE",))
+                       for trip in original.dispatch_context.trips],
+                vehicle_profiles={"ICE": replace(original.dispatch_context.vehicle_profiles["BEV"],
+                                                  vehicle_type="ICE", fuel_tank_capacity_l=300.0,
+                                                  fuel_consumption_l_per_km=0.3)},
+            ),
+        )
     results = []
     for factored in (False, True):
         problem = replace(original, metadata={
@@ -82,4 +102,7 @@ def test_native_factored_and_explicit_phase3_match_cost_and_physical_gates(fragm
         results.append(result)
     assert results[0].cost_breakdown["total_cost"] == pytest.approx(
         results[1].cost_breakdown["total_cost"], abs=1e-6
+    )
+    assert results[0].solver_metadata["stage1_objective_value"] == pytest.approx(
+        results[1].solver_metadata["stage1_objective_value"], abs=1e-6
     )
