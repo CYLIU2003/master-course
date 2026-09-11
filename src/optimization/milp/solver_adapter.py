@@ -19,7 +19,10 @@ from src.optimization.common.vehicle_timeline import build_vehicle_timeline, fix
 from src.dispatch.route_band import duty_route_band_ids, fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
-from src.optimization.common.cost_components import normalize_cost_component_flags
+from src.optimization.common.cost_components import (
+    DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
+    normalize_cost_component_flags,
+)
 from src.optimization.common.evaluator import CostBreakdown, CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.seed_fingerprint import (
@@ -9824,7 +9827,7 @@ class GurobiMILPAdapter:
         )
         contract_overage_penalty = self._safe_nonnegative_float(
             problem.metadata.get("contract_overage_penalty_yen_per_kwh"),
-            default=500.0,
+            default=DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
         )
         curtail_penalty = self._safe_nonnegative_float(
             problem.metadata.get("pv_curtail_penalty_yen_per_kwh"),
@@ -22735,7 +22738,7 @@ class GurobiMILPAdapter:
             problem.metadata.get(
                 "contract_overage_penalty_yen_per_kwh"
             ),
-            default=500.0,
+            default=DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
         )
         on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
@@ -26307,7 +26310,7 @@ class GurobiMILPAdapter:
             problem.metadata.get(
                 "contract_overage_penalty_yen_per_kwh"
             ),
-            default=500.0,
+            default=DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
         )
         contract_overage_allowed = bool(
             problem.metadata.get("enable_contract_overage_penalty", True)

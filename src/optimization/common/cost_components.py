@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 
+DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH = 500.0
+
+
 @dataclass(frozen=True)
 class CostComponentDefinition:
     key: str
@@ -208,6 +211,7 @@ def legacy_cost_component_flags(flags: Mapping[str, Any] | None) -> dict[str, bo
 
 
 __all__ = [
+    "DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH",
     "COST_COMPONENT_DEFINITIONS",
     "COST_COMPONENT_KEYS",
     "LEGACY_OTHER_COMPONENT_KEYS",

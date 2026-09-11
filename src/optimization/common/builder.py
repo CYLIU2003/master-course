@@ -20,7 +20,10 @@ from src.dispatch.models import (
     hhmm_to_min,
 )
 from src.dispatch.route_band import trip_route_band_key
-from src.optimization.common.cost_components import normalize_cost_component_flags
+from src.optimization.common.cost_components import (
+    DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
+    normalize_cost_component_flags,
+)
 from src.optimization.common.bess_terminal_policy import normalize_bess_terminal_policy
 from src.optimization.common.bev_terminal_policy import (
     BevTerminalSocPolicy,
@@ -1606,7 +1609,11 @@ class ProblemBuilder:
                 "enable_contract_overage_penalty": bool(enable_contract_overage_penalty)
                 and bool(normalized_cost_component_flags.get("contract_overage_penalty", True)),
                 "contract_overage_penalty_yen_per_kwh": (
-                    contract_overage_penalty_yen_per_kwh
+                    (
+                        DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH
+                        if contract_overage_penalty_yen_per_kwh is None
+                        else contract_overage_penalty_yen_per_kwh
+                    )
                     if normalized_cost_component_flags.get("contract_overage_penalty", True)
                     else 0.0
                 ),

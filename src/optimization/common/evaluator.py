@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Set, Tuple
 
 from src.objective_modes import objective_value_for_mode
-from src.optimization.common.cost_components import normalize_cost_component_flags
+from src.optimization.common.cost_components import (
+    DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
+    normalize_cost_component_flags,
+)
 from .energy_flow_accounting import normalize_pv_energy_breakdown
 
 from .problem import (
@@ -1009,8 +1012,15 @@ class CostEvaluator:
         )
         contract_over_limit_kwh = _sum_flow(contract_over_limit)
         enable_contract_overage_penalty = bool(problem.metadata.get("enable_contract_overage_penalty", True))
+        raw_contract_overage_penalty = problem.metadata.get("contract_overage_penalty_yen_per_kwh")
+        # Builder historically persisted None; it means the native solver's
+        # default rate, while an explicitly declared zero remains zero.
         contract_overage_penalty = max(
-            float(problem.metadata.get("contract_overage_penalty_yen_per_kwh", 500.0) or 0.0),
+            float(
+                DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH
+                if raw_contract_overage_penalty is None
+                else raw_contract_overage_penalty
+            ),
             0.0,
         )
         contract_overage_cost = (

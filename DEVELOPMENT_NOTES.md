@@ -1,5 +1,13 @@
 # Development Notes
 
+## 2026-09-12 未設定契約超過単価の確定会計を修正
+
+全体回帰は2,240 passed / 既存PowerPoint証拠2 failed（102.56秒）。新規12件・関連97件、独立コードレビュー残P0/P1ゼロを確認した。JUnitは `output/exact_depot_factor_validation/pytest-contract-price-release.xml`。新clean SHAの四季再実行は未完了。
+
+`a812aeb2` の春は168時間と独立物理検証を通過したが、実行超過31.04537962105529 kWhを0円としていた。Builderの未設定 `None` に対し、native solverは500 JPY/kWh、Evaluatorは0を使用したことが原因。夏Prepare中に停止し、旧春の会計採用を撤回する。未設定値の共通定数化、canonical数値化、確定会計の量・料金独立照合を追加する。明示0・無効componentを保持し、物理量・native制約は変更しない。
+
+保持実行計画の診断再集計では、総費用4241099.626143190円から4256622.315953718円へ、超過料金15522.689810528円だけ増え、flow hash不変・日別差0円を確認した。全四季は新clean SHAから再Prepare・再実行する。過去の会計通過表記は当時の検査結果であり、今回の料金検査は含まない。[詳細と検証](docs/notes/CONTRACT_OVERAGE_PRICE_DEFAULT_20260912.md)。
+
 ## 2026-09-12 有料契約超過と共通検証の整合
 
 全体回帰は2,228 passed / 既存PowerPoint証拠2 failed（98.36秒）。関連41件が通過し、独立コードレビューの微小負値P1を解消、残P0/P1は0件。JUnitは `output/exact_depot_factor_validation/pytest-contract-overage-policy-final.xml`。修正後の保持秋状態159〜167時は全9回の求解・履歴推定PV実行を通過した。新規Prepareからの全四季・週間最終会計は別途必要。

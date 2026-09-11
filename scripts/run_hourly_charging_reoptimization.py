@@ -46,6 +46,10 @@ from src.optimization.common.research_phase3_policy import (  # noqa: E402
     enforce_research_phase3_single_continuous_duty,
 )
 from src.optimization.common.evaluator import CostEvaluator  # noqa: E402
+from src.optimization.common.cost_components import (  # noqa: E402
+    DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
+    normalize_cost_component_flags,
+)
 from src.optimization.common.problem import (  # noqa: E402
     AssignmentPlan,
     classify_peak_slots,
@@ -171,6 +175,55 @@ def _merge_executed_slot_values(
             owner_values[slot] = value
 
 
+def _contract_overage_accounting_audit(
+    problem: Any,
+    plan: AssignmentPlan,
+    breakdown: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Check final charges against executed flows and the declared rate."""
+    raw_rate = problem.metadata.get("contract_overage_penalty_yen_per_kwh")
+    try:
+        rate = float(
+            DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH
+            if raw_rate is None else raw_rate
+        )
+        reported_quantity = float(breakdown["contract_over_limit_kwh"])
+        reported_cost = float(breakdown["contract_overage_cost"])
+    except (KeyError, TypeError, ValueError):
+        return {"consistent": False, "reason": "missing_or_invalid_contract_overage_value"}
+    quantities = [
+        float(value)
+        for slots in plan.contract_over_limit_kwh_by_depot_slot.values()
+        for value in slots.values()
+    ]
+    if any(
+        not math.isfinite(value) or value < 0.0
+        for value in (rate, reported_quantity, reported_cost, *quantities)
+    ):
+        return {"consistent": False, "reason": "nonfinite_or_negative_contract_overage_value"}
+    flags = normalize_cost_component_flags(problem.metadata.get("cost_component_flags"))
+    charge_enabled = (
+        bool(problem.metadata.get("enable_contract_overage_penalty", True))
+        and flags["contract_overage_penalty"]
+        and flags["electricity_cost"]
+    )
+    executed_quantity = sum(quantities)
+    expected_cost = executed_quantity * rate if charge_enabled else 0.0
+    quantity_difference = abs(reported_quantity - executed_quantity)
+    cost_difference = abs(reported_cost - expected_cost)
+    return {
+        "consistent": quantity_difference <= 1.0e-6 and cost_difference <= 1.0e-6,
+        "charge_enabled": charge_enabled,
+        "executed_overage_kwh": executed_quantity,
+        "reported_overage_kwh": reported_quantity,
+        "penalty_yen_per_kwh": rate,
+        "expected_cost_jpy": expected_cost,
+        "reported_cost_jpy": reported_cost,
+        "cost_difference_jpy": cost_difference,
+        "quantity_difference_kwh": quantity_difference,
+    }
+
+
 def _build_executed_day_accounting(
     problem: Any,
     day_ahead_plan: AssignmentPlan,
@@ -288,6 +341,9 @@ def _build_executed_day_accounting(
         **stitched_maps,
     )
     breakdown = CostEvaluator().evaluate(accounting_problem, accounting_plan).to_dict()
+    contract_overage_audit = _contract_overage_accounting_audit(
+        accounting_problem, accounting_plan, breakdown
+    )
     bev_terminal_balanced = all(
         bool(
             {
@@ -385,6 +441,8 @@ def _build_executed_day_accounting(
         breakdown.get("ev_unreplenished_drive_energy_kwh", 0.0) or 0.0
     )
     rejection_reasons = []
+    if not contract_overage_audit["consistent"]:
+        rejection_reasons.append("contract_overage_accounting_mismatch")
     if not bev_terminal_balanced:
         rejection_reasons.append("bev_terminal_energy_not_balanced")
     if not bess_terminal_balanced:
@@ -396,7 +454,11 @@ def _build_executed_day_accounting(
     eligible = not rejection_reasons
     return {
         "eligible": eligible,
-        "reason": None if eligible else "terminal_energy_inventory_not_balanced",
+        "reason": (
+            None if eligible else
+            "contract_overage_accounting_mismatch" if not contract_overage_audit["consistent"]
+            else "terminal_energy_inventory_not_balanced"
+        ),
         "rejection_reasons": rejection_reasons,
         "accounting_basis": (
             "executed_hourly_energy_flows_plus_inventory_valuation_for_unrefueled_fuel"
@@ -413,6 +475,7 @@ def _build_executed_day_accounting(
         "bess_terminal_energy_balanced": bess_terminal_balanced,
         "bess_daily_energy_balanced": bess_daily_balanced,
         "bess_terminal_soc_by_depot": bess_terminal_details,
+        "contract_overage_accounting": contract_overage_audit,
         "cost_breakdown": breakdown,
         "executed_refuel_liters": sum(float(slot.refuel_liters) for slot in refuel_slots),
         "executed_energy_flow_hash": _canonical_hash(
