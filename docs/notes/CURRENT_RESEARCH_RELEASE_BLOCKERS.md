@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-12 全接続day-ahead物理通過、rolling窓末の充電継続を修正
+
+凍結 `2bd7cc9f` の冬週は1,704便・60台・全78,647,760接続を保持してday-ahead物理検証を通過した。Stage 1 gap84.65%は宣言10%に未到達であり最適性を主張しない。rolling初回の窓末充電継続の欠落を修正し、保持入力で最初の窓は実行可能となった。新clean SHAの完全Prepareから4季節各168時間・最終物理・会計の受入まで再実行する必要がある。研究リリースはBLOCKED。[根拠と境界](ROLLING_TERMINAL_CHARGE_SESSION_20260912.md)。
+
 ## 2026-09-11 燃料修正後の初期候補を再検査、全MILP再実行待ち
 
 `0f217819` は完全Prepare通過後、Stage 1がTIME_LIMIT・incumbent 0件で停止した。構造上有効な初期候補にも週末SOC復元と充電条件の不成立があった。候補選択へ車両別の時間順SOC・native充電検査を追加した。保持入力で更新候補の共有充電・独立物理検証は通過したが、新SHAの全接続MILP・168時間rolling・4季節は未完了。研究リリースBLOCKEDを維持する。[証拠](PHASE3_FINITE_ICE_FUEL_20260911.md)。

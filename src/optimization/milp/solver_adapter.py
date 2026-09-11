@@ -22068,6 +22068,9 @@ class GurobiMILPAdapter:
                 "rolling_execution_minutes": getattr(
                     config, "rolling_execution_minutes", None
                 ),
+                "rolling_window_terminal_reference": dict(
+                    problem.metadata.get("rolling_window_terminal_reference") or {}
+                ),
                 "stage1_feasible": True,
                 "stage2_feasible": True,
                 "supports_two_stage_milp": True,
@@ -22495,6 +22498,17 @@ class GurobiMILPAdapter:
                 or ()
             )
         )
+        terminal_charge_continuations: Mapping[str, int] = {}
+        window_reference = problem.metadata.get("rolling_window_terminal_reference")
+        if (
+            is_remaining_day_reoptimization
+            and isinstance(window_reference, Mapping)
+            and window_reference.get("policy") == "day_ahead_boundary_state"
+            and window_reference.get("boundary_slot") == slot_indices[-1] + 1
+        ):
+            terminal_charge_continuations = window_reference.get(
+                "charge_session_continuation_slots_by_vehicle", {}
+            )
         for vehicle_id in assigned_bev_ids:
             vehicle = vehicle_by_id[vehicle_id]
             cap = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
@@ -22550,6 +22564,9 @@ class GurobiMILPAdapter:
                 initial_session_active=(
                     is_remaining_day_reoptimization
                     and vehicle_id in rolling_active_charge_session_vehicle_ids
+                ),
+                terminal_session_continuation_slots=int(
+                    terminal_charge_continuations.get(vehicle_id, 0)
                 ),
                 name_prefix="stage2_charge",
             )
@@ -23574,6 +23591,9 @@ class GurobiMILPAdapter:
             ),
             "rolling_execution_minutes": getattr(
                 config, "rolling_execution_minutes", None
+            ),
+            "rolling_window_terminal_reference": dict(
+                problem.metadata.get("rolling_window_terminal_reference") or {}
             ),
             "rolling_observed_on_peak_kw_by_depot": dict(
                 getattr(config, "rolling_observed_on_peak_kw_by_depot", {}) or {}
@@ -31220,6 +31240,7 @@ class GurobiMILPAdapter:
         session_start_var: Optional[Mapping[Tuple[str, int], Any]] = None,
         name_prefix: str,
         initial_session_active: bool = False,
+        terminal_session_continuation_slots: int = 0,
     ) -> None:
         """Add the documented SOC taper and charge-session time contract."""
 
@@ -31319,8 +31340,19 @@ class GurobiMILPAdapter:
                     ),
                 )
             if pos == len(slot_indices) - 1:
+                # A fixed forecast reference can continue beyond an artificial
+                # lookahead boundary. Match its active state without charging
+                # teardown time before that session actually ends.
+                if terminal_session_continuation_slots > 0:
+                    model.addConstr(
+                        on_var == 1,
+                        name=(
+                            f"{name_prefix}_on_boundary_continuation__"
+                            f"{vehicle_id}__slot_{slot_idx}"
+                        ),
+                    )
                 model.addConstr(
-                    end == on_var,
+                    end == (0 if terminal_session_continuation_slots > 0 else on_var),
                     name=(
                         f"{name_prefix}_end_boundary__{vehicle_id}__"
                         f"slot_{slot_idx}"
@@ -31444,7 +31476,9 @@ class GurobiMILPAdapter:
             return
         for pos, slot_idx in enumerate(slot_indices):
             key = (vehicle_id, slot_idx)
-            if pos + required_slots > len(slot_indices):
+            remaining_slots = len(slot_indices) - pos
+            missing_slots = max(required_slots - remaining_slots, 0)
+            if missing_slots > max(terminal_session_continuation_slots, 0):
                 model.addConstr(
                     start_vars[key] == 0,
                     name=(
@@ -31458,7 +31492,7 @@ class GurobiMILPAdapter:
                     charge_on_var[(vehicle_id, candidate_slot)]
                     for candidate_slot in slot_indices[pos : pos + required_slots]
                 )
-                >= required_slots * start_vars[key],
+                >= min(required_slots, remaining_slots) * start_vars[key],
                 name=(
                     f"{name_prefix}_minimum_session_continuity__"
                     f"{vehicle_id}__slot_{slot_idx}"

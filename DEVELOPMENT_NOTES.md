@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-12 Rollingの途中窓での充電継続
+
+保持入力で実測状態を引き継ぐ4時間連続診断が通過し、対象独立レビューの残P0/P1は0件。全体回帰は2,172 passed / 既存PowerPoint証拠2 failed（99.12秒）。JUnitは `output/exact_depot_factor_validation/pytest-rolling-terminal-release.xml`。研究受入は未成立。
+
+`2bd7cc9f` の新しい冬週Prepare・全接続day-ahead・独立物理検証は通過したが、最初の24時間窓のStage 2がINFEASIBLEだった。前日計画のslot 95→96で続く充電に、窓末でteardown 5分を追加していた。前日予測計画の両側に正の充電がある場合だけ、途中窓の終端active状態と連続する将来slot数を渡す。真の評価末のteardown・BEV各車両の初期SOC復元、最小充電時間、物理出帰庫、PV情報境界は保持する。Stage 2結果metadataにも境界参照を記録する。[検証と制限](docs/notes/ROLLING_TERMINAL_CHARGE_SESSION_20260912.md)。
+
 ## 2026-09-11 ICE有限燃料候補の週末SOC・充電検査
 
 全体回帰は2,169 passed / 既存PowerPoint証拠2 failed（110.40秒、`output/exact_depot_factor_validation/pytest-finite-fuel-seed-release.xml`）。候補選択の6件と燃料・native factorの13件が通過し、対象の独立レビューで残るP0/P1は0件。

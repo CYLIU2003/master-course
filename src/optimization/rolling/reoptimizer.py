@@ -488,6 +488,21 @@ class RollingReoptimizer:
         if window_end >= end_min:
             return problem
         boundary = (window_end-horizon_start_min(problem))//problem.scenario.timestep_min
+        charge_slots_by_vehicle: dict[str, set[int]] = {}
+        for charge in plan.charging_slots:
+            if float(charge.charge_kw) > 1.0e-6:
+                charge_slots_by_vehicle.setdefault(str(charge.vehicle_id), set()).add(
+                    int(charge.slot_index)
+                )
+        continuation_slots: dict[str, int] = {}
+        for vid, charge_slots in charge_slots_by_vehicle.items():
+            if boundary - 1 not in charge_slots:
+                continue
+            next_slot = boundary
+            while next_slot in charge_slots:
+                next_slot += 1
+            if next_slot > boundary:
+                continuation_slots[vid] = next_slot - boundary
         targets = {}
         vehicles = {str(vehicle.vehicle_id):vehicle for vehicle in problem.vehicles}
         for vid in plan.vehicle_paths():
@@ -514,6 +529,7 @@ class RollingReoptimizer:
         return replace(problem,depot_energy_assets=assets,metadata={**problem.metadata,
             BEV_TERMINAL_SOC_TARGET_KWH_BY_VEHICLE_KEY:targets,
             "rolling_window_terminal_reference":{"policy":policy,"boundary_slot":boundary,
+                "charge_session_continuation_slots_by_vehicle":continuation_slots,
                 "source":"fixed_day_ahead_forecast_plan_not_future_actuals"}})
 
     @staticmethod
