@@ -1,5 +1,9 @@
 # master-course
 
+2026-09-11: フロントアプリに **TypeScript + React + Electron** を追加しました。[起動・操作・検証の案内](frontend/README.md)。初回は `frontend` で `npm.cmd ci`、`npm.cmd run build`、`npm.cmd start` を実行します。ビルド後は `python run_desktop.py` からも起動できます。Windows portable版は `frontend/release/EV Bus Research 0.1.0.exe` です（Python・Gurobi・入力データは既存環境を使用）。旧 `run_app.py` は保持しています。
+
+時刻表の全件ロードを避けたページ取得、Parquet row group の読み飛ばし、結果のストリーム投影、画面の仮想スクロールを実装しました。100万行の合成データで末尾250件を検証し、SQLite取得1.27秒、Parquet取得0.013秒でした。これは画面と読取り経路の検証であり、solverの大規模最適性や研究採用を示すものではありません。
+
 2026-09-11 気象データ取得の再確認: 取得済み23/36か月の整合性を確認しました。定期実行用のSolcast認証を再利用できないため、残り13か月の取得には認証設定の復旧が必要です。APIリクエストは行っておらず、利用枠の回復有無は未確認です。[現在の取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
 
 2026-09-10: [連続7日・季節別日射量の拡張記録](docs/notes/SEVEN_DAY_SEASONAL_EXTENSION_20260910.md)を更新しました。弦巻の2025暦年・年度、2024年、および2022年1〜11月の日射データを取得・検証済みです。2022〜2024年の36か月中23か月が完了し、残り13か月は利用枠回復待ちです。取得済みデータは日付別の最適化入力と季節カーブ生成に使用できます。

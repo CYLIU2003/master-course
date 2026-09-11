@@ -102,6 +102,11 @@ outputs/transit_catalog.sqlite
 outputs/scenarios/
 
 build/
+frontend/node_modules/
+frontend/release/
+frontend/dist-electron/
+frontend/coverage/
+frontend/*.tsbuildinfo
 dist/
 *.egg-info/
 *.egg

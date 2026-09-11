@@ -1,5 +1,7 @@
 # Implementation architecture
 
+2026-09-11 implementation: [Electron desktop architecture and operation](../../frontend/README.md) supersedes the Tauri shell and sequencing in this July design. The implemented path is React/TypeScript → same-origin protocol → Electron-authenticated HTTP → loopback FastAPI → existing research services. There is no optimizer logic in the renderer. The broader editor/parity backlog below remains a plan.
+
 ## 1. Layer boundaries
 
 ```mermaid
@@ -149,4 +151,3 @@ The sidecar may be a PyInstaller executable or another reproducible packaged Pyt
 4. Add Prepare and job workflow.
 5. Add editing one domain section at a time with cross-UI round-trip tests.
 6. Pass Gate 6 and only then scaffold the Tauri shell/sidecar manager.
-

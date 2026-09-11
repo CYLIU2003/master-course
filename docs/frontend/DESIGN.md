@@ -3,13 +3,13 @@ version: alpha
 name: Research Operations Console
 description: A restrained, evidence-first interface for EV bus optimization experiments.
 colors:
-  primary: "#16324F"
-  secondary: "#526273"
-  tertiary: "#0C7C73"
-  neutral: "#F4F7F9"
+  primary: "#233A37"
+  secondary: "#829085"
+  tertiary: "#315F46"
+  neutral: "#F5F6F2"
   surface: "#FFFFFF"
-  surface-container: "#E8EEF2"
-  on-surface: "#18212B"
+  surface-container: "#EDF2E7"
+  on-surface: "#233A37"
   on-primary: "#FFFFFF"
   on-tertiary: "#FFFFFF"
   outline: "#B9C5CE"
@@ -70,7 +70,7 @@ This is a research operations console, not a consumer dashboard. It should feel 
 
 ## Colors
 
-Navy identifies structure and headings. Teal is reserved for the primary next action or a valid ready state. Warning and error colors communicate research validity risks; weather conditions and vehicle types must not be encoded only by color.
+The September Electron implementation uses deep green for headings and primary actions, with neutral surfaces and separate warning/error treatments. Status text must always carry the result; color alone never implies validity or acceptance. Weather conditions and vehicle types must not be encoded only by color.
 
 ## Typography
 

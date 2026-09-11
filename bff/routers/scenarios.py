@@ -3893,6 +3893,15 @@ def get_timetable(
 ) -> Dict[str, Any]:
     try:
         imports = store.get_timetable_import_meta(scenario_id)
+        # Indexed pages must not materialize the full timetable first.
+        if limit is not None and store.count_timetable_rows(scenario_id) > 0:
+            return {
+                "items": store.page_timetable_rows(scenario_id, offset=offset, limit=limit, service_id=service_id),
+                "total": store.count_timetable_rows(scenario_id, service_id=service_id),
+                "limit": limit,
+                "offset": offset,
+                "meta": {"imports": imports},
+            }
         rows = store.get_field(scenario_id, "timetable_rows") or []
         if not rows:
             doc = store.get_scenario_document(scenario_id)

@@ -2126,6 +2126,19 @@ def get_scenario(scenario_id: str) -> Dict[str, Any]:
     return _meta_payload(_load_shallow(scenario_id))
 
 
+def scenario_metadata_paths() -> List[Path]:
+    """Metadata files only, without hydrating master or solver artifacts."""
+    return [p for p in _STORE_DIR.glob("*.json") if not _is_auxiliary_path(p) and p != _APP_CONTEXT_PATH]
+
+
+def get_desktop_context(scenario_id: str) -> tuple[Dict[str, Any], Dict[str, str]]:
+    """Read refs without repair or full artifact hydration."""
+    if _incomplete_marker_path(scenario_id).exists() and not _complete_marker_path(scenario_id).exists():
+        raise RuntimeError(f"Scenario '{scenario_id}' artifacts are incomplete")
+    meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
+    return meta, _refs_for_scenario(scenario_id, meta)
+
+
 def ensure_runtime_master_data(scenario_id: str) -> bool:
     with _scenario_lock(scenario_id):
         doc = _load(
@@ -2519,9 +2532,9 @@ def get_field_summary(scenario_id: str, field: str) -> Optional[Dict[str, Any]]:
     # the count to 210k+.  page_timetable_rows() already excludes those rows.
     if field == "timetable_rows":
         if trip_store.count_timetable_rows(db_path) > 0:
-            rows = trip_store.page_timetable_rows(db_path, offset=0, limit=None)
-            imports = _load_shallow(scenario_id).get("timetable_import_meta") or {}
-            return _build_timetable_summary_artifact(rows, imports)
+            imports = get_timetable_import_meta(scenario_id)
+            summary = trip_store.summarize_timetable_rows(db_path)
+            return {**summary, "imports": imports, "updatedAt": _updated_at_from_imports(imports)}
         # Fallback to JSON-backed rows (e.g. legacy scenarios without SQLite DB)
         shallow_doc = _load_shallow(scenario_id)
         items = shallow_doc.get(field) or []
@@ -3624,8 +3637,10 @@ def set_timetable_import_meta(
 def get_timetable_import_meta(
     scenario_id: str, source: Optional[str] = None
 ) -> Dict[str, Any]:
-    doc = _load_shallow(scenario_id)
-    timetable_import_meta = doc.get("timetable_import_meta") or {}
+    meta, refs = get_desktop_context(scenario_id)
+    timetable_import_meta = master_data_store.load_master_collection(
+        Path(refs["masterData"]), "timetable_import_meta", meta.get("timetable_import_meta") or {}
+    ) or {}
     if source is None:
         return dict(timetable_import_meta)
     value = timetable_import_meta.get(source)

@@ -59,6 +59,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from bff.routers import (
     app_state,
+    desktop,
     graph,
     jobs,
     master_data,
@@ -131,6 +132,7 @@ app.add_middleware(TimingMiddleware)
 PREFIX = "/api"
 
 app.include_router(scenarios.router, prefix=PREFIX)
+app.include_router(desktop.router, prefix=PREFIX)
 app.include_router(app_state.router, prefix=PREFIX)
 app.include_router(timetable.router, prefix=PREFIX)
 app.include_router(master_data.router, prefix=PREFIX)

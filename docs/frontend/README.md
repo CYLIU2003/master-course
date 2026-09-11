@@ -1,11 +1,13 @@
 # React + FastAPI frontend migration specification
 
-Status: Phase 0 design baseline  
-Last updated: 2026-07-19
+Status: Electron implementation added; full Tkinter parity and research release remain separate gates
+Last updated: 2026-09-11
+
+The user selected TypeScript + React + Electron on 2026-09-11. The current entrypoint, implemented scope, validation and packaging are documented in [frontend/README.md](../../frontend/README.md). This overrides the old Tauri sequencing below. The remaining sections record the July migration plan and its broader acceptance backlog; they are not a claim that every parity gate has passed.
 
 ## Purpose
 
-This directory defines the safe migration from the current Tkinter + FastAPI application to React + FastAPI, followed by React + FastAPI + Tauri.
+This directory records the migration from Tkinter + FastAPI to React + TypeScript + Electron over the same FastAPI research contracts.
 
 The current Tkinter application is not deprecated. It remains the operational fallback and regression oracle until every Phase A acceptance gate passes. Phase 0 changes documentation only; it does not modify `run_app.py`, `tools/scenario_backup_tk.py`, the BFF, or the optimization core.
 

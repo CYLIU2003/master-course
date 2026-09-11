@@ -43,6 +43,7 @@ from bff.services.run_preparation import (
     solver_prepare_profile,
 )
 from bff.store import job_store, output_paths, scenario_store as store
+from bff.desktop_models import PrepareReply
 from src.milp_model import MILPResult
 from src.run_output_layout import allocate_run_dir
 from src.pipeline.simulate import simulate_problem_data
@@ -926,7 +927,7 @@ def get_simulation_capabilities(scenario_id: str) -> Dict[str, Any]:
     return _simulation_capabilities()
 
 
-@router.post("/scenarios/{scenario_id}/simulation/prepare")
+@router.post("/scenarios/{scenario_id}/simulation/prepare", response_model=PrepareReply)
 def prepare_simulation(
     scenario_id: str,
     body: PrepareSimulationBody,

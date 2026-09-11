@@ -2,7 +2,7 @@
 
 ## 1. Product statement
 
-Build an evidence-first research operations console for configuring, executing and auditing EV-bus dispatch and charging experiments. The first target is browser-hosted React + TypeScript over the existing FastAPI BFF. Desktop packaging with Tauri is a later deployment layer and must not change the research contract.
+Build an evidence-first research operations console for configuring, executing and auditing EV-bus dispatch and charging experiments. The user-selected target as of 2026-09-11 is React + TypeScript + Electron over the existing FastAPI BFF. [The delivered desktop scope](../../frontend/README.md) overrides the Tauri sequencing below and preserves the research contract. The remaining full-parity requirements are still a backlog.
 
 ## 2. Users and primary jobs
 
@@ -137,4 +137,3 @@ Build an evidence-first research operations console for configuring, executing a
 - The current FastAPI OpenAPI contains request models but almost all success responses are generic objects. Typed response DTO work is therefore a prerequisite for reliable client generation.
 - Backend cancellation is not currently available.
 - Historical documents refer to an earlier `frontend/` tree, but that directory is absent from the current worktree. Those documents are evidence of past intent, not executable current behavior.
-

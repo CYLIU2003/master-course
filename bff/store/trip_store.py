@@ -6,6 +6,8 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any, List, Optional, cast
 
+TIMETABLE_VISIBLE_FILTER = "(json_extract(payload_json, '$.trip_id') IS NULL OR json_extract(payload_json, '$.trip_id') NOT GLOB '*__v[0-9]*')"
+
 try:
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -116,7 +118,7 @@ def save_parquet_rows(path: Path, rows: List[Any]) -> None:
         b"schema_version": b"1",
         b"payload_format": b"json_row_envelope",
     }
-    pq_module.write_table(table.replace_schema_metadata(metadata), path)
+    pq_module.write_table(table.replace_schema_metadata(metadata), path, row_group_size=16384)
 
 
 def count_parquet_rows(path: Path) -> int:
@@ -142,10 +144,26 @@ def page_parquet_rows(path: Path, *, offset: int = 0, limit: Optional[int] = Non
 
     pq_module = cast(Any, pq)
     parquet_file = pq_module.ParquetFile(path)
+    if offset < 0 or (limit is not None and limit < 0):
+        raise ValueError("offset and limit must be nonnegative")
+    if limit == 0 or offset >= parquet_file.metadata.num_rows:
+        return []
     target_end = None if limit is None else offset + limit
     current_index = 0
+    selected_groups = []
+    for index in range(parquet_file.metadata.num_row_groups):
+        group_size = parquet_file.metadata.row_group(index).num_rows
+        if current_index + group_size > offset:
+            selected_groups.append(index)
+        elif not selected_groups:
+            current_index += group_size
+            continue
+        if target_end is not None and current_index + group_size >= target_end:
+            break
+        current_index += group_size
+    current_index = sum(parquet_file.metadata.row_group(i).num_rows for i in range(selected_groups[0]))
     results: List[Any] = []
-    for batch in parquet_file.iter_batches(columns=["payload_json"], batch_size=1024):
+    for batch in parquet_file.iter_batches(columns=["payload_json"], batch_size=1024, row_groups=selected_groups):
         batch_size = batch.num_rows
         batch_start = current_index
         batch_end = current_index + batch_size
@@ -280,7 +298,7 @@ def page_timetable_rows(
     if not db_path.exists():
         return []
     # Exclude __vN duplicate trips produced by GTFS reconciliation
-    conditions = ["(json_extract(payload_json, '$.trip_id') IS NULL OR json_extract(payload_json, '$.trip_id') NOT GLOB '*__v[0-9]*')"]
+    conditions = [TIMETABLE_VISIBLE_FILTER]
     params: list[Any] = []
     if service_id:
         conditions.append("service_id = ?")
@@ -303,7 +321,7 @@ def count_timetable_rows(db_path: Path, *, service_id: Optional[str] = None) -> 
     if not db_path.exists():
         return 0
     # Exclude __vN duplicate trips produced by GTFS reconciliation
-    conditions = ["(json_extract(payload_json, '$.trip_id') IS NULL OR json_extract(payload_json, '$.trip_id') NOT GLOB '*__v[0-9]*')"]
+    conditions = [TIMETABLE_VISIBLE_FILTER]
     params: list[Any] = []
     if service_id:
         conditions.append("service_id = ?")
@@ -343,6 +361,24 @@ def summarize_timetable_routes(db_path: Path) -> List[dict[str, Any]]:
             }
         )
     return summaries
+
+
+def summarize_timetable_rows(db_path: Path) -> dict[str, Any]:
+    """Aggregate the existing visible timetable, without materializing its rows."""
+    visible = TIMETABLE_VISIBLE_FILTER
+    time_columns = "MIN(CASE WHEN typeof(departure) = 'text' THEN NULLIF(departure, '') END), MAX(CASE WHEN typeof(arrival) = 'text' THEN NULLIF(arrival, '') END)"
+    with closing(_connect(db_path)) as conn:
+        _ensure_schema(conn)
+        # Python's previous summary failed on nonnumeric distances; SQLite CAST
+        # would silently coerce them to zero, so retain the strict conversion.
+        conn.create_function("strict_distance", 1, lambda value: float(value or 0.0))
+        row = conn.execute(f"SELECT COUNT(*), COUNT(DISTINCT NULLIF(route_id, '')), SUM(strict_distance(json_extract(payload_json, '$.distance_km'))), {time_columns} FROM timetable_rows WHERE {visible}").fetchone()
+        services = conn.execute(f"SELECT COALESCE(NULLIF(service_id, ''), 'WEEKDAY'), COUNT(*), COUNT(DISTINCT NULLIF(route_id, '')), {time_columns} FROM timetable_rows WHERE {visible} GROUP BY COALESCE(NULLIF(service_id, ''), 'WEEKDAY') ORDER BY 1").fetchall()
+    return {
+        "totalRows": row[0], "routeCount": row[1], "totalDistanceKm": round(row[2] or 0.0, 3),
+        "firstDeparture": row[3], "lastArrival": row[4],
+        "byService": [{"serviceId": item[0], "rowCount": item[1], "routeCount": item[2], "firstDeparture": item[3], "lastArrival": item[4]} for item in services],
+    }
 
 
 def summarize_timetable_routes_from_row_artifacts(db_path: Path) -> List[dict[str, Any]]:

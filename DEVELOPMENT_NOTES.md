@@ -1,5 +1,17 @@
 # Development Notes
 
+## 2026-09-11 TypeScript / React / Electron と大量データ読取り
+
+Windows portable版 `frontend/release/EV Bus Research 0.1.0.exe` の実起動・一覧・概要・時刻表・仮想行数・正常終了を確認した（packaged smoke exit code 0、2026-09-11 15:14 JST）。配布版はローカル生成のみで、公開・GitHub pushはしていない。
+
+`frontend/` を新設し、`run_desktop.py` → Electron main → 認証付きloopback BFF → 既存Prepare/optimization/job endpoints の到達経路を実装した。OpenAPI生成型、シナリオ検索・作成・複製、範囲/日付設定、Prepare失効、ジョブ復元、物理/研究/会計の別表示、ページ単位のデータ閲覧を含む。7月のTauri案は今回の利用者指定によりElectronへ更新した。Tkinterの全機能移植とは宣言せず、旧入口を保持する。
+
+発見して修正した問題: (1) ページ要求前の時刻表全件hydrate、(2) 集計のための全行hydrate、(3) 深いParquetページで先行全batchを読む処理、(4) 巨大結果JSONの全件展開、(5) Windows venv launcherのPIDとPython本体PIDを同一視した起動チェック、(6) nullable結果を未実行として扱わない表示、(7) 長いIDで表の列幅が崩れる表示、(8) Electronの隔離セッションにカスタムprotocolが未登録で配布版を開けない不具合。数式・料金・SOC・運行便・operator・距離の書換えはない。既存の `__vN` 表示除外規則をそのまま共有する。
+
+100万行の合成データ `output/desktop_scalability/synthetic-i95h9ydd/benchmark.json` で全5項目を確認した。254,566,400-byte SQLiteの末尾250行は1.2729秒、Parquetは0.0130秒、36,000,131-byte結果の初回投影は5.7226秒、キャッシュ後は0.00112秒。Python割当ピークは各2,060,807 / 84,144 / 1,584,342 bytesで、ネイティブ割当・構築時は別範囲。読み取り経路のみの合成測定であり、solverの性能主張ではない。
+
+ローカル検証: Electron実起動・一覧・概要・時刻表の描画、終了時のBFF停止、TypeScript/Viteビルド、認証/ページ境界/投影/Prepare失効/保存済み設定の継承/ジョブ再読込の回帰を実施。`python -X utf8 -m pytest -q` は **2,023 passed / 2 failed、91.58秒**。残る2件は既存の発表資料ハッシュ・部品同一性である。UTF-8指定なしのWindows既定cp932では既存テストのファイル読込2件も失敗するため、明示的なUTF-8モードで再実行した。フロント4テストと型/ビルドは成功。GitHub Actions/AI/CIは実行・有効化していない。自己点検で見つけた上記不具合は修正したが、独立レビューと正式研究実行は別ゲートのままである。
+
 ## 2026-09-11 気象データ取得の再確認
 
 2022〜2024年の取得済み23か月・67,200件を再検証し、月内連続性、7項目の有限値、弦巻の地点、PT15M、リクエストと原データのSHA-256が一致した。残りは2022年12月と2023年1〜12月の13か月。今回の定期実行では前回の認証を再利用できず、SOLCAST_API_KEYの既存設定も確認できなかったため、APIリクエストは0件である。利用枠の回復有無は未確認。認証設定の復旧を要する旨を一度だけ通知し、同じ状態での再通知を抑止する。取得済み原データ、2024年学習モデル、四季診断結果は保持した。
