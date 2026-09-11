@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
+
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.optimization.common.problem import (
     AssignmentPlan,
@@ -11,6 +13,7 @@ from src.optimization.common.problem import (
     ProblemTrip,
     ProblemVehicle,
 )
+from src.optimization.milp.engine import MILPOptimizer
 from src.optimization.milp.model_builder import MILPModelBuilder
 
 
@@ -121,3 +124,37 @@ def test_successor_cap_preserves_representable_baseline_connection() -> None:
     assert ("veh-available", "t0", "t11") in pairs
     assert len([pair for pair in pairs if pair[0] == "veh-available" and pair[1] == "t0"]) == 9
     assert summary["baseline_preserved_arc_count"] == 1
+
+
+@pytest.mark.parametrize("cap,expected", [(None, 9), (1, 2), (8, 9)])
+def test_metadata_counts_arcs_without_materializing_vehicle_labelled_list(
+    monkeypatch: pytest.MonkeyPatch, cap: int | None, expected: int
+) -> None:
+    problem = _problem(successor_cap=cap)
+    trips = list(problem.trips)
+    trips[1] = replace(trips[1], allowed_vehicle_types=("BEV",))
+    trips[3] = replace(trips[3], route_id="other-band")
+    baseline = VehicleDuty(
+        duty_id="baseline",
+        vehicle_type="ICE",
+        legs=(DutyLeg(trip=trips[0]), DutyLeg(trip=trips[-1])),
+    )
+    problem = replace(
+        problem,
+        trips=tuple(trips),
+        metadata={**problem.metadata, "fixed_route_band_mode": True},
+        baseline_plan=AssignmentPlan(
+            duties=(baseline,),
+            metadata={"duty_vehicle_map": {"baseline": "veh-available"}},
+        ),
+    )
+    optimizer = MILPOptimizer()
+    assert len(optimizer._builder.enumerate_arc_pairs(problem, problem.trip_by_id())) == expected
+
+    def forbid_materialization(*_args: object) -> None:
+        raise AssertionError("metadata must not allocate the full connection list")
+
+    monkeypatch.setattr(optimizer._builder, "enumerate_arc_pairs", forbid_materialization)
+    stats = optimizer._lightweight_model_stats(problem)
+    assert stats["variables"]["connection"] == expected
+    assert stats["constraints"]["connection_link_omitted"] == expected * 2

@@ -82,5 +82,7 @@ portable EXE（101,661,135 bytes、SHA-256
 正式研究リリースは既存PowerPoint証拠、fresh clean-commit正式実行、研究採用等の
 未解消ゲートによりBLOCKEDを維持する。
 
-4季節診断は別のclean frozen SHA `e8bd9d6c` で進行中。
-MAINの画面追加やBESS保存経路の変更後SHAのsolver証拠へ付け替えない。
+4季節診断は別のclean frozen SHA `e8bd9d6c` で4週の完全Prepareまで完了した。
+冬週のモデル構築をPCのメモリー逼迫により停止し、他3週は未実行である。
+[資源不足の証拠と未完了ゲート](SHIBU21_24_RESOURCE_BLOCK_20260911.md)を参照。
+MAINの画面追加・BESS保存経路・統計用リスト生成の変更後SHAのsolver証拠へ付け替えない。

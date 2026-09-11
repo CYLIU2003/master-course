@@ -1204,13 +1204,19 @@ class MILPOptimizer:
     ) -> Dict[str, Any]:
         trip_by_id = problem.trip_by_id()
         assignment_pairs = self._builder.enumerate_assignment_pairs(problem)
-        arc_pairs = self._builder.enumerate_arc_pairs(problem, trip_by_id)
         arc_pruning_summary_fn = getattr(self._builder, "arc_pruning_summary", None)
         arc_pruning_summary = (
             arc_pruning_summary_fn(problem, trip_by_id)
             if callable(arc_pruning_summary_fn)
             else {}
         )
+        # The summary already counts the exact selected arcs, including preserved
+        # baseline successors. Materializing all vehicle-labelled tuples just to
+        # count them can exhaust memory before the actual solver is constructed.
+        arc_count = arc_pruning_summary.get("arc_count_after_successor_pruning")
+        if arc_count is None:
+            # Retain compatibility with alternate builders lacking count metadata.
+            arc_count = len(self._builder.enumerate_arc_pairs(problem, trip_by_id))
         price_slot_count = len(problem.price_slots)
         bev_vehicle_count = sum(
             1
@@ -1220,7 +1226,7 @@ class MILPOptimizer:
         return {
             "variables": {
                 "assignment": len(assignment_pairs),
-                "connection": len(arc_pairs),
+                "connection": arc_count,
                 "start_arc": len(assignment_pairs),
                 "end_arc": len(assignment_pairs),
                 "unserved": len(problem.trips),
@@ -1238,7 +1244,7 @@ class MILPOptimizer:
                 # Both Phase 3 and Phase 4 use node-flow equalities; explicit
                 # x<=y endpoint rows are intentionally omitted as redundant.
                 "connection_link": 0,
-                "connection_link_omitted": len(arc_pairs) * 2,
+                "connection_link_omitted": arc_count * 2,
                 "connection_node_flow": len(assignment_pairs) * 2,
             },
             "objective_terms": (),

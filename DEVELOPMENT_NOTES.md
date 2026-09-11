@@ -1,5 +1,15 @@
 # Development Notes
 
+## 2026-09-11 4路線の資源不足と統計用接続リストの重複生成
+
+clean frozen `e8bd9d6c` で4週すべての完全Prepare、路線来歴・親フリート・事業者・距離・遷移等の監査が完了した。冬週のモデル構築ではprivate memory 28.43 GiB、OS空きvirtual memory 0.58 GiBを観測したため、19:22 JSTにこの診断プロセスだけを停止した。他3週は未実行であり、物理的実行不能や最適化結果は得られていない。全4週でaccepted rolling chain・最終会計は未成立。[各週の状態と証拠](docs/notes/SHIBU21_24_RESOURCE_BLOCK_20260911.md)。
+
+到達経路の調査で、`MILPOptimizer._lightweight_model_stats` が既存のexact count summaryとは別に全接続tupleを生成して件数だけ取得していた。summaryの `arc_count_after_successor_pruning` を再利用し、値0を保ち、count metadataを持たない代替builderだけ従来の列挙へfallbackする。可用車、車種、route-band、baseline successor保持を含む件数を確認した。数式・目的関数・実solverの変数/制約・successor pruningは変更していない。
+
+実solver adapterの接続列挙・キー複製・Gurobi変数生成は残る。今回の修正を4路線の実行完了や大規模solverのメモリー問題解決とは呼ばない。12 threadsはPythonの接続列挙を制限せず、Phase 4のSoftMemLimit/NodefileStartは今回のPhase 3へ適用されていない。条件を変更した自動再実行は行わず、旧凍結成果物を修正後HEADへ付け替えない。対象のLuna独立レビューはP0/P1 0件であり、研究モデル全体の承認ではない。
+
+修正後のUTF-8全体回帰は **2,127 passed / 2 failed、95.56秒**。残る2件は既存PowerPoint原本hashとspeaker-notes版の部品集合の不一致である。JUnitは `output/desktop_parity_validation/pytest-model-stats-final.xml`。React/Electronは今回未変更で、13 UIテストと配布版smokeの検証記録を保持する。
+
 ## 2026-09-11 Tkinter主要操作とElectron UI
 
 用途別11画面、revision付き設定編集、既存master CRUD、CSVの検査・全行バックアップ、気象ファイル取込・既存前処理、bounded result/chart/ledger、成果物取得、比較を実装した。BESS方針はdate-series materializationとproduction rolling requestへ明示的に届く。未指定の旧assetだけ従来の初期SOC復元を維持する。BEV条件は変更しない。[操作・数学・検証の詳細](docs/notes/DESKTOP_TK_PARITY_20260911.md)。

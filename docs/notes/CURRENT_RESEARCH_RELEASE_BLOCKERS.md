@@ -1,8 +1,14 @@
 # Current research release blockers
 
+## 2026-09-11 最終状態: 4週Prepare完了、4路線solverは資源不足で未完了
+
+凍結 `e8bd9d6c` の4週は完全Prepareを通過した。冬週のモデル構築でprivate memory 28.43 GiBとOS空きvirtual memory 0.58 GiBを観測し、診断プロセスを停止した。他3週は未実行。解・accepted rolling chain・物理検証・最終会計がなく、研究リリースは **BLOCKED**。これは数学的なINFEASIBLE判定ではない。[各週の監査値と停止記録](SHIBU21_24_RESOURCE_BLOCK_20260911.md)。
+
+MAINでは統計取得だけの全接続tuple生成を除去したが、実solverの巨大な接続表現は未解決である。候補削減・制約緩和・fleet変更・解後修復を追加していない。修正後のclean-commit実行、全4週の168時間実行と会計、正式provenance、既存PowerPoint証拠2件等は引き続き必要であり、旧SHAの停止記録を新HEADの実行証拠にはしない。
+
 ## 2026-09-11 Electron主要操作群の移行
 
-Tkinter主要操作を用途別画面へ移し、保存・入出力・図表・比較を追加した。設定/CSV検査と研究採用は別ゲートである。BESS方針の明示保存・日付Prepare/rollingへの転送は、未指定の旧ケースの意味を維持する。進行中の4季節診断はclean frozen e8bd9d6cの成果物として扱い、MAINの新しいSHAのsolver証拠へ転記しない。既存PowerPoint証拠と正式採用ゲートを含む研究リリースBLOCKEDを維持する。[変更範囲](DESKTOP_TK_PARITY_20260911.md)。
+Tkinter主要操作を用途別画面へ移し、保存・入出力・図表・比較を追加した。設定/CSV検査と研究採用は別ゲートである。BESS方針の明示保存・日付Prepare/rollingへの転送は、未指定の旧ケースの意味を維持する。4季節診断はclean frozen e8bd9d6cの成果物として扱い、MAINの新しいSHAのsolver証拠へ転記しない。最終実行状態は上記の資源不足記録を参照。既存PowerPoint証拠と正式採用ゲートを含む研究リリースBLOCKEDを維持する。[変更範囲](DESKTOP_TK_PARITY_20260911.md)。
 
 ## 2026-09-11 4路線季節診断のRolling終端契約を修正
 
