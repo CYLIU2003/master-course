@@ -11,6 +11,7 @@ from src.optimization.common.cost_components import (
     normalize_cost_component_flags,
 )
 from src.optimization.common.evaluator import CostEvaluator
+from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
     ChargerDefinition,
@@ -1484,15 +1485,23 @@ def test_stage2_contract_overage_matches_stage1_soft_limit() -> None:
         ),
     )
 
-    # Stage 2 mirrors the soft contract-overage model. The independent engine
-    # validator still rejects the resulting over-contract physical schedule,
-    # which is the required formal-run gate.
+    # Explicit soft policy must agree in the solver, validator, and accounting.
+    # The same physical schedule must still fail under a hard contract limit.
     assert result.plan.metadata["stage2_feasible"] is True
-    assert result.feasible is False
-    assert any(
-        "contract power violations" in reason
-        for reason in result.infeasibility_reasons
+    assert result.feasible is True
+    report = FeasibilityChecker().evaluate(problem, result.plan)
+    assert report.metrics["contract_power_exceedance_count"] > 0
+    assert report.metrics["contract_power_violation_count"] == 0
+    assert report.metrics["contract_overage_accounting_violation_count"] == 0
+    assert report.metrics["contract_power_excess_kwh"] == pytest.approx(
+        report.metrics["contract_overage_reported_kwh"], abs=1e-6
     )
+    hard_problem = replace(
+        problem, metadata={**problem.metadata, "enable_contract_overage_penalty": False}
+    )
+    hard_report = FeasibilityChecker().evaluate(hard_problem, result.plan)
+    assert hard_report.feasible is False
+    assert hard_report.metrics["contract_power_violation_count"] > 0
     assert result.plan.metadata["stage2_contract_overage_enabled"] is True
     assert result.plan.metadata["stage2_contract_overage_kwh"] > 0.0
     assert (

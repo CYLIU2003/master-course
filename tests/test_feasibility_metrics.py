@@ -168,6 +168,7 @@ def test_required_validation_metric_missing_is_not_treated_as_zero() -> None:
         "ev_soc_violation_count": 0,
         "bess_soc_violation_count": 0,
         "contract_power_violation_count": 0,
+        "contract_overage_accounting_violation_count": 0,
         # charger_concurrency_violation_count is intentionally absent.
         "bess_terminal_soc_deviation_kwh": 0.0,
         "bess_terminal_soc_tolerance_kwh": 1.0e-6,
@@ -190,6 +191,7 @@ def test_duplicate_trip_metric_prevents_clean_validation() -> None:
         "ev_soc_violation_count": 0,
         "bess_soc_violation_count": 0,
         "contract_power_violation_count": 0,
+        "contract_overage_accounting_violation_count": 0,
         "charger_concurrency_violation_count": 0,
         "bess_terminal_soc_deviation_kwh": 0.0,
         "bess_terminal_soc_tolerance_kwh": 1.0e-6,

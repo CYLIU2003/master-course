@@ -297,6 +297,7 @@ class FeasibilityChecker:
     ) -> Dict[str, Any]:
         ev_soc_bounds = self._count_vehicle_soc_bound_violations(problem, plan)
         bess_metrics = self._evaluate_bess_metrics(problem, plan)
+        contract_metrics = self._evaluate_contract_power_metrics(problem, plan)
         metrics: Dict[str, Any] = {
             "unassigned_trip_count": int(len(set(uncovered_trip_ids))),
             "duplicate_trip_count": int(len(set(duplicate_trip_ids))),
@@ -310,7 +311,7 @@ class FeasibilityChecker:
             "bess_soc_violation_count": int(bess_metrics["lower"] + bess_metrics["upper"]),
             "bess_terminal_soc_deviation_kwh": float(bess_metrics["terminal_deviation_kwh"]),
             "bess_terminal_soc_tolerance_kwh": float(bess_metrics["terminal_tolerance_kwh"]),
-            "contract_power_violation_count": self._count_contract_power_violations(problem, plan),
+            **contract_metrics,
             "charger_concurrency_violation_count": self._count_charger_concurrency_violations(problem, plan),
         }
         metrics["all_required_validation_checks_passed"] = self._metrics_are_clean(metrics)
@@ -325,6 +326,7 @@ class FeasibilityChecker:
             "ev_soc_violation_count": "EV SOC bound/readiness violations remain",
             "bess_soc_violation_count": "BESS SOC bound violations remain",
             "contract_power_violation_count": "contract power violations remain",
+            "contract_overage_accounting_violation_count": "contract overage accounting inconsistencies remain",
             "charger_concurrency_violation_count": "charger concurrency violations remain",
         }
         errors: List[str] = []
@@ -535,33 +537,65 @@ class FeasibilityChecker:
             "terminal_tolerance_kwh": tolerance,
         }
 
-    def _count_contract_power_violations(
+    def _evaluate_contract_power_metrics(
         self,
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
-    ) -> int:
+    ) -> Dict[str, Any]:
+        # Prepared inputs declare this policy explicitly. Missing or malformed
+        # policy must not silently relax the legacy validation contract.
+        allow_overage = problem.metadata.get("enable_contract_overage_penalty") is True
+        tolerance_kwh = 1.0e-6
         timestep_h = max(float(getattr(problem.scenario, "timestep_min", 0) or 0.0), 1.0) / 60.0
         depot_limit_by_id = {
             str(getattr(depot, "depot_id", "") or ""): float(getattr(depot, "import_limit_kw", 0.0) or 0.0)
             for depot in list(getattr(problem, "depots", ()) or ())
             if str(getattr(depot, "depot_id", "") or "")
         }
-        depot_ids = set(depot_limit_by_id)
-        depot_ids.update(str(key) for key in dict(plan.grid_to_bus_kwh_by_depot_slot or {}).keys())
-        depot_ids.update(str(key) for key in dict(plan.grid_to_bess_kwh_by_depot_slot or {}).keys())
-        violations = 0
+        grid_to_bus = plan.grid_to_bus_kwh_by_depot_slot or {}
+        grid_to_bess = plan.grid_to_bess_kwh_by_depot_slot or {}
+        reported_overage = plan.contract_over_limit_kwh_by_depot_slot or {}
+        depot_ids = set(depot_limit_by_id) | set(grid_to_bus) | set(grid_to_bess) | set(reported_overage)
+        exceedance_count = 0
+        accounting_violations = 0
+        excess_total_kwh = 0.0
+        reported_total_kwh = 0.0
         for depot_id in depot_ids:
             limit_kw = max(float(depot_limit_by_id.get(depot_id, 0.0) or 0.0), 0.0)
-            if limit_kw <= 0.0:
-                continue
-            slot_indices = set(dict(plan.grid_to_bus_kwh_by_depot_slot or {}).get(depot_id, {}).keys())
-            slot_indices.update(dict(plan.grid_to_bess_kwh_by_depot_slot or {}).get(depot_id, {}).keys())
+            bus_slots = grid_to_bus.get(depot_id, {})
+            bess_slots = grid_to_bess.get(depot_id, {})
+            overage_slots = reported_overage.get(depot_id, {})
+            slot_indices = set(bus_slots) | set(bess_slots) | set(overage_slots)
             for slot_idx in slot_indices:
-                grid_kwh = float(dict(plan.grid_to_bus_kwh_by_depot_slot or {}).get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
-                grid_kwh += float(dict(plan.grid_to_bess_kwh_by_depot_slot or {}).get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
-                if grid_kwh > limit_kw * timestep_h + 1.0e-6:
-                    violations += 1
-        return violations
+                bus_kwh = float(bus_slots.get(slot_idx, 0.0))
+                bess_kwh = float(bess_slots.get(slot_idx, 0.0))
+                reported_kwh = float(overage_slots.get(slot_idx, 0.0))
+                if any(
+                    not math.isfinite(value) or value < 0.0
+                    for value in (bus_kwh, bess_kwh, reported_kwh)
+                ):
+                    accounting_violations += 1
+                    continue
+                # As before, a nonpositive import limit denotes no finite cap.
+                excess_kwh = (
+                    max(bus_kwh + bess_kwh - limit_kw * timestep_h, 0.0)
+                    if limit_kw > 0.0 else 0.0
+                )
+                excess_total_kwh += excess_kwh
+                reported_total_kwh += reported_kwh
+                if excess_kwh > tolerance_kwh:
+                    exceedance_count += 1
+                expected_reported_kwh = excess_kwh if allow_overage else 0.0
+                if abs(reported_kwh - expected_reported_kwh) > tolerance_kwh:
+                    accounting_violations += 1
+        return {
+            "contract_power_violation_count": 0 if allow_overage else exceedance_count,
+            "contract_overage_accounting_violation_count": accounting_violations,
+            "contract_power_exceedance_count": exceedance_count,
+            "contract_power_excess_kwh": excess_total_kwh,
+            "contract_overage_reported_kwh": reported_total_kwh,
+            "contract_overage_enabled": allow_overage,
+        }
 
     def _count_charger_concurrency_violations(
         self,

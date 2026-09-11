@@ -1,5 +1,13 @@
 # Development Notes
 
+## 2026-09-12 有料契約超過と共通検証の整合
+
+全体回帰は2,228 passed / 既存PowerPoint証拠2 failed（98.36秒）。関連41件が通過し、独立コードレビューの微小負値P1を解消、残P0/P1は0件。JUnitは `output/exact_depot_factor_validation/pytest-contract-overage-policy-final.xml`。修正後の保持秋状態159〜167時は全9回の求解・履歴推定PV実行を通過した。新規Prepareからの全四季・週間最終会計は別途必要。
+
+凍結 `43fe848f` の冬・春・夏は各168時間・独立物理・会計を通過したが、秋は159時間後の予測窓slot669で停止した。200 kW、15分の50 kWh枠に対する67.32609273735918 kWhの購入には、既存soft設定に従い17.326092737359165 kWhの有料超過が記録されていた。共通検証がpolicyを無視して上限超過を一律拒否したことが原因。
+
+明示softの場合だけ、物理超過量と費用に使う `contract_over_limit_kwh_by_depot_slot` が1e-6 kWh以内で一致することを必須とする。超過件数・量と計上量を保存し、hardまたは未宣言のpolicyでは従来どおり上限超過を拒否する。欠損・過少・過大・非有限・負の計上は拒否する。負値には数値許容差を適用しない。ソルバーの制約・単価・物理量・実行prefix・fleet・接続は変更しない。旧結果を修正後の証拠にせず、新clean SHAで全四季を再Prepare・再実行する。[詳細と検証](docs/notes/CONTRACT_OVERAGE_VALIDATION_20260912.md)。
+
 ## 2026-09-12 未観測PVを信用しない実行prefixのBESS・受電制約
 
 追加native Gurobi回帰7件が通過し、独立実装レビューの残P0/P1は0件。UTF-8での全体回帰は2,212 passed / 既存PowerPoint証拠2 failed（98.32秒）、JUnitは `output/exact_depot_factor_validation/pytest-pv-execution-reserve-release-utf8.xml`。保持状態からの101〜167時は全67回の求解・実測PV実行を通過した。これは週途中からの診断再現であり、新しいclean SHAでの全四季Prepare・168時間・最終物理会計は別途必要。
