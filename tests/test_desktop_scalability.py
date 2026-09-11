@@ -225,3 +225,22 @@ def test_sqlite_result_projection_streams_and_refreshes(desktop_scenario):
         path, "optimization_result", {"feasible": True, "objective_value": 100}
     )
     assert desktop_store.result_summary(sid)["values"]["objective_value"] == 100
+
+
+def test_sqlite_legacy_nonfinite_values_are_displayed_without_rewriting(desktop_scenario):
+    import hashlib
+
+    sid, refs = desktop_scenario
+    path = Path(refs["artifactStore"])
+    trip_store.save_scalar(path, "optimization_result", {
+        "objective_value": float("inf"),
+        "mip_gap": float("nan"),
+        "feasible": False,
+        "ignored": [float("-inf")],
+    })
+    original_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    result = desktop_store.result_summary(sid)
+    assert result["values"] == {
+        "objective_value": "Infinity", "mip_gap": "NaN", "feasible": False,
+    }
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == original_hash

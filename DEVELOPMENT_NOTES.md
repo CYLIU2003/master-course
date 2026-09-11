@@ -1,5 +1,15 @@
 # Development Notes
 
+## 2026-09-11 デスクトップの旧結果JSON読取りを修正
+
+既存parentの結果SQLiteにPython JSONの裸 `Infinity` があり、strictなstream parserが概要取得を失敗させていた。表示読取りだけに64 KiB chunkの互換readerを挟み、文字列内の内容を保持しながら `Infinity` / `-Infinity` / `NaN` を文字として投影する。原本は書き換えず、非有限値を数値やゼロへ補正しない。50関連テスト、実parentの概要JSON化、portable版の一覧・概要・時刻表smokeが通過した。
+
+100万行の再測定はSQLite末尾250件1.20秒、Parquet0.0082秒、36 MB結果5.73秒、キャッシュ後0.00098秒。Python割当の最大2.1 MB以下で5検査を通過した。途中実装の14.88秒への後退は特殊値のないchunkを一括処理して解消した。ネイティブメモリーと構築・solver性能は測定外。[詳細と証拠](docs/notes/DESKTOP_LEGACY_JSON_COMPATIBILITY_20260911.md)。進行中の4週診断は凍結 `0cc91fa2` のままで、表示修正後のHEADのsolver証拠へ付け替えない。
+
+全体回帰は **2,093 passed / 2 failed、89.43秒**。残る2件は既存PowerPoint証拠のハッシュ・部品同一性の不整合である。研究リリースBLOCKEDを維持する。
+
+GPT-5.6 Lunaの独立レビューでは、reader・fast path・投影wrapper・対応テストにP0/P1指摘0件だった。Lunaの実画面操作や研究モデル全体の承認ではない。
+
 ## 2026-09-11 日付付き路線情報の再読込による上書きを修正
 
 `0132e319` の完全Prepare後に路線カタログの22件の警告を追跡したところ、保存済み正値距離22件がcanonical側で0、曜日別件数が空、方向13件が変更されていた。個別3,182便の正値距離は保持されていたが、路線の来歴に関わるP1として旧実行を停止し、冬週完了・春週途中を別成果物へ保存した。solverは開始していない。

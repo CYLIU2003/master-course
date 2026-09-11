@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sqlite3
 from contextlib import closing
@@ -12,6 +13,7 @@ from typing import Any, BinaryIO
 import ijson
 
 from bff.store import scenario_store, trip_store
+from bff.store.desktop_json import LegacyResultReader
 
 MASTER_TABLES = frozenset({"routes", "depots", "vehicles", "stops", "chargers"})
 ARTIFACT_TABLES = frozenset({"timetable_rows", "trips", "duties", "blocks"})
@@ -201,7 +203,9 @@ def _stream_projection(source: BinaryIO) -> dict[str, Any]:
     root = ""
     depth = 0
     projected_events = 0
-    for prefix, event, value in ijson.parse(source, use_float=True):
+    for prefix, event, value in ijson.parse(
+        io.BufferedReader(LegacyResultReader(source)), use_float=True
+    ):
         if builder is not None:
             projected_events += 1
             if projected_events > 10_000:

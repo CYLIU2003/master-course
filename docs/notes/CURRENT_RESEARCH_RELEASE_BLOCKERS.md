@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-11 旧結果のデスクトップ表示互換
+
+旧結果の裸 `Infinity` / `NaN` による概要取得失敗を表示専用readerで修正した。値は文字として表示し、保存結果・採用判定・数式は変更しない。実parentの概要とportable smoke、100万行のbounded読取りを再検査した。4週診断のコードは凍結 `0cc91fa2` を維持しており、UI修正後HEADの研究証拠へ転記しない。[変更範囲](DESKTOP_LEGACY_JSON_COMPATIBILITY_20260911.md)。研究リリースBLOCKEDは継続。
+
 ## 2026-09-11 日付付き路線metadataの来歴修正
 
 旧 `0132e319` の冬週は完全Prepareの物理関連監査を通過したが、再読込のglobal補完が路線距離22件・方向13件等を変更していたため、採用せず春週途中で停止した。保存済み路線情報を保持する修正、各段階のハッシュ照合、runnerの来歴ゲートを追加した。旧結果を修正後SHAへ流用せず、全4週を新しく検証・診断する。[証拠と変更範囲](DATED_ROUTE_METADATA_PROVENANCE_20260911.md)。研究リリースは引き続きBLOCKED。
