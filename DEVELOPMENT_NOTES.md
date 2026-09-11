@@ -1,5 +1,15 @@
 # Development Notes
 
+## 2026-09-11 日付付き路線情報の再読込による上書きを修正
+
+`0132e319` の完全Prepare後に路線カタログの22件の警告を追跡したところ、保存済み正値距離22件がcanonical側で0、曜日別件数が空、方向13件が変更されていた。個別3,182便の正値距離は保持されていたが、路線の来歴に関わるP1として旧実行を停止し、冬週完了・春週途中を別成果物へ保存した。solverは開始していない。
+
+scenario storeの日付付きモードではglobal masterの自動補完・時刻表fallbackを使わず、取得済み路線情報を保持する。新準備は保存前後・canonical後の全路線metadataハッシュを照合し、runnerもハッシュ・正値距離・全路線カタログ監査を要求する。元データ・式・フリートを変更しないが、モデルへ渡る路線値が変わるため旧結果を流用せず、修正後の凍結commitで4週を再実行する。関連58テスト成功、追加の保存契約5テストは修正前失敗を確認した。[詳細](docs/notes/DATED_ROUTE_METADATA_PROVENANCE_20260911.md)。
+
+全体は **2,051 passed / 2 failed、88.59秒**。失敗は既存のPowerPoint証拠2件。4週の新候補を再読込した確認では、各22路線の正値距離・カタログissue 0・全路線metadataハッシュ一致・親不変・日付付き時刻表契約が通過した。候補は全件 `formal_prepared=false` とし、次の完全Prepareへ流用しない。
+
+GPT-5.6 Lunaの独立レビューでは、dated source保持・producer/runnerの新ゲート・追加テストにP0/P1指摘0件。Electron mainとdesktop BFFの認証・起動応答・protocol/path分離・終了処理についても対象レビューを行い、P0/P1指摘0件だった。研究モデル全体の承認とは区別する。
+
 ## 2026-09-11 完全Prepareの地点照合を計算単位で再利用
 
 凍結SHA `737e07be` の冬週Prepareを実行中、処理スタックが `resolve_location_ids` → `get_deadhead_min` → `can_connect` → 全組合せのgraph buildにあることを観測した。停止を失敗とみなしたり監査を省略したりせず、旧作業フォルダーを保持してMAIN側で独立した性能改善を検証した。
@@ -7,6 +17,8 @@
 `src/dispatch/lookup_snapshot.py` は標準DispatchContextのルールとaliasのコピーにだけ、各4,096件を上限とするキャッシュを持つ。graph build、strict precheck、path-cover matchingのバッチ終了後に破棄する。元のcontextは変更しないため、次回のルール変更や折返し感度条件を引き継げる。カスタムcontextの実装も保持する。候補弧数、判定式、回送時間、料金、SOC、車両集合は変更しない。
 
 実入力由来17地点・289組の全照合値とaliasの順序が一致した。289,000組の反復は従来4.8137秒、キャッシュ0.3466秒（約13.89倍、lookup部分のみ）。関連41テスト、全体 **2,034 passed / 2 failed、90.09秒**。残る2件は既存のPowerPoint証拠不整合のみ。GPT-5.6 Lunaの独立した読み取りレビューでP0/P1なし、追加6テスト成功。旧SHAのPrepare/solver結果を新SHAの証拠へ転用せず、別のclean worktreeで完全Prepareから実行する。[詳細](docs/notes/LOCATION_LOOKUP_SCALABILITY_20260911.md)。
+
+凍結SHA `0132e319` でも同一測定を行い、4.8513秒 / 0.3439秒、約14.11倍、全289組一致、チェックサム双方6,683,000を確認した。前後のGit状態は同一SHA・clean。旧 `737e07be` の未完了Prepareは1,817.1秒で改善版への切替として中断し、失敗と扱わず旧成果物を保存した。新実行は親・原データをハッシュ検証して複製した別worktreeで、完全Prepareから開始した。
 
 ## 2026-09-11 渋21〜24 四季診断の入力と実行契約
 

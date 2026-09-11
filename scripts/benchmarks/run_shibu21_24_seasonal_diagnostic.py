@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -24,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from scripts.benchmarks.run_shibu21_seasonal_diagnostic import solve_week, write_json
+from src.optimization.common.date_series import content_hash
 
 
 def git_state() -> dict:
@@ -127,6 +129,30 @@ def discover_route_scope(config: dict) -> dict:
     }
 
 
+def _route_metadata_provenance_verified(prepared_payload: dict, case: dict) -> bool:
+    routes = prepared_payload.get("routes")
+    if not isinstance(routes, list) or not routes:
+        return False
+    if any(not isinstance(route, dict) or not str(route.get("id") or "").strip() for route in routes):
+        return False
+    if len({route["id"] for route in routes}) != len(routes):
+        return False
+    distances = [route.get("distanceKm") for route in routes]
+    if any(
+        isinstance(value, bool) or not isinstance(value, (int, float))
+        or not math.isfinite(value) or value <= 0 for value in distances
+    ):
+        return False
+    catalog_audit = (case.get("scope_summary") or {}).get("route_catalog_audit") or {}
+    declared_hash = case.get("declared_route_metadata_sha256")
+    return bool(
+        declared_hash and case.get("route_metadata_preserved") is True
+        and content_hash({route["id"]: route for route in routes}) == declared_hash
+        and catalog_audit.get("issueCount") == 0
+        and catalog_audit.get("checkedRouteCount") == len(routes)
+    )
+
+
 def audit_prepared_inputs(config: dict) -> dict:
     root = ROOT / config["input_manifests_directory"]
     prepared_root = ROOT / config.get("prepared_inputs_directory", "output/prepared_inputs")
@@ -199,6 +225,9 @@ def audit_prepared_inputs(config: dict) -> dict:
                 if failed_checks:
                     contract_status = "BLOCKED_PREPARED_SCOPE_CONTRACT"
                     contract_blocker = f"{week}: " + ", ".join(failed_checks)
+                elif not _route_metadata_provenance_verified(prepared_payload, case):
+                    contract_status = "BLOCKED_ROUTE_METADATA_PROVENANCE"
+                    contract_blocker = f"{week}: captured route metadata, distance, or catalog audit is unverified"
                 else:
                     contract_status = "READY"
         if not valid and prepared_namespace != "candidate_prepared_inputs":
@@ -213,6 +242,8 @@ def audit_prepared_inputs(config: dict) -> dict:
             "vehicle_count": case.get("vehicle_count"),
             "timetable_row_count": case.get("timetable_row_count"),
             "selected_route_codes": case.get("selected_route_codes"),
+            "declared_route_metadata_sha256": case.get("declared_route_metadata_sha256"),
+            "route_metadata_preserved": case.get("route_metadata_preserved"),
             "prepared_input_path": (
                 str(prepared_path.relative_to(ROOT)) if prepared_path is not None else None
             ),

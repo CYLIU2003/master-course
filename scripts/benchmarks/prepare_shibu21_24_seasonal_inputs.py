@@ -371,8 +371,11 @@ def prepare_week(
     doc = configure_doc(doc, start_date, source)
     scenario_store._invalidate_dispatch_artifacts(doc)
     scenario_store._normalize_dispatch_scope(doc)
+    route_metadata_hash = content_hash({route["id"]: route for route in doc["routes"]})
     scenario_store._save(doc)
     doc = scenario_store._load(scenario_id, skip_graph_arcs=True)
+    if content_hash({route["id"]: route for route in doc["routes"]}) != route_metadata_hash:
+        raise ValueError("Captured route metadata changed during scenario save/reload")
     scenario_id = str(doc.get("id") or scenario_id)
     if validation_mode:
         prepared = get_or_build_run_preparation(
@@ -386,6 +389,12 @@ def prepare_week(
     else:
         prepared, prepared_path = _prepare_lightweight_candidate(doc, scenario_id, output)
         prepared_namespace = "candidate_prepared_inputs"
+    canonical_route_metadata_hash = None
+    if prepared_path is not None:
+        canonical_routes = read_json(prepared_path).get("routes") or []
+        canonical_route_metadata_hash = content_hash({route["id"]: route for route in canonical_routes})
+        if canonical_route_metadata_hash != route_metadata_hash:
+            raise ValueError("Captured route metadata changed during canonical Prepare")
     after_hash = parent_hash(scenario_store._load(PARENT_SCENARIO_ID, skip_graph_arcs=True))
     if before_hash != after_hash:
         raise ValueError("Parent scenario changed during four-route preparation")
@@ -394,6 +403,9 @@ def prepare_week(
         "parent_scenario_id": PARENT_SCENARIO_ID, "scenario_id": scenario_id,
         "parent_document_sha256_before": before_hash, "parent_document_sha256_after": after_hash,
         "parent_unchanged": True, "prepared_input_id": prepared.prepared_input_id,
+        "declared_route_metadata_sha256": route_metadata_hash,
+        "canonical_route_metadata_sha256": canonical_route_metadata_hash,
+        "route_metadata_preserved": canonical_route_metadata_hash == route_metadata_hash,
         "input_preparation_valid": bool(validation_mode and prepared.is_valid),
         "formal_prepared": bool(validation_mode and prepared.is_valid),
         "prepared_input_namespace": prepared_namespace,

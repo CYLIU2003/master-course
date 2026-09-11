@@ -20,6 +20,8 @@
 
 `benchmark_location_lookups.py --repetitions 1000` の289,000組の反復は、従来4.8137秒、キャッシュ0.3466秒、比率13.89倍だった。`lookup_benchmark_v1.json` は実装中のdirty計測であることを明記している。照合の反復部分だけの測定で、context生成、全graph生成、メモリー全量、solver実行は含まない。全診断時間の改善率とは呼ばない。
 
+凍結SHA `0132e3195b475ac73a9c1a26f9e0c8a4072cd76f` のclean worktreeで同じ測定を行い、従来4.8513秒、キャッシュ0.3439秒、比率14.11倍だった。全照合値とalias順序が一致し、反復値のチェックサムは双方6,683,000。成果物は `C:/master-course-worktrees/shibu21-24-cache-20260911/output/lookup_benchmark_frozen.json`。実行前後のGit SHAとclean状態も一致した。単一実行の局所測定であり、全Prepareやsolverの時間短縮率、一般化した性能保証ではない。
+
 ```powershell
 python scripts/benchmarks/benchmark_location_lookups.py --input output/four_route_runtime_observation/lookup_inputs.json --output output/four_route_runtime_observation/lookup_benchmark_new.json --repetitions 1000
 ```
@@ -29,5 +31,7 @@ python scripts/benchmarks/benchmark_location_lookups.py --input output/four_rout
 - 関連dispatch/strict/route-band検証: 41 passed。
 - 全体: `python -X utf8 -m pytest -q`、2,034 passed / 2 failed、90.09秒。失敗は既存のPowerPointハッシュ・部品同一性の2件。
 - Reviewer: GPT-5.6 Luna。Date: 2026-09-11。対象は新lookup helperと3つの呼出し箇所。P0/P1指摘0件、対象6テスト成功。これは研究モデル全体の採用レビューではない。
+
+旧SHA `737e07be` のPrepareは冬週の処理中、経過1,817.1秒で、検証済みの性能改善版へ切り替えるために中断した。完了・失敗のどちらにも分類せず、`SUPERSEDED_FOR_VERIFIED_LOOKUP_PERFORMANCE` として元作業フォルダーの `output/old_control_status_superseded_lookup_20260911.json` に記録した。solverは開始していない。
 
 旧作業フォルダーのソースと成果物を保持し、新しい凍結SHAでは完全Prepareから別出力へ再実行する。旧SHAの成果物を新SHAの証拠へ付け替えない。

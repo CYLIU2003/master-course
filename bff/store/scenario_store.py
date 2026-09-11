@@ -69,6 +69,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 from bff.services.service_ids import canonical_service_id
 from bff.store import master_data_store, output_paths, scenario_meta_store, trip_store
+from src.optimization.common.date_series import DATE_SERIES_INPUT_MODE
 from src.value_normalization import coerce_list
 
 _STORE_DIR = output_paths.scenarios_root()
@@ -820,6 +821,12 @@ def _build_duties_summary_artifact(items: List[Dict[str, Any]]) -> Dict[str, Any
 
 
 def _master_repair_dataset_id(doc: Dict[str, Any]) -> Optional[str]:
+    simulation_config = doc.get("simulation_config") or {}
+    if simulation_config.get("multi_day_input_mode") == DATE_SERIES_INPUT_MODE:
+        # A dated scenario owns its captured routes and materialized timetable.
+        # Global defaults can silently replace distances, directions, or missing
+        # source rows; leave missing data for the normal validation contracts.
+        return None
     overlay = doc.get("scenario_overlay") or {}
     feed_context = doc.get("feed_context") or {}
     for value in (

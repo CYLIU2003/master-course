@@ -46,6 +46,8 @@ OpenAPI から `src/generated/api.ts` を生成し、公開 DTO をそこから�
 
 Smoke は別の Electron セッションでシナリオ一覧・概要・時刻表を読み、`output/desktop-smoke/` に記録します。シナリオの書換えや solver 実行は行いません。Electron を閉じると、起動した BFF へ停止を要求し、5秒で終了しない場合はその子プロセスツリーだけを終了します。最適化中はアプリを開いたままにしてください。
 
+2026-09-11、GPT-5.6 Lunaが `electron/main.ts` と `bff/desktop_server.py` を独立して確認しました。loopback限定・Bearer認証・起動応答のHMAC・protocol/path分離・sandbox/contextIsolation・stdin終了監視・Windows子プロセス終了が対象で、P0/P1指摘0件。画面全機能や研究モデル全体を承認するレビューではありません。
+
 ## 大量データへの対応と測定範囲
 
 API は1ページ最大250件に制限し、React は見えている行と前後の行だけを描画します。検索とページ要求はキャンセル可能です。Parquet は先行 row group を飛ばし、新規保存は16,384行単位に分割します。SQLite の時刻表ページと件数は同じ読取りトランザクションで取得し、全時刻表を Python に展開しません。既存の重複行の表示規則を維持します。

@@ -40,6 +40,8 @@ Prepareの返却値が成功でも、遷移ネットワーク、折返し余裕�
 
 最初の凍結SHA `737e07be` の完全Prepare中に、地点照合の反復を観測した。[計算単位のキャッシュ](LOCATION_LOOKUP_SCALABILITY_20260911.md)で同等性・性能・回帰を検証したため、修正後の診断は新しいclean worktreeと出力から再実行する。旧SHAの未完了入力や結果は再利用しない。
 
+次の凍結SHA `0132e319` では冬週の完全Prepareが930.1375秒で完了したが、カタログ警告の追跡で路線metadataが読込時に上書きされる不具合を検出した。冬週成果物を保管し、春週途中で停止した。修正後は[路線情報の保存・Prepare前後ハッシュ](DATED_ROUTE_METADATA_PROVENANCE_20260911.md)も必須とし、4週とも新しい固定コードと出力で再実行する。旧結果のSHAを付け替えない。
+
 候補4ケースの生成、candidate namespaceの拒否、例外後の後続週実行、週単位のPrepare阻害、監査未実施の拒否を回帰テストで確認する。完全Prepareとsolver実行の結果は、凍結後の別成果物に記録する。
 
 診断の成功は、研究採用・予報技能・実運行再現・統合大域最適性を意味しない。独立レビュー、既存PowerPoint証拠の2件の不整合、正式研究実行は別の未解決ゲートである。全成果物を **DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS** として扱う。

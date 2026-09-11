@@ -1,6 +1,8 @@
 from pathlib import Path
 import json
 
+import pytest
+
 import scripts.benchmarks.run_shibu21_24_seasonal_diagnostic as seasonal_runner
 from scripts.benchmarks.run_shibu21_24_seasonal_diagnostic import (
     audit_parent_fleet,
@@ -232,3 +234,55 @@ def test_prepare_success_does_not_override_failed_scope_audit(tmp_path, monkeypa
     })
     assert result["cases"][week]["status"] == "BLOCKED_PREPARED_SCOPE_CONTRACT"
     assert "strict_coverage_precheck_not_checked" in result["blockers"][0]
+
+
+@pytest.mark.parametrize("change", ["none", "missing_hash", "direction", "zero_distance", "catalog_warning"])
+def test_preflight_requires_captured_route_metadata_after_all_physical_audits(
+    tmp_path, monkeypatch, change,
+):
+    monkeypatch.setattr(seasonal_runner, "ROOT", tmp_path)
+    week = "2025-02-03"
+    manifest_dir = tmp_path / "manifests" / week
+    canonical_dir = tmp_path / "prepared" / "scenario"
+    manifest_dir.mkdir(parents=True)
+    canonical_dir.mkdir(parents=True)
+    route = {"id": "route-a", "distanceKm": 5.5, "canonicalDirection": "outbound"}
+    case = {
+        "input_preparation_valid": True, "scenario_id": "scenario", "prepared_input_id": "input",
+        "declared_route_metadata_sha256": seasonal_runner.content_hash({"route-a": route}),
+        "route_metadata_preserved": True,
+        "scope_summary": {"route_catalog_audit": {"issueCount": 0, "checkedRouteCount": 1}},
+    }
+    if change == "missing_hash":
+        case.pop("declared_route_metadata_sha256")
+    elif change == "direction":
+        route["canonicalDirection"] = "inbound"
+    elif change == "zero_distance":
+        route["distanceKm"] = 0
+    elif change == "catalog_warning":
+        case["scope_summary"]["route_catalog_audit"]["issueCount"] = 1
+    (manifest_dir / "derived_scenarios.json").write_text(
+        json.dumps({"cases": [case]}), encoding="utf-8",
+    )
+    (canonical_dir / "input.json").write_text(json.dumps({
+        "routes": [route],
+        "prepared_scope_audit": {
+            "strict_coverage_precheck": {"checked": True, "infeasible": False},
+            "formal_transition_network_ready": True,
+            "formal_turnaround_sensitivity_ready": True,
+            "formal_vehicle_trip_compatibility_ready": True,
+        },
+    }), encoding="utf-8")
+    result = seasonal_runner.audit_prepared_inputs({
+        "evaluation_weeks": [week], "input_manifests_directory": "manifests",
+        "prepared_inputs_directory": "prepared",
+    })
+    expected = "READY" if change == "none" else "BLOCKED_ROUTE_METADATA_PROVENANCE"
+    assert result["cases"][week]["status"] == expected
+
+
+@pytest.mark.parametrize("distance", [None, True, "5.5", "invalid", float("nan"), float("inf"), -1.0])
+def test_route_distance_provenance_rejects_unusable_values_without_throwing(distance):
+    assert seasonal_runner._route_metadata_provenance_verified(
+        {"routes": [{"id": "route-a", "distanceKm": distance}]}, {},
+    ) is False
