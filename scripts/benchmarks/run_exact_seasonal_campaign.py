@@ -123,6 +123,8 @@ def _phase_summary(prepare: dict, diagnostic: dict | None) -> dict:
                 "DAY_AHEAD_PASSED"
                 if result.get("day_ahead_feasible")
                 else "DAY_AHEAD_FAILED"
+                if result.get("day_ahead_feasible") is False
+                else "DAY_AHEAD_RESULT_UNAVAILABLE"
                 if result.get("solve_attempted")
                 else "NOT_ATTEMPTED"
             ),
@@ -141,7 +143,9 @@ def _phase_summary(prepare: dict, diagnostic: dict | None) -> dict:
                 else "NOT_ATTEMPTED"
             ),
             "hourly_steps_accepted": int(result.get("hourly_steps_accepted") or 0),
-            "reasons": result.get("hourly_reasons") or [],
+            "reasons": result.get("hourly_reasons") or (
+                result.get("reasons") if result.get("day_ahead_physical_accepted") else []
+            ) or [],
         },
         "physical": {
             "day_ahead_accepted": result.get("day_ahead_physical_accepted"),

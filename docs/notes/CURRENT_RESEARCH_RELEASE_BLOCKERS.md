@@ -1,5 +1,13 @@
 # Current research release blockers
 
+## 2026-09-12 春週のPV実行不足を修正、新凍結版の四季実行待ち
+
+BESS固定値修正後の保持入力は54〜100時を通過したが、101時に未実行の予測PV充電を使う放電指令が物理SOC下限を超過した。実行prefixだけに未観測PVを信用しない在庫・hard受電制約を追加し、保持状態から101〜167時の全67回の求解・実測PV実行が通過した。全体回帰は2,212 passed / 既存PowerPoint証拠2 failed、独立実装レビューP0/P1は0件。対象rollingモデルのfeasible setを変えるため、全四季を新clean SHAで再Prepare・再実行する。週末物理・会計・最適性を事前制約や部分再現だけで成立としない。[詳細](ROLLING_PV_EXECUTION_RESERVE_20260912.md)。
+
+## 2026-09-12 冬週完走、春週BESS境界例外の修正後再実行待ち
+
+凍結 `803f8f9f` の冬週は全168時間・独立物理・最終会計を通過し、独立監査P0/P1は0件。春週はday-ahead物理と54時間を通過後、minimum_onlyで不要な固定BESS境界を一時生成する処理で停止した。対象処理を修正し、元の下限・週末条件・BEV参照・全候補を保持する。新clean SHAでの四季完走はまだ未成立。旧SHAの冬週を修正後の証拠へ付け替えない。最適性ギャップ未達、正式fleet-contract provenance、既存PowerPoint証拠2件等により、研究リリースは引き続きBLOCKED。[証拠と修正](ROLLING_BESS_REFERENCE_POLICY_20260912.md)。
+
 毎時の同一構造事前検査をハッシュ照合で再利用する性能修正も検証中。全接続・物理検査・受入条件は維持し、新clean SHAからの4季節実行完了まで研究リリースBLOCKEDを継続する。[境界と測定](STRICT_PRECHECK_REUSE_20260912.md)。
 
 ## 2026-09-12 冬週15時間通過後の数値境界例外を修正

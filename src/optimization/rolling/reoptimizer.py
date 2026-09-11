@@ -434,7 +434,10 @@ class RollingReoptimizer:
                 )
         problem = self._freeze_bev_terminal_soc_targets(problem)
         problem = self._freeze_bess_terminal_soc_targets(problem)
-        problem = self._apply_window_terminal_targets(problem, day_ahead_plan, service_current, lookahead_hours)
+        problem = self._apply_window_terminal_targets(
+            problem, day_ahead_plan, service_current, lookahead_hours,
+            bess_terminal_policy=bess_terminal_policy,
+        )
         if actual_soc:
             problem = self._apply_actual_soc(problem, actual_soc, unit="kwh")
         if actual_bess_soc_kwh:
@@ -477,7 +480,8 @@ class RollingReoptimizer:
 
     @staticmethod
     def _apply_window_terminal_targets(problem: CanonicalOptimizationProblem, plan: AssignmentPlan,
-                                       current_min: int, lookahead_hours: int | None) -> CanonicalOptimizationProblem:
+                                       current_min: int, lookahead_hours: int | None, *,
+                                       bess_terminal_policy: str = "scenario") -> CanonicalOptimizationProblem:
         policy = problem.metadata.get("rolling_window_terminal_policy", "return_to_evaluation_initial")
         if policy == "return_to_evaluation_initial":
             return problem
@@ -513,8 +517,20 @@ class RollingReoptimizer:
                 raise ValueError(f"Day-ahead terminal reference lacks vehicle {vid} at boundary {boundary}")
             targets[vid] = float(trace[boundary])
         assets = dict(problem.depot_energy_assets)
+        minimum_only_bess = str(bess_terminal_policy or "scenario").strip().lower() == "minimum_only"
         for depot, asset in assets.items():
             if not asset.bess_enabled:
+                continue
+            # A minimum-only window has no BESS reference equality. Building a
+            # discarded fixed target here can reject harmless solver roundoff
+            # before the explicit rolling policy is applied below.
+            if minimum_only_bess:
+                assets[depot] = replace(
+                    asset,
+                    bess_terminal_soc_policy="minimum_only",
+                    bess_terminal_soc_target_kwh=0.0,
+                    bess_terminal_soc_min_kwh=float(asset.bess_soc_min_kwh or 0.0),
+                )
                 continue
             trace = plan.bess_soc_kwh_by_depot_slot.get(depot,{})
             if boundary-1 not in trace:

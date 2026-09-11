@@ -1,5 +1,17 @@
 # Development Notes
 
+## 2026-09-12 未観測PVを信用しない実行prefixのBESS・受電制約
+
+追加native Gurobi回帰7件が通過し、独立実装レビューの残P0/P1は0件。UTF-8での全体回帰は2,212 passed / 既存PowerPoint証拠2 failed（98.32秒）、JUnitは `output/exact_depot_factor_validation/pytest-pv-execution-reserve-release-utf8.xml`。保持状態からの101〜167時は全67回の求解・実測PV実行を通過した。これは週途中からの診断再現であり、新しいclean SHAでの全四季Prepare・168時間・最終物理会計は別途必要。
+
+春の保持入力再現は54〜100時を通過後、101時の実測PV実行でBESS下限を約5.263e-5 kWh下回った。予定PV充電が未実行でも放電指令は固定されるため、native Stage 2に各committed slotの累積在庫下限を追加する。既存training_only_forecast_proxy契約のrollingだけを対象とし、実初期在庫＋系統充電−放電で物理下限を守る。hard importの場合はPVゼロ時の受電上限も課す。対象prefixのfeasible setは保守化され、費用が変わり得る。後処理修復・実PV先読みはなく、BEV終端・全接続・後続予測窓を保持する。旧冬週結果は新モデルの証拠へ流用しない。[数式・証拠・検証](docs/notes/ROLLING_PV_EXECUTION_RESERVE_20260912.md)。
+
+## 2026-09-12 Minimum-only BESSの不要な途中窓固定値を除去
+
+全体回帰は2,205 passed / 既存PowerPoint証拠2 failed（107.91秒）。境界6件・campaignを含む13件が通過し、reoptimizerと集計の独立レビューはP0/P1とも0件。JUnitは `output/exact_depot_factor_validation/pytest-bess-boundary-policy-release.xml`。保持入力からの再現確認と新clean SHAでの全四季実行は別ゲートとして扱う。
+
+凍結 `803f8f9f` の冬週は168/168時間・独立物理・実行会計を通過し、日別費用差0円。春週は54時間後にBESS境界1199.9999999999998 kWhを物理下限1200 kWh未満として例外停止した。明示minimum_onlyを適用する前に、一時的な固定targetを生成していたのが原因。到達するrolling helperへ明示policyを渡し、minimum_onlyではBESS参照値を生成せず物理floorを直接設定する。BEV境界と充電継続、週末の元floor、daily balance target、scenario既定動作を保持する。欠損day-ahead結果を失敗と誤表示するphase集計も区別し、rolling例外理由を保持する。旧成果物を変更せず、新clean SHAで全四季を再実行する。[詳細と検証](docs/notes/ROLLING_BESS_REFERENCE_POLICY_20260912.md)。
+
 ## 2026-09-12 同一構造のstrict coverage事前検査を再利用
 
 最終全体回帰は2,197 passed / 既存PowerPoint証拠2 failed（95.37秒）。対象68テスト、cache専用15件が通過し、独立レビューの残P0/P1は0件。同一hour・同一実測状態の比較は33.246秒→6.711秒で、割当・充電・SOC・source flow・費用が一致した。JUnitは `output/exact_depot_factor_validation/pytest-rolling-roundoff-precheck-release.xml`。新clean SHAでの4季節実行はこれから確認する。

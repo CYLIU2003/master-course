@@ -112,6 +112,28 @@ def test_campaign_stops_after_failure_without_preparing_later_weeks(tmp_path, mo
     assert result["summaries"][1]["prepare"]["status"] == "NOT_ATTEMPTED"
 
 
+def test_rolling_exception_does_not_relabel_missing_day_ahead_result_as_failure():
+    phases = _phase_summary({}, {
+        "solve_attempted": True,
+        "day_ahead_physical_accepted": True,
+        "hourly_steps_accepted": 54,
+        "reasons": ["ValueError: invalid rolling BESS reference"],
+        "accounting_eligible": False,
+    })
+    assert phases["solve"]["status"] == "DAY_AHEAD_RESULT_UNAVAILABLE"
+    assert phases["solve"]["feasible"] is None
+    assert phases["rolling"]["status"] == "ROLLING_FAILED"
+    assert phases["rolling"]["hourly_steps_accepted"] == 54
+    assert phases["rolling"]["reasons"] == ["ValueError: invalid rolling BESS reference"]
+    assert phases["accounting"]["eligible"] is False
+
+
+def test_explicit_day_ahead_infeasibility_remains_failed():
+    phases = _phase_summary({}, {"solve_attempted": True, "day_ahead_feasible": False})
+    assert phases["solve"]["status"] == "DAY_AHEAD_FAILED"
+    assert phases["rolling"]["status"] == "NOT_ATTEMPTED"
+
+
 def test_source_drift_blocks_before_fresh_prepare(tmp_path, monkeypatch):
     from scripts.benchmarks import prepare_shibu21_24_seasonal_inputs as preparation
     from scripts.benchmarks import run_shibu21_24_seasonal_diagnostic as diagnostic

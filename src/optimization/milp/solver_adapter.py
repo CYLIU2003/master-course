@@ -34,6 +34,7 @@ from src.optimization.common.bev_terminal_policy import (
     normalize_bev_terminal_soc_policy,
 )
 from src.optimization.milp.model_builder import MILPModelBuilder
+from src.optimization.milp.pv_execution_reserve import add_pv_execution_reserve_constraints
 from src.optimization.milp.depot_connection_factors import (
     ArcDomain, SuccessorRow, FactoredConnectionVariables,
     add_factor_soc_terms, create_factor_variables, factor_depot_connections,
@@ -22901,6 +22902,12 @@ class GurobiMILPAdapter:
                                 boundary_key = (depot_id,boundary_slot)
                                 stage2.addConstr(bess_soc_var[boundary_key] + eta_ch*(pv2bess_var[boundary_key]+g2bess_var[boundary_key])
                                                  - bess2bus_var[boundary_key]/eta_dis == daily_target)
+        pv_execution_reserve_audit = add_pv_execution_reserve_constraints(
+            stage2, problem, config, slot_indices,
+            is_remaining_day_reoptimization=is_remaining_day_reoptimization,
+            grid_to_bus_var=g2bus_var, pv_to_bus_var=pv2bus_var,
+            grid_to_bess_var=g2bess_var, bess_to_bus_var=bess2bus_var,
+        )
         if w_on_depot_var:
             w_on_var = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_on")
             w_off_var = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_off")
@@ -23239,6 +23246,7 @@ class GurobiMILPAdapter:
                 "stage1_feasible": True,
                 "stage2_feasible": False,
                 "supports_two_stage_milp": False,
+                "rolling_pv_execution_reserve": pv_execution_reserve_audit,
                 "supports_integrated_exact_milp": False,
                 "assignment_candidate_available": True,
                 "solver_objective_matches_accounting_total": False,
@@ -23598,6 +23606,7 @@ class GurobiMILPAdapter:
             "rolling_observed_on_peak_kw_by_depot": dict(
                 getattr(config, "rolling_observed_on_peak_kw_by_depot", {}) or {}
             ),
+            "rolling_pv_execution_reserve": pv_execution_reserve_audit,
             "rolling_observed_off_peak_kw_by_depot": dict(
                 getattr(config, "rolling_observed_off_peak_kw_by_depot", {}) or {}
             ),
