@@ -205,7 +205,10 @@ def _execution_case() -> tuple[
             "DEPOT": DepotEnergyAsset(
                 depot_id="DEPOT",
                 pv_enabled=True,
-                pv_generation_kwh_by_slot=(0.0, 0.0),
+                # The forecast supplies one kWh of PV in each target slot.
+                # Actual PV is zero, so the replay adds one kWh of grid import
+                # and creates a one-kWh contract overage in each slot.
+                pv_generation_kwh_by_slot=(1.0, 1.0),
             )
         },
         metadata={
@@ -221,21 +224,9 @@ def _execution_case() -> tuple[
             )
             for slot in range(3)
         ),
-        grid_to_bus_kwh_by_depot_slot={"DEPOT": {0: 11.0, 1: 11.0, 2: 11.0}},
+        grid_to_bus_kwh_by_depot_slot={"DEPOT": {0: 10.0, 1: 10.0, 2: 10.0}},
+        pv_to_bus_kwh_by_depot_slot={"DEPOT": {0: 1.0, 1: 1.0, 2: 1.0}},
         metadata={"source_provenance_exact": True},
-    )
-    execution_problem = replace(
-        problem,
-        price_slots=tuple(
-            EnergyPriceSlot(slot_index=index, grid_buy_yen_per_kwh=30.0)
-            for index in range(3)
-        ),
-        depot_energy_assets={
-            "DEPOT": replace(
-                problem.depot_energy_assets["DEPOT"],
-                pv_generation_kwh_by_slot=(0.0, 0.0, 0.0),
-            )
-        },
     )
     result = OptimizationEngineResult(
         mode=OptimizationMode.MILP,
@@ -245,7 +236,7 @@ def _execution_case() -> tuple[
         feasible=True,
         solver_metadata={"bev_terminal_soc_balance_satisfied": True},
     )
-    return problem, execution_problem, plan, result
+    return problem, problem, plan, result
 
 
 def _accounting_case(monkeypatch=None):
@@ -285,10 +276,32 @@ def test_executed_pv_prefix_accounts_only_target_slots_and_daily_ledger() -> Non
     assert breakdown["contract_overage_cost"] == pytest.approx(1000.0)
     assert breakdown["total_cost"] == pytest.approx(1660.0)
 
+    forecast_breakdown = CostEvaluator().evaluate(actual_problem, _execution_case()[2])
+    assert forecast_breakdown.contract_over_limit_kwh == pytest.approx(0.0)
+    assert forecast_breakdown.contract_overage_cost == pytest.approx(0.0)
+
+    # The executed result retains the look-ahead command for rolling state, so
+    # ledger reconciliation uses the same target prefix that accounting uses.
+    target_plan = replace(
+        executed.plan,
+        charging_slots=tuple(slot for slot in executed.plan.charging_slots if slot.slot_index < 2),
+        grid_to_bus_kwh_by_depot_slot={
+            depot: {slot: value for slot, value in values.items() if slot < 2}
+            for depot, values in executed.plan.grid_to_bus_kwh_by_depot_slot.items()
+        },
+        pv_to_bus_kwh_by_depot_slot={
+            depot: {slot: value for slot, value in values.items() if slot < 2}
+            for depot, values in executed.plan.pv_to_bus_kwh_by_depot_slot.items()
+        },
+        contract_over_limit_kwh_by_depot_slot={
+            depot: {slot: value for slot, value in values.items() if slot < 2}
+            for depot, values in executed.plan.contract_over_limit_kwh_by_depot_slot.items()
+        },
+    )
     evaluator = CostEvaluator()
-    ledger_breakdown = evaluator.evaluate(actual_problem, executed.plan)
+    ledger_breakdown = evaluator.evaluate(actual_problem, target_plan)
     _vehicle_ledger, daily_ledger = evaluator.build_plan_ledgers(
-        actual_problem, executed.plan, ledger_breakdown
+        actual_problem, target_plan, ledger_breakdown
     )
     assert sum(row.total_cost_jpy for row in daily_ledger) == pytest.approx(
         ledger_breakdown.total_cost
