@@ -122,6 +122,102 @@ def git_state() -> dict:
     }
 
 
+_SEASONAL_HOURS = 168
+
+
+def _verified_persisted_progress(output: Path, week: str) -> dict:
+    """Read only the safe progress fields written by ``solve_week``.
+
+    A failed solve must not inherit cost or acceptance fields from a partially
+    written JSON file.  The accepted-hour count is trusted only when its type,
+    week, and completed-prefix artifacts agree with the runner's write order.
+    """
+
+    path = output / "progress.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict) or payload.get("week") != week:
+        return {}
+
+    accepted = payload.get("hourly_steps_accepted")
+    if isinstance(accepted, bool) or not isinstance(accepted, int):
+        return {}
+    if not 0 <= accepted <= _SEASONAL_HOURS:
+        return {}
+
+    physical = payload.get("day_ahead_physical_accepted")
+    if physical is not None and not isinstance(physical, bool):
+        return {}
+
+    # A positive prefix is meaningful only after the day-ahead physical gate
+    # passed.  Keep that gate as an independent diagnostic field, but never
+    # let an unverified prefix count escape from the exception path.
+    if accepted > 0 and physical is not True:
+        return {
+            "hourly_steps_accepted": 0,
+            **({"day_ahead_physical_accepted": physical} if physical is not None else {}),
+        }
+
+    verified = {"hourly_steps_accepted": accepted}
+    if physical is not None:
+        verified["day_ahead_physical_accepted"] = physical
+    if accepted == 0:
+        return verified
+
+    # ``solve_week`` writes progress only after the complete execution state,
+    # PV audit, and accepted prefix have been persisted.  Parse and validate
+    # those files before inferring the next failed hour; file existence alone
+    # would allow truncated or placeholder JSON to overstate progress.
+    for hour in range(accepted):
+        folder = output / "rolling_hourly_chain" / f"hour_{hour:03d}"
+        try:
+            forecast = json.loads(
+                (folder / "forecast_result.json").read_text(encoding="utf-8")
+            )
+            execution_state = json.loads(
+                (folder / "execution_state.json").read_text(encoding="utf-8")
+            )
+            pv_audit = json.loads(
+                (folder / "pv_execution_audit.json").read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return {
+                "hourly_steps_accepted": 0,
+                "day_ahead_physical_accepted": physical,
+            }
+        if (
+            not isinstance(forecast, dict)
+            or forecast.get("feasible") is not True
+            or not isinstance(execution_state, dict)
+            or isinstance(execution_state.get("current_min"), bool)
+            or not isinstance(execution_state.get("current_min"), int)
+            or execution_state.get("current_min") != (hour + 1) * 60
+            or not isinstance(pv_audit, dict)
+            or not isinstance(pv_audit.get("policy"), str)
+            or not pv_audit["policy"]
+            or isinstance(pv_audit.get("start_slot"), bool)
+            or not isinstance(pv_audit.get("start_slot"), int)
+            or isinstance(pv_audit.get("stop_slot"), bool)
+            or not isinstance(pv_audit.get("stop_slot"), int)
+            or pv_audit["start_slot"] != hour * 4
+            or pv_audit["stop_slot"] != (hour + 1) * 4
+            or pv_audit.get("bus_charging_commands_unchanged") is not True
+            or not isinstance(pv_audit.get("rows"), list)
+            or pv_audit.get("future_observations_used") is not False
+            or not isinstance(pv_audit.get("provenance"), str)
+            or not pv_audit["provenance"]
+        ):
+            return {
+                "hourly_steps_accepted": 0,
+                "day_ahead_physical_accepted": physical,
+            }
+    if accepted < _SEASONAL_HOURS:
+        verified["failed_hour"] = accepted
+    return verified
+
+
 def normalize_route_code(value: object) -> str:
     """Normalize route labels for exact equality, preserving route semantics."""
     return "".join(unicodedata.normalize("NFKC", str(value or "")).split())
@@ -494,13 +590,16 @@ def run_diagnostic(config: dict, output: Path) -> list[dict]:
             summaries.append(result)
         except Exception as exc:
             after = git_state()
+            persisted_progress = _verified_persisted_progress(week_output, week)
             failure = {
                 "week": week,
                 "status": "DIAGNOSTIC_CASE_FAILED",
                 "research_status": "NOT_USED_FOR_RESEARCH_CONCLUSIONS",
                 "formal_solve": False,
                 "solve_attempted": not bool(blocked),
-                "hourly_steps_accepted": 0,
+                "hourly_steps_accepted": persisted_progress.get(
+                    "hourly_steps_accepted", 0
+                ),
                 "physical_accepted": None,
                 "accounting_eligible": False,
                 "final_week_cost_jpy": None,
@@ -514,6 +613,12 @@ def run_diagnostic(config: dict, output: Path) -> list[dict]:
                 "git_state_after": after,
                 "source_state_stable": week_state_before == after == source_state_before,
             }
+            if "day_ahead_physical_accepted" in persisted_progress:
+                failure["day_ahead_physical_accepted"] = persisted_progress[
+                    "day_ahead_physical_accepted"
+                ]
+            if "failed_hour" in persisted_progress:
+                failure["failed_hour"] = persisted_progress["failed_hour"]
             write_json(week_output / "failure.json", failure)
             summaries.append(failure)
         write_json(week_output / "summary.json", summaries[-1])

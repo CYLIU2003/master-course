@@ -15,6 +15,7 @@ from .vehicle_soc_contract import canonical_soc_energy, finite_soc_value
 
 ELECTRIC_POWERTRAINS = {"BEV", "PHEV", "FCEV"}
 DAY_MINUTES = 24 * 60
+_SOC_BOUNDARY_TOLERANCE_KWH = 1.0e-6
 BEV_TERMINAL_SOC_TARGET_KWH_BY_VEHICLE_KEY = (
     "bev_terminal_soc_target_kwh_by_vehicle"
 )
@@ -236,7 +237,7 @@ def vehicle_initial_soc_kwh(
     value = canonical_soc_energy(vehicle, "initial_soc", cap, .8)
     minimum = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=cap)
     maximum = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=cap)
-    if not minimum-1e-6 <= value <= maximum+1e-6:
+    if not minimum-_SOC_BOUNDARY_TOLERANCE_KWH <= value <= maximum+_SOC_BOUNDARY_TOLERANCE_KWH:
         raise ValueError(f"Initial SOC for {getattr(vehicle, 'vehicle_id', '')} is outside [{minimum}, {maximum}] kWh")
     return value
 
@@ -284,8 +285,14 @@ def effective_final_soc_target_kwh(
                 f"Frozen BEV terminal SOC target for {vehicle_id!r} must be finite"
             )
         floor = final_soc_floor_kwh(problem, vehicle, cap_kwh=cap)
-        if not floor <= frozen_target <= maximum:
-            raise ValueError("Frozen terminal SOC target violates physical bounds")
+        # Solver/JSON boundary values can differ by a few floating-point ulps
+        # (62.8 versus 0.2 * 314). Keep the recorded energy unchanged and use
+        # the same numerical boundary tolerance as the measured initial state.
+        if not floor-_SOC_BOUNDARY_TOLERANCE_KWH <= frozen_target <= maximum+_SOC_BOUNDARY_TOLERANCE_KWH:
+            raise ValueError(
+                f"Frozen terminal SOC target for {vehicle_id!r} violates "
+                f"physical bounds: target={frozen_target}, bounds=[{floor}, {maximum}] kWh"
+            )
         return frozen_target
     tolerance_ratio = percent_like_to_ratio(
         metadata.get("final_soc_target_tolerance_percent")

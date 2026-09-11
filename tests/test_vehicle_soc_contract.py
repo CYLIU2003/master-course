@@ -112,3 +112,22 @@ def test_terminal_target_above_vehicle_upper_bound_is_rejected():
 
 def test_vehicles_with_different_upper_bounds_are_not_symmetry_clones():
     assert _problem_vehicle_symmetry_signature(_vehicle()) != _problem_vehicle_symmetry_signature(_vehicle(maximum_soc_kwh=85))
+
+
+@pytest.mark.parametrize('target', [62.8, 282.6000000000001])
+def test_frozen_boundary_target_keeps_float_roundoff_without_clipping(target):
+    vehicle = _vehicle(battery_capacity_kwh=314, initial_soc=159.971696,
+                       reserve_soc=0.2*314, maximum_soc_kwh=282.6)
+    problem = _problem(vehicle, bev_terminal_soc_policy='return_to_initial',
+                       bev_terminal_soc_target_kwh_by_vehicle={'v1':target})
+    assert effective_final_soc_target_kwh(problem, vehicle) == target
+
+
+@pytest.mark.parametrize('target', [62.8-2e-6, 282.6+2e-6, float('nan'), float('inf')])
+def test_frozen_boundary_target_rejects_real_bound_violation_or_nonfinite(target):
+    vehicle = _vehicle(battery_capacity_kwh=314, initial_soc=159.971696,
+                       reserve_soc=0.2*314, maximum_soc_kwh=282.6)
+    problem = _problem(vehicle, bev_terminal_soc_policy='return_to_initial',
+                       bev_terminal_soc_target_kwh_by_vehicle={'v1':target})
+    with pytest.raises(ValueError, match='physical bounds|must be finite'):
+        effective_final_soc_target_kwh(problem, vehicle)

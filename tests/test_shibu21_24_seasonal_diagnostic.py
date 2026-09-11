@@ -263,6 +263,200 @@ def test_run_diagnostic_records_one_week_failure_and_continues(tmp_path, monkeyp
     assert public["formal_solve_executed"] is False
 
 
+def test_run_diagnostic_preserves_verified_hourly_prefix_on_exception(
+    tmp_path, monkeypatch
+):
+    week = "2025-02-03"
+    preflight = {
+        "status": "READY_FOR_FROZEN_RUN",
+        "blockers": [],
+        "worktree_dirty": False,
+        "route_scope": {"blockers": []},
+        "prepared_inputs": {"cases": {week: {"status": "READY"}}},
+    }
+    monkeypatch.setattr(
+        seasonal_runner, "run_preflight", lambda config, output: preflight
+    )
+    monkeypatch.setattr(
+        seasonal_runner,
+        "git_state",
+        lambda: {"sha": "frozen-sha", "status_porcelain": ""},
+    )
+
+    def fake_solve(failed_week, output, config, **kwargs):
+        assert failed_week == week
+        seasonal_runner.write_json(
+            output / "progress.json",
+            {
+                "week": week,
+                "status": "DIAGNOSTIC",
+                "hourly_steps_accepted": 15,
+                "day_ahead_physical_accepted": True,
+                "accounting_eligible": True,
+                "executed_cost": {"total_cost": 123.0},
+            },
+        )
+        for hour in range(15):
+            folder = output / "rolling_hourly_chain" / f"hour_{hour:03d}"
+            seasonal_runner.write_json(folder / "forecast_result.json", {"feasible": True})
+            seasonal_runner.write_json(
+                folder / "execution_state.json",
+                {"current_min": (hour + 1) * 60},
+            )
+            seasonal_runner.write_json(
+                folder / "pv_execution_audit.json",
+                {
+                    "policy": "test_policy",
+                    "start_slot": hour * 4,
+                    "stop_slot": (hour + 1) * 4,
+                    "bus_charging_commands_unchanged": True,
+                    "rows": [],
+                    "future_observations_used": False,
+                    "provenance": "test_provenance",
+                },
+            )
+        raise ValueError("failure after accepted prefix")
+
+    monkeypatch.setattr(seasonal_runner, "solve_week", fake_solve)
+    summaries = seasonal_runner.run_diagnostic(
+        {
+            "evaluation_weeks": [week],
+            "route_codes": ["渋21", "渋22", "渋23", "渋24"],
+            "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
+        },
+        tmp_path,
+    )
+
+    failure = summaries[0]
+    assert failure["status"] == "DIAGNOSTIC_CASE_FAILED"
+    assert failure["day_ahead_physical_accepted"] is True
+    assert failure["hourly_steps_accepted"] == 15
+    assert failure["failed_hour"] == 15
+    assert failure["accounting_eligible"] is False
+    assert failure["executed_cost"] == {}
+    assert "total_cost" not in failure
+
+
+def test_run_diagnostic_discards_missing_or_malformed_progress_on_exception(
+    tmp_path, monkeypatch
+):
+    week = "2025-02-03"
+    preflight = {
+        "status": "READY_FOR_FROZEN_RUN",
+        "blockers": [],
+        "worktree_dirty": False,
+        "route_scope": {"blockers": []},
+        "prepared_inputs": {"cases": {week: {"status": "READY"}}},
+    }
+    monkeypatch.setattr(
+        seasonal_runner, "run_preflight", lambda config, output: preflight
+    )
+    monkeypatch.setattr(
+        seasonal_runner,
+        "git_state",
+        lambda: {"sha": "frozen-sha", "status_porcelain": ""},
+    )
+
+    def fake_solve(failed_week, output, config, **kwargs):
+        seasonal_runner.write_json(
+            output / "progress.json",
+            {
+                "week": week,
+                "hourly_steps_accepted": "15",
+                "day_ahead_physical_accepted": "true",
+            },
+        )
+        raise RuntimeError("malformed progress must fail safe")
+
+    monkeypatch.setattr(seasonal_runner, "solve_week", fake_solve)
+    failure = seasonal_runner.run_diagnostic(
+        {
+            "evaluation_weeks": [week],
+            "route_codes": ["渋21", "渋22", "渋23", "渋24"],
+            "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
+        },
+        tmp_path,
+    )[0]
+
+    assert failure["hourly_steps_accepted"] == 0
+    assert "day_ahead_physical_accepted" not in failure
+    assert "failed_hour" not in failure
+    assert failure["accounting_eligible"] is False
+    assert failure["executed_cost"] == {}
+
+
+@pytest.mark.parametrize("artifact_failure", ["missing", "malformed"])
+def test_run_diagnostic_discards_unverified_prefix_artifacts_on_exception(
+    tmp_path, monkeypatch, artifact_failure
+):
+    week = "2025-02-03"
+    preflight = {
+        "status": "READY_FOR_FROZEN_RUN",
+        "blockers": [],
+        "worktree_dirty": False,
+        "route_scope": {"blockers": []},
+        "prepared_inputs": {"cases": {week: {"status": "READY"}}},
+    }
+    monkeypatch.setattr(
+        seasonal_runner, "run_preflight", lambda config, output: preflight
+    )
+    monkeypatch.setattr(
+        seasonal_runner,
+        "git_state",
+        lambda: {"sha": "frozen-sha", "status_porcelain": ""},
+    )
+
+    def fake_solve(failed_week, output, config, **kwargs):
+        seasonal_runner.write_json(
+            output / "progress.json",
+            {
+                "week": week,
+                "hourly_steps_accepted": 2,
+                "day_ahead_physical_accepted": True,
+            },
+        )
+        for hour in range(2):
+            folder = output / "rolling_hourly_chain" / f"hour_{hour:03d}"
+            seasonal_runner.write_json(folder / "forecast_result.json", {"feasible": True})
+            seasonal_runner.write_json(
+                folder / "execution_state.json", {"current_min": (hour + 1) * 60}
+            )
+        if artifact_failure == "malformed":
+            (output / "rolling_hourly_chain" / "hour_001" / "pv_execution_audit.json").write_text(
+                "{malformed", encoding="utf-8"
+            )
+        # The PV audit is deliberately absent or malformed for hour 1.  A
+        # progress count alone must never be treated as an accepted prefix.
+        seasonal_runner.write_json(
+            output / "rolling_hourly_chain" / "hour_000" / "pv_execution_audit.json",
+            {
+                "policy": "test_policy",
+                "start_slot": 0,
+                "stop_slot": 4,
+                "bus_charging_commands_unchanged": True,
+                "rows": [],
+                "future_observations_used": False,
+                "provenance": "test_provenance",
+            },
+        )
+        raise RuntimeError("missing prefix artifact must fail safe")
+
+    monkeypatch.setattr(seasonal_runner, "solve_week", fake_solve)
+    failure = seasonal_runner.run_diagnostic(
+        {
+            "evaluation_weeks": [week],
+            "route_codes": ["渋21", "渋22", "渋23", "渋24"],
+            "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
+        },
+        tmp_path,
+    )[0]
+
+    assert failure["hourly_steps_accepted"] == 0
+    assert failure["day_ahead_physical_accepted"] is True
+    assert "failed_hour" not in failure
+    assert failure["accounting_eligible"] is False
+
+
 def test_invalid_prepare_blocks_only_its_week_and_preserves_four_route_scope(tmp_path, monkeypatch):
     weeks = ["2025-02-03", "2025-05-12"]
     preflight = {

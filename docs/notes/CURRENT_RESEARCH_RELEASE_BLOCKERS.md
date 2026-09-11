@@ -1,5 +1,11 @@
 # Current research release blockers
 
+毎時の同一構造事前検査をハッシュ照合で再利用する性能修正も検証中。全接続・物理検査・受入条件は維持し、新clean SHAからの4季節実行完了まで研究リリースBLOCKEDを継続する。[境界と測定](STRICT_PRECHECK_REUSE_20260912.md)。
+
+## 2026-09-12 冬週15時間通過後の数値境界例外を修正
+
+`cdd66532` の冬週はday-ahead物理検証と15時間を通過したが、16回目の境界SOC検査が約7.1e-15 kWhの丸め差で例外終了した。frozen SOCの保存値と物理条件を保持し、既存初期SOCと同じ1e-6 kWh数値許容差を適用する。新SHAのfresh Prepare・全4季節168時間・最終物理と会計受入は未完了である。前回summaryの0時間は例外集計不具合であり、raw progressと15件の実行状態が通過を示す。[根拠](ROLLING_TERMINAL_CHARGE_SESSION_20260912.md)。
+
 ## 2026-09-12 全接続day-ahead物理通過、rolling窓末の充電継続を修正
 
 凍結 `2bd7cc9f` の冬週は1,704便・60台・全78,647,760接続を保持してday-ahead物理検証を通過した。Stage 1 gap84.65%は宣言10%に未到達であり最適性を主張しない。rolling初回の窓末充電継続の欠落を修正し、保持入力で最初の窓は実行可能となった。新clean SHAの完全Prepareから4季節各168時間・最終物理・会計の受入まで再実行する必要がある。研究リリースはBLOCKED。[根拠と境界](ROLLING_TERMINAL_CHARGE_SESSION_20260912.md)。

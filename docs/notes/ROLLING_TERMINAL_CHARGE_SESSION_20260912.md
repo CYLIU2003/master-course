@@ -1,5 +1,45 @@
 # Rolling terminal charging-session continuity
 
+## Follow-up on frozen cdd66532: SOC roundoff after 15 hours
+
+The fresh winter day-ahead again passed native feasibility and independent
+physical validation (447.481 seconds; Stage 1 gap 0.8464525489). Fifteen hourly
+execution prefixes were persisted successfully. The next call, hour 15, raised
+`Frozen terminal SOC target violates physical bounds` at forecast boundary 156.
+The exact failing value was 62.8 kWh; the canonical reserve was
+62.800000000000004 kWh. Their difference is 7.105427357601002e-15 kWh.
+An audit of all stored reference points found 215 strict floating-point boundary
+comparisons with that same maximum discrepancy; no material SOC violation was
+identified. The canonical vehicle parameters match the preceding frozen input.
+
+`effective_final_soc_target_kwh` now uses the same 1e-6 kWh numerical boundary
+tolerance as `vehicle_initial_soc_kwh`. It returns the original frozen value
+unchanged. Native SOC bounds, targets, cost formulas and independent physical
+validation remain in place. Nonfinite targets and deviations greater than the
+numeric tolerance still raise, with the vehicle, target and bounds in the error.
+Six regressions cover lower/upper roundoff without clipping and genuine lower/
+upper violations, NaN and infinity. The relevant SOC and session tests pass 33/33.
+
+The exception handler previously replaced all partial progress with zero. The
+failed campaign's raw `progress.json` and 15 hourly artifact directories are the
+evidence for progress; its summary's zero is a reporting defect. The handler is
+corrected to retain only supported progress while keeping final costs
+empty and accounting/research eligibility false. This failure does not establish
+168-hour acceptance, and subsequent seasons were not executed.
+
+The corrected reporting helper recovered exactly 15 accepted hours and failed
+hour 15 from the retained real artifacts. A resumed diagnostic with the SOC fix
+passed hours 15 through 26, including actual-PV execution handoff and the first
+service-day boundary. It does not replace a fresh campaign. After the independent
+structural precheck reuse change, hours 27 through 32 also passed; see
+[reuse equivalence and timing](STRICT_PRECHECK_REUSE_20260912.md).
+
+Final combined validation: 2,197 passed / 2 existing PowerPoint evidence failures
+in 95.37 seconds. The targeted cache/SOC/progress suite passed 68 tests and
+independent review found zero remaining P0/P1 in these changes. JUnit is
+`output/exact_depot_factor_validation/pytest-rolling-roundoff-precheck-release.xml`.
+New clean-commit execution remains required before a weekly acceptance claim.
+
 ## Verified failure on frozen 2bd7cc9f
 
 The fresh winter Prepare retained 1,704 timetable trips, the exact 60-vehicle

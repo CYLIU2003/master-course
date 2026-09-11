@@ -1,5 +1,15 @@
 # Development Notes
 
+## 2026-09-12 同一構造のstrict coverage事前検査を再利用
+
+最終全体回帰は2,197 passed / 既存PowerPoint証拠2 failed（95.37秒）。対象68テスト、cache専用15件が通過し、独立レビューの残P0/P1は0件。同一hour・同一実測状態の比較は33.246秒→6.711秒で、割当・充電・SOC・source flow・費用が一致した。JUnitは `output/exact_depot_factor_validation/pytest-rolling-roundoff-precheck-release.xml`。新clean SHAでの4季節実行はこれから確認する。
+
+毎時約33秒の計算をプロファイルし、計測器込み134.713秒中116.890秒が同一1,434,720便対の事前検査だった。engine内の1件キャッシュに、canonical scenario/trips/DispatchContext全field、車両ID・type・home・availability、実際に使用する3つのmetadata制御を丸めずハッシュ化する。入力変更・custom context・未対応値では完全再検査する。SOC/PV/燃料は各時刻でnative求解と物理検査を継続し、接続候補や数学モデルは変更しない。[同等性契約・検証](docs/notes/STRICT_PRECHECK_REUSE_20260912.md)。
+
+## 2026-09-12 Frozen終端SOCの丸め差と例外時の進捗保存
+
+凍結 `cdd66532` は冬週day-ahead物理検証と15時間のrollingを通過後、境界slot156の62.8 kWhと下限62.800000000000004 kWhの差で停止した。保存SOCをclampせず、frozen targetの範囲検査を初期SOCと同じ1e-6 kWh数値許容差へ統一した。実際の上下限逸脱・非有限値の拒否を含む関連33テストが通過した。例外時に受入時間を0へ戻していた集計も、保存済み証拠を検査して部分進捗だけ保持するよう修正する。週間費用・研究受入は引き続き未成立。[差分・検証](docs/notes/ROLLING_TERMINAL_CHARGE_SESSION_20260912.md)。
+
 ## 2026-09-12 Rollingの途中窓での充電継続
 
 保持入力で実測状態を引き継ぐ4時間連続診断が通過し、対象独立レビューの残P0/P1は0件。全体回帰は2,172 passed / 既存PowerPoint証拠2 failed（99.12秒）。JUnitは `output/exact_depot_factor_validation/pytest-rolling-terminal-release.xml`。研究受入は未成立。
