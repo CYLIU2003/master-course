@@ -41,4 +41,4 @@ native solverの既定単価と制約は変わらない。変更はcanonical単�
 
 全体回帰は **2,240 passed / 既存PowerPoint証拠2 failed、102.56秒**。JUnitは `output/exact_depot_factor_validation/pytest-contract-price-release.xml`。残る2件は `test_original_and_all_bound_sources_unchanged` と `test_unrelated_presentation_parts_remain_byte_identical` であり、資料のhash・部品集合の既存不一致を保持する。`git diff --check` も対象変更で通過した。
 
-新clean SHAの四季完走は未成立。既存PowerPoint証拠2件、宣言10%の最適性ギャップ未達、正式fleet-contractの未宣言、2026時刻表と2025評価日、2024年だけの予測学習という制限は残る。結果は **DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS**、研究リリースは **BLOCKED**。
+新clean SHA `e09fb550` で全四季の新規Prepare・各168時間・最終物理会計が通過し、独立監査も完了した。春の新規実行では超過料金15,522.689810527645円、総費用4,256,622.315953718円が正しく保存され、日別差0円。夏・秋の正の超過料金も独立grid再計算と一致した。[四季完走と丸め前の証拠](SHIBU21_23_FOUR_SEASON_COMPLETION_20260912.md)。既存PowerPoint証拠2件、宣言10%の最適性ギャップ未達、正式fleet-contractの未宣言、2026時刻表と2025評価日、2024年だけの予測学習という制限は残る。結果は **DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS**、研究リリースは **BLOCKED**。

@@ -1,5 +1,19 @@
 # Current research release blockers
 
+## 2026-09-12 現在判定: 四季の診断計算は完走、研究採用はBLOCKED
+
+`e09fb550` の新規Prepareから、渋21〜23・60台の四季各7日間が全て168/168時間、最終物理検証、確定会計を通過した。全接続保持、前後のclean SHA、超過量と料金、日別台帳の一致を確認し、全四季のLuna独立監査で新たなP0/P1技術欠陥は0件。これまでの計算停止・料金欠落は今回の新規実行で解消を確認した。[結果・費用・証拠](SHIBU21_23_FOUR_SEASON_COMPLETION_20260912.md)。
+
+研究採用に残る条件:
+
+- 全4週がStage 1 time limit、gap約84〜85%で事前宣言10%に未達。Phase 3 two-stageであり、全接続保持から統合全体最適性は主張できない。
+- 観測した入力ID・inventoryの整合は通過したが、正式research fleet contractは `UNDECLARED`。
+- 2026時刻表・2025評価日を組み合わせた診断であり、実運行再現ではない。PVは履歴推定値、予測学習は2024年のみ。
+- 車両電源配分・日別費用配賦は会計上の配賦を含む。solver-nativeな車両別電源来歴とは区別する。
+- 全体回帰2,240 passed / 既存PowerPoint証拠2 failed。原本hash・部品集合の不一致が残る。
+
+したがって `DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS` を維持する。以下は停止・修正の履歴であり、現時点の四季実行状況は上記の完走記録を参照。
+
 ## 2026-09-12 春の超過料金欠落を検出、四季の再実行が必要
 
 修正後の全体回帰は2,240 passed / 既存資料2 failed。新規12件・関連97件と独立コードレビュー残P0/P1ゼロを確認した。新clean SHAの全四季検証は未完了。

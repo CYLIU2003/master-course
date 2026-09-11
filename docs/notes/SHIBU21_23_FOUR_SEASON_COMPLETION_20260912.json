@@ -1,0 +1,1051 @@
+{
+  "schema_version": "four_season_completion_audit_v1",
+  "generated_at_utc": "2026-09-11T22:53:23.326162+00:00",
+  "source_git_sha": "e09fb550379db71730b1ee5025e721d64022303b",
+  "campaign_directory": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912",
+  "campaign_summary_sha256": "d2e053da77a80044e93bca2b56dd67a4f4b54d67b6a6a7fda85ff5b13f630e44",
+  "source_design_sha256": "9b9ebe80a3d10b4f6a17fa5d188a3bb283ccc018888ce335931a6c42d85f1e1b",
+  "status": "DIAGNOSTIC_EXECUTION_PASSED_ALL_FOUR_WEEKS",
+  "research_status": "BLOCKED_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
+  "accepted_hourly_steps": 672,
+  "accepted_quarter_hour_slots": 2688,
+  "weeks": [
+    {
+      "season": "冬",
+      "week": "2025-02-03",
+      "end_date": "2025-02-09",
+      "status": "DIAGNOSTIC_EXECUTION_PASSED",
+      "hourly_steps_accepted": 168,
+      "trip_count": 1704,
+      "distance_km": 13925.428829,
+      "input_fleet": {
+        "BEV": 35,
+        "ICE": 25
+      },
+      "used_vehicle_count": 32,
+      "used_vehicle_types": {
+        "BEV": 26,
+        "ICE": 6
+      },
+      "full_candidate_arcs": 78647760,
+      "pruned_arcs": 0,
+      "physical_violation_metrics": {
+        "unassigned_trip_count": 0,
+        "duplicate_trip_count": 0,
+        "unknown_vehicle_count": 0,
+        "vehicle_time_overlap_count": 0,
+        "infeasible_transition_count": 0,
+        "location_discontinuity_count": 0,
+        "unknown_operator_count": 0,
+        "blank_charger_id_count": 0,
+        "unknown_charger_id_count": 0,
+        "charger_depot_mismatch_count": 0,
+        "charging_location_violation_count": 0,
+        "charger_compatibility_violation_count": 0,
+        "charger_power_violation_count": 0,
+        "charger_concurrency_violation_count": 0,
+        "refueling_location_violation_count": 0,
+        "refueling_powertrain_violation_count": 0,
+        "ev_soc_lower_violation_count": 0,
+        "ev_soc_upper_violation_count": 0,
+        "ev_soc_contract_violation_count": 0,
+        "bev_terminal_soc_violation_count": 0,
+        "fuel_lower_violation_count": 0,
+        "fuel_upper_violation_count": 0
+      },
+      "costs": {
+        "total_cost": 4221549.725308179,
+        "energy_cost": 99925.53669517174,
+        "electricity_cost": 62540.31503587976,
+        "fuel_cost": 37385.22165929199,
+        "vehicle_usage_cost": 4120000.0,
+        "co2_cost": 1624.1886130055286,
+        "contract_overage_cost": 1.2825296380469808e-09,
+        "contract_over_limit_kwh": 2.5650592760939617e-12,
+        "used_vehicle_day_count": 206,
+        "grid_import_kwh": 2084.677167862973,
+        "pv_generated_kwh": 21340.7375,
+        "total_co2_kg": 1624.1886130055286,
+        "ice_fuel_consumed_l": 249.2348110619469
+      },
+      "accounting": {
+        "consistent": true,
+        "charge_enabled": true,
+        "executed_overage_kwh": 2.5650592760939617e-12,
+        "reported_overage_kwh": 2.5650592760939617e-12,
+        "penalty_yen_per_kwh": 500.0,
+        "expected_cost_jpy": 1.2825296380469808e-09,
+        "reported_cost_jpy": 1.2825296380469808e-09,
+        "cost_difference_jpy": 0.0,
+        "quantity_difference_kwh": 0.0
+      },
+      "independent_grid_excess_kwh": 2.5650592760939617e-12,
+      "independent_overage_fee_jpy": 1.2825296380469808e-09,
+      "daily_ledger_total_jpy": 4221549.725308179,
+      "daily_ledger_difference_jpy": 0.0,
+      "daily_ledger": [
+        {
+          "day_index": 0,
+          "service_date": "2025-02-03",
+          "ev_provisional_drive_cost_jpy": 87706.87422335998,
+          "ev_realized_charge_cost_jpy": 8653.754398247818,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 6105.693053097344,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 597457.2099143903,
+          "other_operating_cost_allocated_jpy": 588803.4555161425,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 1,
+          "service_date": "2025-02-04",
+          "ev_provisional_drive_cost_jpy": 84665.69744975996,
+          "ev_realized_charge_cost_jpy": 8097.556875279806,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 7726.184867256636,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 596901.0123914223,
+          "other_operating_cost_allocated_jpy": 588803.4555161425,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 2,
+          "service_date": "2025-02-05",
+          "ev_provisional_drive_cost_jpy": 86451.08889563994,
+          "ev_realized_charge_cost_jpy": 8220.286672626551,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 6693.35253318584,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 597023.742188769,
+          "other_operating_cost_allocated_jpy": 588803.4555161425,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 3,
+          "service_date": "2025-02-06",
+          "ev_provisional_drive_cost_jpy": 85242.37276883997,
+          "ev_realized_charge_cost_jpy": 7819.240412976631,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 7709.367245575219,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 596622.6959291191,
+          "other_operating_cost_allocated_jpy": 588803.4555161425,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 4,
+          "service_date": "2025-02-07",
+          "ev_provisional_drive_cost_jpy": 88550.45799095999,
+          "ev_realized_charge_cost_jpy": 9011.870547313134,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 4570.271482300884,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 597815.3260634557,
+          "other_operating_cost_allocated_jpy": 588803.4555161425,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 5,
+          "service_date": "2025-02-08",
+          "ev_provisional_drive_cost_jpy": 70966.85882831996,
+          "ev_realized_charge_cost_jpy": 8716.444682445252,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 2290.176238938053,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 597519.9001985878,
+          "other_operating_cost_allocated_jpy": 588803.4555161425,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 6,
+          "service_date": "2025-02-09",
+          "ev_provisional_drive_cost_jpy": 63127.867671959975,
+          "ev_realized_charge_cost_jpy": 12021.161446999999,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 2290.1762389380524,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 37385.22165929204,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 638209.8386224345,
+          "other_operating_cost_allocated_jpy": 588803.4555161425,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        }
+      ],
+      "bess_observed_min_kwh": 1199.9999999999998,
+      "bess_observed_max_kwh": 3970.862324700016,
+      "bess_terminal": {
+        "tsurumaki": {
+          "policy": "minimum_only",
+          "initial_soc_kwh": 3000.0,
+          "target_soc_kwh": null,
+          "terminal_soc_kwh": 1200.0000000000105,
+          "terminal_soc_delta_kwh": -1799.9999999999895,
+          "terminal_soc_floor_kwh": 1200.0,
+          "terminal_soc_ceiling_kwh": 4800.0,
+          "absolute_deviation_kwh": null,
+          "balanced": true
+        }
+      },
+      "stage1_status": "time_limit",
+      "stage1_gap": 0.8464525489261578,
+      "stage2_uncertified_hour_indices": [
+        14,
+        24,
+        25,
+        33,
+        34,
+        35,
+        36,
+        37,
+        41,
+        46,
+        49,
+        51,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        75,
+        80,
+        86,
+        114
+      ],
+      "formal_fleet_status": "UNDECLARED",
+      "all_prefix_state_continuity_passed": true,
+      "all_prefix_pv_information_boundaries_passed": true,
+      "prefix_artifact_digest_sha256": "53d006b09de0b73ceb818d9ae50b4249403a8cea5058d134a17c996d380d0a31",
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\summary.json",
+          "sha256": "5d1fc2d48771631b9e685f3280987a88b188adc0f239039a6f519b35f7f84e7c"
+        },
+        "input_audit": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\input_audit.json",
+          "sha256": "57be8d60f9c7952d4a652dee0de535d7395474ff5f9b2dcc49c8cac24b36da99"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\prepared_inputs\\518497ff-2049-41cb-94b0-b86eed01bb21\\prepared-b0848bfe2d664913-1d6a2773c8b93b77-8acc7b3a.json",
+          "sha256": "8ab2dc4d618446ffa8781ec567655543c2142809358d55d5ac93ea055e2e077d"
+        },
+        "summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\summary.json",
+          "sha256": "9cbf79a4670db90d2f8e35e6c424375a0914286d82b7e8f9ebe632f48686bd02"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "b259bb240fee6e9ed9f71ce8c2838f117af172023b1700d9d0757af184f163c6"
+        },
+        "executed_plan_with_daily_ledger": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "1e73e29934f7e7303d5096259c487cd54e8aceb90b8be307bdf87ea79bb62393"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "dab2c7790060f35f71894c655b709a976e13f2163f9dcdabc2275cb28ad38fa0"
+        },
+        "canonical_day_ahead": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\canonical_solver_result.json",
+          "sha256": "0ea2acae1481899d69d10f9b2ad5d0f853f5af7e59d254abb952c449a3e52af1"
+        }
+      }
+    },
+    {
+      "season": "春",
+      "week": "2025-05-12",
+      "end_date": "2025-05-18",
+      "status": "DIAGNOSTIC_EXECUTION_PASSED",
+      "hourly_steps_accepted": 168,
+      "trip_count": 1704,
+      "distance_km": 13925.428829,
+      "input_fleet": {
+        "BEV": 35,
+        "ICE": 25
+      },
+      "used_vehicle_count": 32,
+      "used_vehicle_types": {
+        "BEV": 26,
+        "ICE": 6
+      },
+      "full_candidate_arcs": 78647760,
+      "pruned_arcs": 0,
+      "physical_violation_metrics": {
+        "unassigned_trip_count": 0,
+        "duplicate_trip_count": 0,
+        "unknown_vehicle_count": 0,
+        "vehicle_time_overlap_count": 0,
+        "infeasible_transition_count": 0,
+        "location_discontinuity_count": 0,
+        "unknown_operator_count": 0,
+        "blank_charger_id_count": 0,
+        "unknown_charger_id_count": 0,
+        "charger_depot_mismatch_count": 0,
+        "charging_location_violation_count": 0,
+        "charger_compatibility_violation_count": 0,
+        "charger_power_violation_count": 0,
+        "charger_concurrency_violation_count": 0,
+        "refueling_location_violation_count": 0,
+        "refueling_powertrain_violation_count": 0,
+        "ev_soc_lower_violation_count": 0,
+        "ev_soc_upper_violation_count": 0,
+        "ev_soc_contract_violation_count": 0,
+        "bev_terminal_soc_violation_count": 0,
+        "fuel_lower_violation_count": 0,
+        "fuel_upper_violation_count": 0
+      },
+      "costs": {
+        "total_cost": 4256622.315953718,
+        "energy_cost": 119163.56631791711,
+        "electricity_cost": 82694.05317632423,
+        "fuel_cost": 36469.513141592884,
+        "vehicle_usage_cost": 4120000.0,
+        "co2_cost": 1936.0598252728732,
+        "contract_overage_cost": 15522.689810527645,
+        "contract_over_limit_kwh": 31.04537962105529,
+        "used_vehicle_day_count": 206,
+        "grid_import_kwh": 2756.468439211048,
+        "pv_generated_kwh": 26623.9125,
+        "total_co2_kg": 1936.0598252728732,
+        "ice_fuel_consumed_l": 243.13008761061948
+      },
+      "accounting": {
+        "consistent": true,
+        "charge_enabled": true,
+        "executed_overage_kwh": 31.04537962105529,
+        "reported_overage_kwh": 31.04537962105529,
+        "penalty_yen_per_kwh": 500.0,
+        "expected_cost_jpy": 15522.689810527645,
+        "reported_cost_jpy": 15522.689810527645,
+        "cost_difference_jpy": 0.0,
+        "quantity_difference_kwh": 0.0
+      },
+      "independent_grid_excess_kwh": 31.04537962105529,
+      "independent_overage_fee_jpy": 15522.689810527645,
+      "daily_ledger_total_jpy": 4256622.315953718,
+      "daily_ledger_difference_jpy": 0.0,
+      "daily_ledger": [
+        {
+          "day_index": 0,
+          "service_date": "2025-05-12",
+          "ev_provisional_drive_cost_jpy": 88394.85483527997,
+          "ev_realized_charge_cost_jpy": 11432.780397804267,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 4591.554092920352,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 602498.3160600604,
+          "other_operating_cost_allocated_jpy": 591065.5356622562,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 1,
+          "service_date": "2025-05-13",
+          "ev_provisional_drive_cost_jpy": 84523.9525242,
+          "ev_realized_charge_cost_jpy": 11009.953554366513,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 7845.331891592918,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 602075.4892166227,
+          "other_operating_cost_allocated_jpy": 591065.5356622562,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 2,
+          "service_date": "2025-05-14",
+          "ev_provisional_drive_cost_jpy": 85480.41573119999,
+          "ev_realized_charge_cost_jpy": 11983.534942373262,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 7041.3542920353975,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 603049.0706046295,
+          "other_operating_cost_allocated_jpy": 591065.5356622562,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 3,
+          "service_date": "2025-05-15",
+          "ev_provisional_drive_cost_jpy": 85029.20820743997,
+          "ev_realized_charge_cost_jpy": 11037.325046777703,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 7888.547721238937,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 602102.8607090339,
+          "other_operating_cost_allocated_jpy": 591065.5356622562,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 4,
+          "service_date": "2025-05-16",
+          "ev_provisional_drive_cost_jpy": 89448.48440219997,
+          "ev_realized_charge_cost_jpy": 12521.902629951961,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 4542.184214601768,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 603587.4382922081,
+          "other_operating_cost_allocated_jpy": 591065.5356622562,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 5,
+          "service_date": "2025-05-17",
+          "ev_provisional_drive_cost_jpy": 71298.37191455996,
+          "ev_realized_charge_cost_jpy": 9217.969079724826,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 2270.3646902654855,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 600283.504741981,
+          "other_operating_cost_allocated_jpy": 591065.5356622562,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 6,
+          "service_date": "2025-05-18",
+          "ev_provisional_drive_cost_jpy": 63127.867671959975,
+          "ev_realized_charge_cost_jpy": 15490.587525332925,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 2290.1762389380524,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 36469.51314159292,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 643025.6363291821,
+          "other_operating_cost_allocated_jpy": 591065.5356622562,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        }
+      ],
+      "bess_observed_min_kwh": 1199.9999999999993,
+      "bess_observed_max_kwh": 4447.5209704773715,
+      "bess_terminal": {
+        "tsurumaki": {
+          "policy": "minimum_only",
+          "initial_soc_kwh": 3000.0,
+          "target_soc_kwh": null,
+          "terminal_soc_kwh": 1199.9999999999993,
+          "terminal_soc_delta_kwh": -1800.0000000000007,
+          "terminal_soc_floor_kwh": 1200.0,
+          "terminal_soc_ceiling_kwh": 4800.0,
+          "absolute_deviation_kwh": null,
+          "balanced": true
+        }
+      },
+      "stage1_status": "time_limit",
+      "stage1_gap": 0.8460464569708696,
+      "stage2_uncertified_hour_indices": [
+        13,
+        22,
+        26,
+        109,
+        112,
+        145,
+        146,
+        147,
+        159,
+        160,
+        161,
+        162
+      ],
+      "formal_fleet_status": "UNDECLARED",
+      "all_prefix_state_continuity_passed": true,
+      "all_prefix_pv_information_boundaries_passed": true,
+      "prefix_artifact_digest_sha256": "bfdbedc327b67490dd06c4b767448fd109d161c4cfae8b5d2c2868d1640b0d7e",
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\summary.json",
+          "sha256": "02d7b5c3e74a8ed91f54be2d1c8b85963197efab2dbb1c3e0075ba91325517ba"
+        },
+        "input_audit": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\input_audit.json",
+          "sha256": "7ea2ad0d3f42e2d663d994eb0cccb32e873d62b2995adec7aafaf9311de7880e"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\prepared_inputs\\f8ca2c45-fe96-4759-aa89-fbf687aa8dc0\\prepared-e8178203c45d1ab3-02ecce302cd58fff-8acc7b3a.json",
+          "sha256": "14d2a8214b816d0f996603464820e5ed791bc0c5f3a2dc4039ebade28be1de18"
+        },
+        "summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\summary.json",
+          "sha256": "729bb454d7802f8b3851b063cbf3134dfd12782ac8ce9592d6b15c1c70323c68"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "8812889acdf047460df313df2455ee985248b3d6e2c22a385813ac11eda0af75"
+        },
+        "executed_plan_with_daily_ledger": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "2ca82ed2d781aa03c81f66ffe913b047502c40aa7d90cd73bb2e1455de329fe9"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "c16a02646d76c958f142ecbd05be101712120ca11cdd65c9c140d94b7f4b30db"
+        },
+        "canonical_day_ahead": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\canonical_solver_result.json",
+          "sha256": "85e0f281325f8791458be79149e38d768d0e482fc1ca25ae816ac9ef49d48582"
+        }
+      }
+    },
+    {
+      "season": "夏",
+      "week": "2025-08-04",
+      "end_date": "2025-08-10",
+      "status": "DIAGNOSTIC_EXECUTION_PASSED",
+      "hourly_steps_accepted": 168,
+      "trip_count": 1704,
+      "distance_km": 13925.428829,
+      "input_fleet": {
+        "BEV": 35,
+        "ICE": 25
+      },
+      "used_vehicle_count": 32,
+      "used_vehicle_types": {
+        "BEV": 26,
+        "ICE": 6
+      },
+      "full_candidate_arcs": 78647760,
+      "pruned_arcs": 0,
+      "physical_violation_metrics": {
+        "unassigned_trip_count": 0,
+        "duplicate_trip_count": 0,
+        "unknown_vehicle_count": 0,
+        "vehicle_time_overlap_count": 0,
+        "infeasible_transition_count": 0,
+        "location_discontinuity_count": 0,
+        "unknown_operator_count": 0,
+        "blank_charger_id_count": 0,
+        "unknown_charger_id_count": 0,
+        "charger_depot_mismatch_count": 0,
+        "charging_location_violation_count": 0,
+        "charger_compatibility_violation_count": 0,
+        "charger_power_violation_count": 0,
+        "charger_concurrency_violation_count": 0,
+        "refueling_location_violation_count": 0,
+        "refueling_powertrain_violation_count": 0,
+        "ev_soc_lower_violation_count": 0,
+        "ev_soc_upper_violation_count": 0,
+        "ev_soc_contract_violation_count": 0,
+        "bev_terminal_soc_violation_count": 0,
+        "fuel_lower_violation_count": 0,
+        "fuel_upper_violation_count": 0
+      },
+      "costs": {
+        "total_cost": 4213520.406792755,
+        "energy_cost": 75050.89394647602,
+        "electricity_cost": 38208.95337125482,
+        "fuel_cost": 36841.94057522119,
+        "vehicle_usage_cost": 4120000.0,
+        "co2_cost": 1214.792299374135,
+        "contract_overage_cost": 17254.720546904788,
+        "contract_over_limit_kwh": 34.50944109380958,
+        "used_vehicle_day_count": 206,
+        "grid_import_kwh": 1273.6317790420683,
+        "pv_generated_kwh": 30537.7375,
+        "total_co2_kg": 1214.792299374135,
+        "ice_fuel_consumed_l": 245.6129371681416
+      },
+      "accounting": {
+        "consistent": true,
+        "charge_enabled": true,
+        "executed_overage_kwh": 34.50944109380958,
+        "reported_overage_kwh": 34.50944109380958,
+        "penalty_yen_per_kwh": 500.0,
+        "expected_cost_jpy": 17254.720546904788,
+        "reported_cost_jpy": 17254.720546904788,
+        "cost_difference_jpy": 0.0,
+        "quantity_difference_kwh": 0.0
+      },
+      "independent_grid_excess_kwh": 34.50944109380958,
+      "independent_overage_fee_jpy": 17254.720546904788,
+      "daily_ledger_total_jpy": 4213520.406792755,
+      "daily_ledger_difference_jpy": 0.0,
+      "daily_ledger": [
+        {
+          "day_index": 0,
+          "service_date": "2025-08-04",
+          "ev_provisional_drive_cost_jpy": 86401.84991339996,
+          "ev_realized_charge_cost_jpy": 5564.424303147357,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 6266.821161504424,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 596774.3547097576,
+          "other_operating_cost_allocated_jpy": 591209.9304066102,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 1,
+          "service_date": "2025-08-05",
+          "ev_provisional_drive_cost_jpy": 87145.99212815997,
+          "ev_realized_charge_cost_jpy": 4999.753793550928,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 6109.235309734512,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 596209.6842001611,
+          "other_operating_cost_allocated_jpy": 591209.9304066102,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 2,
+          "service_date": "2025-08-06",
+          "ev_provisional_drive_cost_jpy": 86858.76817967997,
+          "ev_realized_charge_cost_jpy": 5183.271152632638,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 6350.66814159292,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 596393.2015592429,
+          "other_operating_cost_allocated_jpy": 591209.9304066102,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 3,
+          "service_date": "2025-08-07",
+          "ev_provisional_drive_cost_jpy": 83106.31790999998,
+          "ev_realized_charge_cost_jpy": 5728.354132343523,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 9036.957942477875,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 596938.2845389538,
+          "other_operating_cost_allocated_jpy": 591209.9304066102,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 4,
+          "service_date": "2025-08-08",
+          "ev_provisional_drive_cost_jpy": 88506.26514491998,
+          "ev_realized_charge_cost_jpy": 5080.203840720716,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 4497.905542035397,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 596290.134247331,
+          "other_operating_cost_allocated_jpy": 591209.9304066102,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 5,
+          "service_date": "2025-08-09",
+          "ev_provisional_drive_cost_jpy": 70966.85882831996,
+          "ev_realized_charge_cost_jpy": 5517.349006821045,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 2290.1762389380524,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 596727.2794134313,
+          "other_operating_cost_allocated_jpy": 591209.9304066102,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 6,
+          "service_date": "2025-08-10",
+          "ev_provisional_drive_cost_jpy": 63127.867671959975,
+          "ev_realized_charge_cost_jpy": 6135.597142045832,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 2290.1762389380524,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 36841.94057522124,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 634187.4681238773,
+          "other_operating_cost_allocated_jpy": 591209.9304066102,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        }
+      ],
+      "bess_observed_min_kwh": 1200.0,
+      "bess_observed_max_kwh": 4170.670116963943,
+      "bess_terminal": {
+        "tsurumaki": {
+          "policy": "minimum_only",
+          "initial_soc_kwh": 3000.0,
+          "target_soc_kwh": null,
+          "terminal_soc_kwh": 1200.0000000000002,
+          "terminal_soc_delta_kwh": -1799.9999999999998,
+          "terminal_soc_floor_kwh": 1200.0,
+          "terminal_soc_ceiling_kwh": 4800.0,
+          "absolute_deviation_kwh": null,
+          "balanced": true
+        }
+      },
+      "stage1_status": "time_limit",
+      "stage1_gap": 0.8460604859031927,
+      "stage2_uncertified_hour_indices": [
+        84,
+        95,
+        158,
+        159,
+        160
+      ],
+      "formal_fleet_status": "UNDECLARED",
+      "all_prefix_state_continuity_passed": true,
+      "all_prefix_pv_information_boundaries_passed": true,
+      "prefix_artifact_digest_sha256": "2d048336fde7e554db32764f003ea36d5e571b2131d4fc8387fb3e0d3f4bb6ab",
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\summary.json",
+          "sha256": "c9635e811cbd710adcf54042f3b66b74e807173945490476a77a659ef2348443"
+        },
+        "input_audit": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\input_audit.json",
+          "sha256": "a50bfa463af254c7274a0c6922ed032cb3cdb3ff88cdde34c5234341de57376e"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\prepared_inputs\\7090732e-21c8-462f-bdc4-4ddf824b5f6d\\prepared-85d6ccd4bb13e4f4-c8e67b3360d37a8f-8acc7b3a.json",
+          "sha256": "8f134bbb4c7bc1c28c3168c6cc8b35a396cb7043b9fbc362d2f51ba97e71aafb"
+        },
+        "summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\summary.json",
+          "sha256": "ae341c2ffee6e296ea4bd80e08116f10fc905e4b054135eb084db1792cf015a5"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "922c029f083db13963771801aa00c116476e8785c627ea3e12a380345a5685e7"
+        },
+        "executed_plan_with_daily_ledger": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "8606ea569c7bb12c056d3c7a766678a6dfcaf40d6a96e9768728ab6b517a8fa6"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "5644431109e2d17cee7636a256b7cf4fa7efdb067eaf8325d40d6d8c95b2d153"
+        },
+        "canonical_day_ahead": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\canonical_solver_result.json",
+          "sha256": "7e8c428def0313a1c72c024eb8bccec9b2737cae96889ae51bea0b9c76a0b09c"
+        }
+      }
+    },
+    {
+      "season": "秋",
+      "week": "2025-11-03",
+      "end_date": "2025-11-09",
+      "status": "DIAGNOSTIC_EXECUTION_PASSED",
+      "hourly_steps_accepted": 168,
+      "trip_count": 1621,
+      "distance_km": 13325.586034,
+      "input_fleet": {
+        "BEV": 35,
+        "ICE": 25
+      },
+      "used_vehicle_count": 32,
+      "used_vehicle_types": {
+        "BEV": 26,
+        "ICE": 6
+      },
+      "full_candidate_arcs": 71173980,
+      "pruned_arcs": 0,
+      "physical_violation_metrics": {
+        "unassigned_trip_count": 0,
+        "duplicate_trip_count": 0,
+        "unknown_vehicle_count": 0,
+        "vehicle_time_overlap_count": 0,
+        "infeasible_transition_count": 0,
+        "location_discontinuity_count": 0,
+        "unknown_operator_count": 0,
+        "blank_charger_id_count": 0,
+        "unknown_charger_id_count": 0,
+        "charger_depot_mismatch_count": 0,
+        "charging_location_violation_count": 0,
+        "charger_compatibility_violation_count": 0,
+        "charger_power_violation_count": 0,
+        "charger_concurrency_violation_count": 0,
+        "refueling_location_violation_count": 0,
+        "refueling_powertrain_violation_count": 0,
+        "ev_soc_lower_violation_count": 0,
+        "ev_soc_upper_violation_count": 0,
+        "ev_soc_contract_violation_count": 0,
+        "bev_terminal_soc_violation_count": 0,
+        "fuel_lower_violation_count": 0,
+        "fuel_upper_violation_count": 0
+      },
+      "costs": {
+        "total_cost": 4175642.379136662,
+        "energy_cost": 215316.3197855803,
+        "electricity_cost": 184859.8539559343,
+        "fuel_cost": 30456.46582964602,
+        "vehicle_usage_cost": 3880000.0,
+        "co2_cost": 3556.272959565968,
+        "contract_overage_cost": 76769.78639151606,
+        "contract_over_limit_kwh": 153.5395727830321,
+        "used_vehicle_day_count": 194,
+        "grid_import_kwh": 6161.995131864624,
+        "pv_generated_kwh": 16096.45,
+        "total_co2_kg": 3556.272959565968,
+        "ice_fuel_consumed_l": 203.04310553097346
+      },
+      "accounting": {
+        "consistent": true,
+        "charge_enabled": true,
+        "executed_overage_kwh": 153.5395727830321,
+        "reported_overage_kwh": 153.5395727830321,
+        "penalty_yen_per_kwh": 500.0,
+        "expected_cost_jpy": 76769.78639151606,
+        "reported_cost_jpy": 76769.78639151606,
+        "cost_difference_jpy": 0.0,
+        "quantity_difference_kwh": 0.0
+      },
+      "independent_grid_excess_kwh": 153.5395727830321,
+      "independent_overage_fee_jpy": 76769.78639151606,
+      "daily_ledger_total_jpy": 4175642.3791366625,
+      "daily_ledger_difference_jpy": 4.656612873077393e-10,
+      "daily_ledger": [
+        {
+          "day_index": 0,
+          "service_date": "2025-11-03",
+          "ev_provisional_drive_cost_jpy": 64548.03966575997,
+          "ev_realized_charge_cost_jpy": 27386.224633401842,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 1096.4173340707962,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 593147.0902549843,
+          "other_operating_cost_allocated_jpy": 565760.8656215825,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 1,
+          "service_date": "2025-11-04",
+          "ev_provisional_drive_cost_jpy": 87287.78857511995,
+          "ev_realized_charge_cost_jpy": 19900.71733185537,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 5522.124623893804,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 585661.5829534378,
+          "other_operating_cost_allocated_jpy": 565760.8656215825,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 2,
+          "service_date": "2025-11-05",
+          "ev_provisional_drive_cost_jpy": 84954.64323947998,
+          "ev_realized_charge_cost_jpy": 28029.796645379924,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 7483.304701327433,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 593790.6622669625,
+          "other_operating_cost_allocated_jpy": 565760.8656215825,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 3,
+          "service_date": "2025-11-06",
+          "ev_provisional_drive_cost_jpy": 85663.45689468,
+          "ev_realized_charge_cost_jpy": 25207.821702407415,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 6887.49474557522,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 590968.6873239899,
+          "other_operating_cost_allocated_jpy": 565760.8656215825,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 4,
+          "service_date": "2025-11-07",
+          "ev_provisional_drive_cost_jpy": 87990.08135819997,
+          "ev_realized_charge_cost_jpy": 22119.094276161864,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 4931.795940265486,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 587879.9598977444,
+          "other_operating_cost_allocated_jpy": 565760.8656215825,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 5,
+          "service_date": "2025-11-08",
+          "ev_provisional_drive_cost_jpy": 70989.16348859997,
+          "ev_realized_charge_cost_jpy": 30760.80856546061,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 2271.42753318584,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 0.0,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 596521.6741870431,
+          "other_operating_cost_allocated_jpy": 565760.8656215825,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        },
+        {
+          "day_index": 6,
+          "service_date": "2025-11-09",
+          "ev_provisional_drive_cost_jpy": 63159.126435719976,
+          "ev_realized_charge_cost_jpy": 31455.390801271802,
+          "ev_leftover_provisional_cost_jpy": 0.0,
+          "ice_provisional_drive_cost_jpy": 2263.9009513274327,
+          "ice_realized_refuel_cost_jpy": 0.0,
+          "ice_leftover_provisional_cost_jpy": 30456.46582964602,
+          "demand_charge_jpy": 0.0,
+          "total_cost_jpy": 627672.7222525004,
+          "other_operating_cost_allocated_jpy": 565760.8656215825,
+          "cost_attribution_policy": "period_expenses_allocated_by_vehicle_charge_or_refuel_quantity; unreplenished_inventory_at_period_end; other_period_costs_equal_per_day; not_solver_native_source_provenance"
+        }
+      ],
+      "bess_observed_min_kwh": 1199.9999999999998,
+      "bess_observed_max_kwh": 3291.5727725000015,
+      "bess_terminal": {
+        "tsurumaki": {
+          "policy": "minimum_only",
+          "initial_soc_kwh": 3000.0,
+          "target_soc_kwh": null,
+          "terminal_soc_kwh": 1199.9999999999998,
+          "terminal_soc_delta_kwh": -1800.0000000000002,
+          "terminal_soc_floor_kwh": 1200.0,
+          "terminal_soc_ceiling_kwh": 4800.0,
+          "absolute_deviation_kwh": null,
+          "balanced": true
+        }
+      },
+      "stage1_status": "time_limit",
+      "stage1_gap": 0.8405295108632607,
+      "stage2_uncertified_hour_indices": [
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        45,
+        48,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        70,
+        72,
+        73,
+        74,
+        78,
+        79,
+        80,
+        81,
+        82,
+        97,
+        103,
+        104,
+        120,
+        123,
+        128,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166
+      ],
+      "formal_fleet_status": "UNDECLARED",
+      "all_prefix_state_continuity_passed": true,
+      "all_prefix_pv_information_boundaries_passed": true,
+      "prefix_artifact_digest_sha256": "affe2b531536bf0407ed3005d84e6e7a39cf754fc936884c305bcffe4163ba5b",
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\summary.json",
+          "sha256": "b90f181978d65d698273e878083598266f53a26949c27d6e7e30d1b4fd10ebb4"
+        },
+        "input_audit": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\input_audit.json",
+          "sha256": "20022dc496a6a9d1f9bd3bd479615d1ec7279efd03c56041c8fa39617936c287"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\prepared_inputs\\636671eb-cbef-4ac9-ba57-c83a36adeb97\\prepared-247f6cc0464b7632-f51cc2b00e2f6675-8acc7b3a.json",
+          "sha256": "a7617c4e2548a2826652d612d5fcbcd5ab7aa7924c8b9030e7ed7c2039639ef1"
+        },
+        "summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\summary.json",
+          "sha256": "54730759200108e056d4bbb9d93ab6fff3eb764162593ed4c6213a94bf75cd41"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "4589026c21626ed8e5c7ddffb5743a09f11bea5f0c2c9af766f493b25718765d"
+        },
+        "executed_plan_with_daily_ledger": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "53388e4100ab245c0e50d5bff69273e71f0c4a8b41a60e1d58259abc91e116e1"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "0236b17eac9a295fa5d25df66bf05a277345bf1ce7411723c4b4222b4b3839b1"
+        },
+        "canonical_day_ahead": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\canonical_solver_result.json",
+          "sha256": "ded67e14ef376a3909d615f62080df33eb103f8d2bbb8e5e1c92e9a590fbc9f3"
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Stage 1 time limits and gaps exceed the predeclared 10 percent target.",
+    "Full successors do not make the Phase 3 two-stage solution an integrated global optimum.",
+    "Prepared research fleet contract status remains UNDECLARED.",
+    "2026 timetable with 2025 evaluation dates; not historical operations reconstruction.",
+    "PV actuals are historical estimates; forecasts use 2024-only training.",
+    "Vehicle source allocations and daily cost allocations are accounting attributions.",
+    "Two pre-existing PowerPoint provenance tests remain failing.",
+    "Four selected weeks are not an annual cost estimate or a controlled PV-only comparison."
+  ]
+}

@@ -1,5 +1,13 @@
 # Development Notes
 
+## 2026-09-12 渋21〜23・四季各7日間の診断計算が完走
+
+凍結 `e09fb550379db71730b1ee5025e721d64022303b` の新規Prepareから、冬・春・夏・秋の全4週で168/168時間、最終物理検証、実行会計が通過した。各週前後でSHA一致・clean、接続候補削減0、fallback・解後修復0。合計672回・2,688個の15分slotに欠損・重複はない。元の60台（BEV 35 / ICE 25）を維持し、各週の運行使用は32台（26 / 6）だった。
+
+確定総費用は冬4221549.725308円、春4256622.315954円、夏4213520.406793円、秋4175642.379137円。元JSONに対して小数6桁表示で1e-6円以内。実行gridからの契約超過量と500円/kWhの料金が全4週で一致し、日別台帳との差は最大4.656612873077393e-10円。Lunaの独立監査と主担当の別集計が全四季で通過し、新たなP0/P1技術欠陥は0件。
+
+全体回帰は2,240 passed / 既存PowerPoint証拠2 failed。Stage 1 gap約84〜85%の宣言10%未達、正式fleet-contract未宣言、2026時刻表・2025評価日・2024年のみのPV予測学習、資料証拠の制限は残る。計算完走と研究採用を分け、DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS、研究リリースBLOCKEDを維持する。[結果・費用・証拠](docs/notes/SHIBU21_23_FOUR_SEASON_COMPLETION_20260912.md)。以下は対応履歴。
+
 ## 2026-09-12 未設定契約超過単価の確定会計を修正
 
 全体回帰は2,240 passed / 既存PowerPoint証拠2 failed（102.56秒）。新規12件・関連97件、独立コードレビュー残P0/P1ゼロを確認した。JUnitは `output/exact_depot_factor_validation/pytest-contract-price-release.xml`。新clean SHAの四季再実行は未完了。
