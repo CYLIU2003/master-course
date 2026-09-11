@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import replace
 import math
 import time
@@ -29,6 +30,7 @@ from src.optimization.common.strict_precheck import (
     StrictCoveragePrecheckResult,
     evaluate_strict_coverage_precheck,
 )
+from src.optimization.common.strict_precheck_cache import strict_precheck_input_fingerprint
 from src.optimization.common.seed_fingerprint import (
     phase4_seed_plan_fingerprint,
 )
@@ -925,6 +927,8 @@ class OptimizationEngine:
         self._feasibility = FeasibilityChecker()
         self._evaluator = CostEvaluator()
 
+        self._strict_precheck_cache: tuple[str, StrictCoveragePrecheckResult] | None = None
+
     def solve(
         self,
         problem: CanonicalOptimizationProblem,
@@ -952,9 +956,32 @@ class OptimizationEngine:
                 float(config.time_limit_sec),
                 0.001,
             )
-        precheck = evaluate_strict_coverage_precheck(problem)
+        precheck_fingerprint = strict_precheck_input_fingerprint(problem)
+        cached_precheck = self._strict_precheck_cache
+        precheck_reused = bool(
+            precheck_fingerprint is not None
+            and cached_precheck is not None
+            and cached_precheck[0] == precheck_fingerprint
+        )
+        if precheck_reused:
+            precheck = deepcopy(cached_precheck[1])
+        else:
+            precheck = evaluate_strict_coverage_precheck(problem)
+            if (precheck_fingerprint is not None
+                    and precheck_fingerprint == strict_precheck_input_fingerprint(problem)):
+                # Keep one result private to this engine. A changed structural
+                # input always runs the original complete precheck again.
+                self._strict_precheck_cache = (precheck_fingerprint, deepcopy(precheck))
+        precheck_audit = {
+            **precheck.to_metadata(),
+            "input_sha256": precheck_fingerprint,
+            "reused_identical_structural_input": precheck_reused,
+        }
         if precheck.infeasible and not bool(getattr(config, "debug_mode", False)):
             result = self._strict_precheck_infeasible_result(problem, config, precheck)
+            result = replace(result, solver_metadata={
+                **result.solver_metadata, "strict_coverage_precheck": precheck_audit,
+            })
             return self._finalize_result(problem, result, config)
 
         # The strict path-cover precheck is already paid for at this point.
@@ -965,7 +992,7 @@ class OptimizationEngine:
             problem,
             metadata={
                 **dict(problem.metadata or {}),
-                "strict_coverage_precheck": precheck.to_metadata(),
+                "strict_coverage_precheck": precheck_audit,
             },
         )
 
