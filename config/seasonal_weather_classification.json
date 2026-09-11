@@ -1,0 +1,8 @@
+{
+  "version": "solcast_daylight_precip_clearsky_v1",
+  "daylight_clearsky_ghi_w_m2": 20.0,
+  "rainy_daylight_precip_mm": 1.0,
+  "sunny_clearsky_ratio": 0.7,
+  "suspected_solid_precip_temp_c": 2.0,
+  "minimum_days_per_cell": 10
+}

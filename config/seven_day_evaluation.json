@@ -1,0 +1,17 @@
+{
+  "schema_version": "seven_day_evaluation_design_v1",
+  "selection_rule": "First Monday of February, May, August, November 2025; February 2026 for fiscal-year winter. Calendar selection, before optimization outcomes.",
+  "training_start": "2024-01-01",
+  "training_end_exclusive": "2025-01-01",
+  "evaluation_weeks": ["2025-02-03", "2025-05-05", "2025-08-04", "2025-11-03", "2026-02-02"],
+  "evaluation_days": 7,
+  "lookahead_hours": [24, 48],
+  "execution_minutes": 60,
+  "timestep_minutes": 15,
+  "forecast_kind": "training_only_seasonal_climatology_proxy",
+  "future_weather_class_known": false,
+  "terminal_window_policy": "return_to_evaluation_initial",
+  "bess_balance_periods": ["daily", "evaluation_period"],
+  "formal_solver_budget_status": "PENDING_SMALL_CASE_TIMING_AND_PREDECLARATION",
+  "claim": "Fixed verified timetable with date-specific historical estimated irradiance. Not a reconstruction of historical actual operations or historical Solcast forecasts."
+}
