@@ -7,128 +7,171 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import RunPanel from "./RunPanel";
+import RunPanel, { executionControls } from "./RunPanel";
 import type { Overview } from "../api";
-
-// Selection paging is tested by the real Electron smoke. Keep this test focused
-// on request semantics, stale Prepare state, and background job transitions.
-vi.mock("./DataTable", () => ({ default: () => <div>scope table</div> }));
-const data: Overview = {
-  meta: { id: "s1", name: "Existing scenario" },
+const overview: Overview = {
+  meta: { id: "s1", name: "Saved scenario" },
   stats: {},
-  scope: {
-    depotSelection: { depotIds: ["tsurumaki"] },
-    routeSelection: { includeRouteIds: ["route-1"] },
-  },
+  scope: {},
   settings: {
     service_date: "2025-05-12",
     planning_days: 7,
-    initial_soc: 80,
+    initial_soc: 0.8,
     diesel_price_per_l: 140,
-    random_seed: 42,
+    random_seed: 17,
     rolling_lookahead_hours: 24,
   },
   result: { available: false, source: null, values: {} },
 };
+const configuration = {
+  values: {
+    selectedDepotIds: ["tsurumaki"],
+    selectedRouteIds: ["route-1"],
+    serviceDate: "2025-05-12",
+    serviceDates: ["2025-05-12"],
+    planningDays: 7,
+    solverMode: "phase3_two_stage",
+    timeLimitSeconds: 465,
+    randomSeed: 17,
+    mipGap: 0.02,
+  },
+  revision: "original",
+};
 const requests: { url: string; body: Record<string, unknown> }[] = [];
+let revision = "original";
 beforeEach(() => {
   const saved = new Map<string, string>();
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => saved.get(key) ?? null,
     setItem: (key: string, value: string) => saved.set(key, value),
-    clear: () => saved.clear(),
   });
-  localStorage.clear();
   requests.length = 0;
+  revision = "original";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, options: RequestInit = {}) => {
+      const body = options.body
+        ? (JSON.parse(String(options.body)) as Record<string, unknown>)
+        : {};
+      requests.push({ url, body });
+      let payload: unknown = {};
+      if (url.endsWith("/configuration"))
+        payload = { ...configuration, revision };
+      else if (url === "/api/desktop/scenarios/s1") payload = overview;
+      else if (url.endsWith("/simulation/prepare"))
+        payload = {
+          ready: true,
+          preparedInputId: "prepared-1",
+          tripCount: 100,
+          vehicleCount: 35,
+          planningDays: 7,
+          warnings: [],
+        };
+      else if (url.includes("/jobs/"))
+        payload = {
+          job_id: "known-job",
+          status: "failed",
+          progress: 20,
+          message: "BFF restarted",
+          error: "Worker orphaned after restart",
+        };
+      else if (
+        url.endsWith("/run-optimization") ||
+        url.endsWith("/simulation/run")
+      )
+        payload = { job_id: "new-job" };
+      return Promise.resolve(
+        new Response(JSON.stringify(payload), { status: 200 }),
+      );
+    }),
+  );
 });
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-function mount() {
+function mount(blocked = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  render(
+  return render(
     <QueryClientProvider client={client}>
-      <RunPanel id="s1" data={data} />
+      <RunPanel id="s1" data={overview} revision={0} blocked={blocked} />
     </QueryClientProvider>,
   );
 }
-function respond(payload: unknown, status = 200) {
-  return Promise.resolve(new Response(JSON.stringify(payload), { status }));
-}
-it("retains saved physical controls and invalidates Prepare after editing", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string, options: RequestInit) => {
-      requests.push({ url, body: JSON.parse(String(options.body)) });
-      return respond({
-        ready: true,
-        preparedInputId: "prepared-1",
-        tripCount: 100,
-        vehicleCount: 35,
-        planningDays: 7,
-        warnings: [],
-      });
-    }),
-  );
-  mount();
-  expect(
-    screen
-      .getByRole("button", { name: "最適化を実行" })
-      .hasAttribute("disabled"),
-  ).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "入力を準備" }));
-  await screen.findByText(/入力準備済み/);
-  expect(requests).toHaveLength(1);
-  expect(requests[0].body.service_dates).toEqual([
-    "2025-05-12",
-    "2025-05-13",
-    "2025-05-14",
-    "2025-05-15",
-    "2025-05-16",
-    "2025-05-17",
-    "2025-05-18",
-  ]);
-  expect(requests[0].body.simulation_settings).toMatchObject({
-    initial_soc: 80,
-    diesel_price_per_l: 140,
-    random_seed: 42,
-    rolling_lookahead_hours: 24,
-  });
-  expect(
-    screen
-      .getByRole("button", { name: "最適化を実行" })
-      .hasAttribute("disabled"),
-  ).toBe(false);
-  fireEvent.change(screen.getByLabelText("開始日"), {
-    target: { value: "2025-05-19" },
-  });
+async function prepare() {
   await waitFor(() =>
     expect(
       screen
-        .getByRole("button", { name: "最適化を実行" })
+        .getByRole("button", { name: "1. 入力を準備" })
         .hasAttribute("disabled"),
-    ).toBe(true),
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "1. 入力を準備" }));
+  await screen.findByText(/入力準備済み/);
+}
+it("prepares fresh saved physical controls and sends the configured solver budget", async () => {
+  mount();
+  await prepare();
+  expect(
+    requests.find((row) => row.url.endsWith("/simulation/prepare"))?.body
+      .simulation_settings,
+  ).toEqual(overview.settings);
+  fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
+  await waitFor(() =>
+    expect(requests.some((row) => row.url.endsWith("/run-optimization"))).toBe(
+      true,
+    ),
+  );
+  expect(
+    requests.find((row) => row.url.endsWith("/run-optimization"))?.body,
+  ).toMatchObject({
+    prepared_input_id: "prepared-1",
+    time_limit_seconds: 465,
+    mip_gap: 0.02,
+    random_seed: 17,
+    mode: "phase3_two_stage",
+  });
+});
+it("rejects a prepared input when another writer changes saved settings", async () => {
+  mount();
+  await prepare();
+  revision = "changed";
+  fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
+  await screen.findByText(/入力条件が変更されています/);
+  expect(requests.some((row) => row.url.endsWith("/run-optimization"))).toBe(
+    false,
   );
 });
-it("restores polling for an existing job and exposes restart-orphan failure", async () => {
-  localStorage.setItem("ev-job-s1", "known-job");
-  const fetch = vi.fn(() =>
-    respond({
-      job_id: "known-job",
-      status: "failed",
-      progress: 20,
-      message: "BFF restarted",
-      error: "Worker orphaned after restart",
-    }),
+it("routes simulation through the prepared-simulation endpoint", async () => {
+  mount();
+  await prepare();
+  fireEvent.change(screen.getByLabelText("実行する処理"), {
+    target: { value: "simulate" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
+  await waitFor(() =>
+    expect(requests.some((row) => row.url.endsWith("/simulation/run"))).toBe(
+      true,
+    ),
   );
-  vi.stubGlobal("fetch", fetch);
+  expect(
+    requests.find((row) => row.url.endsWith("/simulation/run"))?.body,
+  ).toEqual({ prepared_input_id: "prepared-1", source: "duties" });
+});
+it("restores an existing job and exposes restart failure", async () => {
+  localStorage.setItem("ev-job-s1", "known-job");
   mount();
   await screen.findByText("Worker orphaned after restart");
-  expect(fetch.mock.calls.length).toBe(1);
+  expect(requests.some((row) => row.url === "/api/jobs/known-job")).toBe(true);
+});
+it("retains zero and false controls instead of silently applying defaults", () => {
   expect(
-    screen.getByRole("button", { name: "入力を準備" }).hasAttribute("disabled"),
-  ).toBe(false);
+    executionControls({
+      mipGap: 0,
+      randomSeed: 0,
+      stage1BevFrontierEnabled: false,
+    }),
+  ).toEqual({ mip_gap: 0, random_seed: 0, stage1_bev_frontier_enabled: false });
 });

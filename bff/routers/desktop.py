@@ -3,11 +3,115 @@
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from bff.desktop_models import DesktopPage, ScenarioOverview, ScenarioPage
+from fastapi.responses import FileResponse
+from bff.desktop_models import (
+    DesktopConfiguration, DesktopConfigurationEdit, DesktopPage, DesktopWeatherAction, DesktopTimetableImport, ScenarioOverview, ScenarioPage, ResultSummary, DesktopWeatherSource,
+)
 
 from bff.store import desktop_store, scenario_store
 
 router = APIRouter(prefix="/desktop", tags=["desktop"])
+
+
+@router.get("/scenarios/{scenario_id}/simulation-summary", response_model=ResultSummary)
+def simulation_summary(scenario_id: str):
+    try:
+        return desktop_store.simulation_summary(scenario_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/scenarios/{scenario_id}/artifacts")
+def artifacts(scenario_id: str):
+    try:
+        return desktop_store.result_files(scenario_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/scenarios/{scenario_id}/artifacts/file")
+def artifact_file(scenario_id: str, name: str = Query(max_length=500)):
+    try:
+        path = desktop_store.result_file(scenario_id, name)
+        return FileResponse(path, filename=path.name)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/scenarios/{scenario_id}/timetable-import")
+def timetable_import(scenario_id: str, body: DesktopTimetableImport):
+    from bff.services.desktop_timetable import import_timetable
+    try:
+        return import_timetable(scenario_id, body.content, body.apply, body.revision)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+    except (ValueError, OSError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/scenarios/{scenario_id}/timetable-export")
+def timetable_export(scenario_id: str):
+    from bff.services.desktop_timetable import export_timetable
+    try:
+        return export_timetable(scenario_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+    except (ValueError, OSError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/scenarios/{scenario_id}/result-data/{name}")
+def result_data(scenario_id: str, name: str, owner: str = Query("", max_length=200), offset: int = Query(0, ge=0), limit: int = Query(250, ge=1, le=250)):
+    try:
+        return desktop_store.result_page(scenario_id, name, owner, offset, limit)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/weather/action")
+def weather_action(body: DesktopWeatherAction):
+    from bff.services.desktop_weather import weather_action as run_action
+    try:
+        return run_action(body)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/weather/source")
+def weather_source(body: DesktopWeatherSource):
+    from bff.services.desktop_weather import import_source
+    try:
+        return import_source(body.filename, body.content)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/scenarios/{scenario_id}/configuration", response_model=DesktopConfiguration)
+def configuration(scenario_id: str):
+    from bff.services.desktop_configuration import configuration as read_configuration
+    try:
+        return read_configuration(scenario_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+
+
+@router.put("/scenarios/{scenario_id}/configuration", response_model=DesktopConfiguration)
+def edit_configuration(scenario_id: str, body: DesktopConfigurationEdit):
+    from bff.services.desktop_configuration import save_configuration
+    try:
+        return save_configuration(scenario_id, body.changes, body.revision)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/scenarios", response_model=ScenarioPage)
@@ -46,6 +150,7 @@ def table(
         "routes",
         "depots",
         "vehicles",
+        "vehicle_templates",
         "stops",
         "chargers",
         "timetable_rows",

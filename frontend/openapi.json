@@ -1295,6 +1295,481 @@
         }
       }
     },
+    "/api/desktop/scenarios/{scenario_id}/simulation-summary": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Simulation Summary",
+        "operationId": "simulation_summary_api_desktop_scenarios__scenario_id__simulation_summary_get",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/scenarios/{scenario_id}/artifacts": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Artifacts",
+        "operationId": "artifacts_api_desktop_scenarios__scenario_id__artifacts_get",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/scenarios/{scenario_id}/artifacts/file": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Artifact File",
+        "operationId": "artifact_file_api_desktop_scenarios__scenario_id__artifacts_file_get",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 500,
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/scenarios/{scenario_id}/timetable-import": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Timetable Import",
+        "operationId": "timetable_import_api_desktop_scenarios__scenario_id__timetable_import_post",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopTimetableImport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/scenarios/{scenario_id}/timetable-export": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Timetable Export",
+        "operationId": "timetable_export_api_desktop_scenarios__scenario_id__timetable_export_post",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/scenarios/{scenario_id}/result-data/{name}": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Result Data",
+        "operationId": "result_data_api_desktop_scenarios__scenario_id__result_data__name__get",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "default": "",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 250,
+              "minimum": 1,
+              "default": 250,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/weather/action": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Weather Action",
+        "operationId": "weather_action_api_desktop_weather_action_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopWeatherAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/weather/source": {
+      "post": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Weather Source",
+        "operationId": "weather_source_api_desktop_weather_source_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopWeatherSource"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/scenarios/{scenario_id}/configuration": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Configuration",
+        "operationId": "configuration_api_desktop_scenarios__scenario_id__configuration_get",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopConfiguration"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Edit Configuration",
+        "operationId": "edit_configuration_api_desktop_scenarios__scenario_id__configuration_put",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopConfigurationEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopConfiguration"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/desktop/scenarios": {
       "get": {
         "tags": [
@@ -1430,6 +1905,7 @@
                 "routes",
                 "depots",
                 "vehicles",
+                "vehicle_templates",
                 "stops",
                 "chargers",
                 "timetable_rows",
@@ -7222,6 +7698,49 @@
         ],
         "title": "DepotRoutePermissionItem"
       },
+      "DesktopConfiguration": {
+        "properties": {
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Values"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values",
+          "revision"
+        ],
+        "title": "DesktopConfiguration"
+      },
+      "DesktopConfigurationEdit": {
+        "properties": {
+          "changes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Changes"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "changes",
+          "revision"
+        ],
+        "title": "DesktopConfigurationEdit"
+      },
       "DesktopPage": {
         "properties": {
           "items": {
@@ -7262,6 +7781,119 @@
           "limit"
         ],
         "title": "DesktopPage"
+      },
+      "DesktopTimetableImport": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 20000000,
+            "title": "Content"
+          },
+          "apply": {
+            "type": "boolean",
+            "title": "Apply",
+            "default": false
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "DesktopTimetableImport"
+      },
+      "DesktopWeatherAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "inspect",
+              "historical",
+              "pv_proxy",
+              "representative",
+              "typical_proxy"
+            ],
+            "title": "Action"
+          },
+          "source_path": {
+            "type": "string",
+            "title": "Source Path",
+            "default": ""
+          },
+          "service_date": {
+            "type": "string",
+            "title": "Service Date",
+            "default": ""
+          },
+          "station_id": {
+            "type": "string",
+            "title": "Station Id",
+            "default": ""
+          },
+          "station_name": {
+            "type": "string",
+            "title": "Station Name",
+            "default": ""
+          },
+          "depot_id": {
+            "type": "string",
+            "title": "Depot Id",
+            "default": ""
+          },
+          "issue_date": {
+            "type": "string",
+            "title": "Issue Date",
+            "default": ""
+          },
+          "weather_class": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "sunny",
+              "cloudy",
+              "rainy"
+            ],
+            "title": "Weather Class",
+            "default": "auto"
+          },
+          "random_seed": {
+            "type": "integer",
+            "title": "Random Seed",
+            "default": 42
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "DesktopWeatherAction"
+      },
+      "DesktopWeatherSource": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Filename"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 20000000,
+            "title": "Content"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "filename",
+          "content"
+        ],
+        "title": "DesktopWeatherSource"
       },
       "DuplicateScenarioBody": {
         "properties": {
@@ -11330,6 +11962,36 @@
               }
             ],
             "title": "Experimentnotes"
+          },
+          "bessBalancePeriod": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "daily",
+                  "evaluation_period"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bessbalanceperiod"
+          },
+          "rollingBessTerminalPolicy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "scenario",
+                  "minimum_only"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollingbessterminalpolicy"
           }
         },
         "type": "object",

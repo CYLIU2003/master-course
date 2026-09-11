@@ -1,5 +1,9 @@
 # Development Notes
 
+## 2026-09-11 Tkinter主要操作とElectron UI
+
+用途別11画面、revision付き設定編集、既存master CRUD、CSVの検査・全行バックアップ、気象ファイル取込・既存前処理、bounded result/chart/ledger、成果物取得、比較を実装した。BESS方針はdate-series materializationとproduction rolling requestへ明示的に届く。未指定の旧assetだけ従来の初期SOC復元を維持する。BEV条件は変更しない。[操作・数学・検証の詳細](docs/notes/DESKTOP_TK_PARITY_20260911.md)。
+
 ## 2026-09-11 Rolling BESS方針と4路線契約の分離
 
 季節診断の共有solver helperへ明示的な `contract_validator` callbackを追加し、

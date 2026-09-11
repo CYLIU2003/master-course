@@ -19,6 +19,7 @@ export async function api<T>(
     headers: { "Content-Type": "application/json", ...options.headers },
   });
   const text = await response.text();
+  if (response.status === 204) return undefined as T;
   let payload: unknown;
   try {
     payload = JSON.parse(text);
@@ -38,6 +39,16 @@ export async function api<T>(
 }
 export const post = <T>(path: string, body: unknown) =>
   api<T>(path, { method: "POST", body: JSON.stringify(body) });
+export const put = <T>(path: string, body: unknown) =>
+  api<T>(path, { method: "PUT", body: JSON.stringify(body) });
+export const remove = (path: string) => api<void>(path, { method: "DELETE" });
+export const rows = (value: Json | undefined): Row[] =>
+  Array.isArray(value)
+    ? value.filter(
+        (item): item is Row =>
+          !!item && typeof item === "object" && !Array.isArray(item),
+      )
+    : [];
 export const record = (value: Json | undefined): Row =>
   value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Row)

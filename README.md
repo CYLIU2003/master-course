@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-11: Tkinterの主要操作群をElectronへ移しました。用途別メニューで、車両・設備・運行条件・気象・CSV・実行・図表・比較まで扱えます。BESSは20〜80%かつ日末・週末自由を設定でき、BEVの終端条件は維持します。[対応表と検証範囲](docs/notes/DESKTOP_TK_PARITY_20260911.md)。
+
 2026-09-11: Rolling の季節診断契約を明示しました。途中窓の BEV 終端は
 `day_ahead_boundary_state` で固定し、評価末だけ各車両の初期 SOC 目標を保持します。
 BESS は `rolling_bess_terminal_policy=minimum_only` とし、容量20〜80%の物理範囲と

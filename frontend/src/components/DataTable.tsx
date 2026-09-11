@@ -5,7 +5,8 @@ import { api, display, type Page, type Row } from "../api";
 import { ErrorBox, Pager } from "./common";
 const tableNames: Record<string, string> = {
   timetable_rows: "時刻表",
-  routes: "系統",
+  routes: "路線パターン",
+  vehicle_templates: "車両テンプレート",
   depots: "営業所",
   vehicles: "車両",
   chargers: "充電器",
@@ -25,7 +26,8 @@ const columns: Record<string, string[]> = {
     "operator_id",
   ],
   routes: ["id", "name", "routeCode", "distanceKm"],
-  vehicles: ["id", "name", "type", "depotId", "batteryCapacityKWh"],
+  vehicles: ["id", "modelName", "type", "depotId", "batteryKwh", "enabled"],
+  vehicle_templates: ["id", "name", "type", "batteryKwh"],
   depots: ["id", "name"],
   stops: ["id", "name"],
 };
@@ -44,17 +46,22 @@ const columnLabels: Record<string, string> = {
   type: "車種",
   depotId: "営業所",
   batteryCapacityKWh: "電池容量 (kWh)",
+  batteryKwh: "電池容量 (kWh)",
+  modelName: "車両モデル",
+  enabled: "使用可",
 };
 export default function DataTable({
   id,
   fixed,
   selected,
   onSelection,
+  onEdit,
 }: {
   id: string;
   fixed?: string;
   selected?: string[];
   onSelection?: (ids: string[]) => void;
+  onEdit?: (row: Row) => void;
 }) {
   const [name, setName] = useState(fixed ?? "timetable_rows");
   const [offset, setOffset] = useState(0);
@@ -70,7 +77,10 @@ export default function DataTable({
     placeholderData: keepPreviousData,
   });
   const rows = data.data?.items ?? [];
-  const keys = columns[name] ?? Object.keys(rows[0] ?? {}).slice(0, 8);
+  const keys = [
+    ...(onEdit ? ["__edit"] : []),
+    ...(columns[name] ?? Object.keys(rows[0] ?? {}).slice(0, 8)),
+  ];
   const virtual = useVirtualizer({
     count: rows.length,
     getScrollElement: () => viewport.current,
@@ -150,7 +160,7 @@ export default function DataTable({
           {onSelection && <div role="columnheader">選択</div>}
           {keys.map((key) => (
             <div key={key} role="columnheader">
-              {columnLabels[key] ?? key}
+              {key === "__edit" ? "操作" : (columnLabels[key] ?? key)}
             </div>
           ))}
         </div>
@@ -197,7 +207,17 @@ export default function DataTable({
                 )}
                 {keys.map((key) => (
                   <div role="cell" key={key} title={display(row[key])}>
-                    {display(row[key])}
+                    {key === "__edit" ? (
+                      <button
+                        type="button"
+                        disabled={data.isPlaceholderData}
+                        onClick={() => onEdit?.(row)}
+                      >
+                        編集
+                      </button>
+                    ) : (
+                      display(row[key])
+                    )}
                   </div>
                 ))}
               </div>

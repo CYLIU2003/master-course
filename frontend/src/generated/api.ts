@@ -348,6 +348,160 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/desktop/scenarios/{scenario_id}/simulation-summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Simulation Summary */
+    get: operations["simulation_summary_api_desktop_scenarios__scenario_id__simulation_summary_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/scenarios/{scenario_id}/artifacts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Artifacts */
+    get: operations["artifacts_api_desktop_scenarios__scenario_id__artifacts_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/scenarios/{scenario_id}/artifacts/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Artifact File */
+    get: operations["artifact_file_api_desktop_scenarios__scenario_id__artifacts_file_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/scenarios/{scenario_id}/timetable-import": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Timetable Import */
+    post: operations["timetable_import_api_desktop_scenarios__scenario_id__timetable_import_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/scenarios/{scenario_id}/timetable-export": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Timetable Export */
+    post: operations["timetable_export_api_desktop_scenarios__scenario_id__timetable_export_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/scenarios/{scenario_id}/result-data/{name}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Result Data */
+    get: operations["result_data_api_desktop_scenarios__scenario_id__result_data__name__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/weather/action": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Weather Action */
+    post: operations["weather_action_api_desktop_weather_action_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/weather/source": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Weather Source */
+    post: operations["weather_source_api_desktop_weather_source_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/scenarios/{scenario_id}/configuration": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Configuration */
+    get: operations["configuration_api_desktop_scenarios__scenario_id__configuration_get"];
+    /** Edit Configuration */
+    put: operations["edit_configuration_api_desktop_scenarios__scenario_id__configuration_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/desktop/scenarios": {
     parameters: {
       query?: never;
@@ -2066,6 +2220,24 @@ export interface components {
       /** Allowed */
       allowed: boolean;
     };
+    /** DesktopConfiguration */
+    DesktopConfiguration: {
+      /** Values */
+      values: {
+        [key: string]: components["schemas"]["JsonValue"];
+      };
+      /** Revision */
+      revision: string;
+    };
+    /** DesktopConfigurationEdit */
+    DesktopConfigurationEdit: {
+      /** Changes */
+      changes: {
+        [key: string]: components["schemas"]["JsonValue"];
+      };
+      /** Revision */
+      revision: string;
+    };
     /** DesktopPage */
     DesktopPage: {
       /** Items */
@@ -2080,6 +2252,82 @@ export interface components {
       limit: number;
       /** Warnings */
       warnings?: string[];
+    };
+    /** DesktopTimetableImport */
+    DesktopTimetableImport: {
+      /** Content */
+      content: string;
+      /**
+       * Apply
+       * @default false
+       */
+      apply: boolean;
+      /**
+       * Revision
+       * @default
+       */
+      revision: string;
+    };
+    /** DesktopWeatherAction */
+    DesktopWeatherAction: {
+      /**
+       * Action
+       * @enum {string}
+       */
+      action:
+        | "inspect"
+        | "historical"
+        | "pv_proxy"
+        | "representative"
+        | "typical_proxy";
+      /**
+       * Source Path
+       * @default
+       */
+      source_path: string;
+      /**
+       * Service Date
+       * @default
+       */
+      service_date: string;
+      /**
+       * Station Id
+       * @default
+       */
+      station_id: string;
+      /**
+       * Station Name
+       * @default
+       */
+      station_name: string;
+      /**
+       * Depot Id
+       * @default
+       */
+      depot_id: string;
+      /**
+       * Issue Date
+       * @default
+       */
+      issue_date: string;
+      /**
+       * Weather Class
+       * @default auto
+       * @enum {string}
+       */
+      weather_class: "auto" | "sunny" | "cloudy" | "rainy";
+      /**
+       * Random Seed
+       * @default 42
+       */
+      random_seed: number;
+    };
+    /** DesktopWeatherSource */
+    DesktopWeatherSource: {
+      /** Filename */
+      filename: string;
+      /** Content */
+      content: string;
     };
     /** DuplicateScenarioBody */
     DuplicateScenarioBody: {
@@ -3416,6 +3664,10 @@ export interface components {
       experimentMethod?: string | null;
       /** Experimentnotes */
       experimentNotes?: string | null;
+      /** Bessbalanceperiod */
+      bessBalancePeriod?: ("daily" | "evaluation_period") | null;
+      /** Rollingbessterminalpolicy */
+      rollingBessTerminalPolicy?: ("scenario" | "minimum_only") | null;
     };
     /** UpdateRouteBody */
     UpdateRouteBody: {
@@ -4535,6 +4787,335 @@ export interface operations {
       };
     };
   };
+  simulation_summary_api_desktop_scenarios__scenario_id__simulation_summary_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ResultSummary"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  artifacts_api_desktop_scenarios__scenario_id__artifacts_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  artifact_file_api_desktop_scenarios__scenario_id__artifacts_file_get: {
+    parameters: {
+      query: {
+        name: string;
+      };
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  timetable_import_api_desktop_scenarios__scenario_id__timetable_import_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DesktopTimetableImport"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  timetable_export_api_desktop_scenarios__scenario_id__timetable_export_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  result_data_api_desktop_scenarios__scenario_id__result_data__name__get: {
+    parameters: {
+      query?: {
+        owner?: string;
+        offset?: number;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        scenario_id: string;
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  weather_action_api_desktop_weather_action_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DesktopWeatherAction"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  weather_source_api_desktop_weather_source_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DesktopWeatherSource"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  configuration_api_desktop_scenarios__scenario_id__configuration_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DesktopConfiguration"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  edit_configuration_api_desktop_scenarios__scenario_id__configuration_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DesktopConfigurationEdit"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DesktopConfiguration"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   scenarios_api_desktop_scenarios_get: {
     parameters: {
       query?: {
@@ -4613,6 +5194,7 @@ export interface operations {
           | "routes"
           | "depots"
           | "vehicles"
+          | "vehicle_templates"
           | "stops"
           | "chargers"
           | "timetable_rows"

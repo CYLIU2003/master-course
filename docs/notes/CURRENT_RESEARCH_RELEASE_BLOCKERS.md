@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-11 Electron主要操作群の移行
+
+Tkinter主要操作を用途別画面へ移し、保存・入出力・図表・比較を追加した。設定/CSV検査と研究採用は別ゲートである。BESS方針の明示保存・日付Prepare/rollingへの転送は、未指定の旧ケースの意味を維持する。進行中の4季節診断はclean frozen e8bd9d6cの成果物として扱い、MAINの新しいSHAのsolver証拠へ転記しない。既存PowerPoint証拠と正式採用ゲートを含む研究リリースBLOCKEDを維持する。[変更範囲](DESKTOP_TK_PARITY_20260911.md)。
+
 ## 2026-09-11 4路線季節診断のRolling終端契約を修正
 
 途中窓のBEVはday-ahead計画の同じ境界SOCへ接続し、評価末だけ各車両の初期SOC

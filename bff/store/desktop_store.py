@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import json
 import sqlite3
-from contextlib import closing
+from contextlib import closing, contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -14,8 +14,9 @@ import ijson
 
 from bff.store import scenario_store, trip_store
 from bff.store.desktop_json import LegacyResultReader
+from bff.store.output_paths import outputs_root, project_root
 
-MASTER_TABLES = frozenset({"routes", "depots", "vehicles", "stops", "chargers"})
+MASTER_TABLES = frozenset({"routes", "depots", "vehicles", "stops", "chargers", "vehicle_templates"})
 ARTIFACT_TABLES = frozenset({"timetable_rows", "trips", "duties", "blocks"})
 RESULT_PATHS = (
     "status",
@@ -24,6 +25,13 @@ RESULT_PATHS = (
     "objective_value",
     "cost_breakdown",
     "mip_gap",
+    "solve_time_seconds",
+    "summary.vehicle_count_used",
+    "summary.trip_count_served",
+    "summary.trip_count_unserved",
+    "simulation_summary.total_co2_kg",
+    "simulation_summary.total_fuel_cost",
+    "simulation_summary.peak_demand_kw",
     "solution_validity",
     "result_class",
     "research_kpi_eligible",
@@ -44,6 +52,11 @@ RESULT_PATHS = (
     "metadata.post_solve_repair_used",
     "metadata.rolling_hourly_chain_summary",
     "metadata.claim_scope",
+    "total_operating_cost", "total_energy_cost", "total_demand_charge",
+    "total_degradation_cost", "total_fuel_cost", "total_co2_kg",
+    "total_pv_kwh", "total_grid_kwh", "peak_demand_kw", "served_task_ratio",
+    "electricity_cost_basis", "electricity_cost_provisional_jpy",
+    "electricity_cost_charged_jpy", "feasibility_report",
 )
 
 
@@ -286,3 +299,150 @@ def result_summary(scenario_id: str) -> dict[str, Any]:
                 "values": result,
             }
     return {"available": False, "source": None, "values": {}}
+
+
+RESULT_SERIES = frozenset({
+    "vehicle_soc_kwh_by_vehicle_slot", "bess_soc_kwh_by_depot_slot",
+    "grid_to_bus_kwh_by_depot_slot", "pv_to_bus_kwh_by_depot_slot",
+    "bess_to_bus_kwh_by_depot_slot", "pv_to_bess_kwh_by_depot_slot",
+    "grid_to_bess_kwh_by_depot_slot", "pv_curtail_kwh_by_depot_slot",
+})
+RESULT_ROWS = frozenset({"charging_schedule", "vehicle_cost_ledger", "daily_cost_ledger"})
+
+
+class MissingResult(ValueError):
+    """The scenario has no persisted result of the requested kind."""
+
+
+@contextmanager
+def result_source(scenario_id: str, artifact: str = "optimization_result"):
+    """Open the persisted result without decoding its complete JSON document."""
+    _, refs = _context(scenario_id)
+    db_path = Path(refs["artifactStore"])
+    if db_path.exists():
+        with closing(_read_connection(db_path)) as conn:
+            exists = conn.execute("SELECT 1 FROM sqlite_master WHERE name='scalar_artifacts'").fetchone()
+            row = conn.execute("SELECT rowid FROM scalar_artifacts WHERE name=?", (artifact,)).fetchone() if exists else None
+            if row:
+                with conn.blobopen("scalar_artifacts", "payload_json", row[0], readonly=True) as source:
+                    yield io.BufferedReader(LegacyResultReader(source))
+                return
+    path = Path(refs["simulationResult" if artifact == "simulation_result" else "optimizationResult"])
+    if not path.is_file():
+        raise MissingResult("保存された結果がありません。")
+    with path.open("rb") as source:
+        yield io.BufferedReader(LegacyResultReader(source))
+
+
+def simulation_summary(scenario_id: str) -> dict[str, Any]:
+    try:
+        with result_source(scenario_id, "simulation_result") as source:
+            values = _stream_projection(source)
+    except MissingResult:
+        values = {}
+    return {"available": bool(values), "source": "simulation_result" if values else None,
+            "values": values}
+
+
+def result_page(scenario_id: str, name: str, owner: str, offset: int, limit: int) -> dict[str, Any]:
+    if name == "vehicle_gantt_rows":
+        return timeline_page(scenario_id, owner, offset, limit)
+    if name not in RESULT_SERIES | RESULT_ROWS:
+        raise ValueError("Unsupported result data")
+    root = "canonical_solver_result." + name
+    items, owners, total = [], [], 0
+    with result_source(scenario_id) as source:
+        if name in RESULT_ROWS:
+            for row in ijson.items(source, root + ".item", use_float=True):
+                if owner and str(row.get("vehicle_id", "")) != owner:
+                    continue
+                if offset <= total < offset + limit:
+                    items.append(row)
+                total += 1
+        else:
+            for prefix, event, value in ijson.parse(source, use_float=True):
+                if prefix == root and event == "map_key" and len(owners) < 250:
+                    owners.append(str(value))
+                if not owner or not prefix.startswith(root + "." + owner + ".") or event not in {"number", "null", "string"}:
+                    continue
+                slot = prefix[len(root + "." + owner + "."):]
+                if not slot.isdigit():
+                    continue
+                if offset <= total < offset + limit:
+                    items.append({"slot_index": int(slot), "value": value, "owner": owner})
+                total += 1
+    return {"items": items, "total": total, "offset": offset, "limit": limit,
+            "owners": owners, "source": "optimization_result.canonical_solver_result", "scope": "saved_solver_plan"}
+
+
+def result_directory(scenario_id: str) -> Path | None:
+    with result_source(scenario_id) as source:
+        directory = next(ijson.items(source, "audit.output_dir"), None)
+    if not isinstance(directory, str) or not directory:
+        return None
+    path = Path(directory)
+    if not path.is_absolute():
+        path = project_root() / path
+    path = path.resolve()
+    if not path.is_relative_to(outputs_root().resolve()):
+        raise ValueError("結果の出力先が許可されたoutputフォルダー外です。")
+    return path
+
+
+RESULT_FILE_EXTENSIONS = frozenset({".csv", ".json", ".xlsx", ".png", ".pdf", ".md"})
+
+
+def result_file(scenario_id: str, name: str) -> Path:
+    directory = result_directory(scenario_id)
+    if directory is None:
+        raise MissingResult("結果の出力フォルダーが保存されていません。")
+    path = (directory / name).resolve()
+    if not path.is_relative_to(directory) or path.suffix.lower() not in RESULT_FILE_EXTENSIONS:
+        raise ValueError("許可された結果ファイルを指定してください。")
+    if not path.is_file() or path.stat().st_size > 100_000_000:
+        raise ValueError("ファイルが存在しないか、画面から取得できる100 MBの上限を超えています。")
+    return path
+
+
+def result_files(scenario_id: str) -> dict[str, Any]:
+    directory = result_directory(scenario_id)
+    result = {"directory": str(directory) if directory else None, "items": [], "truncated": False}
+    if directory is None:
+        return result
+    for folder in (directory, directory / "graph"):
+        if not folder.is_dir() or not folder.resolve().is_relative_to(directory):
+            continue
+        for path in folder.iterdir():
+            if not path.is_file() or path.suffix.lower() not in RESULT_FILE_EXTENSIONS or not path.resolve().is_relative_to(directory):
+                continue
+            if len(result["items"]) == 250:
+                result["truncated"] = True
+                return result
+            result["items"].append({"name": path.relative_to(directory).as_posix(), "bytes": path.stat().st_size})
+    return result
+
+
+def timeline_page(scenario_id: str, owner: str, offset: int, limit: int) -> dict[str, Any]:
+    """Page the exact saved timeline artifact, never regenerate dispatch rows."""
+    directory = result_directory(scenario_id)
+    result = {"items": [], "total": 0, "offset": offset, "limit": limit,
+              "owners": [], "source": "vehicle_timelines.json", "scope": "saved_solver_plan"}
+    if directory is None:
+        return result
+    path = (directory / "vehicle_timelines.json").resolve()
+    if not path.is_relative_to(outputs_root().resolve()):
+        raise ValueError("結果の出力先が許可されたoutputフォルダー外です。")
+    if not path.is_file():
+        return result
+    with path.open("rb") as source:
+        for row in ijson.items(source, "vehicle_gantt_rows.item", use_float=True):
+            vehicle = str(row.get("vehicle_id", ""))
+            if vehicle not in result["owners"] and len(result["owners"]) < 250:
+                result["owners"].append(vehicle)
+            if owner and vehicle != owner:
+                continue
+            if offset <= result["total"] < offset + limit:
+                result["items"].append(row)
+            result["total"] += 1
+    result["source"] = str(path)
+    return result

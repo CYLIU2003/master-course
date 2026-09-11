@@ -152,6 +152,13 @@ async function handle(request: Request): Promise<Response> {
         headers: {
           "content-type":
             upstream.headers.get("content-type") ?? "application/json",
+          ...(upstream.headers.has("content-disposition")
+            ? {
+                "content-disposition": upstream.headers.get(
+                  "content-disposition",
+                )!,
+              }
+            : {}),
         },
       });
     } catch {
@@ -254,6 +261,19 @@ else
       window.webContents.session.setPermissionCheckHandler(() => false);
       await window.loadURL("research://app/");
       if (smoke) {
+        const selectedScenario = process.env.EV_BUS_SMOKE_SCENARIO_ID;
+        if (selectedScenario) {
+          if (!/^[A-Za-z0-9_-]+$/.test(selectedScenario))
+            throw new Error("Invalid smoke scenario ID");
+          await window.webContents.executeJavaScript(
+            `localStorage.setItem('ev-scenario', ${JSON.stringify(selectedScenario)})`,
+          );
+          await window.loadURL("research://app/");
+        }
+        // Hidden windows can pause CSS transitions midway between snapshots.
+        await window.webContents.insertCSS(
+          "*, *::before, *::after { transition: none !important; animation: none !important; }",
+        );
         const deadline = Date.now() + 30_000;
         while (Date.now() < deadline) {
           const ready: boolean = await window.webContents.executeJavaScript(
@@ -279,10 +299,11 @@ else
         const hasScenario: boolean = await window.webContents.executeJavaScript(
           "Boolean(document.querySelector('.scenario'))",
         );
-        if (hasScenario) {
-          await window.webContents.executeJavaScript(
-            "document.querySelector('.scenario').click()",
-          );
+        if (hasScenario || selectedScenario) {
+          if (hasScenario)
+            await window.webContents.executeJavaScript(
+              "document.querySelector('.scenario').click()",
+            );
           const scenarioDeadline = Date.now() + 60_000;
           let opened = false;
           while (Date.now() < scenarioDeadline) {
@@ -297,28 +318,124 @@ else
             path.join(output, "overview.png"),
             (await window.webContents.capturePage()).toPNG(),
           );
-          await window.webContents.executeJavaScript(
-            "Array.from(document.querySelectorAll('.tabs button')).find(button => button.textContent === 'データを確認').click()",
-          );
-          const tableDeadline = Date.now() + 60_000;
-          let tableReady = false;
-          while (Date.now() < tableDeadline) {
-            tableReady = await window.webContents.executeJavaScript(
-              "Boolean(document.querySelector('.workspace > .data-panel')) && !Array.from(document.querySelectorAll('.table-status')).some(node => node.textContent.includes('読み込み')) && !document.querySelector('[role=alert]')",
-            );
-            if (tableReady) break;
-            await new Promise((resolve) => setTimeout(resolve, 250));
-          }
-          if (!tableReady) throw new Error("Table smoke failed");
-          const renderedRows: number =
+          const visitedScreens: string[] = [];
+          const screens = [
+            "運行・計算設定",
+            "車両",
+            "営業所・充電設備",
+            "路線・運行パターン",
+            "PV・BESS設備",
+            "気象・PVデータ",
+            "データを確認",
+            "実行",
+            "グラフ・費用明細",
+            "シナリオ比較",
+          ];
+          for (const label of screens) {
             await window.webContents.executeJavaScript(
-              "document.querySelectorAll('.workspace > .data-panel .table-row').length",
+              `Array.from(document.querySelectorAll('.workspace-nav button')).find(button => button.textContent === ${JSON.stringify(label)}).click()`,
             );
-          if (renderedRows > 50)
-            throw new Error("Virtual table rendered too many rows");
+            const screenDeadline = Date.now() + 60_000;
+            while (Date.now() < screenDeadline) {
+              await new Promise((resolve) => setTimeout(resolve, 250));
+              if (
+                await window.webContents.executeJavaScript(
+                  "document.body.dataset.fetching === '0'",
+                )
+              )
+                break;
+            }
+            if (
+              !(await window.webContents.executeJavaScript(
+                "document.body.dataset.fetching === '0'",
+              ))
+            )
+              throw new Error("Screen data timed out: " + label);
+            const state: { alerts: string[]; rows: number; heading: string } =
+              await window.webContents.executeJavaScript(
+                `({ alerts: Array.from(document.querySelectorAll('[role=alert]')).filter(node => node.checkVisibility()).map(node => node.textContent), rows: Array.from(document.querySelectorAll('.table-row')).filter(node => node.checkVisibility()).length, heading: document.querySelector('header').textContent })`,
+              );
+            if (state.alerts.length)
+              throw new Error(`${label}: ${state.alerts.join("; ")}`);
+            if (state.rows > 100)
+              throw new Error("Virtual table rendered too many rows");
+            if (!state.heading.includes(label))
+              throw new Error("Navigation failed: " + label);
+            writeFileSync(
+              path.join(output, `screen-${visitedScreens.length + 1}.png`),
+              (await window.webContents.capturePage()).toPNG(),
+            );
+            visitedScreens.push(label);
+          }
+          await window.webContents.executeJavaScript(
+            "Array.from(document.querySelectorAll('.workspace-nav button')).find(button => button.textContent === 'グラフ・費用明細').click()",
+          );
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          const hasDownload: boolean =
+            await window.webContents.executeJavaScript(
+              "Boolean(document.querySelector('.artifact-list a'))",
+            );
+          if (hasDownload) {
+            const done = new Promise<string>((resolve, reject) => {
+              const timer = setTimeout(
+                () => reject(new Error("Native artifact download timed out")),
+                20_000,
+              );
+              window.webContents.session.once(
+                "will-download",
+                (_event, item) => {
+                  const download = path.join(
+                    output,
+                    `download-${Date.now()}-${path.basename(item.getFilename())}`,
+                  );
+                  item.setSavePath(download);
+                  item.once("done", (_event, state) => {
+                    clearTimeout(timer);
+                    if (state === "completed") resolve(download);
+                    else reject(new Error("Artifact download: " + state));
+                  });
+                },
+              );
+            });
+            await window.webContents.executeJavaScript(
+              "document.querySelector('.artifact-list a').click()",
+              true,
+            );
+            const download = await done;
+            writeFileSync(
+              path.join(output, "download.json"),
+              JSON.stringify({
+                path: download,
+                bytes: readFileSync(download).length,
+                nativeDownload: true,
+              }),
+            );
+          }
+          window.setSize(900, 760);
+          for (const label of [
+            "運行・計算設定",
+            "車両",
+            "PV・BESS設備",
+            "グラフ・費用明細",
+          ]) {
+            await window.webContents.executeJavaScript(
+              `Array.from(document.querySelectorAll('.workspace-nav button')).find(button => button.textContent === ${JSON.stringify(label)}).click()`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            const overflow: boolean =
+              await window.webContents.executeJavaScript(
+                "document.documentElement.scrollWidth > window.innerWidth + 1",
+              );
+            if (overflow)
+              throw new Error("Horizontal page overflow at 900px: " + label);
+          }
           writeFileSync(
-            path.join(output, "table.png"),
+            path.join(output, "compact.png"),
             (await window.webContents.capturePage()).toPNG(),
+          );
+          writeFileSync(
+            path.join(output, "screens.json"),
+            JSON.stringify({ visitedScreens }, null, 2),
           );
         }
         writeFileSync(

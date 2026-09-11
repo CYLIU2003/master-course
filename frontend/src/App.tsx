@@ -4,27 +4,59 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  useIsFetching,
 } from "@tanstack/react-query";
 import {
   Activity,
+  ArrowLeftRight,
+  BatteryCharging,
   BusFront,
+  CalendarDays,
+  ChevronDown,
+  CloudSun,
   Database,
+  Gauge,
+  Home,
   Layers3,
+  Map,
   Plus,
   Search,
   Settings2,
+  X,
 } from "lucide-react";
 import { api, post, type Page, type Scenario } from "./api";
 import { ErrorBox, Pager } from "./components/common";
 import Workspace from "./components/Workspace";
+const pages = [
+  ["overview", "概要と検証", Home],
+  ["settings", "運行・計算設定", Settings2],
+  ["fleet", "車両", BusFront],
+  ["depots", "営業所・充電設備", Layers3],
+  ["routes", "路線・運行パターン", Map],
+  ["energy", "PV・BESS設備", BatteryCharging],
+  ["weather", "気象・PVデータ", CloudSun],
+  ["data", "データを確認", Database],
+  ["run", "実行", Activity],
+  ["results", "グラフ・費用明細", Gauge],
+  ["compare", "シナリオ比較", ArrowLeftRight],
+] as const;
 export default function App() {
+  const fetching = useIsFetching();
+  useEffect(() => {
+    document.body.dataset.fetching = String(fetching);
+  }, [fetching]);
   const [selected, setSelected] = useState(
     localStorage.getItem("ev-scenario") ?? "",
   );
+  const [page, setPage] = useState("overview");
+  const [picker, setPicker] = useState(!selected);
+  const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [name, setName] = useState("");
+  const [dataset, setDataset] = useState("");
+  const [seed, setSeed] = useState(42);
   const [creating, setCreating] = useState(false);
   const client = useQueryClient();
   useEffect(() => {
@@ -46,12 +78,30 @@ export default function App() {
   useEffect(() => {
     document.body.dataset.ready = String(list.isSuccess);
   }, [list.isSuccess]);
+  useEffect(() => {
+    const handler = (event: BeforeUnloadEvent) => {
+      if (dirty) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
   function select(id: string) {
     setSelected(id);
     localStorage.setItem("ev-scenario", id);
+    setPicker(!id);
+    setDirty(false);
+    setPage("overview");
   }
   const create = useMutation({
-    mutationFn: () => post<Scenario>("/scenarios", { name: name.trim() }),
+    mutationFn: () =>
+      post<Scenario>("/scenarios", {
+        name: name.trim(),
+        randomSeed: seed,
+        ...(dataset.trim() ? { datasetId: dataset.trim() } : {}),
+      }),
     onSuccess: (row) => {
       void client.invalidateQueries({ queryKey: ["scenarios"] });
       select(row.id);
@@ -59,9 +109,10 @@ export default function App() {
       setName("");
     },
   });
+  const title = pages.find(([key]) => key === page)?.[1] ?? "";
   return (
     <div className="app">
-      <aside>
+      <aside className="main-sidebar">
         <div className="brand">
           <div className="brand-icon">
             <BusFront size={23} />
@@ -70,98 +121,52 @@ export default function App() {
             EV BUS<span>RESEARCH WORKSPACE</span>
           </div>
         </div>
-        <div className="sidebar-label">ワークスペース</div>
-        <div className="nav-active">
-          <Layers3 size={18} /> シナリオ <span>{list.data?.total ?? "—"}</span>
-        </div>
-        <div className="sidebar-title">
-          <h2>シナリオを選ぶ</h2>
-          <button
-            aria-label="新しいシナリオ"
-            onClick={() => setCreating(!creating)}
-          >
-            <Plus size={18} />
-          </button>
-        </div>
-        <label className="search">
-          <Search size={16} />
-          <input
-            placeholder="名前で検索"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
-        {creating && (
-          <form
-            className="create-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              create.mutate();
-            }}
-          >
-            <input
-              autoFocus
-              aria-label="シナリオ名"
-              placeholder="シナリオ名"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={160}
-            />
+        <button
+          className="scenario-switch"
+          disabled={dirty}
+          onClick={() => setPicker(true)}
+        >
+          <Layers3 size={18} />
+          <span>シナリオを切り替える</span>
+          <ChevronDown size={15} />
+        </button>
+        <div className="sidebar-label">計画と検証</div>
+        <nav className="workspace-nav">
+          {pages.map(([key, label, Icon]) => (
             <button
-              className="primary"
-              disabled={create.isPending || !name.trim()}
+              key={key}
+              disabled={!selected}
+              className={page === key && selected ? "active" : ""}
+              aria-current={page === key && selected ? "page" : undefined}
+              onClick={() => setPage(key)}
             >
-              作成
-            </button>
-            <ErrorBox error={create.error} />
-          </form>
-        )}
-        <ErrorBox error={list.error} />
-        {!!list.data?.warnings?.length && (
-          <details className="warning">
-            <summary>読み込めないシナリオがあります</summary>
-            {list.data.warnings.map((warning) => (
-              <p key={warning}>{warning}</p>
-            ))}
-          </details>
-        )}
-        <div className="scenario-list">
-          {list.isPending && <p>読み込み中…</p>}
-          {list.data?.items.map((row) => (
-            <button
-              key={row.id}
-              className={"scenario " + (selected === row.id ? "selected" : "")}
-              onClick={() => select(row.id)}
-            >
-              <span>{row.name}</span>
-              <small>
-                {row.status} · {row.updatedAt?.slice(0, 10)}
-              </small>
+              <Icon size={18} />
+              <span>{label}</span>
             </button>
           ))}
-        </div>
-        <Pager
-          offset={offset}
-          total={list.data?.total ?? 0}
-          size={50}
-          set={setOffset}
-        />
+        </nav>
         <div className="sidebar-footer">
           <span className="dot" /> ローカル研究環境
           <br />
-          <small>TypeScript · React · Electron</small>
+          <small>入力の準備 → 実行 → 結果の確認</small>
         </div>
       </aside>
       <main>
         <header>
           <span>
-            研究ワークスペース <span className="crumb">/ シナリオ</span>
+            研究ワークスペース{" "}
+            <span className="crumb">/ {selected ? title : "シナリオ"}</span>
           </span>
           <span className="local-tag">LOCAL</span>
         </header>
         {selected ? (
-          <Workspace key={selected} id={selected} onSelect={select} />
+          <Workspace
+            key={selected}
+            id={selected}
+            page={page}
+            onSelect={select}
+            onDirty={setDirty}
+          />
         ) : (
           <section className="welcome">
             <span className="eyebrow">DISPATCH · CHARGING · ENERGY</span>
@@ -170,30 +175,175 @@ export default function App() {
               <br />
               ひとつの視点で。
             </h1>
-            <p>シナリオを選び、入力の準備から診断結果まで確認できます。</p>
-            <button className="primary" onClick={() => setCreating(true)}>
-              <Plus size={17} /> シナリオを作成
+            <p>シナリオを選び、運行計画から結果の比較まで進めましょう。</p>
+            <button
+              className="primary"
+              onClick={() => {
+                setPicker(true);
+                setCreating(true);
+              }}
+            >
+              <Plus size={17} />
+              シナリオを作成
             </button>
             <div className="welcome-cards">
-              <article>
-                <Database />
-                <h3>必要なデータから</h3>
-                <p>時刻表・車両・仕業をページ単位で読み込みます。</p>
-              </article>
-              <article>
-                <Settings2 />
-                <h3>条件をそろえる</h3>
-                <p>営業所・系統・対象日を確認して入力を準備します。</p>
-              </article>
-              <article>
-                <Activity />
-                <h3>根拠をたどる</h3>
-                <p>実行状態と検証結果を個別に確認できます。</p>
-              </article>
+              {[
+                [
+                  CalendarDays,
+                  "条件を整える",
+                  "対象路線・日付・車両・電力設備を設定。",
+                ],
+                [
+                  Activity,
+                  "計算の状態が見える",
+                  "入力の検査と計算の進み具合を確認。",
+                ],
+                [
+                  ArrowLeftRight,
+                  "結果を比べる",
+                  "費用・残量・検証結果を出典と一緒に比較。",
+                ],
+              ].map(([Icon, label, detail], i) => {
+                const Symbol = Icon as typeof Activity;
+                return (
+                  <article key={i}>
+                    <Symbol />
+                    <h3>{String(label)}</h3>
+                    <p>{String(detail)}</p>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
       </main>
+      {picker && (
+        <div className="drawer-backdrop">
+          <section
+            className="scenario-picker"
+            role="dialog"
+            aria-modal="true"
+            aria-label="シナリオを選ぶ"
+          >
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">YOUR SCENARIOS</span>
+                <h2>どの計画から始めますか</h2>
+              </div>
+              <button
+                aria-label="シナリオ選択を閉じる"
+                onClick={() => setPicker(false)}
+              >
+                <X size={19} />
+              </button>
+            </div>
+            <div className="table-toolbar">
+              <label className="search">
+                <Search size={16} />
+                <input
+                  autoFocus
+                  placeholder="名前で検索"
+                  aria-label="シナリオ検索"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+              <button onClick={() => setCreating(!creating)}>
+                <Plus size={16} />
+                新しく作成
+              </button>
+            </div>
+            {creating && (
+              <form
+                className="create-form panel"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  create.mutate();
+                }}
+              >
+                <div className="form-grid">
+                  <label>
+                    シナリオ名
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      maxLength={160}
+                    />
+                  </label>
+                  <label>
+                    データセットID
+                    <input
+                      value={dataset}
+                      onChange={(e) => setDataset(e.target.value)}
+                      placeholder="空欄は既定データセット"
+                    />
+                  </label>
+                  <label>
+                    乱数seed
+                    <input
+                      type="number"
+                      step={1}
+                      value={seed}
+                      onChange={(e) => setSeed(Number(e.target.value))}
+                    />
+                  </label>
+                </div>
+                <button
+                  className="primary"
+                  disabled={create.isPending || !name.trim()}
+                >
+                  作成
+                </button>
+                <ErrorBox error={create.error} />
+              </form>
+            )}
+            <ErrorBox error={list.error} />
+            {!!list.data?.warnings?.length && (
+              <details className="warning">
+                <summary>読み込めないシナリオがあります</summary>
+                {list.data.warnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+              </details>
+            )}
+            <div className="scenario-list">
+              {list.isPending && <p>読み込み中…</p>}
+              {list.data?.items.map((row) => (
+                <button
+                  key={row.id}
+                  className={
+                    "scenario " + (selected === row.id ? "selected" : "")
+                  }
+                  disabled={list.isPlaceholderData}
+                  onClick={() => select(row.id)}
+                >
+                  <div className="scenario-symbol">
+                    <Layers3 size={20} />
+                  </div>
+                  <span>
+                    {row.name}
+                    <small>
+                      {row.description || "運行・充電・エネルギー計画"}
+                    </small>
+                  </span>
+                  <small>
+                    {row.updatedAt?.slice(0, 10)}
+                    <br />
+                    {row.status}
+                  </small>
+                </button>
+              ))}
+            </div>
+            <Pager
+              offset={offset}
+              total={list.data?.total ?? 0}
+              size={50}
+              set={setOffset}
+            />
+          </section>
+        </div>
+      )}
     </div>
   );
 }

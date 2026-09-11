@@ -5,7 +5,7 @@ export default function Results({ data }: { data: Overview }) {
   const validity = record(values.solution_validity);
   const stats = [
     ["timetableRowCount", "時刻表"],
-    ["routeCount", "系統"],
+    ["routeCount", "路線パターン"],
     ["tripCount", "トリップ"],
     ["dutyCount", "仕業"],
   ];
@@ -26,7 +26,7 @@ export default function Results({ data }: { data: Overview }) {
       </div>
       <section className="panel">
         <div className="section-title">
-          <h2>結果の確認</h2>
+          <h2>最適化結果の確認</h2>
           <span className="badge">
             {data.result.available
               ? display(values.result_class)
@@ -85,7 +85,7 @@ export default function Results({ data }: { data: Overview }) {
         <div>
           <h2>入力条件を確認して、診断へ</h2>
           <p>
-            「入力と実行」で対象範囲と日付を設定できます。既存の結果を残す場合は、先にシナリオを複製してください。
+            「運行・計算設定」で対象範囲と日付を設定し、「実行」へ進めます。既存の結果を残す場合は、先にシナリオを複製してください。
           </p>
         </div>
         <ArrowRight />

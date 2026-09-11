@@ -939,6 +939,8 @@ class UpdateQuickSetupBody(BaseModel):
     planningHorizonHours: Optional[float] = Field(default=None, gt=0.0)
     experimentMethod: Optional[str] = None
     experimentNotes: Optional[str] = None
+    bessBalancePeriod: Optional[Literal["daily", "evaluation_period"]] = None
+    rollingBessTerminalPolicy: Optional[Literal["scenario", "minimum_only"]] = None
 
     @model_validator(mode="after")
     def _validate_integrated_solver_controls(self) -> "UpdateQuickSetupBody":
@@ -1878,6 +1880,7 @@ def _builder_defaults(
         "planningDays": int(simulation_config.get("planning_days") or 1),
         "rollingLookaheadHours": simulation_config.get('rolling_lookahead_hours'),
         "bessBalancePeriod": simulation_config.get('bess_balance_period') or 'daily',
+        "rollingBessTerminalPolicy": simulation_config.get('rolling_bess_terminal_policy') or 'scenario',
         "pvInformationMode": simulation_config.get('pv_information_mode') or 'historical_perfect_information',
         "vehicleTemplateId": primary_template.get("id"),
         "vehicleCount": len(existing_vehicles) or int(overlay_fleet.get("n_bev") or 10),
@@ -3614,6 +3617,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["solcast_typical_weather_class"] = str(
                 body.solcastTypicalWeatherClass
             ).strip()
+        if body.bessBalancePeriod is not None:
+            simulation_config["bess_balance_period"] = body.bessBalancePeriod
+        if body.rollingBessTerminalPolicy is not None:
+            simulation_config["rolling_bess_terminal_policy"] = body.rollingBessTerminalPolicy
         if body.depotEnergyAssets is not None:
             normalized_assets = _normalize_depot_energy_assets_payload(body.depotEnergyAssets)
             simulation_config["depot_energy_assets"] = normalized_assets

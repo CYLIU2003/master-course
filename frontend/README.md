@@ -23,15 +23,22 @@ Windows portable 版は `npm.cmd run package` で `release/EV Bus Research 0.1.0
 
 ## 画面でできること
 
-- シナリオの検索・作成・複製、保存済みの概要と検証結果の確認。
-- 営業所・系統・対象日・日数・ソルバー・時間制限の指定、既存の SOC・料金等を継承した Prepare と最適化実行。
-- 実行中ジョブの状態確認。再起動後もジョブ状態は再取得しますが、中断した最適化の再開ではありません。
-- 時刻表・系統・営業所・車両・充電器・停留所・トリップ・仕業・ブロックのページ表示。
-- ソルバー状態、物理検証、研究採用、研究コストの適格性を別に表示。未確認は合格やゼロへ変換しません。
+シナリオを選び、左メニューから運行・計算設定、車両、営業所・充電設備、路線、
+PV・BESS、気象、データ、実行、図表、比較を開きます。
 
-Prepare は入力を更新し、派生データを無効化します。以前の結果を残して比較する場合はシナリオを複製してください。正式実行は BFF の clean commit・入力契約・最終会計の既存ゲートを通ります。
+車両・テンプレートの作成/編集/複製/一括変更、設備と料金・SOC・solver設定、
+気象CSV/JSONの取込みと予報生成、時刻表の検査付き置換・全行書出し、
+calendar/permissionの編集、Prepare/最適化/simulation/再最適化/rolling、
+車両ダイヤ・SOC・電源フロー・費用明細・保存レポートの取得に対応します。
+[操作別の対応表と制限](../docs/notes/DESKTOP_TK_PARITY_20260911.md)。
 
-既存の Tkinter 全編集機能、比較図表、インポート、全研究レポートの画面移植はまだ完了していません。これらは `python run_app.py` と既存 CLI を利用できます。旧入口と研究成果物は保持しています。
+未保存の変更は各画面に保持します。シナリオ切替・実行の前に保存か「元に戻す」を
+選びます。保存済み条件が別操作で変わった場合は再読込みと再Prepareが必要です。
+Prepareは派生データを更新します。以前の結果を残す場合はシナリオを複製してください。
+BESSの20〜80%ボタンは日末・週末の残量を範囲内で自由にします。BEVの条件は維持します。
+
+研究採用・物理検証・最終会計・最適性は別に確認します。未確認を合格やゼロにしません。
+旧Tkinter入口と研究成果物は保持し、全Tkinterメニューとの逐語的な一致は主張しません。
 
 ## 検証・型生成
 
@@ -44,7 +51,7 @@ npm.cmd run smoke
 
 OpenAPI から `src/generated/api.ts` を生成し、公開 DTO をそこから参照します。任意 JSON の内容は `unknown` として境界で確認します。`api:generate` の Windows コマンドは `.venv/Scripts/python.exe` を使います。他 OS では同じ `scripts/export-openapi.py` を対応する Python で実行してから `openapi-typescript` を呼びます。
 
-Smoke は別の Electron セッションでシナリオ一覧・概要・時刻表を読み、`output/desktop-smoke/` に記録します。シナリオの書換えや solver 実行は行いません。Electron を閉じると、起動した BFF へ停止を要求し、5秒で終了しない場合はその子プロセスツリーだけを終了します。最適化中はアプリを開いたままにしてください。
+Smoke は別の Electron セッションで全メニューと900px幅を確認し、`output/desktop-smoke/` に記録します。シナリオの書換えやsolver実行は行いません。保存済み結果がある場合は既存ファイル1件をsmoke出力フォルダーへ取得し、native downloadも検査します。`EV_BUS_SMOKE_SCENARIO_ID` で検査するシナリオを指定できます。Electron を閉じると、起動した BFF へ停止を要求し、5秒で終了しない場合はその子プロセスツリーだけを終了します。最適化中はアプリを開いたままにしてください。
 
 2026-09-11、GPT-5.6 Lunaが `electron/main.ts` と `bff/desktop_server.py` を独立して確認しました。loopback限定・Bearer認証・起動応答のHMAC・protocol/path分離・sandbox/contextIsolation・stdin終了監視・Windows子プロセス終了が対象で、P0/P1指摘0件。画面全機能や研究モデル全体を承認するレビューではありません。
 

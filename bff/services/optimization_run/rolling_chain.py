@@ -1627,6 +1627,7 @@ def execute_frontend_rolling_chain(
         service_id=str(service_id),
         day_ahead_problem=problem,
         lookahead_hours=problem.metadata.get('rolling_lookahead_hours'),
+        bess_terminal_policy=problem.metadata.get('rolling_bess_terminal_policy', 'scenario'),
         pv_actuals_json=_prepare_actual_pv_execution_file(problem, Path(run_dir)),
     )
     exit_code = run_rolling_chain(request)

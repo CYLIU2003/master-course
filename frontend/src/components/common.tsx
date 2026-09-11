@@ -24,6 +24,7 @@ export function Pager({
         {total.toLocaleString()} 件
       </span>
       <button
+        type="button"
         aria-label="前のページ"
         disabled={!offset}
         onClick={() => set(Math.max(0, offset - size))}
@@ -31,6 +32,7 @@ export function Pager({
         <ChevronLeft size={16} />
       </button>
       <button
+        type="button"
         aria-label="次のページ"
         disabled={offset + size >= total}
         onClick={() => set(offset + size)}

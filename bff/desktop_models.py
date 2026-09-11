@@ -1,6 +1,7 @@
 """Public desktop contracts, shared with the generated TypeScript client."""
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from typing import Literal
 
 
 class ScenarioSummary(BaseModel):
@@ -39,6 +40,43 @@ class ScenarioOverview(BaseModel):
     scope: dict[str, JsonValue]
     settings: dict[str, JsonValue]
     result: ResultSummary
+
+
+class DesktopConfiguration(BaseModel):
+    values: dict[str, JsonValue]
+    revision: str
+
+
+class DesktopConfigurationEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    changes: dict[str, JsonValue]
+    revision: str
+
+
+class DesktopWeatherAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["inspect", "historical", "pv_proxy", "representative", "typical_proxy"]
+    source_path: str = ""
+    service_date: str = ""
+    station_id: str = ""
+    station_name: str = ""
+    depot_id: str = ""
+    issue_date: str = ""
+    weather_class: Literal["auto", "sunny", "cloudy", "rainy"] = "auto"
+    random_seed: int = 42
+
+
+class DesktopTimetableImport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str = Field(max_length=20_000_000)
+    apply: bool = False
+    revision: str = ""
+
+
+class DesktopWeatherSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    filename: str = Field(max_length=200)
+    content: str = Field(max_length=20_000_000)
 
 
 class PrepareReply(BaseModel):

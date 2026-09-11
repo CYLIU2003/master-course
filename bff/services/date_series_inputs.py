@@ -220,7 +220,9 @@ def prepare_date_series_scenario(scenario: dict[str,Any], *, repo_root: Path = R
     asset['bess_balance_period'] = cfg.get('bess_balance_period') or 'daily'
     if asset['bess_balance_period'] not in ('daily','evaluation_period'):
         raise ValueError('Unsupported BESS balance period')
-    asset['bess_terminal_soc_policy'] = 'return_to_initial'
+    # Preserve explicitly saved BESS policy; legacy dated scenarios retain the
+    # previous return-to-initial default when no policy was declared.
+    asset['bess_terminal_soc_policy'] = asset.get('bess_terminal_soc_policy') or 'return_to_initial'
     dated_capacity_factors(asset,dates,step)
     cfg['depot_energy_assets'] = [asset]
     doc.setdefault('scenario_overlay',{})['depot_energy_assets'] = {'tsurumaki':deepcopy(asset)}
