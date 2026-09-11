@@ -25,7 +25,89 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from scripts.benchmarks.run_shibu21_seasonal_diagnostic import solve_week, write_json
+from src.optimization.common.bess_terminal_policy import resolve_bess_terminal_soc_target_kwh
 from src.optimization.common.date_series import content_hash
+from src.optimization.common.soc_helpers import (
+    effective_final_soc_target_kwh,
+    is_electric_vehicle,
+    vehicle_initial_soc_kwh,
+)
+
+
+def verify_evaluation_contract(problem, design: dict) -> dict:
+    """Verify BEV and seasonal BESS terminal controls before a diagnostic solve."""
+    metadata = problem.metadata
+    if metadata.get("bev_terminal_soc_policy") != design["bev_evaluation_terminal_policy"]:
+        raise ValueError("Prepared BEV terminal policy differs from the declared evaluation")
+    if float(metadata.get("final_soc_target_tolerance_percent") or 0) != 0:
+        raise ValueError("The evaluation forbids an inherited percentage terminal tolerance")
+    if metadata.get("daily_return_depot_id") != design["daily_return_depot_id"]:
+        raise ValueError("Prepared daily return depot differs from the declared evaluation")
+    if metadata.get("rolling_window_terminal_policy") != design["rolling_window_terminal_policy"]:
+        raise ValueError("The declared rolling boundary policy was not preserved")
+    if metadata.get("rolling_bess_terminal_policy", "scenario") != design["rolling_bess_terminal_policy"]:
+        raise ValueError("The declared rolling BESS terminal policy was not preserved")
+    if metadata.get("bess_balance_period") != design["bess_balance_period"]:
+        raise ValueError("Prepared BESS balance period differs from the declared evaluation")
+
+    vehicle_targets = {}
+    for vehicle in problem.vehicles:
+        if not is_electric_vehicle(problem, vehicle):
+            continue
+        initial = vehicle_initial_soc_kwh(problem, vehicle)
+        target = effective_final_soc_target_kwh(problem, vehicle)
+        if target is None or abs(target - initial) > 1.0e-6:
+            raise ValueError(
+                f"Terminal target does not return {vehicle.vehicle_id} to its own initial state"
+            )
+        vehicle_targets[vehicle.vehicle_id] = {
+            "initial_kwh": initial,
+            "terminal_target_kwh": target,
+        }
+
+    bess_controls = {}
+    expected_floor_ratio = float(design.get("bess_terminal_soc_floor_percent", 20.0)) / 100.0
+    for depot_id, asset in (problem.depot_energy_assets or {}).items():
+        if not asset.bess_enabled:
+            continue
+        capacity = float(asset.bess_energy_kwh or 0.0)
+        expected_min = capacity * expected_floor_ratio
+        expected_max = capacity * (1.0 - expected_floor_ratio)
+        if abs(float(asset.bess_soc_min_kwh) - expected_min) > 1.0e-6:
+            raise ValueError(f"BESS {depot_id} minimum SOC is not the declared 20% capacity floor")
+        if abs(float(asset.bess_soc_max_kwh) - expected_max) > 1.0e-6:
+            raise ValueError(f"BESS {depot_id} maximum SOC is not the declared 80% capacity ceiling")
+        if abs(float(asset.bess_terminal_soc_min_kwh) - expected_min) > 1.0e-6:
+            raise ValueError(f"BESS {depot_id} terminal floor is not the declared 20% capacity floor")
+        if str(asset.bess_balance_period) != design["bess_balance_period"]:
+            raise ValueError(f"BESS {depot_id} balance period differs from the declared evaluation")
+        if str(asset.bess_terminal_soc_policy) != design["bess_terminal_soc_policy"]:
+            raise ValueError(f"BESS {depot_id} terminal policy is not minimum_only")
+        target = resolve_bess_terminal_soc_target_kwh(
+            policy=asset.bess_terminal_soc_policy,
+            initial_soc_kwh=asset.bess_initial_soc_kwh,
+            configured_target_kwh=asset.bess_terminal_soc_target_kwh,
+            terminal_soc_floor_kwh=asset.bess_terminal_soc_min_kwh,
+            maximum_soc_kwh=asset.bess_soc_max_kwh,
+        )
+        if target is not None:
+            raise ValueError(f"BESS {depot_id} unexpectedly retains a terminal SOC target")
+        bess_controls[str(depot_id)] = {
+            "capacity_kwh": capacity,
+            "initial_soc_kwh": float(asset.bess_initial_soc_kwh),
+            "soc_min_kwh": float(asset.bess_soc_min_kwh),
+            "soc_max_kwh": float(asset.bess_soc_max_kwh),
+            "terminal_soc_floor_kwh": float(asset.bess_terminal_soc_min_kwh),
+            "terminal_soc_policy": str(asset.bess_terminal_soc_policy),
+            "terminal_soc_target_kwh": None,
+        }
+    return {
+        "status": "DECLARED_TERMINAL_CONTROLS_VERIFIED",
+        "vehicle_targets": vehicle_targets,
+        "bess_controls": bess_controls,
+        "bess_balance_period": design["bess_balance_period"],
+        "rolling_bess_terminal_policy": design["rolling_bess_terminal_policy"],
+    }
 
 
 def git_state() -> dict:
@@ -389,7 +471,12 @@ def run_diagnostic(config: dict, output: Path) -> list[dict]:
                 }
             else:
                 print(f"{week}: complete Prepare passed; diagnostic starts", flush=True)
-                result = solve_week(week, week_output, config)
+                result = solve_week(
+                    week,
+                    week_output,
+                    config,
+                    contract_validator=verify_evaluation_contract,
+                )
                 result["solve_attempted"] = True
             result["git_state_before"] = week_state_before
             result["git_state_after"] = git_state()

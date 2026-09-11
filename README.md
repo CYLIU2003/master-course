@@ -1,5 +1,12 @@
 # master-course
 
+2026-09-11: Rolling の季節診断契約を明示しました。途中窓の BEV 終端は
+`day_ahead_boundary_state` で固定し、評価末だけ各車両の初期 SOC 目標を保持します。
+BESS は `rolling_bess_terminal_policy=minimum_only` とし、容量20〜80%の物理範囲と
+最低SOC floorだけを適用して、途中窓に day-ahead の BESS 目標を残しません。
+4路線 runner はこの契約、`evaluation_period`、および入力 metadata を検査します。
+旧方針で途中まで作成した Prepare 出力は再利用せず、修正後の全4週 Prepare から再実行します。
+
 2026-09-11: 旧保存結果に含まれる `Infinity` / `NaN` でデスクトップ概要が開けない問題を修正しました。表示専用のストリーム読取りで非有限値を文字として保持し、原本・会計値・採用判定は書き換えません。[互換性と再測定](docs/notes/DESKTOP_LEGACY_JSON_COMPATIBILITY_20260911.md)。
 
 2026-09-11: 日付付き入力の読込みで、取得済み路線の件数・距離・方向がglobalカタログに置き換わる不具合を修正しました。保存前後とPrepare後の路線情報をハッシュで検査し、不一致・ゼロ距離・未確認カタログを診断実行へ渡しません。[原因・修正・再実行の扱い](docs/notes/DATED_ROUTE_METADATA_PROVENANCE_20260911.md)。

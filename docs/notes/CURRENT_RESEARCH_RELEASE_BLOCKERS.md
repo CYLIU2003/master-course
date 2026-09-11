@@ -1,5 +1,17 @@
 # Current research release blockers
 
+## 2026-09-11 4路線季節診断のRolling終端契約を修正
+
+途中窓のBEVはday-ahead計画の同じ境界SOCへ接続し、評価末だけ各車両の初期SOC
+目標を保持する。BESSは `rolling_bess_terminal_policy=minimum_only` とし、
+day-aheadの中間BESS目標を引き継がず、20% floor〜80% ceilingの物理範囲で運用する。
+4路線入力は `bess_balance_period=evaluation_period` を要求し、runnerは設定値と
+canonical metadata・assetを照合する。共有solver helperは明示callbackで契約検証を
+受け取り、4路線runnerによるモジュールglobal monkeypatchを廃止した。
+
+旧BESS日次・週末復元条件で部分的に作成したPrepareは診断証拠へ昇格せず、
+方針修正後のclean frozen SHAで全4週を再Prepareするまで研究リリースはBLOCKEDである。
+
 ## 2026-09-11 旧結果のデスクトップ表示互換
 
 旧結果の裸 `Infinity` / `NaN` による概要取得失敗を表示専用readerで修正した。値は文字として表示し、保存結果・採用判定・数式は変更しない。実parentの概要とportable smoke、100万行のbounded読取りを再検査した。4週診断のコードは凍結 `0cc91fa2` を維持しており、UI修正後HEADの研究証拠へ転記しない。[変更範囲](DESKTOP_LEGACY_JSON_COMPATIBILITY_20260911.md)。研究リリースBLOCKEDは継続。

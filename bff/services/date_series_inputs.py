@@ -231,6 +231,7 @@ def prepare_date_series_scenario(scenario: dict[str,Any], *, repo_root: Path = R
     contract.update(pv_source_sha256=[source['sha256'] for source in sources],
                     daily_return_depot_id=cfg.get('daily_return_depot_id'),
                     rolling_window_terminal_policy=cfg.get('rolling_window_terminal_policy','return_to_evaluation_initial'),
+                    rolling_bess_terminal_policy=cfg.get('rolling_bess_terminal_policy', 'scenario'),
                     selected_route_ids=list(selected_ids),
                     depot_load_model='explicit_zero_nontraction_load',
                     bess_balance_period=asset['bess_balance_period'],

@@ -3,7 +3,11 @@ import json
 
 import pytest
 
+from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import (
+    apply_seasonal_bess_policy,
+)
 import scripts.benchmarks.run_shibu21_24_seasonal_diagnostic as seasonal_runner
+from src.optimization.rolling.reoptimizer import RollingReoptimizer
 from scripts.benchmarks.run_shibu21_24_seasonal_diagnostic import (
     audit_parent_fleet,
     discover_route_scope,
@@ -12,6 +16,83 @@ from scripts.benchmarks.run_shibu21_24_seasonal_diagnostic import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_seasonal_bess_policy_preserves_asset_controls_and_removes_inventory_target():
+    source = {
+        "depot_id": "tsurumaki",
+        "bess_enabled": True,
+        "bess_energy_kwh": 6000.0,
+        "bess_power_kw": 900.0,
+        "bess_initial_soc_kwh": 3000.0,
+        "bess_charge_efficiency": 0.95,
+        "bess_discharge_efficiency": 0.95,
+        "grid_to_bess_price_threshold_yen_per_kwh": 12.5,
+        "bess_terminal_soc_min_kwh": 3000.0,
+        "bess_terminal_soc_policy": "fixed_target",
+        "bess_terminal_soc_target_kwh": 3000.0,
+    }
+
+    seasonal = apply_seasonal_bess_policy(source)
+
+    for key in (
+        "bess_energy_kwh",
+        "bess_power_kw",
+        "bess_initial_soc_kwh",
+        "bess_charge_efficiency",
+        "bess_discharge_efficiency",
+        "grid_to_bess_price_threshold_yen_per_kwh",
+    ):
+        assert seasonal[key] == source[key]
+    assert seasonal["bess_soc_min_kwh"] == pytest.approx(1200.0)
+    assert seasonal["bess_soc_max_kwh"] == pytest.approx(4800.0)
+    assert seasonal["bess_terminal_soc_min_kwh"] == pytest.approx(1200.0)
+    assert seasonal["bess_terminal_soc_policy"] == "minimum_only"
+    assert seasonal["bess_terminal_soc_target_kwh"] == 0.0
+    assert source["bess_terminal_soc_policy"] == "fixed_target"
+
+
+def test_seasonal_runner_contract_accepts_floor_only_bess_and_reports_no_target():
+    config = json.loads(
+        (ROOT / "config/shibu21_24_2025_seasonal_test.json").read_text(encoding="utf-8")
+    )
+    asset = type("Asset", (), {
+        "bess_enabled": True,
+        "bess_energy_kwh": 6000.0,
+        "bess_initial_soc_kwh": 3000.0,
+        "bess_soc_min_kwh": 1200.0,
+        "bess_soc_max_kwh": 4800.0,
+        "bess_terminal_soc_min_kwh": 1200.0,
+        "bess_terminal_soc_policy": "minimum_only",
+        "bess_terminal_soc_target_kwh": 0.0,
+        "bess_balance_period": "evaluation_period",
+    })()
+    problem = type("Problem", (), {
+        "metadata": {
+            "bev_terminal_soc_policy": "return_to_initial",
+            "final_soc_target_tolerance_percent": 0.0,
+            "daily_return_depot_id": "tsurumaki",
+            "rolling_window_terminal_policy": "day_ahead_boundary_state",
+            "rolling_bess_terminal_policy": "minimum_only",
+            "bess_balance_period": "evaluation_period",
+        },
+        "vehicles": (),
+        "depot_energy_assets": {"tsurumaki": asset},
+    })()
+
+    contract = seasonal_runner.verify_evaluation_contract(problem, config)
+
+    assert contract["bess_controls"]["tsurumaki"]["terminal_soc_target_kwh"] is None
+    assert contract["bess_controls"]["tsurumaki"]["terminal_soc_floor_kwh"] == pytest.approx(1200.0)
+
+
+def test_seasonal_rolling_policy_requires_day_ahead_reference():
+    problem = type("Problem", (), {
+        "metadata": {"rolling_window_terminal_policy": "day_ahead_boundary_state"},
+    })()
+
+    with pytest.raises((AttributeError, ValueError)):
+        RollingReoptimizer._apply_window_terminal_targets(problem, None, 60, 24)
 
 
 def test_route_matching_normalizes_full_width_digits_without_broad_matching():
@@ -148,7 +229,8 @@ def test_run_diagnostic_records_one_week_failure_and_continues(tmp_path, monkeyp
         lambda: {"sha": "frozen-sha", "status_porcelain": ""},
     )
 
-    def fake_solve(week, output, config):
+    def fake_solve(week, output, config, **kwargs):
+        assert kwargs["contract_validator"] is seasonal_runner.verify_evaluation_contract
         if week == weeks[0]:
             raise RuntimeError("synthetic week failure")
         return {
@@ -196,7 +278,8 @@ def test_invalid_prepare_blocks_only_its_week_and_preserves_four_route_scope(tmp
     monkeypatch.setattr(seasonal_runner, "git_state", lambda: {"sha": "frozen", "status_porcelain": ""})
     solved = []
 
-    def solve(week, output, config):
+    def solve(week, output, config, **kwargs):
+        assert kwargs["contract_validator"] is seasonal_runner.verify_evaluation_contract
         solved.append((week, config["route_codes"]))
         return {"week": week, "status": "DAY_AHEAD_FAILED", "hourly_steps_accepted": 0}
 

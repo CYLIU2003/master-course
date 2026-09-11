@@ -1,5 +1,19 @@
 # Development Notes
 
+## 2026-09-11 Rolling BESS方針と4路線契約の分離
+
+季節診断の共有solver helperへ明示的な `contract_validator` callbackを追加し、
+4路線runnerがモジュールglobalを恒久的に差し替えない構造へ変更した。途中の
+Rolling窓では `day_ahead_boundary_state` のBEV境界目標を維持し、BESSだけ
+`rolling_bess_terminal_policy=minimum_only` でday-ahead BESS目標を消去する。
+評価末のBEV初期SOC目標は保持し、BESSは容量20〜80%の物理範囲とfloorを検証する。
+4路線の入力とcanonical metadataでは `bess_balance_period=evaluation_period` と
+rolling BESS方針を照合する。旧BESS日次・週末復元条件で停止したPrepare
+成果物は証拠に再利用せず、修正後の4週Prepareを最初からやり直す。
+
+関連回帰は `tests/test_daily_return_policy.py`、
+`tests/test_shibu21_24_seasonal_diagnostic.py` に追加・更新する。
+
 ## 2026-09-11 デスクトップの旧結果JSON読取りを修正
 
 既存parentの結果SQLiteにPython JSONの裸 `Infinity` があり、strictなstream parserが概要取得を失敗させていた。表示読取りだけに64 KiB chunkの互換readerを挟み、文字列内の内容を保持しながら `Infinity` / `-Infinity` / `NaN` を文字として投影する。原本は書き換えず、非有限値を数値やゼロへ補正しない。50関連テスト、実parentの概要JSON化、portable版の一覧・概要・時刻表smokeが通過した。

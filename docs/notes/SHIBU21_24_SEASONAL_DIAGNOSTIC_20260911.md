@@ -16,7 +16,11 @@
 - 毎営業日終了時は弦巻へ帰庫。
 - 元の親シナリオ `771d115b-75b0-49f7-a7f0-25f259a2cd21` から同じ有効車両集合を引き継ぐ。確認値はBEV35台、ICE25台、計60台で、設定値による車両の補充・除外は行わない。
 - seed 42、solver threads 12、day-ahead共通予算900秒、Stage 1最大120秒、Stage 2最大30秒、毎時最大15秒。構築時間を含む既存の予算制御を使用する。
-- successor pruning 0、解後修復なし。BESSは初期3,000 kWhへ日次復元し、系統からBESSへ充電しない。BEVは評価終了時に各車両の初期SOCへ戻す。
+- successor pruning 0、解後修復なし。BESSの容量・初期SOC・出力・効率・価格条件は親シナリオから保持し、運用範囲は容量の20〜80%、終端は20% floorのみとする。日末・週末に初期SOCへ復元する制約は置かない。系統からBESSへ充電しない。BEVは評価終了時に各車両の初期SOCへ戻す。
+- Rolling途中窓ではBEVの終端をday-ahead計画の同じ境界SOCへ接続する。BESSは
+  `rolling_bess_terminal_policy=minimum_only` で、途中窓のday-ahead BESS目標を
+  消去し、20% floor〜80% ceilingだけを適用する。評価末のBEV初期SOC目標は保持する。
+- BESSの初期蓄電は費用へ加算せず、実行終端SOCとの差を `terminal_soc_delta_kwh = terminal - initial` として会計へ記録する。`minimum_only` の会計受理は終端floorと上限の物理範囲で判定する。
 - PV予測は2024年だけで学習した暫定的な季節気候proxy。2025年の日射推定値は実行評価用の別入力で、予測学習には使わない。2022/2023年不足分の追加API呼出しは行わない。
 
 ## Prepareと実行
@@ -35,6 +39,8 @@ C:\master-course\.venv\Scripts\python.exe -X utf8 scripts/benchmarks/run_shibu21
 Prepareの返却値が成功でも、遷移ネットワーク、折返し余裕、車種互換性、strict coverageの各監査を個別に確認する。監査が未実施・不成立の週はsolverを開始せず、失敗理由を残す。他の入力検証済みの週は続行する。系統不足や親フリートの変化は共有の阻害要因として4ケースを停止する。系統を減らした代替ケースは実行しない。
 
 各週のsolver例外でも後続週を継続し、`failure.json` と `summary.json` に記録する。Git SHAとdirty状態を開始前・週ごと・終了後に検査し、変化を検出した後のsolver実行を止める。集約した `seasonal_evaluation.json` は全4ケースの状態・毎時prefix数・物理検証・会計適格性・最終費用・阻害理由を保存する。未取得の値はnullとする。
+
+2026-09-11の旧0cc91fa2 Prepareは、冬・春完了、夏進行中の時点でユーザーのBESS方針変更により停止した。元の出力は削除せず、`output/shibu21_24_prepare_superseded_by_user_bess_policy_20260911.json` に停止理由、時刻、最後の状態を保存する。旧条件の結果は新しいBESS条件の証拠へ再利用しない。
 
 ## 検証範囲と未完了事項
 

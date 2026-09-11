@@ -68,6 +68,39 @@ def test_intermediate_bess_reference_uses_physical_floor_and_restores_period_flo
     assert final.depot_energy_assets[depot].bess_terminal_soc_min_kwh == initial
 
 
+def test_intermediate_day_ahead_bev_target_survives_bess_minimum_only_policy():
+    problem = daily_problem()
+    depot, asset = next(iter(problem.depot_energy_assets.items()))
+    problem = replace(
+        problem,
+        depot_energy_assets={depot: replace(
+            asset,
+            bess_terminal_soc_policy="fixed_target",
+            bess_terminal_soc_target_kwh=50.0,
+        )},
+        metadata={**problem.metadata, "rolling_window_terminal_policy": "day_ahead_boundary_state"},
+    )
+    plan = replace(
+        _fixed_plan(problem),
+        vehicle_soc_kwh_by_vehicle_slot={"bev-1": {25: 65.0}},
+        bess_soc_kwh_by_depot_slot={depot: {24: 45.0}},
+    )
+    rolling = RollingReoptimizer()
+    frozen = rolling._freeze_bev_terminal_soc_targets(problem)
+    frozen = rolling._freeze_bess_terminal_soc_targets(frozen)
+    intermediate = rolling._apply_window_terminal_targets(frozen, plan, 60, 24)
+    applied = rolling._apply_bess_terminal_policy(intermediate, "minimum_only")
+
+    assert applied.metadata["rolling_window_terminal_reference"]["policy"] == "day_ahead_boundary_state"
+    assert applied.metadata["bev_terminal_soc_target_kwh_by_vehicle"]["bev-1"] == pytest.approx(65.0)
+    assert applied.depot_energy_assets[depot].bess_terminal_soc_policy == "minimum_only"
+    assert applied.depot_energy_assets[depot].bess_terminal_soc_target_kwh == 0.0
+    assert applied.metadata["rolling_bess_terminal_policy"] == "minimum_only"
+
+    evaluation_end = rolling._apply_window_terminal_targets(frozen, plan, 24 * 60, 24)
+    assert evaluation_end.metadata["bev_terminal_soc_target_kwh_by_vehicle"]["bev-1"] == pytest.approx(80.0)
+
+
 def test_failed_hourly_solve_never_publishes_the_old_reference_energy_trace():
     from src.optimization.rolling.vehicle_execution import vehicle_positions_at
     pytest.importorskip("gurobipy")

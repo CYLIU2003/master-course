@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -68,7 +69,12 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
     return {'status':'DECLARED_TERMINAL_CONTROLS_VERIFIED', 'vehicle_targets':targets}
 
 
-def solve_week(week: str, output: Path, design: dict) -> dict:
+def solve_week(
+    week: str,
+    output: Path,
+    design: dict,
+    contract_validator: Callable[[object, dict], dict] | None = None,
+) -> dict:
     manifest = json.loads((ROOT/design['input_manifests_directory']/week/'derived_scenarios.json').read_text(encoding='utf-8'))
     case = manifest['cases'][0]
     if case.get('prepared_input_namespace') == 'candidate_prepared_inputs':
@@ -98,7 +104,8 @@ def solve_week(week: str, output: Path, design: dict) -> dict:
     problem = ProblemBuilder().build_from_scenario(scenario, depot_id='tsurumaki',service_id='WEEKDAY',config=config,planning_days=7)
     problem = replace(problem, metadata={**problem.metadata,
         'phase3_diagnostics_dir':str(output/'day_ahead_failure_diagnostics')})
-    write_json(output/'evaluation_contract.json', verify_evaluation_contract(problem, design))
+    validator = contract_validator or verify_evaluation_contract
+    write_json(output/'evaluation_contract.json', validator(problem, design))
     if len(problem.trips) != case['timetable_row_count'] or len(problem.vehicles) != case['vehicle_count']:
         raise ValueError('Canonical trip/fleet inventory changed after prepared materialization')
     if problem.metadata.get('milp_max_successors_per_trip') not in (None,0):
@@ -153,7 +160,15 @@ def solve_week(week: str, output: Path, design: dict) -> dict:
             'phase3_diagnostics_dir':str(folder/'failure_diagnostics')})
         if state is not None:
             write_json(folder/'initial_execution_state.json',state.to_dict())
-        result = rolling.reoptimize_charging_hour(hourly_problem,reference,rolling_config,hour*60,lookahead_hours=24,**kwargs)
+        result = rolling.reoptimize_charging_hour(
+            hourly_problem,
+            reference,
+            rolling_config,
+            hour * 60,
+            lookahead_hours=24,
+            bess_terminal_policy=design.get('rolling_bess_terminal_policy', 'scenario'),
+            **kwargs,
+        )
         write_json(folder/'forecast_result.json',ResultSerializer.serialize_result(result))
         if not result.feasible:
             summary.update(status='HOURLY_SOLVE_FAILED',failed_hour=hour,hourly_reasons=list(result.infeasibility_reasons),

@@ -64,6 +64,48 @@ OLD_SOURCE_DIR = ROOT / "data/derived/timetables/tsurumaki_20260901"
 SHIBU24_SOURCE_DIR = ROOT / "output/shibu21_24_seasonal_20260911/shibu24_source_audit"
 SOURCE_CANDIDATE_DIR = ROOT / "output/shibu21_24_seasonal_20260911/four_route_source_candidate"
 SOURCE_ID = "tsurumaki_shibu21_24_20260911_diagnostic_candidate_v1"
+BESS_SOC_MIN_RATIO = 0.20
+BESS_SOC_MAX_RATIO = 0.80
+
+
+def apply_seasonal_bess_policy(asset: dict) -> dict:
+    """Apply the declared seasonal BESS operating range without changing the asset.
+
+    Capacity, initial SOC, power, efficiency, and price controls come from the
+    untouched parent asset. Only the operating bounds and terminal policy are
+    derived here: 20%/80% hard bounds and a 20% terminal floor with no target.
+    This keeps day and weekend boundaries free of an initial-SOC restoration
+    obligation while retaining physical SOC bounds.
+    """
+    configured = deepcopy(asset)
+    capacity_kwh = float(configured.get("bess_energy_kwh") or 0.0)
+    if capacity_kwh <= 0.0:
+        raise ValueError("Seasonal BESS policy requires a positive bess_energy_kwh")
+    soc_min_kwh = capacity_kwh * BESS_SOC_MIN_RATIO
+    soc_max_kwh = capacity_kwh * BESS_SOC_MAX_RATIO
+    initial_soc_kwh = float(configured.get("bess_initial_soc_kwh") or 0.0)
+    if not soc_min_kwh <= initial_soc_kwh <= soc_max_kwh:
+        raise ValueError(
+            "Parent BESS initial SOC is outside the declared seasonal 20%-80% range"
+        )
+    configured.update(
+        bess_soc_min_kwh=soc_min_kwh,
+        bess_soc_max_kwh=soc_max_kwh,
+        bess_terminal_soc_min_kwh=soc_min_kwh,
+        bess_terminal_soc_policy="minimum_only",
+        bess_terminal_soc_target_kwh=0.0,
+        bess_initial_soc_percent=(initial_soc_kwh / capacity_kwh) * 100.0,
+        bess_soc_min_percent=BESS_SOC_MIN_RATIO * 100.0,
+        bess_soc_max_percent=BESS_SOC_MAX_RATIO * 100.0,
+        bess_terminal_soc_min_percent=BESS_SOC_MIN_RATIO * 100.0,
+        bess_initial_soc_ratio=initial_soc_kwh / capacity_kwh,
+        bess_soc_min_ratio=BESS_SOC_MIN_RATIO,
+        bess_soc_max_ratio=BESS_SOC_MAX_RATIO,
+        bess_terminal_soc_min_ratio=BESS_SOC_MIN_RATIO,
+        bess_terminal_soc_target_ratio=0.0,
+        bess_terminal_soc_target_percent=0.0,
+    )
+    return configured
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -158,7 +200,9 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
                service_dates=[], planning_days=7, planning_horizon_hours=168,
                time_step_min=15, timestep_min=15, start_time="00:00", end_time="23:59",
                operation_time_window_enabled=False, rolling_lookahead_hours=24,
-               bess_balance_period="daily", pv_information_mode="training_only_forecast_proxy",
+               bess_balance_period="evaluation_period", bess_terminal_soc_policy="minimum_only",
+               rolling_bess_terminal_policy="minimum_only",
+               bess_terminal_soc_floor_percent=20.0, pv_information_mode="training_only_forecast_proxy",
                daily_return_depot_id="tsurumaki", rolling_window_terminal_policy="day_ahead_boundary_state")
     cfg.pop("calendar_policy", None)
     cfg["allow_fixed_weekday_timetable_pv_counterfactual"] = False
@@ -227,7 +271,8 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
                  pv_input_semantics="gross_generation_before_depot_load",
                  depot_load_model="explicit_zero_nontraction_load",
                  depot_load_kwh_by_slot=[0.0] * (1440 // step * len(dates)),
-                 bess_balance_period="daily", bess_terminal_soc_policy="return_to_initial")
+                 bess_balance_period="evaluation_period")
+    asset = apply_seasonal_bess_policy(asset)
     dated_capacity_factors(asset, dates, step)
     cfg["depot_energy_assets"] = [asset]
     doc.setdefault("scenario_overlay", {})["depot_energy_assets"] = {"tsurumaki": deepcopy(asset)}
@@ -236,8 +281,11 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
     doc["pv_profiles"] = []
     contract.update(pv_source_sha256=[source["sha256"] for source in actual_sources],
                     daily_return_depot_id="tsurumaki", rolling_window_terminal_policy="day_ahead_boundary_state",
+                    rolling_bess_terminal_policy="minimum_only",
                     selected_route_ids=selected_ids, depot_load_model="explicit_zero_nontraction_load",
-                    bess_balance_period="daily", rolling_lookahead_hours=cfg.get("rolling_lookahead_hours"),
+                    bess_balance_period="evaluation_period", bess_terminal_soc_policy="minimum_only",
+                    bess_terminal_soc_floor_percent=20.0,
+                    rolling_lookahead_hours=cfg.get("rolling_lookahead_hours"),
                     pv_capacity_factor_rows_sha256=content_hash(profiles),
                     pv_information_mode="training_only_forecast_proxy", forecast_audit=forecast_audit,
                     pv_execution_input=execution_input,

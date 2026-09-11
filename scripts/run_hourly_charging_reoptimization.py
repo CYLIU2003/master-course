@@ -333,7 +333,26 @@ def _build_executed_day_accounting(
             if terminal_kwh is not None and target_kwh is not None
             else None
         )
-        depot_balanced = deviation_kwh is not None and deviation_kwh <= 1.0e-6
+        terminal_floor_kwh = max(
+            float(asset.bess_terminal_soc_min_kwh or 0.0),
+            float(asset.bess_soc_min_kwh or 0.0),
+        )
+        terminal_ceiling_kwh = max(
+            float(asset.bess_soc_max_kwh or asset.bess_energy_kwh or 0.0),
+            terminal_floor_kwh,
+        )
+        if target_kwh is None:
+            # minimum_only has no inventory-restoration target.  Accounting
+            # remains eligible when the terminal stock stays in the physical
+            # operating range; charging the initial inventory back is not a
+            # cost or acceptance requirement.
+            depot_balanced = (
+                terminal_kwh is not None
+                and terminal_kwh >= terminal_floor_kwh - 1.0e-6
+                and terminal_kwh <= terminal_ceiling_kwh + 1.0e-6
+            )
+        else:
+            depot_balanced = deviation_kwh is not None and deviation_kwh <= 1.0e-6
         daily_deviations = {}
         if asset.bess_balance_period == 'daily':
             start_minute = hhmm_to_min(problem.scenario.horizon_start)
@@ -350,6 +369,13 @@ def _build_executed_day_accounting(
             "initial_soc_kwh": float(asset.bess_initial_soc_kwh or 0.0),
             "target_soc_kwh": target_kwh,
             "terminal_soc_kwh": terminal_kwh,
+            "terminal_soc_delta_kwh": (
+                terminal_kwh - float(asset.bess_initial_soc_kwh or 0.0)
+                if terminal_kwh is not None
+                else None
+            ),
+            "terminal_soc_floor_kwh": terminal_floor_kwh,
+            "terminal_soc_ceiling_kwh": terminal_ceiling_kwh,
             "absolute_deviation_kwh": deviation_kwh,
             "balanced": depot_balanced,
         }
