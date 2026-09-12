@@ -1,0 +1,840 @@
+{
+  "schema_version": "four_season_interpretation_v1",
+  "generated_at_utc": "2026-09-12T14:36:56.283082+00:00",
+  "source_git_sha": "e09fb550379db71730b1ee5025e721d64022303b",
+  "source_audit_path": "C:\\master-course\\docs\\notes\\SHIBU21_23_FOUR_SEASON_COMPLETION_20260912.json",
+  "source_audit_sha256": "9a5d00d5c24b0190aef637d67538aed47ee261bbc04d8d7862ffd36a5066e085",
+  "research_status": "BLOCKED_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
+  "analysis_kind": "descriptive_comparison_of_four_selected_weeks_not_causal_or_annual",
+  "validation": "PASS_SOURCE_HASHES_COMPONENTS_RAW_FLOWS_PEAKS_PV_BALANCE_FEES_DAILY_LEDGER",
+  "distance_denominator": "scheduled_trip_distance_excludes_deadhead",
+  "pv_utilization_definition": "(pv_to_bus_kwh + pv_to_bess_kwh) / pv_generated_kwh",
+  "chart_contract": {
+    "renderer": "matplotlib PNG and editable SVG for research document",
+    "categories": 4,
+    "palette": "blue, grey, gold, orange; hatch and direct labels",
+    "absolute_bar_axes_start_at_zero": true,
+    "panels": [
+      {
+        "question": "How much PV was used or curtailed in each selected week?",
+        "type": "stacked_bar",
+        "fields": "pv_used_total_kwh, pv_curtailed_kwh",
+        "unit": "MWh"
+      },
+      {
+        "question": "How did grid energy purchases vary?",
+        "type": "bar",
+        "fields": "grid_import_kwh",
+        "unit": "MWh"
+      },
+      {
+        "question": "How did the maximum 15-minute grid power vary?",
+        "type": "bar",
+        "fields": "peak_grid_kw",
+        "unit": "kW; 200 kW soft contractual reference"
+      },
+      {
+        "question": "How did costs excluding vehicle usage vary?",
+        "type": "stacked_bar",
+        "fields": "electricity_cost, fuel_cost, co2_cost, contract_overage_cost",
+        "unit": "10,000 JPY"
+      }
+    ]
+  },
+  "weeks": [
+    {
+      "total_cost": 4221549.725308179,
+      "vehicle_usage_cost": 4120000.0,
+      "electricity_cost": 62540.31503587976,
+      "fuel_cost": 37385.22165929199,
+      "co2_cost": 1624.1886130055286,
+      "contract_overage_cost": 1.2825296380469808e-09,
+      "used_vehicle_day_count": 206,
+      "grid_import_kwh": 2084.677167862973,
+      "peak_grid_kw": 200.00000000001003,
+      "pv_generated_kwh": 21340.7375,
+      "pv_used_total_kwh": 17562.770755890822,
+      "pv_curtailed_kwh": 3777.966744109177,
+      "pv_to_bus_kwh": 2456.6806081094746,
+      "pv_to_bess_kwh": 15106.09014778135,
+      "bess_to_bus_kwh": 15343.246358372657,
+      "grid_to_bess_kwh": 0.0,
+      "contract_over_limit_kwh": 2.5650592760939617e-12,
+      "total_co2_kg": 1624.1886130055286,
+      "ice_fuel_consumed_l": 249.2348110619469,
+      "pv_asset_cost": 0.0,
+      "bess_asset_cost": 0.0,
+      "stationary_battery_degradation_cost": 0.0,
+      "bess_discharge_cost": 0.0,
+      "season": "冬",
+      "week": "2025-02-03",
+      "end_date": "2025-02-09",
+      "trip_count": 1704,
+      "scheduled_trip_distance_km": 13925.428829,
+      "used_vehicle_count": 32,
+      "used_vehicle_types": {
+        "BEV": 26,
+        "ICE": 6
+      },
+      "stage1_gap": 0.8464525489261578,
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\summary.json",
+          "sha256": "5d1fc2d48771631b9e685f3280987a88b188adc0f239039a6f519b35f7f84e7c"
+        },
+        "input_audit": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\input_audit.json",
+          "sha256": "57be8d60f9c7952d4a652dee0de535d7395474ff5f9b2dcc49c8cac24b36da99"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\prepared_inputs\\518497ff-2049-41cb-94b0-b86eed01bb21\\prepared-b0848bfe2d664913-1d6a2773c8b93b77-8acc7b3a.json",
+          "sha256": "8ab2dc4d618446ffa8781ec567655543c2142809358d55d5ac93ea055e2e077d"
+        },
+        "summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\summary.json",
+          "sha256": "9cbf79a4670db90d2f8e35e6c424375a0914286d82b7e8f9ebe632f48686bd02"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "b259bb240fee6e9ed9f71ce8c2838f117af172023b1700d9d0757af184f163c6"
+        },
+        "executed_plan_with_daily_ledger": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "1e73e29934f7e7303d5096259c487cd54e8aceb90b8be307bdf87ea79bb62393"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "dab2c7790060f35f71894c655b709a976e13f2163f9dcdabc2275cb28ad38fa0"
+        },
+        "canonical_day_ahead": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-02-03\\diagnostic\\2025-02-03\\canonical_solver_result.json",
+          "sha256": "0ea2acae1481899d69d10f9b2ad5d0f853f5af7e59d254abb952c449a3e52af1"
+        }
+      },
+      "non_vehicle_usage_cost_jpy": 101549.72530817856,
+      "cost_per_scheduled_km_jpy": 303.1540196820878,
+      "non_usage_cost_per_scheduled_km_jpy": 7.292394837902521,
+      "grid_kwh_per_scheduled_km": 0.14970290634939648,
+      "vehicle_usage_cost_share_pct": 97.59449178818413,
+      "pv_utilization_pct": 82.29692509872642,
+      "pv_curtailment_pct": 17.70307490127357,
+      "overage_slot_count_above_tolerance": 0,
+      "bess_initial_kwh": 3000.0,
+      "bess_final_kwh": 1200.0000000000105,
+      "bess_inventory_drawdown_kwh": 1799.9999999999895,
+      "bess_observed_max_kwh": 3970.862324700016
+    },
+    {
+      "total_cost": 4256622.315953718,
+      "vehicle_usage_cost": 4120000.0,
+      "electricity_cost": 82694.05317632423,
+      "fuel_cost": 36469.513141592884,
+      "co2_cost": 1936.0598252728732,
+      "contract_overage_cost": 15522.689810527645,
+      "used_vehicle_day_count": 206,
+      "grid_import_kwh": 2756.468439211048,
+      "peak_grid_kw": 261.48799999999994,
+      "pv_generated_kwh": 26623.9125,
+      "pv_used_total_kwh": 16769.17583803702,
+      "pv_curtailed_kwh": 9854.73666196298,
+      "pv_to_bus_kwh": 3125.37678640107,
+      "pv_to_bess_kwh": 13643.79905163595,
+      "bess_to_bus_kwh": 14023.528644101445,
+      "grid_to_bess_kwh": 0.0,
+      "contract_over_limit_kwh": 31.04537962105529,
+      "total_co2_kg": 1936.0598252728732,
+      "ice_fuel_consumed_l": 243.13008761061948,
+      "pv_asset_cost": 0.0,
+      "bess_asset_cost": 0.0,
+      "stationary_battery_degradation_cost": 0.0,
+      "bess_discharge_cost": 0.0,
+      "season": "春",
+      "week": "2025-05-12",
+      "end_date": "2025-05-18",
+      "trip_count": 1704,
+      "scheduled_trip_distance_km": 13925.428829,
+      "used_vehicle_count": 32,
+      "used_vehicle_types": {
+        "BEV": 26,
+        "ICE": 6
+      },
+      "stage1_gap": 0.8460464569708696,
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\summary.json",
+          "sha256": "02d7b5c3e74a8ed91f54be2d1c8b85963197efab2dbb1c3e0075ba91325517ba"
+        },
+        "input_audit": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\input_audit.json",
+          "sha256": "7ea2ad0d3f42e2d663d994eb0cccb32e873d62b2995adec7aafaf9311de7880e"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\prepared_inputs\\f8ca2c45-fe96-4759-aa89-fbf687aa8dc0\\prepared-e8178203c45d1ab3-02ecce302cd58fff-8acc7b3a.json",
+          "sha256": "14d2a8214b816d0f996603464820e5ed791bc0c5f3a2dc4039ebade28be1de18"
+        },
+        "summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\summary.json",
+          "sha256": "729bb454d7802f8b3851b063cbf3134dfd12782ac8ce9592d6b15c1c70323c68"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "8812889acdf047460df313df2455ee985248b3d6e2c22a385813ac11eda0af75"
+        },
+        "executed_plan_with_daily_ledger": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "2ca82ed2d781aa03c81f66ffe913b047502c40aa7d90cd73bb2e1455de329fe9"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "c16a02646d76c958f142ecbd05be101712120ca11cdd65c9c140d94b7f4b30db"
+        },
+        "canonical_day_ahead": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-05-12\\diagnostic\\2025-05-12\\canonical_solver_result.json",
+          "sha256": "85e0f281325f8791458be79149e38d768d0e482fc1ca25ae816ac9ef49d48582"
+        }
+      },
+      "non_vehicle_usage_cost_jpy": 136622.31595371763,
+      "cost_per_scheduled_km_jpy": 305.6726200840014,
+      "non_usage_cost_per_scheduled_km_jpy": 9.810995239816153,
+      "grid_kwh_per_scheduled_km": 0.19794495904288736,
+      "vehicle_usage_cost_share_pct": 96.7903585093359,
+      "pv_utilization_pct": 62.98539269176542,
+      "pv_curtailment_pct": 37.01460730823458,
+      "overage_slot_count_above_tolerance": 4,
+      "bess_initial_kwh": 3000.0,
+      "bess_final_kwh": 1199.9999999999993,
+      "bess_inventory_drawdown_kwh": 1800.0000000000007,
+      "bess_observed_max_kwh": 4447.5209704773715
+    },
+    {
+      "total_cost": 4213520.406792755,
+      "vehicle_usage_cost": 4120000.0,
+      "electricity_cost": 38208.95337125482,
+      "fuel_cost": 36841.94057522119,
+      "co2_cost": 1214.792299374135,
+      "contract_overage_cost": 17254.720546904788,
+      "used_vehicle_day_count": 206,
+      "grid_import_kwh": 1273.6317790420683,
+      "peak_grid_kw": 271.1789301240743,
+      "pv_generated_kwh": 30537.7375,
+      "pv_used_total_kwh": 18469.866803789224,
+      "pv_curtailed_kwh": 12067.870696210775,
+      "pv_to_bus_kwh": 2163.6896470620595,
+      "pv_to_bess_kwh": 16306.177156727164,
+      "bess_to_bus_kwh": 16426.324883946265,
+      "grid_to_bess_kwh": 0.0,
+      "contract_over_limit_kwh": 34.50944109380958,
+      "total_co2_kg": 1214.792299374135,
+      "ice_fuel_consumed_l": 245.6129371681416,
+      "pv_asset_cost": 0.0,
+      "bess_asset_cost": 0.0,
+      "stationary_battery_degradation_cost": 0.0,
+      "bess_discharge_cost": 0.0,
+      "season": "夏",
+      "week": "2025-08-04",
+      "end_date": "2025-08-10",
+      "trip_count": 1704,
+      "scheduled_trip_distance_km": 13925.428829,
+      "used_vehicle_count": 32,
+      "used_vehicle_types": {
+        "BEV": 26,
+        "ICE": 6
+      },
+      "stage1_gap": 0.8460604859031927,
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\summary.json",
+          "sha256": "c9635e811cbd710adcf54042f3b66b74e807173945490476a77a659ef2348443"
+        },
+        "input_audit": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\input_audit.json",
+          "sha256": "a50bfa463af254c7274a0c6922ed032cb3cdb3ff88cdde34c5234341de57376e"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\prepared_inputs\\7090732e-21c8-462f-bdc4-4ddf824b5f6d\\prepared-85d6ccd4bb13e4f4-c8e67b3360d37a8f-8acc7b3a.json",
+          "sha256": "8f134bbb4c7bc1c28c3168c6cc8b35a396cb7043b9fbc362d2f51ba97e71aafb"
+        },
+        "summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\summary.json",
+          "sha256": "ae341c2ffee6e296ea4bd80e08116f10fc905e4b054135eb084db1792cf015a5"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "922c029f083db13963771801aa00c116476e8785c627ea3e12a380345a5685e7"
+        },
+        "executed_plan_with_daily_ledger": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "8606ea569c7bb12c056d3c7a766678a6dfcaf40d6a96e9768728ab6b517a8fa6"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "5644431109e2d17cee7636a256b7cf4fa7efdb067eaf8325d40d6d8c95b2d153"
+        },
+        "canonical_day_ahead": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-08-04\\diagnostic\\2025-08-04\\canonical_solver_result.json",
+          "sha256": "7e8c428def0313a1c72c024eb8bccec9b2737cae96889ae51bea0b9c76a0b09c"
+        }
+      },
+      "non_vehicle_usage_cost_jpy": 93520.40679275493,
+      "cost_per_scheduled_km_jpy": 302.57742569607694,
+      "non_usage_cost_per_scheduled_km_jpy": 6.715800851891664,
+      "grid_kwh_per_scheduled_km": 0.09146086592247006,
+      "vehicle_usage_cost_share_pct": 97.7804686399053,
+      "pv_utilization_pct": 60.482106127833546,
+      "pv_curtailment_pct": 39.51789387216645,
+      "overage_slot_count_above_tolerance": 3,
+      "bess_initial_kwh": 3000.0,
+      "bess_final_kwh": 1200.0000000000002,
+      "bess_inventory_drawdown_kwh": 1799.9999999999998,
+      "bess_observed_max_kwh": 4170.670116963943
+    },
+    {
+      "total_cost": 4175642.379136662,
+      "vehicle_usage_cost": 3880000.0,
+      "electricity_cost": 184859.8539559343,
+      "fuel_cost": 30456.46582964602,
+      "co2_cost": 3556.272959565968,
+      "contract_overage_cost": 76769.78639151606,
+      "used_vehicle_day_count": 194,
+      "grid_import_kwh": 6161.995131864624,
+      "peak_grid_kw": 360.00039999999996,
+      "pv_generated_kwh": 16096.45,
+      "pv_used_total_kwh": 12275.392105263174,
+      "pv_curtailed_kwh": 3821.0578947368285,
+      "pv_to_bus_kwh": 1620.1562615978664,
+      "pv_to_bess_kwh": 10655.235843665307,
+      "bess_to_bus_kwh": 11326.35034890794,
+      "grid_to_bess_kwh": 0.0,
+      "contract_over_limit_kwh": 153.5395727830321,
+      "total_co2_kg": 3556.272959565968,
+      "ice_fuel_consumed_l": 203.04310553097346,
+      "pv_asset_cost": 0.0,
+      "bess_asset_cost": 0.0,
+      "stationary_battery_degradation_cost": 0.0,
+      "bess_discharge_cost": 0.0,
+      "season": "秋",
+      "week": "2025-11-03",
+      "end_date": "2025-11-09",
+      "trip_count": 1621,
+      "scheduled_trip_distance_km": 13325.586034,
+      "used_vehicle_count": 32,
+      "used_vehicle_types": {
+        "BEV": 26,
+        "ICE": 6
+      },
+      "stage1_gap": 0.8405295108632607,
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\summary.json",
+          "sha256": "b90f181978d65d698273e878083598266f53a26949c27d6e7e30d1b4fd10ebb4"
+        },
+        "input_audit": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\input_audit.json",
+          "sha256": "20022dc496a6a9d1f9bd3bd479615d1ec7279efd03c56041c8fa39617936c287"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\prepared_inputs\\636671eb-cbef-4ac9-ba57-c83a36adeb97\\prepared-247f6cc0464b7632-f51cc2b00e2f6675-8acc7b3a.json",
+          "sha256": "a7617c4e2548a2826652d612d5fcbcd5ab7aa7924c8b9030e7ed7c2039639ef1"
+        },
+        "summary": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\summary.json",
+          "sha256": "54730759200108e056d4bbb9d93ab6fff3eb764162593ed4c6213a94bf75cd41"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "4589026c21626ed8e5c7ddffb5743a09f11bea5f0c2c9af766f493b25718765d"
+        },
+        "executed_plan_with_daily_ledger": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "53388e4100ab245c0e50d5bff69273e71f0c4a8b41a60e1d58259abc91e116e1"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "0236b17eac9a295fa5d25df66bf05a277345bf1ce7411723c4b4222b4b3839b1"
+        },
+        "canonical_day_ahead": {
+          "path": "C:\\master-course-worktrees\\shibu21-23-contract-price-20260912\\output\\shibu21_23_exact_contract_price_campaign_20260912\\cases\\2025-11-03\\diagnostic\\2025-11-03\\canonical_solver_result.json",
+          "sha256": "ded67e14ef376a3909d615f62080df33eb103f8d2bbb8e5e1c92e9a590fbc9f3"
+        }
+      },
+      "non_vehicle_usage_cost_jpy": 295642.37913666235,
+      "cost_per_scheduled_km_jpy": 313.35525270577847,
+      "non_usage_cost_per_scheduled_km_jpy": 22.186069594413034,
+      "grid_kwh_per_scheduled_km": 0.46241832187660653,
+      "vehicle_usage_cost_share_pct": 92.91983478724565,
+      "pv_utilization_pct": 76.26148688228257,
+      "pv_curtailment_pct": 23.738513117717435,
+      "overage_slot_count_above_tolerance": 13,
+      "bess_initial_kwh": 3000.0,
+      "bess_final_kwh": 1199.9999999999998,
+      "bess_inventory_drawdown_kwh": 1800.0000000000002,
+      "bess_observed_max_kwh": 3291.5727725000015
+    }
+  ],
+  "daily_execution_flows": [
+    {
+      "season": "冬",
+      "week": "2025-02-03",
+      "day_index": 0,
+      "service_date": "2025-02-03",
+      "allocated_total_cost_jpy": 597457.2099143903,
+      "grid_import_kwh": 373.83786585894114,
+      "pv_used_total_kwh": 1352.137525,
+      "pv_curtailed_kwh": 0.212475,
+      "pv_generated_kwh": 1352.3500000000001,
+      "peak_grid_kw": 200.0000000000001
+    },
+    {
+      "season": "冬",
+      "week": "2025-02-03",
+      "day_index": 1,
+      "service_date": "2025-02-04",
+      "allocated_total_cost_jpy": 596901.0123914223,
+      "grid_import_kwh": 1083.5264324078773,
+      "pv_used_total_kwh": 2283.854750000032,
+      "pv_curtailed_kwh": 307.79524999996823,
+      "pv_generated_kwh": 2591.65,
+      "peak_grid_kw": 200.0000000000001
+    },
+    {
+      "season": "冬",
+      "week": "2025-02-03",
+      "day_index": 2,
+      "service_date": "2025-02-05",
+      "allocated_total_cost_jpy": 597023.742188769,
+      "grid_import_kwh": 428.5447230947208,
+      "pv_used_total_kwh": 2615.6760250000148,
+      "pv_curtailed_kwh": 407.1364749999853,
+      "pv_generated_kwh": 3022.8125,
+      "peak_grid_kw": 200.00000000001003
+    },
+    {
+      "season": "冬",
+      "week": "2025-02-03",
+      "day_index": 3,
+      "service_date": "2025-02-06",
+      "allocated_total_cost_jpy": 596622.6959291191,
+      "grid_import_kwh": 198.76814650142217,
+      "pv_used_total_kwh": 2919.288000000018,
+      "pv_curtailed_kwh": 651.9869999999817,
+      "pv_generated_kwh": 3571.2749999999996,
+      "peak_grid_kw": 199.99999999999986
+    },
+    {
+      "season": "冬",
+      "week": "2025-02-03",
+      "day_index": 4,
+      "service_date": "2025-02-07",
+      "allocated_total_cost_jpy": 597815.3260634557,
+      "grid_import_kwh": 9.84884374576056e-13,
+      "pv_used_total_kwh": 2868.027076528794,
+      "pv_curtailed_kwh": 476.29792347120565,
+      "pv_generated_kwh": 3344.325,
+      "peak_grid_kw": 1.7976731214730535e-12
+    },
+    {
+      "season": "冬",
+      "week": "2025-02-03",
+      "day_index": 5,
+      "service_date": "2025-02-08",
+      "allocated_total_cost_jpy": 597519.9001985878,
+      "grid_import_kwh": 7.549707891865058e-12,
+      "pv_used_total_kwh": 2748.7763703958794,
+      "pv_curtailed_kwh": 939.5861296041205,
+      "pv_generated_kwh": 3688.3625,
+      "peak_grid_kw": 2.0716106523895224e-11
+    },
+    {
+      "season": "冬",
+      "week": "2025-02-03",
+      "day_index": 6,
+      "service_date": "2025-02-09",
+      "allocated_total_cost_jpy": 638209.8386224345,
+      "grid_import_kwh": 2.9066581634000846e-12,
+      "pv_used_total_kwh": 2775.0110089660852,
+      "pv_curtailed_kwh": 994.9514910339145,
+      "pv_generated_kwh": 3769.9624999999996,
+      "peak_grid_kw": 5.6559201766503975e-12
+    },
+    {
+      "season": "春",
+      "week": "2025-05-12",
+      "day_index": 0,
+      "service_date": "2025-05-12",
+      "allocated_total_cost_jpy": 602498.3160600604,
+      "grid_import_kwh": 425.1209354589524,
+      "pv_used_total_kwh": 1522.8130710526314,
+      "pv_curtailed_kwh": 274.51192894736863,
+      "pv_generated_kwh": 1797.325,
+      "peak_grid_kw": 200.00000000000006
+    },
+    {
+      "season": "春",
+      "week": "2025-05-12",
+      "day_index": 1,
+      "service_date": "2025-05-13",
+      "allocated_total_cost_jpy": 602075.4892166227,
+      "grid_import_kwh": 304.7512196648611,
+      "pv_used_total_kwh": 3498.1487752118605,
+      "pv_curtailed_kwh": 2835.2012247881394,
+      "pv_generated_kwh": 6333.35,
+      "peak_grid_kw": 200.00000000000193
+    },
+    {
+      "season": "春",
+      "week": "2025-05-12",
+      "day_index": 2,
+      "service_date": "2025-05-14",
+      "allocated_total_cost_jpy": 603049.0706046295,
+      "grid_import_kwh": 1.896552254571646e-12,
+      "pv_used_total_kwh": 2658.52476141781,
+      "pv_curtailed_kwh": 2482.9127385821903,
+      "pv_generated_kwh": 5141.4375,
+      "peak_grid_kw": 5.8690829973784275e-12
+    },
+    {
+      "season": "春",
+      "week": "2025-05-12",
+      "day_index": 3,
+      "service_date": "2025-05-15",
+      "allocated_total_cost_jpy": 602102.8607090339,
+      "grid_import_kwh": 3.1914354243090665e-12,
+      "pv_used_total_kwh": 3649.8785439469034,
+      "pv_curtailed_kwh": 2021.9589560530965,
+      "pv_generated_kwh": 5671.8375,
+      "peak_grid_kw": 9.972467296393006e-12
+    },
+    {
+      "season": "春",
+      "week": "2025-05-12",
+      "day_index": 4,
+      "service_date": "2025-05-16",
+      "allocated_total_cost_jpy": 603587.4382922081,
+      "grid_import_kwh": 72.61964765078532,
+      "pv_used_total_kwh": 2303.343282560248,
+      "pv_curtailed_kwh": 1465.131717439752,
+      "pv_generated_kwh": 3768.4750000000004,
+      "peak_grid_kw": 107.44542017790536
+    },
+    {
+      "season": "春",
+      "week": "2025-05-12",
+      "day_index": 5,
+      "service_date": "2025-05-17",
+      "allocated_total_cost_jpy": 600283.504741981,
+      "grid_import_kwh": 667.4161517387904,
+      "pv_used_total_kwh": 1036.8792552631603,
+      "pv_curtailed_kwh": 19.458244736839614,
+      "pv_generated_kwh": 1056.3374999999999,
+      "peak_grid_kw": 261.48799999999994
+    },
+    {
+      "season": "春",
+      "week": "2025-05-12",
+      "day_index": 6,
+      "service_date": "2025-05-18",
+      "allocated_total_cost_jpy": 643025.6363291821,
+      "grid_import_kwh": 1286.5604846976537,
+      "pv_used_total_kwh": 2099.588148584406,
+      "pv_curtailed_kwh": 755.561851415594,
+      "pv_generated_kwh": 2855.15,
+      "peak_grid_kw": 205.548
+    },
+    {
+      "season": "夏",
+      "week": "2025-08-04",
+      "day_index": 0,
+      "service_date": "2025-08-04",
+      "allocated_total_cost_jpy": 596774.3547097576,
+      "grid_import_kwh": 2.7000623958883807e-13,
+      "pv_used_total_kwh": 2468.510521785848,
+      "pv_curtailed_kwh": 3657.6519782141518,
+      "pv_generated_kwh": 6126.1625,
+      "peak_grid_kw": 7.105427357601002e-13
+    },
+    {
+      "season": "夏",
+      "week": "2025-08-04",
+      "day_index": 1,
+      "service_date": "2025-08-05",
+      "allocated_total_cost_jpy": 596209.6842001611,
+      "grid_import_kwh": 3.5515199891492533e-12,
+      "pv_used_total_kwh": 3316.9232845720967,
+      "pv_curtailed_kwh": 2656.664215427903,
+      "pv_generated_kwh": 5973.5875,
+      "peak_grid_kw": 1.1539214028744027e-11
+    },
+    {
+      "season": "夏",
+      "week": "2025-08-04",
+      "day_index": 2,
+      "service_date": "2025-08-06",
+      "allocated_total_cost_jpy": 596393.2015592429,
+      "grid_import_kwh": 3.521500000001092,
+      "pv_used_total_kwh": 3255.3666217473155,
+      "pv_curtailed_kwh": 1825.7208782526848,
+      "pv_generated_kwh": 5081.087500000001,
+      "peak_grid_kw": 14.086000000000002
+    },
+    {
+      "season": "夏",
+      "week": "2025-08-04",
+      "day_index": 3,
+      "service_date": "2025-08-07",
+      "allocated_total_cost_jpy": 596938.2845389538,
+      "grid_import_kwh": 96.51805468100677,
+      "pv_used_total_kwh": 2433.6296472881127,
+      "pv_curtailed_kwh": 697.3453527118875,
+      "pv_generated_kwh": 3130.9750000000004,
+      "peak_grid_kw": 90.00029999999992
+    },
+    {
+      "season": "夏",
+      "week": "2025-08-04",
+      "day_index": 4,
+      "service_date": "2025-08-08",
+      "allocated_total_cost_jpy": 596290.134247331,
+      "grid_import_kwh": 0.00010000000023779876,
+      "pv_used_total_kwh": 3473.8808335430926,
+      "pv_curtailed_kwh": 1574.2691664569074,
+      "pv_generated_kwh": 5048.15,
+      "peak_grid_kw": 0.0001999999999497959
+    },
+    {
+      "season": "夏",
+      "week": "2025-08-04",
+      "day_index": 5,
+      "service_date": "2025-08-09",
+      "allocated_total_cost_jpy": 596727.2794134313,
+      "grid_import_kwh": 0.7855000000075844,
+      "pv_used_total_kwh": 2791.2263533117066,
+      "pv_curtailed_kwh": 1362.5111466882934,
+      "pv_generated_kwh": 4153.7375,
+      "peak_grid_kw": 2.108000000000004
+    },
+    {
+      "season": "夏",
+      "week": "2025-08-04",
+      "day_index": 6,
+      "service_date": "2025-08-10",
+      "allocated_total_cost_jpy": 634187.4681238773,
+      "grid_import_kwh": 1172.8066243610488,
+      "pv_used_total_kwh": 730.3295415410514,
+      "pv_curtailed_kwh": 293.7079584589486,
+      "pv_generated_kwh": 1024.0375,
+      "peak_grid_kw": 271.1789301240743
+    },
+    {
+      "season": "秋",
+      "week": "2025-11-03",
+      "day_index": 0,
+      "service_date": "2025-11-03",
+      "allocated_total_cost_jpy": 593147.0902549843,
+      "grid_import_kwh": 12.366453539732992,
+      "pv_used_total_kwh": 2127.4564999999952,
+      "pv_curtailed_kwh": 936.1560000000046,
+      "pv_generated_kwh": 3063.6124999999997,
+      "peak_grid_kw": 38.29803309107774
+    },
+    {
+      "season": "秋",
+      "week": "2025-11-03",
+      "day_index": 1,
+      "service_date": "2025-11-04",
+      "allocated_total_cost_jpy": 585661.5829534378,
+      "grid_import_kwh": 331.23402529685745,
+      "pv_used_total_kwh": 2226.109750000005,
+      "pv_curtailed_kwh": 1339.215249999995,
+      "pv_generated_kwh": 3565.325,
+      "peak_grid_kw": 188.5250796463551
+    },
+    {
+      "season": "秋",
+      "week": "2025-11-03",
+      "day_index": 2,
+      "service_date": "2025-11-05",
+      "allocated_total_cost_jpy": 593790.6622669625,
+      "grid_import_kwh": 906.3870157154726,
+      "pv_used_total_kwh": 1732.2845,
+      "pv_curtailed_kwh": 96.70299999999999,
+      "pv_generated_kwh": 1828.9875,
+      "peak_grid_kw": 200.0
+    },
+    {
+      "season": "秋",
+      "week": "2025-11-03",
+      "day_index": 3,
+      "service_date": "2025-11-06",
+      "allocated_total_cost_jpy": 590968.6873239899,
+      "grid_import_kwh": 1156.767245207772,
+      "pv_used_total_kwh": 1662.9357499999999,
+      "pv_curtailed_kwh": 64.90174999999999,
+      "pv_generated_kwh": 1727.8374999999999,
+      "peak_grid_kw": 200.00000000000057
+    },
+    {
+      "season": "秋",
+      "week": "2025-11-03",
+      "day_index": 4,
+      "service_date": "2025-11-07",
+      "allocated_total_cost_jpy": 587879.9598977444,
+      "grid_import_kwh": 682.7696567157792,
+      "pv_used_total_kwh": 2138.1557500000154,
+      "pv_curtailed_kwh": 1120.7442499999845,
+      "pv_generated_kwh": 3258.8999999999996,
+      "peak_grid_kw": 200.0
+    },
+    {
+      "season": "秋",
+      "week": "2025-11-03",
+      "day_index": 5,
+      "service_date": "2025-11-08",
+      "allocated_total_cost_jpy": 596521.6741870431,
+      "grid_import_kwh": 1063.7311299323003,
+      "pv_used_total_kwh": 1635.6351052631578,
+      "pv_curtailed_kwh": 263.0523947368421,
+      "pv_generated_kwh": 1898.6875,
+      "peak_grid_kw": 220.60009999999997
+    },
+    {
+      "season": "秋",
+      "week": "2025-11-03",
+      "day_index": 6,
+      "service_date": "2025-11-09",
+      "allocated_total_cost_jpy": 627672.7222525004,
+      "grid_import_kwh": 2008.73960545671,
+      "pv_used_total_kwh": 752.81475,
+      "pv_curtailed_kwh": 0.28525,
+      "pv_generated_kwh": 753.1,
+      "peak_grid_kw": 360.00039999999996
+    }
+  ],
+  "comparisons": {
+    "spring_vs_winter": {
+      "total_cost": {
+        "difference": 35072.59064553864,
+        "ratio": 1.008307989465404
+      },
+      "vehicle_usage_cost": {
+        "difference": 0.0,
+        "ratio": 1.0
+      },
+      "electricity_cost": {
+        "difference": 20153.738140444475,
+        "ratio": 1.3222519446677259
+      },
+      "fuel_cost": {
+        "difference": -915.7085176991022,
+        "ratio": 0.9755061364609696
+      },
+      "co2_cost": {
+        "difference": 311.8712122673446,
+        "ratio": 1.1920166228048066
+      },
+      "contract_overage_cost": {
+        "difference": 15522.689810526363,
+        "ratio": null
+      },
+      "non_vehicle_usage_cost_jpy": {
+        "difference": 35072.590645539065,
+        "ratio": 1.345373564912188
+      },
+      "grid_import_kwh": {
+        "difference": 671.791271348075,
+        "ratio": 1.3222519446676417
+      },
+      "pv_generated_kwh": {
+        "difference": 5283.174999999999,
+        "ratio": 1.2475629063897158
+      },
+      "scheduled_trip_distance_km": {
+        "difference": 0.0,
+        "ratio": 1.0
+      }
+    },
+    "summer_vs_winter": {
+      "total_cost": {
+        "difference": -8029.318515423685,
+        "ratio": 0.9980980163594217
+      },
+      "vehicle_usage_cost": {
+        "difference": 0.0,
+        "ratio": 1.0
+      },
+      "electricity_cost": {
+        "difference": -24331.361664624936,
+        "ratio": 0.6109491669387037
+      },
+      "fuel_cost": {
+        "difference": -543.2810840707971,
+        "ratio": 0.9854680256005446
+      },
+      "co2_cost": {
+        "difference": -409.3963136313937,
+        "ratio": 0.7479379486143459
+      },
+      "contract_overage_cost": {
+        "difference": 17254.720546903503,
+        "ratio": null
+      },
+      "non_vehicle_usage_cost_jpy": {
+        "difference": -8029.318515423627,
+        "ratio": 0.920932149338104
+      },
+      "grid_import_kwh": {
+        "difference": -811.0453888209047,
+        "ratio": 0.6109491669387271
+      },
+      "pv_generated_kwh": {
+        "difference": 9197.0,
+        "ratio": 1.4309598016469676
+      },
+      "scheduled_trip_distance_km": {
+        "difference": 0.0,
+        "ratio": 1.0
+      }
+    },
+    "autumn_vs_summer": {
+      "total_cost": {
+        "difference": -37878.02765609324,
+        "ratio": 0.9910103609335726
+      },
+      "vehicle_usage_cost": {
+        "difference": -240000.0,
+        "ratio": 0.941747572815534
+      },
+      "electricity_cost": {
+        "difference": 146650.90058467948,
+        "ratio": 4.83812922483784
+      },
+      "fuel_cost": {
+        "difference": -6385.474745575171,
+        "ratio": 0.8266791964300096
+      },
+      "co2_cost": {
+        "difference": 2341.480660191833,
+        "ratio": 2.9274740722329007
+      },
+      "contract_overage_cost": {
+        "difference": 59515.065844611265,
+        "ratio": 4.4492048528301025
+      },
+      "non_vehicle_usage_cost_jpy": {
+        "difference": 202121.9723439074,
+        "ratio": 3.161260619747068
+      },
+      "grid_import_kwh": {
+        "difference": 4888.363352822556,
+        "ratio": 4.838129224837042
+      },
+      "pv_generated_kwh": {
+        "difference": -14441.287499999999,
+        "ratio": 0.5271002804317118
+      },
+      "scheduled_trip_distance_km": {
+        "difference": -599.8427950000005,
+        "ratio": 0.9569246446651025
+      }
+    }
+  }
+}
