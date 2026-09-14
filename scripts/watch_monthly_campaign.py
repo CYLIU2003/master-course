@@ -26,7 +26,10 @@ DEPLOYMENT_RELATIVE = Path("output/monthly_fair_weeks_20260914")
 
 def deployment_paths(config: dict) -> tuple[Path, str, str]:
     version = config.get("deployment", "budget")
-    require(version in {"budget", "search"}, "Unknown observer deployment")
+    require(version in {"budget", "search", "phase_search"}, "Unknown observer deployment")
+    if version == "phase_search":
+        return (Path("output/monthly_phase_search_20260915"),
+                "SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915", "shibu21_23_monthly_phase_search_20260915")
     if version == "search":
         return (Path("output/monthly_search_20260915"),
                 "SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915", "shibu21_23_monthly_search_20260915")
@@ -214,7 +217,7 @@ class Observer:
     def publish(self, *, complete: bool) -> None:
         arguments = ["--campaign", str(self.campaign), "--audit", str(self.audit),
                      "--output", str(self.report)]
-        if self.config.get("deployment") == "search":
+        if self.config.get("deployment") in {"search", "phase_search"}:
             arguments.extend(["--figure-name", Path(self.config["figure_stem"]).name])
         if not complete:
             arguments.append("--partial")

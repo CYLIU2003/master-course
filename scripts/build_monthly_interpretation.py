@@ -378,12 +378,14 @@ def main() -> None:
     parser.add_argument("--figure-name")
     args = parser.parse_args()
     data = collect(args.campaign, args.audit, partial=args.partial)
-    default_figure = ("shibu21_23_monthly_search_20260915"
-                      if args.output.name == "SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915"
-                      else "shibu21_23_monthly_20260914")
+    separate_figures = {
+        "SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915": "shibu21_23_monthly_search_20260915",
+        "SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915": "shibu21_23_monthly_phase_search_20260915",
+    }
+    default_figure = separate_figures.get(args.output.name, "shibu21_23_monthly_20260914")
     requested_figure = args.figure_name or default_figure
     require(Path(requested_figure).name == requested_figure, "Figure name must be a filename stem")
-    if args.output.name == "SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915":
+    if args.output.name in separate_figures:
         require(requested_figure == default_figure, "Search report requires its separate figure name")
     figure_name = requested_figure if data["status"] == "COMPLETED" else None
     if figure_name:

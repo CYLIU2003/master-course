@@ -28,6 +28,7 @@ MONTHLY_INPUT_IMPORT = FROZEN_ROOT / "output" / "monthly_input_import.json"
 TOLERANCE = 1.0e-6
 NATIVE_COUNT = 169
 EXPECTED_SEARCH_CONTROLS: dict[str, int] = {}
+EXPECTED_SEARCH_CONTROLS_BY_KIND: dict[str, dict[str, int]] = {}
 
 sys.path.insert(0, str(ROOT))
 from scripts.benchmarks.monthly_week_contract import validate_balanced_week
@@ -225,7 +226,7 @@ def audit_native_entries(
     for kind, hour, path, document in entries:
         metadata = document.get("solver_metadata")
         require(isinstance(metadata, dict), f"{path}: missing solver_metadata")
-        search_controls = read_search_controls(document, EXPECTED_SEARCH_CONTROLS)
+        search_controls = read_search_controls(document, EXPECTED_SEARCH_CONTROLS_BY_KIND.get(kind, EXPECTED_SEARCH_CONTROLS))
         effective = document.get("effective_limits") or {}
         required_metadata = (
             "stage2_gurobi_aggregate", "stage2_gurobi_presolve",

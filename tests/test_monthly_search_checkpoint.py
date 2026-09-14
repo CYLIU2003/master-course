@@ -8,7 +8,7 @@ import pytest
 from scripts.watch_monthly_campaign import sha256, write_json
 
 
-@pytest.mark.parametrize("mutation", [None, "failed", "pending", "source", "campaign", "case"])
+@pytest.mark.parametrize("mutation", [None, "retained_failure", "failed", "pending", "source", "campaign", "case"])
 def test_checkpoint_requires_accepted_evidence_from_its_campaign(tmp_path, monkeypatch, mutation):
     source = Path(__file__).resolve().parents[1] / "output/monthly_search_20260915/update_monthly_checkpoint.py"
     spec = importlib.util.spec_from_file_location("search_checkpoint_test", source)
@@ -32,10 +32,20 @@ def test_checkpoint_requires_accepted_evidence_from_its_campaign(tmp_path, monke
         audit["campaign_output"] = "output/old"
     elif mutation == "case":
         row["case_root"] = str(campaign / "old-case")
+    if mutation == "retained_failure":
+        failed_week = "2025-08-04"
+        failed_case = campaign / "cases" / failed_week / "diagnostic" / failed_week
+        summary_path = failed_case / "summary.json"
+        write_json(summary_path, {"status": "HOURLY_SOLVE_FAILED"})
+        audit["weeks"][failed_week] = {
+            "status": "HOURLY_SOLVE_FAILED", "fully_audited": False, "failure": True,
+            "audit_status": "FAILED_CASE_DIAGNOSTIC_ONLY", "case_root": str(failed_case),
+            "hashes": {"case_summary": sha256(summary_path)}}
     write_json(base / "budget_rerun_launch.json", launch)
     audit_path = base / "monthly_budget_independent_audit.json"
     write_json(audit_path, audit)
-    write_json(campaign / "progress.json", {"base_git_sha": "test-sha", "completed_weeks": [week]})
+    write_json(campaign / "progress.json", {"base_git_sha": "test-sha",
+               "completed_weeks": [week, "2025-08-04"] if mutation == "retained_failure" else [week]})
     write_json(tmp_path / "docs/notes/SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.json",
                {"source_git_sha": "test-sha", "independent_audit": {"sha256": sha256(audit_path)},
                 "weeks": [{"week": week}], "completed_count": 1, "status": "IN_PROGRESS"})
@@ -47,7 +57,7 @@ def test_checkpoint_requires_accepted_evidence_from_its_campaign(tmp_path, monke
     monkeypatch.setattr(module, "ROOT", tmp_path)
     monkeypatch.setattr(module, "BASE", base)
     monkeypatch.setattr(sys, "argv", ["checkpoint", "--dry-run"])
-    if mutation:
+    if mutation and mutation != "retained_failure":
         with pytest.raises(ValueError):
             module.main()
     else:

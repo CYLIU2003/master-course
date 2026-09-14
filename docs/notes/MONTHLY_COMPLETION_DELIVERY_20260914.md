@@ -64,3 +64,13 @@ observerと既存の月別集計・証拠収集のfocused testsは47件通過（
 mainの独立監査だけを修正し、原本metadataの両値を必須照合する。欠落・型違い・値違いを拒否し、solver_metadataにも値がある場合は原本との矛盾を拒否する。設定をソースの既定値から推定したり、原本へ書き足したりしない。設定の出典を監査JSONへ `search_controls_source=metadata` と保存する。実1月の169件・17原本hash、物理・会計照合が通過。66 tests通過（2.20秒）、独立再レビューP0/P1残件0。
 
 固定ソース10a40c9f、入力、求解結果は変更せず、同じsolver PID44204が2月を継続している。監視の旧config/state/failure/dispatch/commands/bindingは `output/monthly_search_20260915/script_observer/recovery_metadata_20260915/` へhash照合して保存。変更した監査helperだけを新しいhashへ結び直し、同じキャンペーン・宛先・完了件名の監視を再開した。旧failure queueは処理済みとして保存し、再送しない。1/12週が独立監査済み、完了メールは未送信。
+
+
+## 2026-09-15 06:15 JSTの8月計算停止
+
+新しいfailureは監査投影の旧障害とは別件。1〜7月の7週監査済み、8月hour48でinfeasible、9〜12月未実行。月別observerは停止し再開しない。`SHIBU21_23_AUGUST_STAGE2_FAILURE_20260915.md` と `output/monthly_search_20260915/script_observer/failure_handling_august_20260915.json` を参照。保存IISと全モデルの診断を別出力で実施する。未完了のメールは送らない。
+
+
+## 段階別探索版の配信経路
+
+次の現行版は `output/monthly_phase_search_20260915/script_observer/`。source SHAは同ディレクトリconfigと親のlaunchで照合する。旧monthly_searchの7週は停止記録として保存し、その監視を再開しない。新しいPHASE_SEARCH_RESULTSの表・専用図・専用bindingから、全12週完了時のみ同じ宛先へ1通送信する。件名のMC2025-<新SHA>で送信済みを照合する。通常のAI監視は行わない。

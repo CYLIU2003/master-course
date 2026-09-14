@@ -32,7 +32,7 @@ def main() -> None:
     launch = read_json(BASE / "budget_rerun_launch.json")
     audit_path = BASE / "monthly_budget_independent_audit.json"
     audit = read_json(audit_path)
-    report = read_json(ROOT / "docs/notes/SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.json")
+    report = read_json(ROOT / "docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json")
     require(report["source_git_sha"] == audit["expected_sha"] == launch["source_git_sha"], "Source mismatch")
     require(report["independent_audit"]["sha256"] == sha256(audit_path), "Audit hash mismatch")
     frozen = Path(launch["frozen_root"]).resolve()
@@ -66,9 +66,9 @@ def main() -> None:
     require(passed == {row["week"] for row in report["weeks"]}, "Audited/report weeks differ")
     require(len(passed) == report["completed_count"], "Count mismatch")
     paragraph = (f'最新の月別再実行: 固定 `{launch["source_git_sha"][:8]}`、独立監査 {len(passed)}/12週、'
-                 f'状態 `{report["status"]}`。全月共通MIPFocus=1・Method=1、物理許容差1e-9。'
-                 '旧fa0c22bfの10週は旧版の記録として保存し、新版には混ぜない。研究採用BLOCKED。'
-                 '結果: `docs/notes/SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.md`。')
+                 f'状態 `{report["status"]}`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。'
+                 '旧10a40c9fの7週・fa0c22bfの10週は旧版の記録として保存し、新版には混ぜない。研究採用BLOCKED。'
+                 '結果: `docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.md`。')
     paths = [ROOT / "README.md", ROOT / "DEVELOPMENT_NOTES.md",
              ROOT / "docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md",
              ROOT / "docs/notes/SHIBU21_23_MONTHLY_FAIR_WEEKS_20260914.md"]

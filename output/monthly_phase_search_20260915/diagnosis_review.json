@@ -1,0 +1,19 @@
+{
+  "reviewer": "four_route_diagnostic_luna",
+  "diagnostic_p0": 0,
+  "diagnostic_p1": 0,
+  "same_mps": true,
+  "method1_infeasible": true,
+  "method0_native_feasible": true,
+  "actual_pv_prefix_accepted": true,
+  "whole_week_physical_check": "NOT_EXECUTED",
+  "policy": "day_ahead Method1, declared rolling Method0, MIPFocus1 both",
+  "fresh_twelve_weeks_required": true,
+  "research_acceptance": "BLOCKED",
+  "implementation_p0": 0,
+  "implementation_p1": 0,
+  "launch_requires_final_sha": true,
+  "full_tests_passed": 2343,
+  "preexisting_ppt_failures": 2,
+  "new_test_failures": 0
+}

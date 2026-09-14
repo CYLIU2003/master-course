@@ -1,7 +1,7 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
 <!-- monthly-search-status -->
-最新の月別再実行: 固定 `10a40c9f`、独立監査 1/12週、状態 `IN_PROGRESS`。全月共通MIPFocus=1・Method=1、物理許容差1e-9。旧fa0c22bfの10週は旧版の記録として保存し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.md`。
+最新の月別比較: 旧10a40c9fは7/12週監査済み、8月hour48で数値求解の問題により停止。全月共通の前日Method=1・毎時Method=0、MIPFocus=1に変更し、新clean固定版から12週を新規実行する準備中。過去版の成功週を混ぜない。研究採用BLOCKED、メール未送信。
 <!-- /monthly-search-status -->
 
 

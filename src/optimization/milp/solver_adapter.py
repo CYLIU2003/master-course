@@ -3271,7 +3271,11 @@ def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[s
         # automatic method. This uniform search policy passed independent
         # physical replay in 21.32 s without changing the feasible region.
         "MIPFocus": 1,
-        "Method": 1,
+        # August's identical rolling MPS is falsely infeasible under dual
+        # simplex but admits a validated execution prefix under primal simplex.
+        # Select once from the declared phase, uniformly across every month;
+        # this is not a retry after failure and never changes physical tolerances.
+        "Method": (0 if config.rolling_horizon_policy == ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT else 1),
     }
     for name, value in parameters.items():
         model.setParam(name, value)
