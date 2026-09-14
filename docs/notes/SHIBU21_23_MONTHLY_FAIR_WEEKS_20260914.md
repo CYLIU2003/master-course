@@ -1,6 +1,6 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
-2026-09-14。2025年の各月から1週、計12週・84日を事前選定した。12週すべての入力materializationで曜日構成、同一時刻表原本、1,704便、同一営業便距離、予測672 slot、同一2024年学習モデルを確認した。これは入力検査であり、新clean commitによる完全Prepare・求解・168時間rolling・最終物理検証・会計の完了を意味しない。現時点では週間結果は未確定。
+2026-09-14。2025年の各月から1週、計12週・84日を事前選定した。12週すべての入力materializationで曜日構成、同一時刻表原本、1,704便、同一営業便距離、予測672 slot、同一2024年学習モデルを確認した。これは入力検査であり、新clean commitによる完全Prepare・求解・168時間rolling・最終物理検証・会計の完了を意味しない。固定SHA `4c5c5d86f7e41ccb38a4288dd18a2aa72a1c2cb0` のclean worktreeから2026-09-14 14:47 JSTに12週の逐次実行を開始した。現時点では週間結果は未確定。
 
 ## 選択日と比較条件
 
@@ -67,3 +67,7 @@ C:/master-course/.venv/Scripts/python.exe -X utf8 scripts/benchmarks/run_exact_s
 ## 凍結前の検証
 
 全体回帰は **2,258 passed / 既存PowerPoint証拠2 failed、168.24秒**。JUnitは `output/monthly_fair_weeks_20260914/pytest-release.xml`。新規18件で祝日週・月跨ぎ・曜日/便の改変、forecast hash/モデル/値/時刻/未宣言週、12週designのPrepare伝達、canonical Preparedの暦・予測証拠の不一致を検査した。Lunaの独立最終レビューで未解決P0/P1は0件。旧canonical Preparedの列との互換も実ファイルで確認した。
+
+## 実行場所
+
+凍結branchは `codex/shibu21-23-monthly-fair-20260914`、worktreeは `C:/master-course-worktrees/shibu21-23-monthly-fair-20260914`。進捗はその配下の `output/monthly_fair_weeks_campaign_20260914/progress.json`、週別結果は `cases/<開始日>/summary.json`、全体結果は完了後の `summary.json`。全体ログは `output/monthly_fair_weeks_campaign_20260914.log`。失敗時は後続を未実行と明示して停止する。監視と独立照合は、ユーザーの既存希望どおりGPT-5.6 Lunaが担当する。
