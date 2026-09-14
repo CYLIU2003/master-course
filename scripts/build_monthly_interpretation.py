@@ -165,6 +165,12 @@ def report_status(campaign_status: str, completed_count: int) -> str:
     return "IN_PROGRESS"
 
 
+def failure_reasons(summary: dict) -> list[str]:
+    """Keep day-ahead failures visible even when no rolling chain was started."""
+    return list(summary.get("hourly_reasons") or summary.get("day_ahead_reasons")
+                or summary.get("reasons") or ["停止理由の記録なし。原本を確認してください。"])
+
+
 def collect(campaign: Path, audit_path: Path, *, partial: bool) -> dict:
     design, _ = read_document(campaign / "design.json")
     audit, audit_hash = read_document(audit_path)
@@ -183,7 +189,7 @@ def collect(campaign: Path, audit_path: Path, *, partial: bool) -> dict:
                 failed_weeks.append({"week": week, "status": failure["status"],
                     "hourly_steps_accepted": failure.get("hourly_steps_accepted", 0),
                     "failed_hour": failure.get("failed_hour"),
-                    "reasons": failure.get("hourly_reasons", failure.get("reasons", [])),
+                    "reasons": failure_reasons(failure),
                     "source_evidence": {"path": str(path), "sha256": digest}})
             continue
         expected_case = campaign / "cases" / week / "diagnostic" / week

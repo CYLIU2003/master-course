@@ -4405,3 +4405,5 @@ The monthly report now explains that fixed seed/threads/time limits do not ensur
 既存診断v2を用いた11月の120秒/600秒比較を別出力で開始。失敗時の車両別便順と主Stage 2制約数が一致する場合だけ比較し、MPS SHA・独立物理検証を確認する。固定実験原本とコードは変更していない。診断終了時だけ既存taskへローカルqueueする通知を起動した。全12週も診断の成否もまだ未確定で、完了メールは未送信。
 
 [原因の記録と診断手順](SHIBU21_23_NOVEMBER_STAGE2_FAILURE_20260915.md)。
+
+11月停止の報告経路を確認し、build_monthly_interpretation.pyがday_ahead_reasonsを表示せず理由欄が空になる欠陥も修正。rolling未開始の失敗、空配列からの理由選択、理由欠落の明示を検査し、49 testsが1.66秒で通過した。原本SHAを保持して停止版の結果表を再生成した。

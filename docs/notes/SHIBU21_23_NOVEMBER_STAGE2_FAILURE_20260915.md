@@ -25,3 +25,5 @@ campaignの `completed_weeks` は成功週だけではなく、失敗で終了�
 停止ケースを成功数から除外するcheckpoint回帰テストを追加し、observer・月別集計・証拠収集の48 testsが通過した（1.84秒）。実際の10週監査と11月失敗記録でも文書同期のdry-runと適用が成功した。Stage 2の数学モデルは変更していない。
 
 研究採用は引き続きBLOCKED。DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONSであり、各季節の最終集計は全12週がそろうまで行わない。
+
+停止表の再確認で、集計CLIがrolling失敗理由だけを参照しday-aheadの理由を空欄にする欠陥も修正した。`day_ahead_reasons`を明示的に取り込み、今回のSTAGE2_NO_INCUMBENTを途中表へ掲載。追加回帰を含む49 testsが1.66秒で通過した。

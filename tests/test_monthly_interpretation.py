@@ -3,7 +3,7 @@ import math
 import pytest
 
 from scripts.build_monthly_interpretation import (
-    cost_difference, observation_paragraphs, ratio_percent, report_status, seasonal_summary,
+    cost_difference, failure_reasons, observation_paragraphs, ratio_percent, report_status, seasonal_summary,
 )
 
 
@@ -57,6 +57,14 @@ def test_zero_generation_ratio_is_unavailable_not_zero_percent():
 @pytest.mark.parametrize("status", ["STOPPED_AFTER_FAILED_CASE", "BLOCKED_SOURCE_STATE_DRIFT"])
 def test_partial_report_preserves_failure_instead_of_claiming_run_is_active(status):
     assert report_status(status, 3) == status
+
+
+def test_day_ahead_failure_reason_is_visible_without_a_rolling_chain():
+    reason = "[STAGE2_NO_INCUMBENT] Charging optimization returned time_limit"
+    assert failure_reasons({"day_ahead_reasons": [reason]}) == [reason]
+    assert failure_reasons({"hourly_reasons": [], "day_ahead_reasons": [reason]}) == [reason]
+    assert failure_reasons({"hourly_reasons": ["hour failed"], "day_ahead_reasons": [reason]}) == ["hour failed"]
+    assert failure_reasons({}) == ["停止理由の記録なし。原本を確認してください。"]
 
 
 def test_twelve_rows_do_not_replace_campaign_completion_gate():

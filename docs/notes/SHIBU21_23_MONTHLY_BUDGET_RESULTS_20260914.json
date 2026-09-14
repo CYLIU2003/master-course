@@ -3,7 +3,7 @@
   "status": "STOPPED_AFTER_FAILED_CASE",
   "campaign_status": "STOPPED_AFTER_FAILED_CASE",
   "source_git_sha": "fa0c22bfed6cf7bf0a09d24b82470d4f3570dfc8",
-  "generated_at_utc": "2026-09-14T16:34:18.990457+00:00",
+  "generated_at_utc": "2026-09-14T16:39:30.185631+00:00",
   "completed_count": 10,
   "declared_week_count": 12,
   "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
@@ -860,7 +860,9 @@
       "status": "DAY_AHEAD_FAILED",
       "hourly_steps_accepted": 0,
       "failed_hour": null,
-      "reasons": [],
+      "reasons": [
+        "[STAGE2_NO_INCUMBENT] Charging optimization returned time_limit; no operating plan is available. Inspect the saved IIS diagnostics."
+      ],
       "source_evidence": {
         "path": "C:\\master-course-worktrees\\shibu21-23-monthly-budget-20260914\\output\\monthly_budget_campaign_20260914\\cases\\2025-11-10\\diagnostic\\2025-11-10\\summary.json",
         "sha256": "01d864041ea3a452930e889fdd022e28983156c8be668abee32ebb214ca40da6"

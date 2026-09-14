@@ -1,6 +1,6 @@
 # 月別12週の結果（途中経過）
 
-更新: 2026-09-14T16:34:18.990457+00:00。**10/12週が完了**。固定版 `fa0c22bf` の確定会計を掲載する。
+更新: 2026-09-14T16:39:30.185631+00:00。**10/12週が完了**。固定版 `fa0c22bf` の確定会計を掲載する。
 **実行状態: `STOPPED_AFTER_FAILED_CASE`。計算プロセスは停止しており、原因調査中。**
 
 
@@ -21,7 +21,7 @@
 
 未確定の週: 2025-11-10、2025-12-01。費用を0として扱わず、全12週と季節別の整理を継続する。
 
-- 2025-11-10開始週: `DAY_AHEAD_FAILED`。0/168時間まで受理。週間会計は未成立。理由: 
+- 2025-11-10開始週: `DAY_AHEAD_FAILED`。0/168時間まで受理。週間会計は未成立。理由: [STAGE2_NO_INCUMBENT] Charging optimization returned time_limit; no operating plan is available. Inspect the saved IIS diagnostics.
 
 ## 原本・定義・限界
 
