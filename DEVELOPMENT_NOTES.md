@@ -1,5 +1,9 @@
 # Development Notes
 
+## 2026-09-14 月別集計の原本・受入条件に対する回帰検査
+
+`tests/test_monthly_evidence_collection.py` に合成資料による集計入口の検査を10件追加し、既存の集計規則11件と合わせて21 passed（1.52秒）。原本hash改変、SHA不一致、167時間、671 slot、物理違反、台帳差、電力収支差を拒否する。失敗週の理由とhashを保持した費用除外、未完了時の最終生成拒否、12週が揃ってもcampaignのclean完了を要求することを確認した。合成fixtureはsolver実行証拠に使用しない。独立レビューで残っていたP2の集計入口テスト不足を補った。変更はmainのテスト・説明のみで、実行中の `8acd8beb` worktreeは変更していない。
+
 ## 2026-09-14 17:08 JST 月別12週の再実行
 
 独立レビューのP1（公開metadataの設定証跡）を、最終clean SHA `8acd8beba102402605375a0f7156fb17951f492d` の単一時間診断で解消した。公開solver_metadataのAggregate=0、許容誤差1e-9、feasible、前後SHA/clean一致を確認。最終全体回帰は2,271 passed / 既存PowerPoint証拠2 failed、98.99秒。新worktree `C:/master-course-worktrees/shibu21-23-monthly-numeric-20260914` の `output/monthly_numeric_campaign_20260914` へ全12週を最初から実行する。時刻表等47ファイルのコピーhashとconfig同一を確認し、旧Prepared・週間結果は流用しない。開始時点は0/12週、1月Prepare中。Luna独立監査はmainの `output/monthly_fair_weeks_20260914/monthly_numeric_independent_audit.json` に分け、heartbeatも新しい実行先へ更新した。入力・コードを実行中に変更しない。
