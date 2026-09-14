@@ -3256,6 +3256,22 @@ def _configured_gurobi_integrality_tol(
     return tolerance
 
 
+def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[str, float | int]:
+    """Preserve exact SOC boundary rows without presolve aggregation roundoff."""
+    parameters = {
+        "FeasibilityTol": _configured_gurobi_feasibility_tol(config, stage=2),
+        "IntFeasTol": _configured_gurobi_integrality_tol(config, stage=2),
+        # The April hourly boundary is feasible at the unchanged 1e-9
+        # tolerances, but aggregating its SOC transitions can report false
+        # infeasibility. Apply the stable policy before every Stage 2 solve;
+        # do not repair states, relax constraints, or retry selectively.
+        "Aggregate": 0,
+    }
+    for name, value in parameters.items():
+        model.setParam(name, value)
+    return parameters
+
+
 def _max_abs_terminal_target_deviation_kwh(
     *,
     target_by_vehicle: Mapping[str, float],
@@ -22134,14 +22150,9 @@ class GurobiMILPAdapter:
         stage2.Params.TimeLimit = max(stage2_time_limit, 0.001)
         stage2.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage2.Params.Seed = int(config.random_seed)
-        stage2_feasibility_tol = _configured_gurobi_feasibility_tol(
-            config, stage=2
-        )
-        stage2_integrality_tol = _configured_gurobi_integrality_tol(
-            config, stage=2
-        )
-        stage2.Params.FeasibilityTol = stage2_feasibility_tol
-        stage2.Params.IntFeasTol = stage2_integrality_tol
+        stage2_numerics = _configure_stage2_numerics(stage2, config)
+        stage2_feasibility_tol = stage2_numerics["FeasibilityTol"]
+        stage2_integrality_tol = stage2_numerics["IntFeasTol"]
         configured_threads = _configured_gurobi_threads(config)
         if configured_threads is not None:
             stage2.Params.Threads = configured_threads
@@ -23216,6 +23227,7 @@ class GurobiMILPAdapter:
                 ),
                 "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
                 "stage2_gurobi_integrality_tol": stage2_integrality_tol,
+                "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
                 "gurobi_threads": configured_threads,
                 "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
                 "stage1_time_limit_sec_effective": (
@@ -23559,6 +23571,7 @@ class GurobiMILPAdapter:
             ),
             "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
             "stage2_gurobi_integrality_tol": stage2_integrality_tol,
+            "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
             "gurobi_threads": configured_threads,
             "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
             "stage2_contract_overage_enabled": (

@@ -1,0 +1,610 @@
+\ Model _copy_copy
+\ LP format - for model browsing. Use MPS format to capture full model detail.
+\ Signature: 0x78e57d77f2d553be
+Minimize
+
+Subject To
+ soc_lower__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_186:
+   soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_186 >= 62.8
+ charge_availability__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_186__deadhead_active:
+   charge_on_8270c9a2-ed1f-4508-81a0-0903ddc4924c_186 = 0
+ charge_power_vehicle__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_186:
+   - 90 charge_on_8270c9a2-ed1f-4508-81a0-0903ddc4924c_186
+   + c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_186 <= 0
+ stage2_charge_soc_high_lower__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_138:
+   - 314 stage2_charge_soc_ge90__8270c9a2-ed1f-4508-81a0-0903ddc4924c__138
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_138 >= -31.4
+ stage2_charge_soc_high_lower__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_157:
+   - 314 stage2_charge_soc_ge90__8270c9a2-ed1f-4508-81a0-0903ddc4924c__157
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_157 >= -31.4
+ stage2_charge_on_boundary_continuation__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_187:
+   charge_on_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187 = 1
+ stage2_charge_active_power_lower__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_187:
+   - 0.0001 charge_on_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187
+   + c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187 >= 0
+ soc_initial__8270c9a2-ed1f-4508-81a0-0903ddc4924c:
+   soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_92 = 255.331233856
+ terminal_soc__8270c9a2-ed1f-4508-81a0-0903ddc4924c__return_to_initial_upper:
+   soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187
+   + 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187
+   <= 73.07487625000005
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_92:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_92
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_93
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_92 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_93:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_93
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_93
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_94 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_94:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_94
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_94
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_95 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_95:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_95
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_95
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_96 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_96:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_96
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_96
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_97 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_97:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_97
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_98
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_97 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_98:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_98
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_98
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_99 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_99:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_99
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_99
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_100 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_100:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_100
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_100
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_101 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_101:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_101
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_101
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_102 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_102:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_102
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_102
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_103 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_103:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_103
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_103
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_104 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_104:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_104
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_104
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_105 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_105:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_105
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_105
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_106 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_106:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_106
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_106
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_107 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_107:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_107
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_107
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_108 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_108:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_108
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_108
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_109 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_109:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_109
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_109
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_110 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_110:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_110
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_110
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_111 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_111:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_111
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_111
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_112 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_112:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_112
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_112
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_113 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_113:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_113
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_113
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_114 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_114:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_114
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_114
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_115 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_115:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_115
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_116
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_115 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_116:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_116
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_116
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_117 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_117:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_117
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_117
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_118 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_118:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_118
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_118
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_119 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_119:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_119
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_119
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_120 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_120:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_120
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_120
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_121 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_121:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_121
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_122
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_121 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_122:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_122
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_122
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_123 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_123:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_123
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_124
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_123 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_124:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_124
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_125
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_124 = -11.72876679290909
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_125:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_125
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_125
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_126 = -3.983071699090909
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_126:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_126
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_126
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_127 = -3.983071699090909
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_127:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_127
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_127
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_128 = -1.858766792909091
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_128:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_128
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_129
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_128 = -0.9045450136470587
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_129:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_129
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_130
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_129 = -3.39204380117647
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_130:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_130
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_131
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_130 = -3.39204380117647
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_131:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_131
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_131
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_132 = -3.39204380117647
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_132:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_132
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_132
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_133 = -0.4522725068235294
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_133:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_133
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_133
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_134 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_134:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_134
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_135
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_134 = -2.031943823304348
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_135:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_135
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_135
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_136 = -3.809894668695653
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_136:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_136
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_136
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_137 = -3.809894668695653
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_137:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_137
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_137
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_138 = -2.031943823304348
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_138:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_138
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_139
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_138 = -1.717673244
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_139:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_139
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_139
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_140 = -3.68072838
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_140:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_140
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_140
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_141 = -3.68072838
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_141:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_141
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_141
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_142 = -2.45381892
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_142:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_142
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_142
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_143 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_143:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_143
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_143
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_144 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_144:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_144
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_145
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_144 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_145:
+   soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_146
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_145
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_145 = -3.6511490575
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_146:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_146
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_146
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_147 = -3.6511490575
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_147:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_147
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_147
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_148 = -3.6511490575
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_148:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_148
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_148
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_149 = -0.7302298115
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_149:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_149
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_150
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_149 = -2.359012279909091
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_150:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_150
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_150
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_151 = -3.931687133181818
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_151:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_151
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_151
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_152 = -3.931687133181818
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_152:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_152
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_152
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_153 = -1.310562377727273
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_153:
+   soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_154
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_153
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_153 = -3.6511490575
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_154:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_154
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_154
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_155 = -3.6511490575
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_155:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_155
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_155
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_156 = -3.6511490575
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_156:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_156
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_156
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_157 = -0.7302298115
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_157:
+   soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_158
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_157
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_157 = -0.981527568
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_158:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_158
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_158
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_159 = -3.68072838
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_159:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_159
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_160
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_159 = -3.68072838
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_160:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_160
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_161
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_160 = -3.189964596
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_161:
+   soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_162
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_161
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_161
+   = -0.4581834111372549
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_162:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_162
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_162
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_163 = -3.436375583529412
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_163:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_163
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_163
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_164 = -3.436375583529412
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_164:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_164
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_165
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_164 = -3.436375583529412
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_165:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_165
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_165
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_166 = -0.9163668222745098
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_166:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_166
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_166
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_167 = -1.472291352
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_167:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_167
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_168
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_167 = -3.68072838
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_168:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_168
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_169
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_168 = -3.68072838
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_169:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_169
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_169
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_170 = -2.699200812
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_170:
+   soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_171
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_170
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_170 = -2.237299848
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_171:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_171
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_172
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_171 = -3.72883308
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_172:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_172
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_172
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_173 = -3.72883308
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_173:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_173
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_173
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_174 = -1.988710976
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_174:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_174
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_175
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_174 = -3.338485214842105
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_175:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_175
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_175
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_176 = -4.552479838421053
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_176:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_176
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_176
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_177 = -3.641983870736842
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_177:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_177
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_177
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_178 = -2.225462282666667
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_178:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_178
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_179
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_178 = -4.17274178
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_179:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_179
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_179
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_180 = -4.17274178
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_180:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_180
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_180
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_181 = -1.112731141333333
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_181:
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_181
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_182
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_181 = -0.3295128264
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_182:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_182
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_182
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_183 = -4.942692395999999
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_183:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_183
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_183
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_184 = -4.942692395999999
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_184:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_184
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_184
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_185 = -1.3180513056
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_185:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_185
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_185
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_186 = 0
+ soc_transition__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_186:
+   - soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_186
+   - 0.2375 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_186
+   + soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187 = -9.87
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-001__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-001__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-001__slot_187
+   <= 0
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-002__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-002__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-002__slot_187
+   <= 0
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-003__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-003__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-003__slot_187
+   <= 0
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-004__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-004__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-004__slot_187
+   <= 0
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-005__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-005__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-005__slot_187
+   <= 0
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-006__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-006__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-006__slot_187
+   <= 0
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-007__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-007__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-007__slot_187
+   <= 0
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-008__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-008__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-008__slot_187
+   <= 0
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-009__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-009__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-009__slot_187
+   <= 0
+ stage2_physical_charger_link__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-010__slot_187:
+   - 90 stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-010__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-010__slot_187
+   <= 0
+ stage2_physical_charger_one__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_187:
+   - charge_on_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-001__slot_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-002__slot_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-003__slot_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-004__slot_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-005__slot_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-006__slot_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-007__slot_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-008__slot_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-009__slot_187
+   + stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-010__slot_187
+   = 0
+ stage2_physical_charger_power_sum__8270c9a2-ed1f-4508-81a0-0903ddc4924c__slot_187:
+   - c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-001__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-002__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-003__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-004__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-005__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-006__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-007__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-008__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-009__slot_187
+   + stage2_physical_charger_kw__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-010__slot_187
+   = 0
+ R77405: - 0.25 c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187
+   + g2v_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187
+   + pv2v_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187
+   + bess2v_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187 = 0
+Bounds
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_92 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_93 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_94 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_95 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_96 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_97 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_98 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_99 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_100 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_101 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_102 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_102 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_103 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_104 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_105 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_106 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_107 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_107 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_108 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_109 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_109 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_110 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_111 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_111 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_112 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_113 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_114 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_116 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_117 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_118 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_119 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_119 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_120 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_121 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_122 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_123 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_125 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_126 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_127 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_129 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_132 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_133 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_135 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_136 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_136 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_137 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_138 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_139 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_139 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_140 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_141 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_142 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_143 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_143 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_144 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_146 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_147 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_150 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_151 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_151 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_152 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_154 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_154 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_155 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_156 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_156 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_158 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_158 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_160 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_162 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_165 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_165 <= 90
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_166 <= 90
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_167 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_168 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_169 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_171 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_172 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_173 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_175 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_175 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_179 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_180 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_182 <= 90
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_185 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_186 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_92 free
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_97 <= 90
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_115 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_121 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_124 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_128 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_130 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_134 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_138 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_145 <= 282.6
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_153 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_157 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_163 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_164 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_166 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_167 free
+ -infinity <= soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_170 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_177 free
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_178 <= 282.6
+ soc_8270c9a2-ed1f-4508-81a0-0903ddc4924c_181 <= 282.6
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_129 <= 90
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_161 <= 90
+ c_8270c9a2-ed1f-4508-81a0-0903ddc4924c_168 <= 90
+ g2v_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187 free
+ pv2v_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187 free
+Binaries
+ charge_on_8270c9a2-ed1f-4508-81a0-0903ddc4924c_186
+ stage2_charge_soc_ge90__8270c9a2-ed1f-4508-81a0-0903ddc4924c__138
+ stage2_charge_soc_ge90__8270c9a2-ed1f-4508-81a0-0903ddc4924c__157
+ charge_on_8270c9a2-ed1f-4508-81a0-0903ddc4924c_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-001__slot_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-002__slot_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-003__slot_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-004__slot_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-005__slot_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-006__slot_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-007__slot_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-008__slot_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-009__slot_187
+ stage2_physical_charger_on__8270c9a2-ed1f-4508-81a0-0903ddc4924c__depot-fast-tsurumaki-010__slot_187
+End

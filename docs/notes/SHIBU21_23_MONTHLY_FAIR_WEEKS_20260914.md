@@ -1,8 +1,8 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
-途中結果: [月別結果表と原本hash](SHIBU21_23_MONTHLY_RESULTS_20260914.md)を追加した。1〜3月の3週は完走・物理・会計照合を通過。残りの週と季節別整理は進行中であり、以下は開始時点の設計・検査記録。
+途中結果: [月別結果表と原本hash](SHIBU21_23_MONTHLY_RESULTS_20260914.md)を追加した。1〜3月の3週は完走・物理・会計照合を通過。4月はhour 023のStage 2がinfeasibleを返して停止し、5〜12月は未実行。週間会計が成立しない失敗週を費用表へ補完しない。以下は開始時点の設計・検査記録。
 
-2026-09-14。2025年の各月から1週、計12週・84日を事前選定した。12週すべての入力materializationで曜日構成、同一時刻表原本、1,704便、同一営業便距離、予測672 slot、同一2024年学習モデルを確認した。これは入力検査であり、新clean commitによる完全Prepare・求解・168時間rolling・最終物理検証・会計の完了を意味しない。固定SHA `4c5c5d86f7e41ccb38a4288dd18a2aa72a1c2cb0` のclean worktreeから2026-09-14 14:47 JSTに12週の逐次実行を開始した。現時点では週間結果は未確定。
+2026-09-14。2025年の各月から1週、計12週・84日を事前選定した。12週すべての入力materializationで曜日構成、同一時刻表原本、1,704便、同一営業便距離、予測672 slot、同一2024年学習モデルを確認した。これは入力検査であり、新clean commitによる完全Prepare・求解・168時間rolling・最終物理検証・会計の完了を意味しない。固定SHA `4c5c5d86f7e41ccb38a4288dd18a2aa72a1c2cb0` のclean worktreeから2026-09-14 14:47 JSTに12週の逐次実行を開始した。開始後の実行状況は冒頭の途中結果を参照。
 
 ## 選択日と比較条件
 
@@ -63,6 +63,16 @@ C:/master-course/.venv/Scripts/python.exe -X utf8 scripts/benchmarks/run_exact_s
 各月1週の目的選定であり、月平均・年平均・統計的な季節一般化・PV単独の因果効果を主張しない。時刻表は2026年原本、評価日は2025年、実績PVは履歴推定、予測は2024年のみのclimatology proxy。10% gap、正式fleet contract、統合最適性、既存資料2件の証拠不一致等の研究採用条件は別に残る。結果は **DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS**、研究採用 **BLOCKED** を維持する。
 
 季節別の集計では、3週の費用・購入量は「選択週当たり平均」と範囲を示す。PV利用率・抑制率は3週の分子合計÷発電量合計で求め、週別百分率の単純平均を使わない。受電ピークは週別値の範囲と3週中の最大値を示す。各7日間は同じ初期状態から別々に始めるため、3週合計を連続21日間の運用結果として扱わない。BESS初期在庫の減少量も各週と合計を併記する。
+
+## 結果表の再生成
+
+結果集計はmain側の次の専用CLIで行う。実験worktreeへの書込み・Prepare・求解は行わず、独立監査のhashと原本を再照合する。
+
+```powershell
+.venv/Scripts/python.exe -X utf8 scripts/build_monthly_interpretation.py --campaign C:/master-course-worktrees/shibu21-23-monthly-fair-20260914/output/monthly_fair_weeks_campaign_20260914 --audit output/monthly_fair_weeks_20260914/monthly_independent_audit.json --partial
+```
+
+通常モード（`--partial`なし）は12週すべての完走・独立監査・campaign完了が必要。途中版は停止/失敗状態と未確定週を明記し、季節別集計や完成図を出力しない。関連28テスト、実原本3週の数値一致、未完了時の最終生成拒否を確認した。12週の完成図はデータが揃ってから描画・目視検査する。
 
 ## Solcast追加認証と履歴取得
 
