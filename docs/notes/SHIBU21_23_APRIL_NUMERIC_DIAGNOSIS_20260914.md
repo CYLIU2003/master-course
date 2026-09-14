@@ -28,4 +28,8 @@ Stage 2の最初の求解から一律に `Aggregate=0` を適用し、成功時�
 - 実ソルバー回帰で境界解を残差 `1e-9` 以下で受理し、初期SOCを1 kWh増やした真の終端超過はINFEASIBLEとして拒否する。関連75テストが通過。
 - 全体回帰は **2,271 passed / 既存PowerPoint証拠2 failed、106.66秒**。`output/monthly_fair_weeks_20260914/pytest-numeric-release.xml` と同名logへ保存した。独立コードレビューは別途記録する。
 
+最終検証では、公開solver_metadataへの転送を追加したclean SHA `8acd8beba102402605375a0f7156fb17951f492d` の再検査でnative `stage2_gurobi_aggregate=0`、feasible、前後clean一致を確認した。`april_hour_023_final_source/summary.json` と `result.json` に保存。全体回帰は **2,271 passed / 同じ既存2 failed、98.99秒**（`pytest-final-numeric-release.xml`）。Lunaの `numeric_policy_review.json` でP0/P1は0件となった。
+
+2026-09-14 17:08 JST、同SHAの `C:/master-course-worktrees/shibu21-23-monthly-numeric-20260914` で新しい全12週実行を開始した。結果は `output/monthly_numeric_campaign_20260914`、ログは同名`.log`。開始時点は0/12週。進行中の固定版は変更しない。
+
 現時点の研究採用は引き続き **BLOCKED / DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS**。この修正は最適性gap、正式fleet contract、時刻表年次や予測モデルの制限を解消しない。

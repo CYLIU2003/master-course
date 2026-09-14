@@ -1,5 +1,7 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
+再実行: 初回の数値的な停止を対処し、`8acd8beb` のclean版で2026-09-14 17:08 JSTに同じ12週を最初から開始した。新worktreeは `C:/master-course-worktrees/shibu21-23-monthly-numeric-20260914`、出力は `output/monthly_numeric_campaign_20260914`、独立監査はmainの `output/monthly_fair_weeks_20260914/monthly_numeric_independent_audit.json`。初回3週を新版の集計へ流用しない。上記の新しいcampaign/auditを結果集計CLIへ指定する。[修正と最終検証](SHIBU21_23_APRIL_NUMERIC_DIAGNOSIS_20260914.md)。
+
 途中結果: [月別結果表と原本hash](SHIBU21_23_MONTHLY_RESULTS_20260914.md)を追加した。1〜3月の3週は完走・物理・会計照合を通過。4月はhour 023のStage 2がinfeasibleを返して停止し、5〜12月は未実行。週間会計が成立しない失敗週を費用表へ補完しない。以下は開始時点の設計・検査記録。
 
 2026-09-14。2025年の各月から1週、計12週・84日を事前選定した。12週すべての入力materializationで曜日構成、同一時刻表原本、1,704便、同一営業便距離、予測672 slot、同一2024年学習モデルを確認した。これは入力検査であり、新clean commitによる完全Prepare・求解・168時間rolling・最終物理検証・会計の完了を意味しない。固定SHA `4c5c5d86f7e41ccb38a4288dd18a2aa72a1c2cb0` のclean worktreeから2026-09-14 14:47 JSTに12週の逐次実行を開始した。開始後の実行状況は冒頭の途中結果を参照。

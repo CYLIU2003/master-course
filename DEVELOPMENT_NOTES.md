@@ -1,5 +1,9 @@
 # Development Notes
 
+## 2026-09-14 17:08 JST 月別12週の再実行
+
+独立レビューのP1（公開metadataの設定証跡）を、最終clean SHA `8acd8beba102402605375a0f7156fb17951f492d` の単一時間診断で解消した。公開solver_metadataのAggregate=0、許容誤差1e-9、feasible、前後SHA/clean一致を確認。最終全体回帰は2,271 passed / 既存PowerPoint証拠2 failed、98.99秒。新worktree `C:/master-course-worktrees/shibu21-23-monthly-numeric-20260914` の `output/monthly_numeric_campaign_20260914` へ全12週を最初から実行する。時刻表等47ファイルのコピーhashとconfig同一を確認し、旧Prepared・週間結果は流用しない。開始時点は0/12週、1月Prepare中。Luna独立監査はmainの `output/monthly_fair_weeks_20260914/monthly_numeric_independent_audit.json` に分け、heartbeatも新しい実行先へ更新した。入力・コードを実行中に変更しない。
+
 ## 2026-09-14 Stage 2の厳密SOC境界に対する数値集約の停止
 
 新clean版による単一時間の再検査では、ネイティブmetadataにAggregate=0を記録した上でfeasibleを確認した。公開solver_metadataへの転送も追加し、監査側が他の数値設定と同じ場所から検査できるようにする。旧状態を使ったこの再検査は回帰診断専用であり、新週間結果として採用しない。

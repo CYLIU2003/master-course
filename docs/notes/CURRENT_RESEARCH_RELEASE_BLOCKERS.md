@@ -1,6 +1,6 @@
 # Current research release blockers
 
-追加対処: 4月hour 023の完全な問題再構築で、Stage 2のAggregate=0により同じ許容誤差でfeasibleを確認した。一律適用の修正を検証中。新clean版の全12週完走・最終物理・会計・独立検査が完了するまで、初回3週を含め研究採用BLOCKEDを維持する。[数値診断と再実行の条件](SHIBU21_23_APRIL_NUMERIC_DIAGNOSIS_20260914.md)。
+追加対処: Stage 2のAggregate=0を全月共通で適用する修正と公開metadata転送を検証し、独立レビューP0/P1は0件。最終clean SHA `8acd8beb` から2026-09-14 17:08 JSTに全12週の再実行を開始した。開始時点は0/12週。新版の全12週完走・最終物理・会計・独立検査が完了するまで、研究採用BLOCKEDを維持する。初回3週と新版を混ぜない。[数値診断と再実行の条件](SHIBU21_23_APRIL_NUMERIC_DIAGNOSIS_20260914.md)。
 
 ## 2026-09-14 月別12週：入力の公平性を検査、週間結果は未確定
 
