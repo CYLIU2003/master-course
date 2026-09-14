@@ -1,6 +1,6 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
-最新実行: 2026-09-14 19:15 JST開始の固定 `829e3983` は1月の前日計画で停止した（19:37 JST確認）。Stage 2の30秒制限でincumbentなし、`DAY_AHEAD_FAILED`、完走0/12週、rolling未開始。worktree `C:/master-course-worktrees/shibu21-23-monthly-presolve-20260914`、campaign `output/monthly_presolve_campaign_v3_20260914`、main監査 `output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json`。同一nativeモデルで必要予算を診断し、全月に適用する設定を事前に固定して新規実行する。停止週の週間費用を補完せず、以下の過去版の完走週も流用しない。[数値修正・検証](SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。
+最新実行: 2026-09-14 19:15 JST開始の固定 `829e3983` は1月の前日計画で停止した（19:37 JST確認）。Stage 2の30秒制限でincumbentなし、`DAY_AHEAD_FAILED`、完走0/12週、rolling未開始。worktree `C:/master-course-worktrees/shibu21-23-monthly-presolve-20260914`、campaign `output/monthly_presolve_campaign_v3_20260914`、main監査 `output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json`。同一nativeモデルの120秒枠で最初の解が約36.5秒後に得られ、SOC・物理検証を通過した。全月の前日Stage 2を最大120秒へ揃えて新規実行する。[変更根拠と診断](SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)。停止週の週間費用を補完せず、以下の過去版の完走週も流用しない。[数値修正・検証](SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。
 
 新版の途中結果（2026-09-14 18:52 JST）: [固定8acd8bebの1・2月結果と原本](SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md)。2/12週が完走・独立監査済み。3月はhour 152のSOC再検証で停止し、152/168時間まで受理、4〜12月は未実行。旧版の結果表は初回試行の履歴として保持する。
 
@@ -33,7 +33,7 @@
 
 祝日は[内閣府の公式CSV](https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv)に基づく。2026-09-14取得分と既存の検証済みcalendar原本のSHA256はともに `cec37a743c96995cdb9cb52b685c9003634682a9b0e1a640a6b9b96881fe964a`。旧秋週2025-11-03は文化の日を含み平日4日だったため、11月10日開始へ変更した。
 
-設計は [config](../../config/shibu21_23_monthly_2025_20260914.json)。渋21/22/23の同じ原本、親シナリオのexact active fleet（観測60台、BEV35・ICE25）、初期SOC、充電器、BESS、料金、seed42、12 threads、Stage 1最大120秒・Stage 2最大30秒・day-ahead共有900秒・rolling最大15秒を保持する。successor pruningは0、fallback・解後修復は禁止。BEVは週末に各車の初期SOCへ戻し、BESSは既定の20〜80%・週末最低20%条件を維持する。数式・単価・feasible setを変更する作業ではない。
+設計は [config](../../config/shibu21_23_monthly_2025_20260914.json)。渋21/22/23の同じ原本、親シナリオのexact active fleet（観測60台、BEV35・ICE25）、初期SOC、充電器、BESS、料金、seed42、12 threads、Stage 1最大120秒・Stage 2最大120秒・day-ahead共有900秒・rolling最大15秒を全月で保持する。Stage 2の上限は1月の同一モデル診断に基づいて旧30秒から変更した。successor pruningは0、fallback・解後修復は禁止。BEVは週末に各車の初期SOCへ戻し、BESSは既定の20〜80%・週末最低20%条件を維持する。数式・単価・feasible setを変更する作業ではない。
 
 同じ曜日構成で同じ時刻表原本をmaterializeした結果、各週1,704便、営業便距離は同値となった。この距離は停留所間の地理的代理距離に基づく営業便合計であり、回送を含む実道路走行距離ではない。使用台数・車両日数・費用は求解結果なので固定値を作らず、完走後に別々に比較する。
 
