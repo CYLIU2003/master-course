@@ -4314,3 +4314,8 @@ The monthly report now explains that fixed seed/threads/time limits do not ensur
 ## 2026-09-14 月別Stage 2共通予算を120秒へ変更
 
 本体1月モデルの30秒no-incumbentを再現し、同一MPSを120秒枠で解くと36.537秒で最初の実行可能解、36.752秒でgap0.448099%となり、独立SOC再計算と物理検証を通過した。モデルSHA・固定割当・前後cleanを照合。最初の誤捕捉した候補検査v1は無効と明記し、根拠に使わない。全月共通設定の前日Stage 2だけを30から120秒へ変更し、Stage 1 120秒・共有900秒・rolling15秒・制約・許容誤差・予測・曜日構成を保持する。新clean版の12週を新規実行し、旧結果・単独診断を週間結果に混ぜない。詳細はSHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md。
+
+
+## 2026-09-14 共通予算の固定版で12週を開始
+
+最新の月別12週は2026-09-14 20:02 JSTに固定 `fa0c22bf` から新規実行を開始した。前日Stage 2を全月最大120秒へ揃え、他の時間枠・制約・予測・週選択を保持する。開始時点0/12週、1月Prepare中。rootは `C:/master-course-worktrees/shibu21-23-monthly-budget-20260914`、campaignは `output/monthly_budget_campaign_20260914`。mainの起動記録は `output/monthly_fair_weeks_20260914/budget_rerun_launch.json`、独立監査は `monthly_budget_independent_audit.json`。完走・週会計・12月分の季節別整理は未完了。以下の停止版と混ぜない。 凍結後25 passed（4.36秒）、47入力同hash・親metadata参照移設とcleanを確認した。新しい実行中ソースは変更しない。

@@ -1,5 +1,7 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
+最新の月別12週は2026-09-14 20:02 JSTに固定 `fa0c22bf` から新規実行を開始した。前日Stage 2を全月最大120秒へ揃え、他の時間枠・制約・予測・週選択を保持する。開始時点0/12週、1月Prepare中。rootは `C:/master-course-worktrees/shibu21-23-monthly-budget-20260914`、campaignは `output/monthly_budget_campaign_20260914`。mainの起動記録は `output/monthly_fair_weeks_20260914/budget_rerun_launch.json`、独立監査は `monthly_budget_independent_audit.json`。完走・週会計・12月分の季節別整理は未完了。以下の停止版と混ぜない。
+
 最新実行: 2026-09-14 19:15 JST開始の固定 `829e3983` は1月の前日計画で停止した（19:37 JST確認）。Stage 2の30秒制限でincumbentなし、`DAY_AHEAD_FAILED`、完走0/12週、rolling未開始。worktree `C:/master-course-worktrees/shibu21-23-monthly-presolve-20260914`、campaign `output/monthly_presolve_campaign_v3_20260914`、main監査 `output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json`。同一nativeモデルの120秒枠で最初の解が約36.5秒後に得られ、SOC・物理検証を通過した。全月の前日Stage 2を最大120秒へ揃えて新規実行する。[変更根拠と診断](SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)。停止週の週間費用を補完せず、以下の過去版の完走週も流用しない。[数値修正・検証](SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。
 
 新版の途中結果（2026-09-14 18:52 JST）: [固定8acd8bebの1・2月結果と原本](SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md)。2/12週が完走・独立監査済み。3月はhour 152のSOC再検証で停止し、152/168時間まで受理、4〜12月は未実行。旧版の結果表は初回試行の履歴として保持する。

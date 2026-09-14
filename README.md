@@ -1,5 +1,7 @@
 # master-course
 
+最新の月別12週は2026-09-14 20:02 JSTに固定 `fa0c22bf` から新規実行を開始した。前日Stage 2を全月最大120秒へ揃え、他の時間枠・制約・予測・週選択を保持する。開始時点0/12週、1月Prepare中。rootは `C:/master-course-worktrees/shibu21-23-monthly-budget-20260914`、campaignは `output/monthly_budget_campaign_20260914`。mainの起動記録は `output/monthly_fair_weeks_20260914/budget_rerun_launch.json`、独立監査は `monthly_budget_independent_audit.json`。完走・週会計・12月分の季節別整理は未完了。以下の停止版と混ぜない。
+
 **最新の固定版 `829e3983` は1月の前日計画で停止し、完走0/12週です（2026-09-14 19:37 JST確認）。** 全Stage 2にAggregate=0/Presolve=0、許容誤差1e-9を適用した30秒制限では実行可能解を得られず、`DAY_AHEAD_FAILED / STAGE2_NO_INCUMBENT` となりました。rollingは未開始、週間費用は未成立です。同じ本体モデルで120秒枠の診断を行うと、約36.5秒で最初の実行可能解を得てSOC・物理検証を通過しました。[予算の根拠と検証](docs/notes/SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)に基づき、前日Stage 2を全月最大120秒に揃え、新しい固定版から12週を実行します。[停止・起動記録](output/monthly_fair_weeks_20260914/presolve_rerun_launch.json)・[独立監査](output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json)・[数値設定の原因と検証](docs/notes/SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。旧版の完走週は流用しません。月別・季節別の最終整理と研究採用は未完了です。結果の費用順位には時間制限内の探索到達度も関わり、Stage 1 gapを週間費用の誤差幅や季節差の有意性とは扱いません。
 
 **前回の固定版8acd8bebは1・2月が完走・独立監査済み（2/12週）、3月hour 152のSOC再検証で停止しました（2026-09-14 18:52 JST）。** 固定 `8acd8beb` の2月確定費用は4,221,934.623206円、購入量2,097.297 kWh、最大15分平均受電200 kW。[新版の結果表・定義・原本hash](docs/notes/SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md)。各週168時間・672 slot、物理・会計、全接続、前後clean SHA、各169求解のStage 2数値設定を確認しました。3月は152/168時間まで受理、4〜12月は未実行です。ソルバー内部の終端SOCと、保存された充電・走行による再計算の差を診断中です。12週・季節別の最終整理は未完了で、研究採用はBLOCKEDです。

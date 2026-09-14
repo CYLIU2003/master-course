@@ -34,3 +34,8 @@ PV曲線・2024年学習モデルは同一hashで移設する。予測manifest�
 この診断だけでは週間168時間・672 slotの実行会計も、全12月の完走も成立しない。旧版の成功週や診断のStage 2目的値を月別費用表へ流用しない。Stage 1 gap未達、正式fleet契約、2026時刻表の2025年適用、2024年climatologyの限界、温度/HVAC季節需要の欠如、既存PPT証拠2件などの研究採用条件は残る。全結果は `DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS` として扱う。
 
 変更後の月別週選択・予測契約・campaign設定検査は25 passed（2.34秒）。既存のモデル全体検証は2,297 passed / 既存PPT証拠2 failedであり、今回の変更は設定・文書だけ。独立診断監査のP0/P1は0件、詳細記録に関するP2は追加監査で解消した。将来の呼出しグラフ変更への防御的改善1件は現固定SHAの妨げではない。レビュー記録はmainの `output/monthly_fair_weeks_20260914/january_presolve_budget_diagnosis_v2_review.json`。
+
+
+## 凍結と実行開始
+
+最新の月別12週は2026-09-14 20:02 JSTに固定 `fa0c22bf` から新規実行を開始した。前日Stage 2を全月最大120秒へ揃え、他の時間枠・制約・予測・週選択を保持する。開始時点0/12週、1月Prepare中。rootは `C:/master-course-worktrees/shibu21-23-monthly-budget-20260914`、campaignは `output/monthly_budget_campaign_20260914`。mainの起動記録は `output/monthly_fair_weeks_20260914/budget_rerun_launch.json`、独立監査は `monthly_budget_independent_audit.json`。完走・週会計・12月分の季節別整理は未完了。以下の停止版と混ぜない。 凍結後の25テストも通過（4.36秒）、47入力hashと親metadataの11参照移設を確認し、前後cleanで開始した。最終報告は `SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914` へ分離する。
