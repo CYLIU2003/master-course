@@ -47,6 +47,7 @@ from bff.services.run_preparation import (
 )
 from bff.store import output_paths, scenario_store
 from scripts.audits.audit_shibu24_source import sha256
+from scripts.benchmarks.monthly_week_contract import validate_balanced_week
 from src.runtime_scope import resolve_scope
 from src.value_normalization import normalize_for_python
 from src.optimization.common.date_series import (
@@ -296,7 +297,7 @@ def build_source_candidate(*, route_codes: Sequence[str] = DEFAULT_ROUTE_CODES) 
     return manifest
 
 
-def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
+def configure_doc(doc: dict, start_date: str, source: dict, *, design: dict | None = None) -> dict:
     """Materialize one seven-day case from the immutable candidate source."""
     source_directory = ROOT / str(
         source.get("source_directory") or SOURCE_CANDIDATE_DIR.relative_to(ROOT)
@@ -370,7 +371,13 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
     profiles, actual_sources = _date_pv_rows(ROOT / "data/external/solcast_raw/tsurumaki_2025_2026",
                                                dates, step, float(asset.get("performance_ratio") or .85))
     execution_input = _persist_actual_profiles(ROOT, profiles, actual_sources, dates, step)
-    profiles, forecast_audit = _date_forecast_rows(ROOT, dates, step, float(asset.get("performance_ratio") or .85))
+    forecast_directory = None
+    if design and design.get("require_balanced_monthly_weeks"):
+        forecast_directory = ROOT / design["forecast_holdouts_directory"]
+    profiles, forecast_audit = _date_forecast_rows(
+        ROOT, dates, step, float(asset.get("performance_ratio") or .85),
+        forecast_directory=forecast_directory,
+    )
     for key in ("capacity_factor_by_slot", "pv_generation_kwh_by_slot", "pv_generation_kwh_by_date",
                 "pv_case_id", "pv_source_date"):
         asset.pop(key, None)
@@ -421,6 +428,10 @@ def configure_doc(doc: dict, start_date: str, source: dict) -> dict:
     if tuple(source_route_codes) == DEFAULT_ROUTE_CODES:
         doc["meta"]["four_route_source_candidate"] = deepcopy(source_metadata)
     validate_dated_timetable(rows, contract)
+    if design and design.get("require_balanced_monthly_weeks"):
+        if holiday_manifest["sha256"] != design["calendar_source_sha256"]:
+            raise ValueError("Monthly selection and materialized calendar source hashes differ")
+        contract["balanced_week_audit"] = validate_balanced_week(rows, contract, week=start_date)
     return doc
 
 
@@ -516,6 +527,7 @@ def prepare_week(
     existing: dict | None = None,
     *,
     validation_mode: bool = False,
+    design: dict | None = None,
 ) -> dict:
     parent = scenario_store._load(PARENT_SCENARIO_ID, skip_graph_arcs=True)
     before_hash = parent_hash(parent)
@@ -528,7 +540,7 @@ def prepare_week(
             PARENT_SCENARIO_ID, name=f"{route_scope_label} 7日入力候補 {start_date} diagnostic"
         )["id"]
     doc = scenario_store._load(scenario_id, skip_graph_arcs=True)
-    doc = configure_doc(doc, start_date, source)
+    doc = configure_doc(doc, start_date, source, design=design)
     scenario_store._invalidate_dispatch_artifacts(doc)
     scenario_store._normalize_dispatch_scope(doc)
     route_metadata_hash = content_hash({route["id"]: route for route in doc["routes"]})
@@ -584,6 +596,8 @@ def prepare_week(
         "service_dates": contract["service_dates"],
         "days": [{key: day[key] for key in ("service_date", "day_type", "trip_count")}
                  for day in contract["days"]],
+        "balanced_week_audit": contract.get("balanced_week_audit"),
+        "forecast_audit": contract.get("forecast_audit"),
         "scope_summary": prepared.scope_summary,
         "source_candidate_manifest_sha256": sha256(
             ROOT / str(

@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from scripts.benchmarks.run_shibu21_seasonal_diagnostic import solve_week, write_json
+from scripts.benchmarks.monthly_week_contract import validate_balanced_week
 from src.optimization.common.bess_terminal_policy import resolve_bess_terminal_soc_target_kwh
 from src.optimization.common.date_series import content_hash
 from src.optimization.common.soc_helpers import (
@@ -408,6 +409,23 @@ def audit_prepared_inputs(config: dict) -> dict:
                     contract_blocker = f"{week}: captured route metadata, distance, or catalog audit is unverified"
                 else:
                     contract_status = "READY"
+        balanced_week_audit = None
+        if contract_status == "READY" and config.get("require_balanced_monthly_weeks"):
+            try:
+                date_contract = prepared_payload["simulation_config"]["date_series_contract"]
+                balanced_week_audit = validate_balanced_week(
+                    prepared_payload["trips"], date_contract, week=week,
+                )
+                forecast_audit = date_contract.get("forecast_audit") or {}
+                if (balanced_week_audit != case.get("balanced_week_audit")
+                        or date_contract["source_provenance"].get("holiday_source_sha256") != config["calendar_source_sha256"]
+                        or forecast_audit != case.get("forecast_audit")
+                        or forecast_audit.get("weekly_profile_verified") is not True
+                        or forecast_audit.get("training_end_exclusive") != config["training_end_exclusive"]):
+                    raise ValueError("Prepared monthly calendar/forecast evidence differs from its manifest")
+            except (KeyError, TypeError, ValueError) as exc:
+                contract_status = "BLOCKED_MONTHLY_WEEK_CONTRACT"
+                contract_blocker = f"{week}: {exc}"
         if not valid and prepared_namespace != "candidate_prepared_inputs":
             contract_status = "INVALID"
             contract_blocker = f"{week}: prepared input is not valid"
@@ -426,6 +444,7 @@ def audit_prepared_inputs(config: dict) -> dict:
                 str(prepared_path.relative_to(ROOT)) if prepared_path is not None else None
             ),
             "prepared_scope_audit_status": prepared_audit.get("status"),
+            "balanced_week_audit": balanced_week_audit,
             "strict_transition_audit_executed": prepared_audit.get("strict_transition_audit_executed"),
             "path": str(path.relative_to(ROOT)),
         }

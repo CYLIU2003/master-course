@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+from pathlib import Path
 
 import scripts.benchmarks.run_exact_seasonal_campaign as campaign
 
@@ -38,6 +40,37 @@ def test_campaign_case_design_is_one_week_and_preserves_source_hash() -> None:
     assert case["campaign_source_design_sha256"] == source_hash
     assert case["input_manifests_directory"] == "output/campaign/inputs"
     assert case["prepared_inputs_directory"] == "output/prepared_inputs"
+
+
+def test_monthly_campaign_forwards_frozen_design_to_all_twelve_preparations(tmp_path, monkeypatch):
+    from bff.services import date_series_inputs
+    from scripts.benchmarks import prepare_shibu21_24_seasonal_inputs as preparation
+    from scripts.benchmarks import run_shibu21_24_seasonal_diagnostic as diagnostic
+    root = Path(__file__).resolve().parents[1]
+    design = json.loads((root / "config/shibu21_23_monthly_2025_20260914.json").read_text(encoding="utf-8"))
+    before = deepcopy(design)
+    monkeypatch.setattr(campaign, "ROOT", tmp_path)
+    monkeypatch.setattr(diagnostic, "git_state", lambda: {"sha": "frozen", "status_porcelain": ""})
+    monkeypatch.setattr(preparation, "build_source_candidate", lambda **_: {})
+    monkeypatch.setattr(date_series_inputs, "_verified_holiday_manifest", lambda *_: {
+        "sha256": design["calendar_source_sha256"], "holiday_dates": design["selection_holiday_dates"]})
+    prepared_weeks = []
+
+    def prepare(week, _output, _source, *, existing, validation_mode, design):
+        assert existing is None and validation_mode is True
+        assert design["require_balanced_monthly_weeks"] is True
+        assert design["forecast_holdouts_directory"] == before["forecast_holdouts_directory"]
+        assert design["evaluation_weeks"] == [week]
+        assert design["successor_pruning"] == 0 and design["postsolve_repair"] is False
+        prepared_weeks.append(week)
+        return {"formal_prepared": True, "input_preparation_valid": True}
+
+    monkeypatch.setattr(preparation, "prepare_week", prepare)
+    monkeypatch.setattr(diagnostic, "run_diagnostic", lambda *_: [{"status": "DIAGNOSTIC_EXECUTION_PASSED"}])
+    result = campaign.run_campaign(design, tmp_path / "monthly")
+    assert prepared_weeks == before["evaluation_weeks"]
+    assert len(result["summaries"]) == 12
+    assert design == before
 
 
 def test_failed_case_record_is_explicitly_not_executed() -> None:

@@ -1,4 +1,4 @@
-"""Run a fresh-Prepare, sequential four-week diagnostic campaign.
+"""Run a fresh-Prepare, sequential multi-week diagnostic campaign.
 
 This entrypoint is deliberately diagnostic.  Each selected week gets a new
 scenario and a new formal prepared input, followed by the existing combined
@@ -199,6 +199,17 @@ def run_campaign(
         raise RuntimeError("Cannot start campaign without a Git SHA")
     if source_state.get("status_porcelain"):
         raise RuntimeError("Campaign requires a clean Git worktree")
+    if design.get("require_balanced_monthly_weeks"):
+        from bff.services.date_series_inputs import _verified_holiday_manifest
+        from scripts.benchmarks.monthly_week_contract import select_monthly_weeks
+
+        year = int(design["evaluation_year"])
+        calendar = _verified_holiday_manifest(ROOT, [f"{year}-01-01", f"{year}-12-31"])
+        if (calendar["sha256"] != design["calendar_source_sha256"]
+                or design["selection_holiday_dates"] != sorted(
+                    day for day in calendar["holiday_dates"] if day.startswith(f"{year}-"))
+                or list(declared_weeks) != select_monthly_weeks(year, list(calendar["holiday_dates"]))):
+            raise ValueError("Monthly weeks differ from the declared holiday-free selection rule")
 
     output.mkdir(parents=True)
     inputs_root = output / "inputs"
@@ -278,6 +289,7 @@ def run_campaign(
                 source,
                 existing=None,
                 validation_mode=True,
+                **({"design": case_design} if design.get("require_balanced_monthly_weeks") else {}),
             )
             after_prepare = git_state()
             if after_prepare != source_state or week_before != source_state:

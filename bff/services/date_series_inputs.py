@@ -81,9 +81,10 @@ def _date_pv_rows(raw_directory: Path, dates: list[str], timestep_min: int, perf
 
 
 def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
-                        performance_ratio: float) -> tuple[list[dict], dict]:
+                        performance_ratio: float, *,
+                        forecast_directory: Path | None = None) -> tuple[list[dict], dict]:
     """Build predictions without accepting any evaluation-period weather."""
-    directory = repo_root / 'data/derived/seasonal_irradiance/tsurumaki/forecast_holdouts'
+    directory = forecast_directory or repo_root / 'data/derived/seasonal_irradiance/tsurumaki/forecast_holdouts'
     manifest = _read(directory / 'manifest.json')
     model_path = directory / 'training_model.json'
     if _digest(model_path) != manifest['artifacts']['training_model.json']:
@@ -93,6 +94,26 @@ def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
     starts = [datetime.fromisoformat(day).replace(tzinfo=JST) + timedelta(minutes=i * model_step)
               for day in dates for i in range(1440 // model_step)]
     predictions = predict_climatology_ghi(model, starts, issued_at=starts[0])
+    holdout_audit = {}
+    if forecast_directory is not None:
+        # Explicit campaign inputs must match the frozen weekly forecast artifact,
+        # not merely regenerate a plausible profile from an unrelated model.
+        profile_path = directory / f'{dates[0]}_forecast.json'
+        if _digest(profile_path) != manifest['artifacts'][profile_path.name]:
+            raise ValueError('Declared weekly forecast hash mismatch')
+        profile = _read(profile_path)
+        if (dates[0] not in manifest['design']['evaluation_weeks']
+                or profile['week_start'] != dates[0]
+                or profile['model_sha256'] != content_hash(model)
+                or profile['training_end_exclusive'] != model['training_end_exclusive']
+                or manifest['design']['training_end_exclusive'] != model['training_end_exclusive']
+                or profile['valid_starts'] != [stamp.isoformat() for stamp in starts]
+                or profile['ghi_w_m2'] != [row['ghi_w_m2'] for row in predictions]):
+            raise ValueError('Declared weekly forecast differs from planning predictions')
+        holdout_audit = {'holdout_directory': str(directory.relative_to(repo_root)),
+                         'manifest_sha256': _digest(directory / 'manifest.json'),
+                         'weekly_profile_sha256': _digest(profile_path),
+                         'weekly_profile_verified': True}
     profiles = []
     for day in dates:
         values = [(parse_timestamp(row['valid_end']).astimezone(JST), row['ghi_w_m2'], model_step)
@@ -109,7 +130,7 @@ def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
                       'training_end_exclusive': model['training_end_exclusive'],
                       'issued_at': starts[0].isoformat(),
                       'update_policy': 'unchanged_climatology_reissued_hourly',
-                      'future_weather_class_known': False}
+                      'future_weather_class_known': False, **holdout_audit}
 
 
 def _persist_actual_profiles(repo_root: Path, profiles: list[dict], sources: list[dict],
