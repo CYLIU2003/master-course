@@ -4273,3 +4273,8 @@ master-course/
 - RAIN候補制御はpublic BFF schemaで設定可能だが、formal research policyが22候補/radius 4/frontier ONを下限として強制する。Fresh Prepareから3 profileを封印する既存RAIN専用CLIがないため、既存diagnosis runnerの狭い非core adapterをPhase 2前のblockerとした。
 - PV LOW/MEDIUM/HIGHはP1とし、MEDIUMのsynthetic interpolation、hash、同一非PV controlをfail-closedで保存するadapterがないため実行を保留した。
 - 判定は `PARTIAL_WITH_EXACT_BLOCKERS`。指導教員の閾値決定、adapterの別Goalでの実装・review、Phase 2の明示承認なしにsolverを開始しない。
+
+
+## 2026-09-14: second monthly campaign stopped at March hour 152
+
+The clean 8acd8beb campaign completed and independently audited January and February. March failed after 152 accepted hours: native terminal SOC 223.35762 kWh versus independent replay 223.35761781498206 kWh for vehicle befc4670-e889-45d9-bd65-23118c02e196. Rebuilding the original problem and replaying saved charging with fixed_path_slot_loads reproduced the discrepancy without optimization. The campaign/process stopped; April through December remain unexecuted. Preserve all original artifacts and exclude the failed week from weekly costs. The partial report and monitor launch record now show STOPPED_AFTER_FAILED_CASE. No tolerance or physical constraint changes were made. Investigation and a fresh full comparison after any solver change remain required.

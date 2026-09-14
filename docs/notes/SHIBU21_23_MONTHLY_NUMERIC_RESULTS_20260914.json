@@ -1,15 +1,15 @@
 {
   "schema_version": "monthly_result_report_v2",
-  "status": "IN_PROGRESS",
-  "campaign_status": "PREPARING_WEEK",
+  "status": "STOPPED_AFTER_FAILED_CASE",
+  "campaign_status": "STOPPED_AFTER_FAILED_CASE",
   "source_git_sha": "8acd8beba102402605375a0f7156fb17951f492d",
-  "generated_at_utc": "2026-09-14T09:12:21.153563+00:00",
+  "generated_at_utc": "2026-09-14T09:50:43.517450+00:00",
   "completed_count": 2,
   "declared_week_count": 12,
   "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
   "independent_audit": {
     "path": "output\\monthly_fair_weeks_20260914\\monthly_numeric_independent_audit.json",
-    "sha256": "552ce0e1f0e7065301c0ed4dda164a3b9880c4f8e54802e58d0ea687db0a1e3c"
+    "sha256": "be92ca267a3d3c478583136138b3e75c743086fd09bc8e200f4ff9a5cd292934"
   },
   "weeks": [
     {
@@ -182,7 +182,22 @@
     }
   ],
   "seasons": [],
-  "failed_weeks": [],
+  "failed_weeks": [
+    {
+      "week": "2025-03-03",
+      "status": "HOURLY_SOLVE_FAILED",
+      "hourly_steps_accepted": 152,
+      "failed_hour": 152,
+      "reasons": [
+        "[SOC_TARGET] vehicle=befc4670-e889-45d9-bd65-23118c02e196 terminal=223.35761781498206 target=223.35762",
+        "[VALIDATION] EV SOC bound/readiness violations remain: 1"
+      ],
+      "source_evidence": {
+        "path": "C:\\master-course-worktrees\\shibu21-23-monthly-numeric-20260914\\output\\monthly_numeric_campaign_20260914\\cases\\2025-03-03\\diagnostic\\2025-03-03\\summary.json",
+        "sha256": "ba6d2427b415510ac8d05f54c08befdb09563d3af9038168094f3ea6fe0203e1"
+      }
+    }
+  ],
   "pending_weeks": [
     "2025-03-03",
     "2025-04-07",
