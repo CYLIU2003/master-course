@@ -178,6 +178,25 @@ def resolve_campaign_status(
     return "RUNNING_CAMPAIGN"
 
 
+def read_search_controls(document: dict[str, Any], expected: dict[str, int]) -> dict[str, int]:
+    """Read serialized adapter metadata, never infer controls from source defaults.
+
+    The engine's solver_metadata projection omits the two new search fields.
+    The complete serialized plan metadata preserves their actual solve values.
+    If a projection does contain either field, it must agree with that original.
+    """
+    original = document.get("metadata") or {}
+    projected = document.get("solver_metadata") or {}
+    observed = {}
+    for key, value in expected.items():
+        require(key in original and type(original[key]) is int and original[key] == value,
+                f"Missing or changed original metadata.{key}")
+        require(key not in projected or projected[key] == original[key],
+                f"Conflicting solver_metadata.{key}")
+        observed[key] = original[key]
+    return observed
+
+
 def audit_native_entries(
     nested: Path, chain: Path, trip_count: int, design: dict[str, Any]
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
@@ -206,6 +225,7 @@ def audit_native_entries(
     for kind, hour, path, document in entries:
         metadata = document.get("solver_metadata")
         require(isinstance(metadata, dict), f"{path}: missing solver_metadata")
+        search_controls = read_search_controls(document, EXPECTED_SEARCH_CONTROLS)
         effective = document.get("effective_limits") or {}
         required_metadata = (
             "stage2_gurobi_aggregate", "stage2_gurobi_presolve",
@@ -246,7 +266,6 @@ def audit_native_entries(
             "stage2_gurobi_presolve": 0,
             "stage2_gurobi_feasibility_tol": 1.0e-9,
             "stage2_gurobi_integrality_tol": 1.0e-9,
-            **EXPECTED_SEARCH_CONTROLS,
         }
         for key, value in expected.items():
             if metadata.get(key) != value:
@@ -273,7 +292,8 @@ def audit_native_entries(
             "stage2_gurobi_integrality_tol": metadata["stage2_gurobi_integrality_tol"],
             "feasible": document.get("feasible"),
             "quality": quality_data,
-            "search_controls": {key: metadata.get(key) for key in EXPECTED_SEARCH_CONTROLS},
+            "search_controls": search_controls,
+            "search_controls_source": "metadata",
         })
 
     def one_value(key: str) -> Any:

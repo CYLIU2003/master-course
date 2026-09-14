@@ -55,3 +55,12 @@ observerと既存の月別集計・証拠収集のfocused testsは47件通過（
 旧fa0c22bf campaignは10週成功・11月停止・12月未実行として保存し、旧observerは終了した。以下の旧版手順の固定パスを新しい検索設定版へ読み替える。新しいobserver設定/state/bundle/dispatch/receiptは `output/monthly_search_20260915/script_observer/`、launchと独立監査はその親ディレクトリ。固定SHAは新launch/config/bundleの一致を必ず確認する。新しいsubjectは `MC2025-<新SHA先頭8文字>`、Gmail送信済み検索もその一意件名を使う。旧版の10週や診断の解を新しい完了判定へ混ぜない。
 
 新しい結果表は `docs/notes/SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.md/.json`、図は `docs/notes/figures/shibu21_23_monthly_search_20260915.png/.svg`。監視は同じスクリプトのallowlisted search deploymentを使い、別の固定bindingで二重通知を防ぐ。0週段階では結果表を作らず、1週目が独立監査を通過してから自動生成する。全12週の完了後の実図確認・承認済み宛先への1通送信・実ID保存という手順は上記と同じ。
+
+
+## 2026-09-15 02:49 JSTの監査停止と復旧
+
+1月は168時間・672 slotの計算と物理検証を通過したが、observerがnative solver gateで停止した。原因は新探索設定の参照先の誤りだった。エンジンの `solver_metadata` は選択した項目だけの投影であり、MIPFocus/Methodは未収録。保存済みcanonical/各hour forecast_resultの完全な `metadata` には、169件すべてで両設定が整数1として記録されていた。
+
+mainの独立監査だけを修正し、原本metadataの両値を必須照合する。欠落・型違い・値違いを拒否し、solver_metadataにも値がある場合は原本との矛盾を拒否する。設定をソースの既定値から推定したり、原本へ書き足したりしない。設定の出典を監査JSONへ `search_controls_source=metadata` と保存する。実1月の169件・17原本hash、物理・会計照合が通過。66 tests通過（2.20秒）、独立再レビューP0/P1残件0。
+
+固定ソース10a40c9f、入力、求解結果は変更せず、同じsolver PID44204が2月を継続している。監視の旧config/state/failure/dispatch/commands/bindingは `output/monthly_search_20260915/script_observer/recovery_metadata_20260915/` へhash照合して保存。変更した監査helperだけを新しいhashへ結び直し、同じキャンペーン・宛先・完了件名の監視を再開した。旧failure queueは処理済みとして保存し、再送しない。1/12週が独立監査済み、完了メールは未送信。

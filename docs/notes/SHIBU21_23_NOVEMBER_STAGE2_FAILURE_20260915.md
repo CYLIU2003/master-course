@@ -54,3 +54,12 @@ MIPFocus=1は実行可能解の発見を優先する設定であり、[Gurobiの
 開始前の追加独立レビューで集計・checkpointの監査状態チェック不足2件を修正。status・audit_status・fully_audited・failure、source/campaign/case rootを必須照合し、未監査・他版データを拒否する。search図は専用名を自動選択し旧版図名を拒否する。追加検証を含む報告系60 tests通過（2.05秒）、再レビューP0/P1残件0。ソルバーの数式・探索設定に追加変更なし。
 
 最終固定版は `10a40c9faa00d0a4725ae0062d6dbaa223f82bfd`。開始前clean、入力47件およびrefs移設11件を再照合し、固定後107 tests通過（3.95秒）。2026-09-15 02:16 JSTに新規12週campaignを開始。solver PID44204、observer PID43300。原本は `C:/master-course-worktrees/shibu21-23-monthly-search-20260915/output/monthly_search_campaign_20260915/`。通常監視はローカルスクリプトのみで、終了時の既存taskへのqueueと最終検査後のメール送信を維持する。
+
+
+## 2026-09-15 02:49 JSTの監査停止と復旧
+
+1月は168時間・672 slotの計算と物理検証を通過したが、observerがnative solver gateで停止した。原因は新探索設定の参照先の誤りだった。エンジンの `solver_metadata` は選択した項目だけの投影であり、MIPFocus/Methodは未収録。保存済みcanonical/各hour forecast_resultの完全な `metadata` には、169件すべてで両設定が整数1として記録されていた。
+
+mainの独立監査だけを修正し、原本metadataの両値を必須照合する。欠落・型違い・値違いを拒否し、solver_metadataにも値がある場合は原本との矛盾を拒否する。設定をソースの既定値から推定したり、原本へ書き足したりしない。設定の出典を監査JSONへ `search_controls_source=metadata` と保存する。実1月の169件・17原本hash、物理・会計照合が通過。66 tests通過（2.20秒）、独立再レビューP0/P1残件0。
+
+固定ソース10a40c9f、入力、求解結果は変更せず、同じsolver PID44204が2月を継続している。監視の旧config/state/failure/dispatch/commands/bindingは `output/monthly_search_20260915/script_observer/recovery_metadata_20260915/` へhash照合して保存。変更した監査helperだけを新しいhashへ結び直し、同じキャンペーン・宛先・完了件名の監視を再開した。旧failure queueは処理済みとして保存し、再送しない。1/12週が独立監査済み、完了メールは未送信。

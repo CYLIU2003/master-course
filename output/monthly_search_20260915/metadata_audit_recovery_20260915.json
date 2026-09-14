@@ -1,0 +1,20 @@
+{
+  "status": "RESOLVED_OBSERVER_ONLY",
+  "source_git_sha": "10a40c9faa00d0a4725ae0062d6dbaa223f82bfd",
+  "solver_pid_unchanged": 44204,
+  "original_metadata_search_controls": [
+    1,
+    1
+  ],
+  "entries_verified": 169,
+  "original_projection_fields": "absent",
+  "physical_accepted": true,
+  "independent_audit": "INDEPENDENTLY_AUDITED",
+  "focused_tests_passed": 66,
+  "reviewer": "four_route_diagnostic_luna",
+  "remaining_p0": 0,
+  "remaining_p1": 0,
+  "solver_or_frozen_files_changed": false,
+  "prior_failure_archive": "script_observer/recovery_metadata_20260915",
+  "email_sent": false
+}

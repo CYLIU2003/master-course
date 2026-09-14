@@ -1,7 +1,7 @@
 # Development Notes
 
 <!-- monthly-search-status -->
-最新の月別再実行: 固定 `10a40c9f` から全12週の新規実行を開始（2026-09-15 02:16 JST、solver PID44204、observer PID43300）。現時点は1月準備中・独立監査0/12週。全月共通MIPFocus=1・Method=1、物理許容差1e-9。固定後107 tests通過、入力47ファイル照合済み。旧fa0c22bfの10週は旧版として保存し、新版には混ぜない。研究採用BLOCKED、メール未送信。状態: `output/monthly_search_20260915/script_observer/state.json`。
+最新の月別再実行: 固定 `10a40c9f`、独立監査 1/12週、状態 `IN_PROGRESS`。全月共通MIPFocus=1・Method=1、物理許容差1e-9。旧fa0c22bfの10週は旧版の記録として保存し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.md`。
 <!-- /monthly-search-status -->
 
 
