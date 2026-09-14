@@ -25,9 +25,11 @@ def main() -> None:
         summary = read_json(summary_path) if summary_path.exists() else {}
         success = (summary.get("identical_native_model_sha256") is True
                    and summary.get("replay_feasible") is True and summary.get("physical_accepted") is True)
+        physical_status = ("NOT_EXECUTED" if summary.get("physical_accepted") is None
+                           else "PASSED" if summary["physical_accepted"] else "FAILED")
         message = (
             "11月の充電求解時間診断が終了しました。これは月別12週の完了ではなく、メールは送らないでください。"
-            f"診断の物理通過フラグは{success}です。"
+            f"物理検証の実施結果は{physical_status}、診断全体の採用条件通過は{success}です。"
             "C:/master-course/output/monthly_fair_weeks_20260914/november_budget_diagnosis_20260915/summary.json、"
             "failed_assignment_comparison.json、同名.log末尾を確認してください。"
             "固定fa0c22bfの1〜10月が監査済み、11月day-aheadは120秒no-incumbent、12月未実行で停止しています。"

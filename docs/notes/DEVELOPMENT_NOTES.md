@@ -4407,3 +4407,10 @@ The monthly report now explains that fixed seed/threads/time limits do not ensur
 [原因の記録と診断手順](SHIBU21_23_NOVEMBER_STAGE2_FAILURE_20260915.md)。
 
 11月停止の報告経路を確認し、build_monthly_interpretation.pyがday_ahead_reasonsを表示せず理由欄が空になる欠陥も修正。rolling未開始の失敗、空配列からの理由選択、理由欠落の明示を検査し、49 testsが1.66秒で通過した。原本SHAを保持して停止版の結果表を再生成した。
+
+
+## 2026-09-15 11月: 600秒でもno-incumbent、探索診断を開始
+
+失敗時の32台の便順と同一MPSを確認した120/600秒比較は、双方incumbent 0で終了した。物理検証は未実施であり、物理違反と区別するよう通知文を修正。許容差や数学モデルを変更せず、保存済み入力のSHAを確認してLP連続緩和、MIPFocus=1、MIPFocus=1+Method=1を各120秒で調べる診断スクリプトを追加・起動した。詳細ログ・MPS同一性・解が出た場合の独立物理検証を保存し、終了時だけ既存taskへ通知する。新規全月実験は未開始で、旧10週と新条件を混ぜない。
+
+[原本・結果・診断条件](SHIBU21_23_NOVEMBER_STAGE2_FAILURE_20260915.md)。
