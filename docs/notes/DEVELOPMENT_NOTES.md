@@ -4299,3 +4299,8 @@ Final release-candidate validation:2297 passed / the same two preexisting PPT ev
 ## 2026-09-14: launch fresh monthly comparison from829e3983
 
 Created clean release branch/worktree codex/shibu21-23-monthly-presolve-20260914. Verified47 byte-identical inputs and relocated only the11refs of the missing parent scenario metadata; all non-refs fields match the previous template. Two pre-solve setup failures are retained (missing metadata, then existing candidate output); no optimization ran in them. Archived only that generated preflight candidate after checking absolute paths stay under the output directory. Frozen20tests and original March hour152 native replay pass with unchanged before/after clean SHA. Started monthly_presolve_campaign_v3_20260914 at10:15:51UTC; actual PID25908,venv43112,exec76968. Main launch/audit records and heartbeat now reference this version. No previous successful weeks are reused; all12 weeks require fresh Prepare and validation.
+
+
+## 2026-09-14: clarify finite-budget monthly interpretation
+
+The monthly report now explains that fixed seed/threads/time limits do not ensure identical search progress across months. Cost rankings concern the feasible incumbents obtained. Stage1 gap is neither an uncertainty interval for executed weekly cost nor evidence of statistical seasonal significance. This is reporting text only; the frozen829e3983 campaign and all numeric collection/aggregation remain unchanged.
