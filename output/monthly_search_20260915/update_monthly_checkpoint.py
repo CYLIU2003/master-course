@@ -35,7 +35,24 @@ def main() -> None:
     report = read_json(ROOT / "docs/notes/SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.json")
     require(report["source_git_sha"] == audit["expected_sha"] == launch["source_git_sha"], "Source mismatch")
     require(report["independent_audit"]["sha256"] == sha256(audit_path), "Audit hash mismatch")
-    passed = {week for week, row in audit["weeks"].items() if row.get("fully_audited") is True}
+    frozen = Path(launch["frozen_root"]).resolve()
+    require(Path(audit["frozen_root"]).resolve() == frozen, "Frozen root mismatch")
+    require(audit["campaign_output"] == launch["campaign_relative_path"], "Campaign mismatch")
+    campaign = frozen / launch["campaign_relative_path"]
+    progress = read_json(campaign / "progress.json")
+    require(progress["base_git_sha"] == launch["source_git_sha"], "Progress source mismatch")
+    passed = set()
+    for week, row in audit["weeks"].items():
+        require(row.get("fully_audited") is True and row.get("status") == "DIAGNOSTIC_EXECUTION_PASSED"
+                and row.get("audit_status") == "INDEPENDENTLY_AUDITED" and not row.get("failure"),
+                "Incomplete or failed audit record")
+        require(Path(row["case_root"]).resolve() == (campaign / "cases" / week / "diagnostic" / week).resolve(),
+                "Audit case belongs to another campaign")
+        passed.add(week)
+    require(passed <= set(progress["completed_weeks"]), "Audited uncompleted week")
+    if report["status"] == "COMPLETED":
+        require(progress["status"] == audit["status"] == "COMPLETED" and len(passed) == 12,
+                "Premature completion")
     require(passed == {row["week"] for row in report["weeks"]}, "Audited/report weeks differ")
     require(len(passed) == report["completed_count"], "Count mismatch")
     paragraph = (f'最新の月別再実行: 固定 `{launch["source_git_sha"][:8]}`、独立監査 {len(passed)}/12週、'

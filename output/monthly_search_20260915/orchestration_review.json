@@ -1,0 +1,10 @@
+{
+  "reviewer": "four_route_diagnostic_luna",
+  "initial_p1": 2,
+  "resolved_p1": 2,
+  "remaining_p0": 0,
+  "remaining_p1": 0,
+  "focused_report_tests_passed": 60,
+  "old_new_evidence_separated": true,
+  "research_acceptance": "BLOCKED"
+}

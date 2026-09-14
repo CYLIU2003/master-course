@@ -71,6 +71,7 @@ def _passed_week(campaign, week):
                  "physical_validation": (chain / "physical_validation.json", physical)}
     hashes = {key: _write(path, document) for key, (path, document) in documents.items()}
     audit = {"status": "DIAGNOSTIC_EXECUTION_PASSED", "case_root": str(case),
+             "audit_status": "INDEPENDENTLY_AUDITED", "fully_audited": True,
              "prepared_input_path": str(documents["prepared_input"][0]), "hashes": hashes,
              "controls": {"pruned_arc_count": 0, "pruned_origin_count": 0,
                           "successor_pruning_enabled": False, "allow_postsolve_repair": False,
@@ -111,6 +112,15 @@ def test_changed_source_bytes_cannot_pass_a_previous_independent_audit(tmp_path)
     document["cost_breakdown"]["total_cost"] += 1
     _write(path, document)
     with pytest.raises(ValueError, match="source hash mismatch"):
+        collect(campaign, audit_path, partial=True)
+
+
+@pytest.mark.parametrize("field,value", [("audit_status", "PENDING"), ("fully_audited", False), ("failure", True)])
+def test_incomplete_audit_cannot_enter_a_report(tmp_path, field, value):
+    campaign, audit_path, audit, _ = _campaign(tmp_path)
+    audit["weeks"][WEEKS[0]][field] = value
+    _write(audit_path, audit)
+    with pytest.raises(ValueError, match="incomplete independent audit"):
         collect(campaign, audit_path, partial=True)
 
 

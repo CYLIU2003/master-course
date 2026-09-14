@@ -48,7 +48,10 @@ def read_document(path: Path) -> tuple[dict, str]:
 
 
 def verify_week(week: str, audited: dict, design: dict, source_sha: str) -> dict:
-    require(audited["status"] == "DIAGNOSTIC_EXECUTION_PASSED", f"{week}: incomplete independent audit")
+    require(audited.get("status") == "DIAGNOSTIC_EXECUTION_PASSED"
+            and audited.get("audit_status") == "INDEPENDENTLY_AUDITED"
+            and audited.get("fully_audited") is True and not audited.get("failure"),
+            f"{week}: incomplete independent audit")
     case = Path(audited["case_root"])
     chain = case / "rolling_hourly_chain"
     paths = {
@@ -372,11 +375,17 @@ def main() -> None:
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=ROOT / "docs/notes/SHIBU21_23_MONTHLY_RESULTS_20260914")
     parser.add_argument("--partial", action="store_true")
-    parser.add_argument("--figure-name", default="shibu21_23_monthly_20260914")
+    parser.add_argument("--figure-name")
     args = parser.parse_args()
     data = collect(args.campaign, args.audit, partial=args.partial)
-    require(Path(args.figure_name).name == args.figure_name, "Figure name must be a filename stem")
-    figure_name = args.figure_name if data["status"] == "COMPLETED" else None
+    default_figure = ("shibu21_23_monthly_search_20260915"
+                      if args.output.name == "SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915"
+                      else "shibu21_23_monthly_20260914")
+    requested_figure = args.figure_name or default_figure
+    require(Path(requested_figure).name == requested_figure, "Figure name must be a filename stem")
+    if args.output.name == "SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915":
+        require(requested_figure == default_figure, "Search report requires its separate figure name")
+    figure_name = requested_figure if data["status"] == "COMPLETED" else None
     if figure_name:
         render_figure(data["weeks"], args.output.parent / "figures" / figure_name)
     args.output.parent.mkdir(parents=True, exist_ok=True)

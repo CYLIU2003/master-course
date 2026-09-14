@@ -50,3 +50,5 @@ MIPFocus=1は実行可能解の発見を優先する設定であり、[Gurobiの
 採用する共通探索設定はMIPFocus=1・Method=1。到達する `_solve_thesis_stage2_charging_dispatch` の `_configure_stage2_numerics` へ適用し、成功・解なし両経路のmetadataに保存する。day-aheadとrolling全月に同じ設定を使う。制約、目的関数、時間枠、許容差、Presolve/Aggregate、入力は維持する。探索経路が変わるため旧10週は引き継がず、新clean release branchで全12週を一からPrepare・求解する。11月の診断は設定選定用で、週間結果にも独立した効果検証にも数えない。11月だけで校正した設定が他月でも成立するかは新規全12週で確認する。
 
 47 focused tests通過。全体は2323 passed / 既存PPT原本・構成不一致2 failed（109.51秒）、新しい失敗なし。observer/report/evidenceは51 tests通過。独立レビューのsolver変更P0/P1残件0。新しい保存先は `output/monthly_search_20260915/`、結果表は `SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.md`。旧版の監査・通知記録・図表は別に保存。全12週と最終図表の検査が完了するまでメールは送らない。研究採用BLOCKEDを維持する。
+
+開始前の追加独立レビューで集計・checkpointの監査状態チェック不足2件を修正。status・audit_status・fully_audited・failure、source/campaign/case rootを必須照合し、未監査・他版データを拒否する。search図は専用名を自動選択し旧版図名を拒否する。追加検証を含む報告系60 tests通過（2.05秒）、再レビューP0/P1残件0。ソルバーの数式・探索設定に追加変更なし。
