@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-14 18:12 JST 新版2月の完走と2週の結果更新
+
+2月3日週が168時間・672 slot、物理・会計・独立監査を通過した。台帳差0.0円、60台、5/1/1、全接続、repair/fallbackなし、全169求解のnative Aggregate0・許容値各1e-9、前後clean SHAを確認。主担当の集計CLIでも原本・会計・電力収支を再照合し、`SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md/.json` を2/12週へ更新した。2月は確定費用4,221,934.623206円、使用車両日数206、車両使用費以外101,934.623206円、購入量2,097.297 kWh、ピーク200 kW、PV抑制率17.78%。
+
+この2週では、2月の総費用は1月より約105,609円低く、車両使用費は20,000円高く、その他費用は約125,609円低かった。これは選択した2週の記述的な差であり、季節一般やPV単独の因果を示さない。3月の新規Prepareへ進み、同じLuna担当が3月完了まで監視・独立監査を継続する。全12週と季節別整理は未完了、研究採用BLOCKEDを維持する。
+
 ## 2026-09-14 17:49 JST 新版1月の完走・独立照合と結果表
 
 `8acd8beb` の1月6日週が168/168時間・672/672 slotを完走。Lunaの独立監査は物理・会計、台帳差0.0円、60台（BEV35/ICE25）、5/1/1、全接続・pruning0・repair/fallbackなし、前後clean一致、day-ahead＋全168 hourlyのnative Aggregate0・FeasibilityTol/IntFeasTol各1e-9を通過した。監査のstatusを原本case statusへ揃え、独立監査状態をaudit_statusへ分離、canonical hashキーを追加し、集計CLIとの記録形式の不一致を解消した。
