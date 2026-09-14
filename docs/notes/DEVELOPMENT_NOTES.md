@@ -4304,3 +4304,8 @@ Created clean release branch/worktree codex/shibu21-23-monthly-presolve-20260914
 ## 2026-09-14: clarify finite-budget monthly interpretation
 
 The monthly report now explains that fixed seed/threads/time limits do not ensure identical search progress across months. Cost rankings concern the feasible incumbents obtained. Stage1 gap is neither an uncertainty interval for executed weekly cost nor evidence of statistical seasonal significance. This is reporting text only; the frozen829e3983 campaign and all numeric collection/aggregation remain unchanged.
+
+
+## 2026-09-14 月別Presolve固定版: 1月の前日計画停止を記録
+
+固定829e3983の1月はStage 2の30秒制限で実行可能解が得られずDAY_AHEAD_FAILEDとなり、campaignはSTOPPED_AFTER_FAILED_CASEで終了した。完走0/12週、rolling受理0時間、週間会計は未成立。前後clean SHAは一致。停止原本・独立監査・launch recordを保持し、READMEと現在のblockerを更新した。同一nativeモデルで必要な計算予算を診断し、全月共通設定と新しい固定版を決めてから12週を新規実行する。SOC・数値許容誤差、全接続、制約、費用式は緩めない。この更新は実行状態の記録のみであり、求解・数式の変更はない。
