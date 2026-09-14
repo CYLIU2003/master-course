@@ -199,9 +199,16 @@ def test_active_reserve_rejects_unaligned_execution_interval():
         )
 
 
-def test_hard_import_uses_worst_case_zero_pv_but_soft_overage_remains_unchanged():
+@pytest.mark.parametrize("policy", [False, None, "true", 1, "missing"])
+def test_hard_import_uses_worst_case_zero_pv_but_soft_overage_remains_unchanged(policy):
     slots = (5,)
     hard_problem = _problem(bess_enabled=False, import_limit_kw=10.0, hard_import=True)
+    metadata = dict(hard_problem.metadata)
+    if policy == "missing":
+        metadata.pop("enable_contract_overage_penalty")
+    else:
+        metadata["enable_contract_overage_penalty"] = policy
+    hard_problem = replace(hard_problem, metadata=metadata)
     hard_model, hard_maps, hard_grb = _flow_model(hard_problem, slots)
     for name, value in (("grid_to_bus", 7.0), ("pv_to_bus", 4.0), ("grid_to_bess", 0.5)):
         _fix(hard_model, hard_maps[name], "DEPOT", {5: value})

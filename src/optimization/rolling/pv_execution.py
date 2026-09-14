@@ -193,7 +193,7 @@ def execute_pv_prefix(
                                           planned("grid_to_bess"), planned("pv_to_bess")),
                 actual_pv_kwh=actual, initial_bess_soc_kwh=soc,
                 timestep_minutes=step_minutes, import_limit_kw=depots[depot].import_limit_kw,
-                allow_contract_overage=bool(problem.metadata.get("enable_contract_overage_penalty", True)),
+                allow_contract_overage=(problem.metadata.get("enable_contract_overage_penalty") is True),
                 slot_index=slot, grid_price_yen_per_kwh=prices[slot],
             )
             for name in FLOW_FIELDS:

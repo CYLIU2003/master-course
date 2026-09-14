@@ -4278,3 +4278,19 @@ master-course/
 ## 2026-09-14: second monthly campaign stopped at March hour 152
 
 The clean 8acd8beb campaign completed and independently audited January and February. March failed after 152 accepted hours: native terminal SOC 223.35762 kWh versus independent replay 223.35761781498206 kWh for vehicle befc4670-e889-45d9-bd65-23118c02e196. Rebuilding the original problem and replaying saved charging with fixed_path_slot_loads reproduced the discrepancy without optimization. The campaign/process stopped; April through December remain unexecuted. Preserve all original artifacts and exclude the failed week from weekly costs. The partial report and monitor launch record now show STOPPED_AFTER_FAILED_CASE. No tolerance or physical constraint changes were made. Investigation and a fresh full comparison after any solver change remain required.
+
+
+## 2026-09-14: preserve Stage 2 SOC replay through uniform Presolve=0
+
+The saved March hour152 model reproduces ConstrVio=5.7000e-7 despite FeasibilityTol=1e-9; NumericFocus=3 does not resolve it. Presolve=0 gives 6.6763e-11 and passes the unchanged native engine validation. Apply this policy uniformly before each Stage2 solve, retain Aggregate=0 and tolerances, and expose the setting publicly. Fix the invalid Max*Vio quality attribute names to ConstrVio/BoundVio/IntVio. No physical constraints, inputs, accounting formulas, repairs or fallback were changed; finite-budget incumbents/gaps may change, so all12 weeks require a fresh frozen run. Three real solver regressions pass, including the original March full MPS and independent SOC replay. Broader validation/review are pending. See SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md.
+
+
+## 2026-09-14: align undeclared contract-overage policy with validation
+
+The first broad Presolve=0 regression run exposed three weather-candidate failures beyond the two known PPT failures (2281 passed,5 failed). The solver interpreted missing enable_contract_overage_penalty as True while validation required explicit boolean True. With presolve disabled an unnecessary unpriced overage variable could remain positive and fail canonical accounting. Stage2, integrated and Stage1-recourse construction, metadata, and evaluator now require explicit True. Missing/None/string/integer policies retain the validator's hard import limit; this strengthens undeclared-input models. Builder defaults and explicit True/False remain unchanged. The monthly canonical problem explicitly declares True and500JPY/kWh, so its model contract is unchanged. All20 existing weather-candidate tests and55 combined overage/numeric tests pass. Final full regression and independent delta review follow.
+
+
+The independent delta review found the same undeclared-policy mismatch in PV reserve constraints and actual PV execution. Both now use strict boolean permission. Expanded real-MIP reserve and physical-execution tests cover False/None/string/integer/missing with an explicit-True control. All71 combined tests pass. The preceding full run was2288 passed / two known PPT failures; a fresh full run after these last two source changes is recorded separately.
+
+
+Final release-candidate validation:2297 passed / the same two preexisting PPT evidence failures in103.93s (`pytest-presolve-final-contract-release.xml`). No new failures remain. The final Luna review has P0/P1/P2 all zero with final source/test hashes synchronized. Formal research gates and the two document integrity failures remain unresolved; proceed only with a fresh diagnostic comparison on a clean frozen commit.

@@ -313,6 +313,9 @@ class MILPOptimizer:
                 "stage2_gurobi_aggregate": (
                     plan.metadata or {}
                 ).get("stage2_gurobi_aggregate"),
+                "stage2_gurobi_presolve": (
+                    plan.metadata or {}
+                ).get("stage2_gurobi_presolve"),
                 "stage1_numeric_diagnostics": dict(
                     (plan.metadata or {}).get("stage1_numeric_diagnostics") or {}
                 ),

@@ -3257,15 +3257,16 @@ def _configured_gurobi_integrality_tol(
 
 
 def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[str, float | int]:
-    """Preserve exact SOC boundary rows without presolve aggregation roundoff."""
+    """Preserve native SOC transitions without presolve reconstruction error."""
     parameters = {
         "FeasibilityTol": _configured_gurobi_feasibility_tol(config, stage=2),
         "IntFeasTol": _configured_gurobi_integrality_tol(config, stage=2),
-        # The April hourly boundary is feasible at the unchanged 1e-9
-        # tolerances, but aggregating its SOC transitions can report false
-        # infeasibility. Apply the stable policy before every Stage 2 solve;
-        # do not repair states, relax constraints, or retry selectively.
+        # April falsely failed at an exact boundary with aggregation enabled.
+        # March still accumulated 2.185e-6 kWh of SOC replay error with only
+        # aggregation disabled. Disable presolve uniformly before every solve;
+        # never repair states, relax tolerances, or retry failed hours.
         "Aggregate": 0,
+        "Presolve": 0,
     }
     for name, value in parameters.items():
         model.setParam(name, value)
@@ -3387,9 +3388,9 @@ def _gurobi_numeric_diagnostics(model: Any) -> Dict[str, Any]:
         return value if math.isfinite(value) else None
 
     diagnostics = {
-        "maximum_constraint_violation": _attribute("MaxConstrVio"),
-        "maximum_bound_violation": _attribute("MaxBoundVio"),
-        "maximum_integrality_violation": _attribute("MaxIntVio"),
+        "maximum_constraint_violation": _attribute("ConstrVio"),
+        "maximum_bound_violation": _attribute("BoundVio"),
+        "maximum_integrality_violation": _attribute("IntVio"),
         "minimum_nonzero_constraint_coefficient": _attribute("MinCoeff"),
         "maximum_constraint_coefficient": _attribute("MaxCoeff"),
         "minimum_nonzero_rhs": _attribute("MinRHS"),
@@ -9572,9 +9573,7 @@ class GurobiMILPAdapter:
         if slot_indices:
             on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
             price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
-            enable_contract_overage_penalty = bool(
-                problem.metadata.get("enable_contract_overage_penalty", True)
-            )
+            enable_contract_overage_penalty = (problem.metadata.get("enable_contract_overage_penalty") is True)
             vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
             bev_ids_by_depot: Dict[str, List[str]] = {}
             for vehicle_id in bev_ids:
@@ -13023,7 +13022,7 @@ class GurobiMILPAdapter:
                 ),
                 "horizon_start": str(problem.scenario.horizon_start or "00:00"),
                 "timestep_min": int(problem.scenario.timestep_min),
-                "enable_contract_overage_penalty": bool(problem.metadata.get("enable_contract_overage_penalty", True)),
+                "enable_contract_overage_penalty": (problem.metadata.get("enable_contract_overage_penalty") is True),
                 "contract_overage_penalty_yen_per_kwh": contract_overage_penalty,
                 "grid_to_bus_priority_penalty_yen_per_kwh": grid_to_bus_priority_penalty,
                 "grid_to_bess_priority_penalty_yen_per_kwh": grid_to_bess_priority_penalty,
@@ -22742,9 +22741,9 @@ class GurobiMILPAdapter:
         if not depot_energy_assets:
             default_depot = next(iter(depot_by_id.keys()), "depot_default")
             depot_energy_assets[default_depot] = DepotEnergyAsset(depot_id=default_depot, pv_enabled=False, bess_enabled=False)
-        enable_contract_overage_penalty = bool(
-            problem.metadata.get("enable_contract_overage_penalty", True)
-        )
+        # Match the independent validator: only an explicit boolean enables
+        # a soft limit. Missing policy must not create unconstrained overage.
+        enable_contract_overage_penalty = (problem.metadata.get("enable_contract_overage_penalty") is True)
         contract_overage_penalty = self._safe_nonnegative_float(
             problem.metadata.get(
                 "contract_overage_penalty_yen_per_kwh"
@@ -23228,6 +23227,7 @@ class GurobiMILPAdapter:
                 "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
                 "stage2_gurobi_integrality_tol": stage2_integrality_tol,
                 "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
+                "stage2_gurobi_presolve": stage2_numerics["Presolve"],
                 "gurobi_threads": configured_threads,
                 "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
                 "stage1_time_limit_sec_effective": (
@@ -23572,6 +23572,7 @@ class GurobiMILPAdapter:
             "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
             "stage2_gurobi_integrality_tol": stage2_integrality_tol,
             "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
+            "stage2_gurobi_presolve": stage2_numerics["Presolve"],
             "gurobi_threads": configured_threads,
             "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
             "stage2_contract_overage_enabled": (
@@ -26325,9 +26326,7 @@ class GurobiMILPAdapter:
             ),
             default=DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
         )
-        contract_overage_allowed = bool(
-            problem.metadata.get("enable_contract_overage_penalty", True)
-        )
+        contract_overage_allowed = (problem.metadata.get("enable_contract_overage_penalty") is True)
 
         pv_input_by_depot_slot: Dict[str, Dict[str, float]] = {}
         constraint_count = 0

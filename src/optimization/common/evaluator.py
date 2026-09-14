@@ -1011,7 +1011,7 @@ class CostEvaluator:
             + pv_curtail_cost_jpy
         )
         contract_over_limit_kwh = _sum_flow(contract_over_limit)
-        enable_contract_overage_penalty = bool(problem.metadata.get("enable_contract_overage_penalty", True))
+        enable_contract_overage_penalty = (problem.metadata.get("enable_contract_overage_penalty") is True)
         raw_contract_overage_penalty = problem.metadata.get("contract_overage_penalty_yen_per_kwh")
         # Builder historically persisted None; it means the native solver's
         # default rate, while an explicitly declared zero remains zero.

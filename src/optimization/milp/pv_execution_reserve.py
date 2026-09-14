@@ -71,7 +71,7 @@ def add_pv_execution_reserve_constraints(
         return audit
     depots = {depot.depot_id: depot for depot in problem.depots}
     duration = problem.scenario.timestep_min / 60.0
-    hard_import = not bool(problem.metadata.get("enable_contract_overage_penalty", True))
+    hard_import = problem.metadata.get("enable_contract_overage_penalty") is not True
     for depot_id, asset in problem.depot_energy_assets.items():
         if asset.bess_enabled:
             remaining_energy = float(asset.bess_initial_soc_kwh)

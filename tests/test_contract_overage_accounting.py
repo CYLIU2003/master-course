@@ -80,6 +80,10 @@ def _scenario(*, penalty: object = "missing", enable: object = "missing") -> dic
 @pytest.mark.parametrize(
     ("metadata", "expected_penalty"),
     [
+        ({}, 0.0),
+        ({"enable_contract_overage_penalty": None}, 0.0),
+        ({"enable_contract_overage_penalty": "true"}, 0.0),
+        ({"enable_contract_overage_penalty": 1}, 0.0),
         ({"enable_contract_overage_penalty": True}, 500.0),
         (
             {
@@ -237,6 +241,23 @@ def _execution_case() -> tuple[
         solver_metadata={"bev_terminal_soc_balance_satisfied": True},
     )
     return problem, problem, plan, result
+
+
+@pytest.mark.parametrize("policy", [False, None, "true", 1, "missing"])
+def test_pv_execution_cannot_exceed_import_without_explicit_permission(policy):
+    problem, _, _, result = _execution_case()
+    metadata = dict(problem.metadata)
+    if policy == "missing":
+        metadata.pop("enable_contract_overage_penalty")
+    else:
+        metadata["enable_contract_overage_penalty"] = policy
+    problem = replace(problem, metadata=metadata)
+    with pytest.raises(ValueError, match="hard grid import limit"):
+        execute_pv_prefix(
+            problem, result,
+            actual_pv_by_depot_slot={"DEPOT": {0: 0.0, 1: 0.0}},
+            actual_bess_soc_kwh={}, start_slot=0, stop_slot=2,
+        )
 
 
 def _accounting_case(monkeypatch=None):
