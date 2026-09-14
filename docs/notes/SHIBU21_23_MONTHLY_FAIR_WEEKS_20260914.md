@@ -85,10 +85,12 @@ C:/master-course/.venv/Scripts/python.exe -X utf8 scripts/benchmarks/run_exact_s
 結果集計はmain側の次の専用CLIで行う。実験worktreeへの書込み・Prepare・求解は行わず、独立監査のhashと原本を再照合する。
 
 ```powershell
-.venv/Scripts/python.exe -X utf8 scripts/build_monthly_interpretation.py --campaign C:/master-course-worktrees/shibu21-23-monthly-fair-20260914/output/monthly_fair_weeks_campaign_20260914 --audit output/monthly_fair_weeks_20260914/monthly_independent_audit.json --partial
+.venv/Scripts/python.exe -X utf8 scripts/build_monthly_interpretation.py --campaign C:/master-course-worktrees/shibu21-23-monthly-budget-20260914/output/monthly_budget_campaign_20260914 --audit output/monthly_fair_weeks_20260914/monthly_budget_independent_audit.json --output docs/notes/SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914 --partial
 ```
 
 通常モード（`--partial`なし）は12週すべての完走・独立監査・campaign完了が必要。途中版は停止/失敗状態と未確定週を明記し、季節別集計や完成図を出力しない。関連28テスト、実原本3週の数値一致、未完了時の最終生成拒否を確認した。12週の完成図はデータが揃ってから描画・目視検査する。
+
+集計後の資料同期は `.venv/Scripts/python.exe -X utf8 output/monthly_fair_weeks_20260914/update_monthly_checkpoint.py --dry-run` で内容を確認し、同じCLIから `--dry-run` を外して適用する。このCLIは実験を起動しない。reportが参照した監査JSONのSHA一致を要求し、README・blocker・本計画・開発記録・起動記録を更新する。3/12週の版から、参照した監査の正確なバイト列を `output/monthly_fair_weeks_20260914/audit_snapshots/<SHA256>.json` に保持する。同じ名前に異なる内容が存在すれば拒否し、同じ内容は再書込みしない。後続月が加わった後も、各結果表JSONの `independent_audit.sha256` に対応するスナップショットで当時の証拠を確認できる。
 
 ## Solcast追加認証と履歴取得
 
@@ -96,12 +98,14 @@ C:/master-course/.venv/Scripts/python.exe -X utf8 scripts/benchmarks/run_exact_s
 
 残りAPI利用枠は取得できていないため、今回は1リクエストで停止した。既存の日次定期取得を追加認証へ更新し、残り枠不明時は1回のみ、402/429なら停止し、課金契約の変更はしない。全月取得後の2022〜2024年学習は別成果物として作成し、この12週比較の2024年固定入力や旧成果物を途中で差し替えない。
 
-## 凍結前の検証
+## 初回版4c5c5d86の凍結前検証（履歴）
 
 全体回帰は **2,258 passed / 既存PowerPoint証拠2 failed、168.24秒**。JUnitは `output/monthly_fair_weeks_20260914/pytest-release.xml`。新規18件で祝日週・月跨ぎ・曜日/便の改変、forecast hash/モデル/値/時刻/未宣言週、12週designのPrepare伝達、canonical Preparedの暦・予測証拠の不一致を検査した。Lunaの独立最終レビューで未解決P0/P1は0件。旧canonical Preparedの列との互換も実ファイルで確認した。
 
 ## 実行場所
 
-凍結branchは `codex/shibu21-23-monthly-fair-20260914`、worktreeは `C:/master-course-worktrees/shibu21-23-monthly-fair-20260914`。進捗はその配下の `output/monthly_fair_weeks_campaign_20260914/progress.json`、週別結果は `cases/<開始日>/summary.json`、全体結果は完了後の `summary.json`。全体ログは `output/monthly_fair_weeks_campaign_20260914.log`。失敗時は後続を未実行と明示して停止する。監視と独立照合は、ユーザーの既存希望どおりGPT-5.6 Lunaが担当する。
+現在の凍結branchは `codex/shibu21-23-monthly-budget-20260914`、SHAは `fa0c22bfed6cf7bf0a09d24b82470d4f3570dfc8`、worktreeは `C:/master-course-worktrees/shibu21-23-monthly-budget-20260914`。進捗はその配下の `output/monthly_budget_campaign_20260914/progress.json`、週間確定結果は `cases/<開始日>/diagnostic/<開始日>/summary.json`、全体結果は完了後の `summary.json`。全体ログは `output/monthly_budget_campaign_20260914.log`。失敗時は後続を未実行と明示して停止する。監視と独立照合は、ユーザーの既存希望どおりGPT-5.6 Lunaが週単位で担当する。
+
+この固定版は25件の関連テストを凍結後に通過した。基になる数値修正の全体回帰は2,297 passed / 既存PowerPoint証拠2 failedで、1月の予算診断と共通120秒設定は[変更根拠](SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)に記録する。main上で報告資料を更新しても、実験結果のSHAを現在のmain HEADに付け替えない。初回 `4c5c5d86`、数値設定 `8acd8beb`、30秒版 `829e3983` の出力は過去の試行として各worktreeに保持する。
 
 このタスクの既存heartbeatへ完了後の結果整理を追加した。月別計算中の状態確認は30分間隔だが、Solcastの確認・取得は日本時間12時以降、同日未確認の場合だけ、一日最大1リクエストの既存制限を維持する。通常の計算中は通知せず、完了・失敗等だけを知らせる。月別報告後は元の日次12時のSolcast取得設定へ戻す。

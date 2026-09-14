@@ -4345,3 +4345,10 @@ The monthly report now explains that fixed seed/threads/time limits do not ensur
 週間監査CLIがmain側の予測manifestを読んでいた参照先を、実際の固定worktreeへ変更した。実行前取込記録のmanifest・training_model・当該週profileを照合し、Preparedのforecast_auditのモデルファイルSHAとも一致を要求する。import SHAとPreparedモデルSHAの不一致を拒否する確認が通過した。1・2月を新しい監査で再確認し、3月も全169求解・確定会計・物理検証を通過。collectorで原本と再照合した3/12週の結果表へ反映した。これは監査の参照・証拠の補強であり、計算中fa0c22bfのコード・数式・入力・時間枠は変更していない。
 
 後続月はoutput/monthly_fair_weeks_20260914/update_monthly_checkpoint.pyで、原本監査・集計の後にREADME/blocker/計画/開発記録/起動記録の最新部分を同期する。宣言12週、同一SHA、監査pass、reportと監査JSONのhash一致を必須にし、12週未完了はCOMPLETEDにしない。2週と3週でdry-runを確認し、3週の更新を適用した。
+
+
+## 2026-09-14 結果再生成コマンドと監査スナップショットを整備
+
+月別計画の再生成コマンドと実行場所が初回4c5c5d86を参照したままになっていたため、現在のfa0c22bf・monthly_budget_campaign・budget独立監査・BUDGET_RESULTS出力を明示するコマンドへ修正した。初回の回帰記録は履歴と明記し、現在の固定版25件と数値修正全体2,297 passed/既存PPT2failedを区別した。実験ソースや出力は変更していない。
+
+3/12週版から、reportが参照する監査JSONをaudit_snapshots/<SHA256>.jsonへ保持する。更新CLIは監査バイト列を一度読み、reportのSHAとの一致を確認してその同じバイト列を保存する。既存の同名ファイルが異なる内容なら拒否し、同一内容の再書込みは避ける。3週版の実ファイルSHA f195e49f240b7936e90e7fd0a4f5652fd4c14035d4b47cdc421046da0ae6f516を保存後に再照合し、CLIのdry-runも通過した。これ以前の版のスナップショットが新たに復元されたとは主張しない。
