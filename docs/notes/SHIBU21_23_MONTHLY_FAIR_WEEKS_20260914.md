@@ -1,7 +1,7 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
 <!-- monthly-search-status -->
-最新の月別比較: 旧10a40c9fは7/12週監査済み、8月hour48で数値求解の問題により停止。全月共通の前日Method=1・毎時Method=0、MIPFocus=1に変更し、新clean固定版から12週を新規実行する準備中。過去版の成功週を混ぜない。研究採用BLOCKED、メール未送信。
+最新の月別再実行: 固定 `7c7c2334` で全12週を新規実行開始（2026-09-15 06:29 JST、solver PID43852、observer PID29580）。全月共通で前日Method=1・毎時Method=0、MIPFocus=1、許容差1e-9。現時点は1月準備中・独立監査0/12週。固定後116 tests通過、入力47ファイル照合済み。旧10a40c9fの7週・fa0c22bfの10週は別版であり混ぜない。研究採用BLOCKED、メール未送信。状態: `output/monthly_phase_search_20260915/script_observer/state.json`。
 <!-- /monthly-search-status -->
 
 

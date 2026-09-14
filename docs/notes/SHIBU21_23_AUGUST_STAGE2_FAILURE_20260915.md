@@ -22,3 +22,5 @@
 境界テストは両段階で実行し、真のSOC超過は引き続き拒否。3月の累積SOC再現モデルはMethod=0でも通過した。関連49 tests通過（6.21秒）、報告と合わせた72 tests通過（3.40秒）。独立診断レビューP0/P1残件0。新しい記録先は `output/monthly_phase_search_20260915/`、結果表は `SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.md/.json`、図名は `shibu21_23_monthly_phase_search_20260915`。旧版の停止・監査・メール重複防止記録は保存する。
 
 全体回帰は2343 passed / 既存PPT資料2 failed（110.10秒）。実装の独立レビューはP0/P1残件0、起動時の最終SHA固定を条件に確認済み。ソース版を固定してから新規実行する。
+
+最終版 `7c7c2334040d54722d2f1c354634269d35f8d1de` をclean固定し、116 tests通過（6.61秒）。47入力hash・11refs移設を照合し、2026-09-15 06:29 JSTに新規12週を開始。solver PID43852、observer PID29580。原本 `C:/master-course-worktrees/shibu21-23-monthly-phase-search-20260915/output/monthly_phase_search_campaign_20260915/`。初回のsource・observer hash・プロセス同一性チェック通過。通常AI監視は行わず、完了・新規失敗時のみ既存taskへ1回queueする。メール未送信。
