@@ -1,10 +1,10 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
-最新の固定版 `fa0c22bf` は1月の1週間が完走・独立監査済み（1/12週、2026-09-14 20:52 JST）。総費用4,309,467.438809円、購入量5,631.900 kWh、最大受電206.497 kW。168時間・672 slot、物理・会計・日別台帳差0円、全169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。2月以降の計算と最終季節別整理を継続中で、研究採用はBLOCKED。 [新版の結果表・原本hash](SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
+最新の固定版 `fa0c22bf` は1・2月の2週間が完走・独立監査済み（2/12週、2026-09-14 21:13 JST）。2月の総費用4,222,459.003284円、購入量2,114.490 kWh、最大受電200.000 kW。各週168時間・672 slot、物理検証、会計と日別台帳の差0円、各169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。3月以降の計算と最終季節別整理を継続中で、研究採用はBLOCKED。 [新版の結果表・原本hash](SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
 
-最新実行: 2026-09-14 19:15 JST開始の固定 `829e3983` は1月の前日計画で停止した（19:37 JST確認）。Stage 2の30秒制限でincumbentなし、`DAY_AHEAD_FAILED`、完走0/12週、rolling未開始。worktree `C:/master-course-worktrees/shibu21-23-monthly-presolve-20260914`、campaign `output/monthly_presolve_campaign_v3_20260914`、main監査 `output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json`。同一nativeモデルの120秒枠で最初の解が約36.5秒後に得られ、SOC・物理検証を通過した。全月の前日Stage 2を最大120秒へ揃えて新規実行する。[変更根拠と診断](SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)。停止週の週間費用を補完せず、以下の過去版の完走週も流用しない。[数値修正・検証](SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。
+前回の実行記録: 2026-09-14 19:15 JST開始の固定 `829e3983` は1月の前日計画で停止した（19:37 JST確認）。Stage 2の30秒制限でincumbentなし、`DAY_AHEAD_FAILED`、完走0/12週、rolling未開始。worktree `C:/master-course-worktrees/shibu21-23-monthly-presolve-20260914`、campaign `output/monthly_presolve_campaign_v3_20260914`、main監査 `output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json`。同一nativeモデルの120秒枠で最初の解が約36.5秒後に得られ、SOC・物理検証を通過した。全月の前日Stage 2を最大120秒へ揃えて新規実行する。[変更根拠と診断](SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)。停止週の週間費用を補完せず、以下の過去版の完走週も流用しない。[数値修正・検証](SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。
 
-新版の途中結果（2026-09-14 18:52 JST）: [固定8acd8bebの1・2月結果と原本](SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md)。2/12週が完走・独立監査済み。3月はhour 152のSOC再検証で停止し、152/168時間まで受理、4〜12月は未実行。旧版の結果表は初回試行の履歴として保持する。
+過去版の途中結果（2026-09-14 18:52 JST）: [固定8acd8bebの1・2月結果と原本](SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md)。2/12週が完走・独立監査済み。3月はhour 152のSOC再検証で停止し、152/168時間まで受理、4〜12月は未実行。旧版の結果表は初回試行の履歴として保持する。
 
 季節差の範囲: 月別にPV履歴・学習済みPV予測を適用する一方、走行需要の設定は `distance_average_v0`、各需要倍率1.0、`weather_factor_scalar=1.0` である。固定した電費・燃費を距離へ適用し、気温に応じた空調負荷の月別入力は与えない。冷暖房等を含む季節的需要変化の評価とは区別する。固定版の入力生成・需要計算経路と1月canonical Preparedで確認し、パス・hashを `output/monthly_fair_weeks_20260914/monthly_energy_scope_audit.json` へ保存した。全12週の実出力監査は別途継続する。
 
