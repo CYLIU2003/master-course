@@ -145,6 +145,8 @@ def seasonal_summary(rows: list[dict]) -> list[dict]:
             "max_weekly_cost_jpy": max(row["total_cost"] for row in selected),
             "mean_weekly_non_vehicle_cost_jpy": totals["non_vehicle_usage_cost_jpy"] / 3,
             "mean_weekly_grid_import_kwh": totals["grid_import_kwh"] / 3,
+            "min_weekly_grid_import_kwh": min(row["grid_import_kwh"] for row in selected),
+            "max_weekly_grid_import_kwh": max(row["grid_import_kwh"] for row in selected),
             "maximum_peak_grid_kw": max(row["peak_grid_kw"] for row in selected),
             "minimum_peak_grid_kw": min(row["peak_grid_kw"] for row in selected),
             "pv_utilization_pct": ratio_percent(totals["pv_used_total_kwh"], totals["pv_generated_kwh"]),
@@ -208,7 +210,7 @@ def collect(campaign: Path, audit_path: Path, *, partial: bool) -> dict:
         "pending_weeks": [week for week in declared if week not in {row["week"] for row in rows}]}
 
 
-def render_figure(rows: list[dict], destination: Path) -> None:
+def render_figure(rows: list[dict], destination: Path, *, is_layout_preview: bool = False) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -235,7 +237,9 @@ def render_figure(rows: list[dict], destination: Path) -> None:
         (panels[2], "peak_grid_kw", 1, "最大15分平均受電", "kW"),
         (panels[4], "total_cost", 10000, "確定総費用", "万円 / 選択週"),
         (panels[5], "used_vehicle_day_count", 1, "使用車両日数", "台・日 / 選択週")):
-        axis.bar(x, [row[key] / scale for row in rows], color="#466e99")
+        bars = axis.bar(x, [row[key] / scale for row in rows], color="#466e99")
+        if key == "used_vehicle_day_count":
+            axis.bar_label(bars, fmt="%d", padding=3, fontsize=9)
         axis.set(title=title, ylabel=unit)
     panels[2].axhline(200, color="#b26c36", linestyle="--", label="契約基準 200 kW（有料超過可）")
     panels[2].legend(fontsize=8)
@@ -248,10 +252,13 @@ def render_figure(rows: list[dict], destination: Path) -> None:
     panels[3].set(title="車両使用費以外の内訳", ylabel="万円 / 選択週")
     panels[3].legend(fontsize=8)
     for axis in panels:
+        axis.margins(y=.25)
         axis.set_xticks(x, [f"{month}月" for month in x])
         axis.grid(axis="y", alpha=0.2)
         axis.set_axisbelow(True)
-    figure.suptitle("各月1週・平日5日＋土休日2日の診断結果", fontsize=19)
+    title = ("表示確認用の仮データ（研究結果ではありません）" if is_layout_preview
+             else "各月1週・平日5日＋土休日2日の診断結果")
+    figure.suptitle(title, fontsize=19)
     figure.text(.03, .035, "2025年の選択週／同じ時刻表・60台入力・全接続保持。月平均・年平均の推計ではありません。\n"
                 "各週は同じ初期状態から開始。BESS初期在庫を使用する条件。最適性gap・研究採用条件は未達。", fontsize=11)
     figure.tight_layout(rect=(0, .085, 1, .95), h_pad=3)
@@ -261,6 +268,58 @@ def render_figure(rows: list[dict], destination: Path) -> None:
     svg = destination.with_suffix(".svg")
     svg.write_text("\n".join(line.rstrip() for line in svg.read_text(encoding="utf-8").splitlines()) + "\n", encoding="utf-8")
     plt.close(figure)
+
+
+def cost_difference(rows: list[dict]) -> dict:
+    """Explain the observed highest-minus-lowest weekly cost without causality."""
+    highest = max(rows, key=lambda row: row["total_cost"])
+    lowest = min(rows, key=lambda row: row["total_cost"])
+    difference = {key: highest[key] - lowest[key] for key in (
+        "total_cost", "vehicle_usage_cost", "non_vehicle_usage_cost_jpy")}
+    require_close(difference["vehicle_usage_cost"] + difference["non_vehicle_usage_cost_jpy"],
+                  difference["total_cost"], "monthly cost difference")
+    return {"highest_month": highest["month"], "lowest_month": lowest["month"], **difference}
+
+
+def observation_paragraphs(data: dict) -> list[str]:
+    """Describe completed cases and distinguish arithmetic from explanations."""
+    require(data["status"] == "COMPLETED", "Observations require a completed campaign")
+    rows = data["weeks"]
+    pv_high = max(rows, key=lambda row: row["pv_generated_kwh"])
+    pv_low = min(rows, key=lambda row: row["pv_generated_kwh"])
+    grid_high = max(rows, key=lambda row: row["grid_import_kwh"])
+    grid_low = min(rows, key=lambda row: row["grid_import_kwh"])
+    season_high = max(data["seasons"], key=lambda row: row["mean_weekly_grid_import_kwh"])
+    season_low = min(data["seasons"], key=lambda row: row["mean_weekly_grid_import_kwh"])
+    peak = max(rows, key=lambda row: row["peak_grid_kw"])
+    difference = cost_difference(rows)
+    inventory = [row["bess_inventory_drawdown_kwh"] for row in rows]
+    return [
+        f"選択した12週のPV発電量は{pv_high['month']}月の{pv_high['pv_generated_kwh']:,.1f} kWhが最多、"
+        f"{pv_low['month']}月の{pv_low['pv_generated_kwh']:,.1f} kWhが最少だった。購入電力量は"
+        f"{grid_high['month']}月の{grid_high['grid_import_kwh']:,.1f} kWhが最多、"
+        f"{grid_low['month']}月の{grid_low['grid_import_kwh']:,.1f} kWhが最少で、差は"
+        f"{grid_high['grid_import_kwh'] - grid_low['grid_import_kwh']:,.1f} kWhだった。"
+        "PV総量と購入量の対応を解釈するには、直接利用・BESS充電・抑制と充電時刻の対応も確認する必要がある。",
+        f"季節ごとの選択3週では、平均購入量は{season_high['season']}の"
+        f"{season_high['mean_weekly_grid_import_kwh']:,.1f} kWh/週が最多、{season_low['season']}の"
+        f"{season_low['mean_weekly_grid_import_kwh']:,.1f} kWh/週が最少だった。"
+        f"それぞれの平均週間費用は{season_high['mean_weekly_cost_jpy']:,.0f}円と"
+        f"{season_low['mean_weekly_cost_jpy']:,.0f}円である。"
+        "月ごとの範囲も併記し、この3週平均を季節全体の期待値や統計的な季節効果とは扱わない。",
+        f"週間総費用の最大月{difference['highest_month']}月と最小月{difference['lowest_month']}月の差は"
+        f"{difference['total_cost']:,.2f}円で、車両使用費の差{difference['vehicle_usage_cost']:+,.2f}円と、"
+        f"電力・燃料・CO₂・契約超過費の合計差{difference['non_vehicle_usage_cost_jpy']:+,.2f}円に分かれる"
+        "（ともに最大月から最小月を引いた符号付きの差）。使用車両日数と割当も求解で変わるため、"
+        "総費用の差からPV単独の削減効果を取り出すことはできない。",
+        f"最大15分平均受電が最も高かったのは{peak['month']}月の{peak['peak_grid_kw']:,.1f} kWで、"
+        f"その週の契約超過費は{peak['contract_overage_cost']:,.2f}円だった。"
+        "契約基準200 kWは有料超過を許す条件であり、購入電力量と受電ピークを別々に評価する。"
+        "充電時刻や受電制限の政策を変える効果は、同じ気象・配車条件を固定した追加比較で確かめる必要がある。",
+        f"各週のBESS在庫減少量（初期−終端）は{min(inventory):,.1f}〜{max(inventory):,.1f} kWhだった。"
+        "毎週同じ初期状態から始めた計算なので、この在庫利用を繰り返し使える運用上の節約とは解釈しない。"
+        "PVからBESSへの充電はPV利用として数えるが、その全量が評価週内にバスへ供給されたことまでは示さない。",
+    ]
 
 
 def markdown(data: dict, figure_name: str | None) -> str:
@@ -279,14 +338,13 @@ def markdown(data: dict, figure_name: str | None) -> str:
         lines += ["", f"![月別比較](figures/{figure_name}.png)", "", f"[編集可能なSVG](figures/{figure_name}.svg)"]
     if complete:
         lines += ["", "## 季節別の記述的比較", "", "各季節3つの独立した7日間ケース。連続21日間の運用結果ではない。費用と購入量は選択週当たり平均、PV率は3週の合計量から求める。", "",
-            "| 季節 | 平均週間費用［円］ | 費用の最小〜最大［円］ | 平均購入量［kWh/週］ | 受電ピーク範囲［kW］ | 合計量でのPV抑制率 |", "|---|---:|---:|---:|---:|---:|"]
+            "| 季節 | 平均週間費用［円］ | 費用の最小〜最大［円］ | 平均購入量［kWh/週］ | 購入量の最小〜最大［kWh/週］ | 受電ピーク範囲［kW］ | 合計量でのPV抑制率 |", "|---|---:|---:|---:|---:|---:|---:|"]
         for row in data["seasons"]:
             rate = f"{row['pv_curtailment_pct']:.2f}%" if row["pv_curtailment_pct"] is not None else "算出不可"
-            lines.append(f"| {row['season']} | {row['mean_weekly_cost_jpy']:,.2f} | {row['min_weekly_cost_jpy']:,.2f}〜{row['max_weekly_cost_jpy']:,.2f} | {row['mean_weekly_grid_import_kwh']:,.3f} | {row['minimum_peak_grid_kw']:.3f}〜{row['maximum_peak_grid_kw']:.3f} | {rate} |")
-        highest = max(data["weeks"], key=lambda row: row["grid_import_kwh"])
-        lowest = min(data["weeks"], key=lambda row: row["grid_import_kwh"])
-        lines += ["", "## 観察と示唆", "", f"選択した12週では、購入電力量は{highest['month']}月が最多、{lowest['month']}月が最少だった。発電総量だけでなく、直接利用・BESS充電・抑制と充電時刻の対応を確認する。使用車両日数も求解結果として変わるため、総費用と車両使用費以外の費用を併記した。", "",
-            "購入量と受電ピークは別指標であり、PVが豊富な週にも短時間の受電集中と有料超過が生じ得る。設備・運用政策の検討では、PV総量、充電可能時間、BESS在庫、受電上限と超過費用を合わせて評価する必要がある。今回の比較だけで特定設備への投資効果や因果効果を確定しない。"]
+            lines.append(f"| {row['season']} | {row['mean_weekly_cost_jpy']:,.2f} | {row['min_weekly_cost_jpy']:,.2f}〜{row['max_weekly_cost_jpy']:,.2f} | {row['mean_weekly_grid_import_kwh']:,.3f} | {row['min_weekly_grid_import_kwh']:,.3f}〜{row['max_weekly_grid_import_kwh']:,.3f} | {row['minimum_peak_grid_kw']:.3f}〜{row['maximum_peak_grid_kw']:.3f} | {rate} |")
+        lines += ["", "## 観察と示唆"]
+        for paragraph in observation_paragraphs(data):
+            lines += ["", paragraph]
     else:
         lines += ["", "未確定の週: " + "、".join(data["pending_weeks"]) + "。費用を0として扱わず、全12週と季節別の整理を継続する。"]
         for failed in data.get("failed_weeks", []):

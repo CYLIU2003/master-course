@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from scripts.build_monthly_interpretation import collect
+from scripts.build_monthly_interpretation import collect, markdown
 from src.optimization.common.date_series import materialize_dated_timetable
 
 SOURCE_SHA = "a" * 40
@@ -167,6 +167,10 @@ def test_twelve_audited_weeks_still_require_a_stable_completed_campaign(tmp_path
     report = collect(campaign, audit_path, partial=False)
     assert report["status"] == "COMPLETED"
     assert len(report["weeks"]) == 12 and len(report["seasons"]) == 4
+    rendered = markdown(report, None)
+    assert "季節別の記述的比較" in rendered and "観察と示唆" in rendered
+    assert "1,800.0〜1,800.0 kWh" in rendered
+    assert "研究採用BLOCKED" in rendered
     final["source_state_stable"] = False
     _write(campaign / "summary.json", final)
     with pytest.raises(ValueError, match="Final campaign gate failed"):

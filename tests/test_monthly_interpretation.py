@@ -2,7 +2,9 @@ import math
 
 import pytest
 
-from scripts.build_monthly_interpretation import ratio_percent, report_status, seasonal_summary
+from scripts.build_monthly_interpretation import (
+    cost_difference, observation_paragraphs, ratio_percent, report_status, seasonal_summary,
+)
 
 
 def _months():
@@ -25,6 +27,8 @@ def test_weekly_cost_mean_peak_extrema_and_separate_inventory_cases():
     assert winter["mean_weekly_cost_jpy"] == 5000
     assert winter["maximum_peak_grid_kw"] == 120
     assert winter["minimum_peak_grid_kw"] == 10
+    assert winter["min_weekly_grid_import_kwh"] == 10
+    assert winter["max_weekly_grid_import_kwh"] == 120
     assert winter["three_case_inventory_drawdown_kwh"] == 5400
     assert winter["independent_week_count"] == 3
 
@@ -58,3 +62,41 @@ def test_partial_report_preserves_failure_instead_of_claiming_run_is_active(stat
 def test_twelve_rows_do_not_replace_campaign_completion_gate():
     with pytest.raises(ValueError, match="Final campaign gate"):
         report_status("RUNNING_WEEK", 12)
+
+
+def test_cost_difference_preserves_opposing_cost_component_directions():
+    rows = [
+        {"month": 4, "total_cost": 1000, "vehicle_usage_cost": 600, "non_vehicle_usage_cost_jpy": 400},
+        {"month": 8, "total_cost": 900, "vehicle_usage_cost": 800, "non_vehicle_usage_cost_jpy": 100},
+    ]
+    difference = cost_difference(rows)
+    assert difference["highest_month"] == 4 and difference["lowest_month"] == 8
+    assert difference["total_cost"] == 100
+    assert difference["vehicle_usage_cost"] == -200
+    assert difference["non_vehicle_usage_cost_jpy"] == 300
+    rows[0]["total_cost"] += 1
+    with pytest.raises(ValueError, match="monthly cost difference"):
+        cost_difference(rows)
+
+
+def test_observations_require_completed_results_and_render_separate_quantity_extrema():
+    rows = _months()
+    for row in rows:
+        row["vehicle_usage_cost"] = row["total_cost"] - row["non_vehicle_usage_cost_jpy"]
+        row["contract_overage_cost"] = 0
+    # Different months lead each quantity, so the text cannot reuse one ranking.
+    rows[0]["pv_generated_kwh"] = 5000
+    rows[1]["grid_import_kwh"] = 800
+    rows[2]["peak_grid_kw"] = 900
+    rows[2]["contract_overage_cost"] = 17
+    data = {"status": "COMPLETED", "weeks": rows, "seasons": seasonal_summary(rows)}
+    paragraphs = observation_paragraphs(data)
+    assert "1月の5,000.0 kWhが最多" in paragraphs[0]
+    assert "2月の800.0 kWhが最多" in paragraphs[0]
+    assert "3月の900.0 kW" in paragraphs[3]
+    assert "17.00円" in paragraphs[3]
+    assert "統計的な季節効果とは扱わない" in paragraphs[1]
+    assert "PV単独の削減効果" in paragraphs[2]
+    data["status"] = "IN_PROGRESS"
+    with pytest.raises(ValueError, match="completed campaign"):
+        observation_paragraphs(data)
