@@ -2,6 +2,8 @@
 
 ## 2026-09-14 月別12週の運行日構成と予測来歴の照合
 
+1月・2月の2週が各168時間・672 slotを完走し、最終物理検証、会計適格性、前後clean SHAを通過した。Luna監査に加え、主担当も確定会計と日別台帳、PV・購入flow、ピーク、費用内訳、契約超過量×500円/kWh、原本hashを再照合した。[途中結果MD/JSON](docs/notes/SHIBU21_23_MONTHLY_RESULTS_20260914.md)を追加し、3月以降を未確定と明記した。計算プロセスPID6832の存続とCPU進行を実確認し、凍結worktreeのコード・入力は変更していない。結果表の更新はmainの説明資料のみである。
+
 2025年各月の最初の月内完結・祝日なし月曜週を選び、平日5日・土曜1日・日曜1日へ揃える。新しい月別designを既存campaignからPrepareへ明示的に渡し、日付・サービスID・時刻表hash・便数をmaterializationとcanonical Preparedの両方で検査する。検証済み祝日原本と設定のholiday一覧・選択週を照合し、入力行の補正や既存時刻表再生成で検査を回避しない。
 
 明示holdout directoryのモデル・週別profile hashと実際の計画用予測全値・時刻を照合する。既存callerは既定動作を保持する。料金・数式・fleet・SOC・全接続・solver予算に変更はない。12週すべての求解前入力検査で同じ1,704便・営業便距離・672予測slot・2024年モデルを確認した。clean凍結版 `4c5c5d86` の専用worktreeから12週の完全Prepareと週間求解を開始した。旧4週結果を新12週へ転用しない。全体回帰2,258 passed / 既存資料2 failed、独立レビュー残P0/P1ゼロ。[設計・手順・境界](docs/notes/SHIBU21_23_MONTHLY_FAIR_WEEKS_20260914.md)。
