@@ -54,6 +54,8 @@ C:/master-course/.venv/Scripts/python.exe -X utf8 scripts/benchmarks/run_exact_s
 
 ## 結果のまとめ方と主張の限界
 
+補足: [選択週の日射量と月全体の比較](SHIBU21_23_MONTHLY_IRRADIANCE_CONTEXT_20260914.md)を作成した。2025年全日のGHIを事後分析した資料で、週選択や学習・計画入力には使わない。
+
 全12週で合計2,016回の毎時rollingと8,064個の15分slotを確認する。週ごとに入力・day-ahead・rolling・物理・会計を別判定し、失敗週や未実行週を結果から隠さない。確定費用は受理済み `rolling_hourly_chain/executed_day_accounting.json` だけから取得し、日別台帳と1e-6円以内で照合する。
 
 比較には総費用、車両日費とそれ以外の費用、購入電力量、受電ピーク、PV発電・直接利用・BESS充電・抑制、BESS初期/終端在庫、使用車両日数を使う。平日/土休日の営業量を揃えることで旧秋週の交絡を一つ除くが、割当・充電時刻・PV・solver incumbentの差は残る。月別の結果を先に提示し、冬12/1/2月・春3/4/5月・夏6/7/8月・秋9/10/11月の3週ずつを記述的に整理する。同年12月と1/2月は連続した一つの冬ではないことも明記する。
