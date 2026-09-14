@@ -1,6 +1,6 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
-最新の固定版 `fa0c22bf` は1・2月の2週間が完走・独立監査済み（2/12週、2026-09-14 21:13 JST）。2月の総費用4,222,459.003284円、購入量2,114.490 kWh、最大受電200.000 kW。各週168時間・672 slot、物理検証、会計と日別台帳の差0円、各169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。3月以降の計算と最終季節別整理を継続中で、研究採用はBLOCKED。 [新版の結果表・原本hash](SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
+最新の固定版 `fa0c22bf` は1〜3月の3週間が完走・独立監査済み（3/12週、2026-09-14 21:38 JST）。3月の総費用4,406,044.133810円、購入量8,036.650 kWh、最大受電208.798 kW。各週168時間・672 slot、物理検証、会計と日別台帳の差1e-6円以内、各169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。4月以降の計算と最終季節別整理を継続中。研究採用はBLOCKED。 [新版の結果表・原本hash](SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
 
 前回の実行記録: 2026-09-14 19:15 JST開始の固定 `829e3983` は1月の前日計画で停止した（19:37 JST確認）。Stage 2の30秒制限でincumbentなし、`DAY_AHEAD_FAILED`、完走0/12週、rolling未開始。worktree `C:/master-course-worktrees/shibu21-23-monthly-presolve-20260914`、campaign `output/monthly_presolve_campaign_v3_20260914`、main監査 `output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json`。同一nativeモデルの120秒枠で最初の解が約36.5秒後に得られ、SOC・物理検証を通過した。全月の前日Stage 2を最大120秒へ揃えて新規実行する。[変更根拠と診断](SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)。停止週の週間費用を補完せず、以下の過去版の完走週も流用しない。[数値修正・検証](SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。
 
@@ -55,6 +55,12 @@
 ```
 
 入力検査証拠は `output/monthly_fair_weeks_20260914/input_materialization_check.json`、holdoutの原本hash・12週一覧は同ディレクトリの `forecast_holdouts/manifest.json` にある。学習モデルは検証済みreferenceが採用した2024年の364日を使用する。
+
+2024年の366日から除外されたのは2月5日と3月8日である。両日ともreferenceの `daily_labels` は `quality_flag=excluded`、`weather_class=unresolved`、理由は `solid_precipitation_unresolved_from_temperature_proxy`（気温を用いた代理判定では固体降水を分類し切れない）である。両日は学習対象から除外される。`training_model.json` の `training_source_dates` はこの2日を含まず、全日付が2024年、`training_end_exclusive=2025-01-01`。2025年の評価履歴は訓練に含めない。この除外による予測誤差への影響は未評価であり、雪などの条件への予測性能を主張しない。
+
+モデル内容のハッシュ `content_hash(model)` は `0b876e8e55a8c4950cdbfe928dc114a09027043e8aeee206d9ebf3db6e7599eb`、`training_model.json` のファイル全体のSHA256は `d7b6b15172e4267e07d5f8846943b08199f102915dd14d77ecff540b4f22b8cd`。JSONの内容とファイルのバイト列という異なる対象を照合しており、両値を取り違えない。最終結果のJSONにある `forecast_model_sha256` は後者のファイルSHAを記録する。
+
+主作業場所と固定版の学習モデル・12予測ファイルはバイト一致する。manifestには実装ファイルの改行コードに伴うハッシュ差があり、両場所のmanifest全体の一致とは主張しない。固定版のmanifestを含む47ファイルは実行前の取込記録と一致した。[学習範囲と入力来歴の監査](../../output/monthly_fair_weeks_20260914/forecast_training_coverage_audit.json)では、main対固定版のmanifest一致不成立と、固定版の実行前入力からの不変を別項目で保持する。週間監査は固定版の予測原本を読み、PreparedのモデルファイルSHAとも照合する。
 
 新しいclean research branch/worktreeで、上記holdoutを同じ相対パスへコピーしhashを照合してから実行する。source candidateとcampaign outputは新規作成し、旧4週成果物を再利用しない。
 

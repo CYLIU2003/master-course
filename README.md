@@ -1,6 +1,6 @@
 # master-course
 
-最新の固定版 `fa0c22bf` は1・2月の2週間が完走・独立監査済み（2/12週、2026-09-14 21:13 JST）。2月の総費用4,222,459.003284円、購入量2,114.490 kWh、最大受電200.000 kW。各週168時間・672 slot、物理検証、会計と日別台帳の差0円、各169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。3月以降の計算と最終季節別整理を継続中で、研究採用はBLOCKED。 [新版の結果表・原本hash](docs/notes/SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
+最新の固定版 `fa0c22bf` は1〜3月の3週間が完走・独立監査済み（3/12週、2026-09-14 21:38 JST）。3月の総費用4,406,044.133810円、購入量8,036.650 kWh、最大受電208.798 kW。各週168時間・672 slot、物理検証、会計と日別台帳の差1e-6円以内、各169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。4月以降の計算と最終季節別整理を継続中。研究採用はBLOCKED。 [新版の結果表・原本hash](docs/notes/SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
 
 **前回の固定版 `829e3983` は1月の前日計画で停止し、完走0/12週です（2026-09-14 19:37 JST確認）。** 全Stage 2にAggregate=0/Presolve=0、許容誤差1e-9を適用した30秒制限では実行可能解を得られず、`DAY_AHEAD_FAILED / STAGE2_NO_INCUMBENT` となりました。rollingは未開始、週間費用は未成立です。同じ本体モデルで120秒枠の診断を行うと、約36.5秒で最初の実行可能解を得てSOC・物理検証を通過しました。[予算の根拠と検証](docs/notes/SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)に基づき、前日Stage 2を全月最大120秒に揃え、新しい固定版から12週を実行します。[停止・起動記録](output/monthly_fair_weeks_20260914/presolve_rerun_launch.json)・[独立監査](output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json)・[数値設定の原因と検証](docs/notes/SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。旧版の完走週は流用しません。月別・季節別の最終整理と研究採用は未完了です。結果の費用順位には時間制限内の探索到達度も関わり、Stage 1 gapを週間費用の誤差幅や季節差の有意性とは扱いません。
 
