@@ -53,7 +53,12 @@ def replacements() -> tuple[dict[Path, bytes], dict]:
     require(0 < count <= 12 and count == report['completed_count'], 'invalid report count')
     require([row['month'] for row in rows] == list(range(1, count + 1)), 'nonsequential months')
     require(report['declared_week_count'] == audit['expected_week_count'] == 12, 'declared count drift')
-    require(set(audit['weeks']) == {row['week'] for row in rows}, 'audit/report weeks differ')
+    passed_weeks = {week for week, record in audit['weeks'].items()
+                    if record.get('fully_audited') is True
+                    and record.get('status') == 'DIAGNOSTIC_EXECUTION_PASSED'}
+    require(passed_weeks == {row['week'] for row in rows}, 'passed audit/report weeks differ')
+    require(all(record.get('failure') is True for week, record in audit['weeks'].items()
+                if week not in passed_weeks), 'unclassified audit record')
     require(set(audit['weeks']) <= set(progress['completed_weeks']), 'execution is not complete for audited week')
     for row in rows:
         record = audit['weeks'][row['week']]
@@ -67,7 +72,9 @@ def replacements() -> tuple[dict[Path, bytes], dict]:
     now = datetime.now(timezone.utc)
     stamp = now.astimezone(ZoneInfo('Asia/Tokyo')).strftime('%Y-%m-%d %H:%M JST')
     months = '1月' if count == 1 else f'1〜{count}月'
+    stopped = progress['status'] == 'STOPPED_AFTER_FAILED_CASE'
     next_text = ('全12週の月別・季節別整理を結果表に掲載した。' if complete
+                 else f'{count + 1}月で計算停止。失敗理由と未実行の週は結果表に記載し、原因を診断中。' if stopped
                  else f'{count + 1}月以降の計算と最終季節別整理を継続中。')
     lead = (
         f'最新の固定版 `fa0c22bf` は{months}の{count}週間が完走・独立監査済み（{count}/12週、{stamp}）。'
@@ -101,8 +108,10 @@ def replacements() -> tuple[dict[Path, bytes], dict]:
                 + '確定会計・台帳・PV収支・各原本hashを集計CLIでも照合し、同名Markdown/JSONへ反映した。'
                 + '計算中の固定ソース、入力、制約、予測、時間枠は変更していない。\n')
         updates[path] = (text.rstrip() + newline * 3 + note.replace('\n', newline)).encode('utf-8')
-    launch.update(passed_weeks=count, execution_passed_weeks=len(progress['completed_weeks']),
-                  independently_audited_weeks=count, status='COMPLETED' if complete else 'RUNNING')
+    launch.update(passed_weeks=count, execution_passed_weeks=count,
+                  execution_finished_cases=len(progress['completed_weeks']),
+                  independently_audited_weeks=count,
+                  status='COMPLETED' if complete else 'STOPPED_AFTER_FAILED_CASE' if stopped else 'RUNNING')
     launch['latest_checkpoint'] = {
         'checked_at_utc': now.isoformat(), 'execution_passed_week': last['week'],
         'active_week': progress.get('active_week'), 'hourly_steps_accepted': 168,

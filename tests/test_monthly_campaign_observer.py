@@ -187,3 +187,48 @@ def test_current_paragraph_update_preserves_added_introduction(newline):
     assert updated == source.replace("は3/12", "は4/12")
     with pytest.raises(ValueError, match="expected one"):
         module.replace_current_result_paragraph(source + newline * 2 + paragraphs[2], "new", "README")
+
+
+def test_checkpoint_excludes_failed_finished_case_and_shows_stopped_status(tmp_path, monkeypatch):
+    helper = Path(__file__).resolve().parents[1] / "output/monthly_fair_weeks_20260914/update_monthly_checkpoint.py"
+    spec = importlib.util.spec_from_file_location("stopped_checkpoint", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    output = tmp_path / "output"
+    monkeypatch.setattr(module, "OUTPUT", output)
+    source_sha = module.SOURCE_SHA
+    week = "2025-01-06"
+    failed_week = "2025-02-03"
+    record = {"fully_audited": True, "status": "DIAGNOSTIC_EXECUTION_PASSED", "audit_status": "INDEPENDENTLY_AUDITED",
+              "accounting": {"within_1e-6_jpy": True, "cost_difference_jpy": 0},
+              "native_stage2_metadata": {"quality_maximums": {"maximum_constraint_violation": 0}}}
+    audit = {"expected_sha": source_sha, "expected_week_count": 12, "weeks": {
+        week: record, failed_week: {"fully_audited": False, "failure": True, "status": "DAY_AHEAD_FAILED"}}}
+    watcher.write_json(output / "monthly_budget_independent_audit.json", audit)
+    row = {"week": week, "month": 1, "status": record["status"], "hourly_steps_accepted": 168,
+           "physical_violations": 0, "total_cost": 100, "grid_import_kwh": 1, "peak_grid_kw": 1,
+           "used_vehicle_day_count": 1, "non_vehicle_usage_cost_jpy": 1, "pv_generated_kwh": 1,
+           "pv_curtailment_pct": 0, "bess_inventory_drawdown_kwh": 0}
+    report = {"source_git_sha": source_sha, "completed_count": 1, "declared_week_count": 12,
+              "status": "STOPPED_AFTER_FAILED_CASE", "weeks": [row],
+              "independent_audit": {"sha256": watcher.sha256(output / "monthly_budget_independent_audit.json")}}
+    watcher.write_json(tmp_path / f"docs/notes/{module.REPORT_STEM}.json", report)
+    watcher.write_json(output / "budget_rerun_launch.json", {"source_git_sha": source_sha,
+                       "frozen_root": str(tmp_path), "campaign_relative_path": "campaign"})
+    watcher.write_json(tmp_path / "campaign/progress.json", {"base_git_sha": source_sha,
+                       "completed_weeks": [week, failed_week], "status": "STOPPED_AFTER_FAILED_CASE", "active_week": None})
+    for relative in ["README.md", "docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md",
+                     "docs/notes/SHIBU21_23_MONTHLY_FAIR_WEEKS_20260914.md"]:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# Title\n\n別担当の導入文\n\n最新の固定版 `fa0c22bf` 旧結果\n", encoding="utf-8")
+    (tmp_path / "docs/notes/DEVELOPMENT_NOTES.md").write_text("# Notes\n", encoding="utf-8")
+    updates, _ = module.replacements()
+    launch = json.loads(updates[output / "budget_rerun_launch.json"])
+    assert launch["status"] == "STOPPED_AFTER_FAILED_CASE"
+    assert launch["execution_passed_weeks"] == launch["independently_audited_weeks"] == 1
+    assert launch["execution_finished_cases"] == 2
+    text = updates[tmp_path / "README.md"].decode("utf-8")
+    assert "2月で計算停止" in text and "別担当の導入文" in text
+    assert "2月以降の計算と最終季節別整理を継続中" not in text
