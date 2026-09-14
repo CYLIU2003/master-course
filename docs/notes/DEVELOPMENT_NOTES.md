@@ -4294,3 +4294,8 @@ The independent delta review found the same undeclared-policy mismatch in PV res
 
 
 Final release-candidate validation:2297 passed / the same two preexisting PPT evidence failures in103.93s (`pytest-presolve-final-contract-release.xml`). No new failures remain. The final Luna review has P0/P1/P2 all zero with final source/test hashes synchronized. Formal research gates and the two document integrity failures remain unresolved; proceed only with a fresh diagnostic comparison on a clean frozen commit.
+
+
+## 2026-09-14: launch fresh monthly comparison from829e3983
+
+Created clean release branch/worktree codex/shibu21-23-monthly-presolve-20260914. Verified47 byte-identical inputs and relocated only the11refs of the missing parent scenario metadata; all non-refs fields match the previous template. Two pre-solve setup failures are retained (missing metadata, then existing candidate output); no optimization ran in them. Archived only that generated preflight candidate after checking absolute paths stay under the output directory. Frozen20tests and original March hour152 native replay pass with unchanged before/after clean SHA. Started monthly_presolve_campaign_v3_20260914 at10:15:51UTC; actual PID25908,venv43112,exec76968. Main launch/audit records and heartbeat now reference this version. No previous successful weeks are reused; all12 weeks require fresh Prepare and validation.

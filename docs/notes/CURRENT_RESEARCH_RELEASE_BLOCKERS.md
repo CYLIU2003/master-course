@@ -1,5 +1,7 @@
 # Current research release blockers
 
+最新実行: 固定 `829e3983`・前後clean確認後、2026-09-14 19:15 JSTから同じ月別12週を再計算中。開始時点0/12週。全体2297 passed/既存PPT証拠2failed、独立レビュー残P0/P1/P2ゼロ、凍結後20testsと元の失敗時刻のSOC検証まで通過。12週の完走/独立監査、最終季節別の整理、既存研究採用条件は未完了でBLOCKEDを維持する。記録はmainの `output/monthly_fair_weeks_20260914/presolve_rerun_launch.json` と `monthly_presolve_independent_audit.json`。
+
 新版の状況（2026-09-14 18:52 JST）: 固定 `8acd8beb` の1・2月が各168時間・672 slot、最終物理・会計、各169求解の数値設定、全接続、前後cleanを通過し、独立監査済み。2月の確定費用4,221,934.623206円。[新版の2/12週の結果表](SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md)。3月hour 152でSOC再検証が失敗して停止。対象車のnative terminal=223.35762 kWhに対し、保存充電・走行による再計算は223.35761781498206 kWh。152/168時間まで受理、4〜12月は未実行。許容誤差を緩めず原因を診断中で、全12週・季節別整理は未完了。既存の研究採用条件は残り、BLOCKEDを維持する。
 
 3月hour 152の原本再求解でも同じSOC不一致を再現。Presolve=0の共通設定により単独診断の全経路は通過したが、全体検証で見つけた未宣言の契約超過可否の解釈不一致も修正し、55件の関連テストを通過。最終全体検証は2,297 passed / 既存資料2 failed、追加独立レビュー残P0/P1/P2ゼロ。新clean版の12週実行が必要。[診断記録](SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。

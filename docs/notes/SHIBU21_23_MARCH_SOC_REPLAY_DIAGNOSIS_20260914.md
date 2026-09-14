@@ -57,3 +57,7 @@ mainの `output/monthly_fair_weeks_20260914/` 配下:
 ## 最終コード検証
 
 全体回帰は **2,297 passed / 既存PowerPoint証拠2 failed、103.93秒**（`output/monthly_fair_weeks_20260914/pytest-presolve-final-contract-release.xml` と同名log）。既存の失敗は `test_original_and_all_bound_sources_unchanged` と `test_unrelated_presentation_parts_remain_byte_identical` で、研究資料のhash/byte照合に関する未解決項目として維持する。新規失敗は0件。Lunaの `march_numeric_policy_review.json` で残P0/P1/P2ゼロ、レビュー対象hashを最終コードへ照合した。これを研究採用やモデル完成とは扱わず、新しい固定版の月別diagnostic実行へ進める。
+
+## 新しい固定版の実行
+
+clean SHA `829e39835327b75c227737f9a5f4d3a76670adf1` の `C:/master-course-worktrees/shibu21-23-monthly-presolve-20260914` で、凍結後20テストと元hour152の全経路検証を通過。後者は前後同SHA/clean、native Presolve=0、最大制約違反6.6763e-11。2026-09-14 19:15 JSTに `output/monthly_presolve_campaign_v3_20260914` を開始した。開始時点0/12週、1月Prepare中。初回2つの起動は求解前に親シナリオ管理JSONの不足、続いて最初の事前生成出力との衝突で停止して保存。管理JSONの11参照先だけを移設し、その他の全フィールド同一、60台親シナリオの読込みを確認した。47入力ファイルはbyte/hash一致。事前生成データは `source_candidate_preflight_missing_parent` に保存し、v3では新規作成する。これらの事前準備失敗に求解済みの週はない。

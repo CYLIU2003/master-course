@@ -1,5 +1,7 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
+最新実行: 2026-09-14 19:15 JSTに固定 `829e3983` から同じ12週を開始。worktree `C:/master-course-worktrees/shibu21-23-monthly-presolve-20260914`、campaign `output/monthly_presolve_campaign_v3_20260914`、main監査 `output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json`。開始時点0/12週。最終報告は `SHIBU21_23_MONTHLY_PRESOLVE_RESULTS_20260914` へ作成し、以下の過去版と混ぜない。[数値修正・検証](SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。
+
 新版の途中結果（2026-09-14 18:52 JST）: [固定8acd8bebの1・2月結果と原本](SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md)。2/12週が完走・独立監査済み。3月はhour 152のSOC再検証で停止し、152/168時間まで受理、4〜12月は未実行。旧版の結果表は初回試行の履歴として保持する。
 
 季節差の範囲: 月別にPV履歴・学習済みPV予測を適用する一方、走行需要の設定は `distance_average_v0`、各需要倍率1.0、`weather_factor_scalar=1.0` である。固定した電費・燃費を距離へ適用し、気温に応じた空調負荷の月別入力は与えない。冷暖房等を含む季節的需要変化の評価とは区別する。固定版の入力生成・需要計算経路と1月canonical Preparedで確認し、パス・hashを `output/monthly_fair_weeks_20260914/monthly_energy_scope_audit.json` へ保存した。全12週の実出力監査は別途継続する。
