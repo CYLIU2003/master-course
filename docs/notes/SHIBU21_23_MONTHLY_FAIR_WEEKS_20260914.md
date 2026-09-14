@@ -1,5 +1,7 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
+季節差の範囲: 月別にPV履歴・学習済みPV予測を適用する一方、走行需要の設定は `distance_average_v0`、各需要倍率1.0、`weather_factor_scalar=1.0` である。固定した電費・燃費を距離へ適用し、気温に応じた空調負荷の月別入力は与えない。冷暖房等を含む季節的需要変化の評価とは区別する。固定版の入力生成・需要計算経路と1月canonical Preparedで確認し、パス・hashを `output/monthly_fair_weeks_20260914/monthly_energy_scope_audit.json` へ保存した。全12週の実出力監査は別途継続する。
+
 再実行: 初回の数値的な停止を対処し、`8acd8beb` のclean版で2026-09-14 17:08 JSTに同じ12週を最初から開始した。新worktreeは `C:/master-course-worktrees/shibu21-23-monthly-numeric-20260914`、出力は `output/monthly_numeric_campaign_20260914`、独立監査はmainの `output/monthly_fair_weeks_20260914/monthly_numeric_independent_audit.json`。初回3週を新版の集計へ流用しない。上記の新しいcampaign/auditを結果集計CLIへ指定する。[修正と最終検証](SHIBU21_23_APRIL_NUMERIC_DIAGNOSIS_20260914.md)。
 
 途中結果: [月別結果表と原本hash](SHIBU21_23_MONTHLY_RESULTS_20260914.md)を追加した。1〜3月の3週は完走・物理・会計照合を通過。4月はhour 023のStage 2がinfeasibleを返して停止し、5〜12月は未実行。週間会計が成立しない失敗週を費用表へ補完しない。以下は開始時点の設計・検査記録。

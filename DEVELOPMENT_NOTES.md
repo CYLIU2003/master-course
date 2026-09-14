@@ -1,5 +1,9 @@
 # Development Notes
 
+## 2026-09-14 季節比較に含める需要変化の範囲
+
+固定版 `8acd8beb` のconfigure_doc、距離ベース需要計算、車両別電費・燃費の求解経路と1月canonical Preparedを照合した。`trip_energy_model=distance_average_v0`、需要倍率はいずれも1.0、`weather_factor_scalar=1.0`、月別の気温・空調負荷系列は入力していない。PV履歴・予測と配車・充電の対応を記述する比較であり、冷暖房等を含む季節的需要変化の検証と解釈しない旨を計画・結果レポートの定型文へ追記した。証拠は `monthly_energy_scope_audit.json`。入力やモデルを追加・変更していない。直前のLunaレビューは `61d9f260` の数値集計部分を対象とし、この追記は主張範囲の明確化のみである。
+
 ## 2026-09-14 月別・季節別レポートの数値に基づく考察
 
 集計コード・テストのLuna独立静的レビューでP0/P1/P2は0件。`output/monthly_fair_weeks_20260914/monthly_report_narrative_review.json` の3ファイルhashと現行bytesの一致を確認した。レビュー担当はテスト実行・図の描画をしておらず、23テストと仮データ図の表示確認は主担当の検証として区別する。実結果の全12週照合・図の確認は未完了。

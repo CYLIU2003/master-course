@@ -353,6 +353,7 @@ def markdown(data: dict, figure_name: str | None) -> str:
         "費用原本は各週の `rolling_hourly_chain/executed_day_accounting.json`。日別台帳、PV/購入flowの672 slot合計、ピーク、費用内訳、契約超過量×500円/kWhを再照合した。丸め前の値と原本パス・SHAは同名JSONに保存する。PV利用量はバスへの直接供給とBESSへの充電の和であり、BESS放電を再加算しない。営業便距離は停留所座標に基づく地理的代理距離で、回送を含む実道路走行距離ではない。", "",
         "[選択週の日射量と月全体の比較](SHIBU21_23_MONTHLY_IRRADIANCE_CONTEXT_20260914.md)では、3月の選択週は月全体の日平均GHIより35.2%少なく、10月は20.2%多い。週選択は固定し、この天候条件も解釈へ含める。冬12/1/2月は同年内の非連続な週である。", "",
         "各週は同じ初期状態へ戻して開始する。BESSは初期3,000 kWhから最低1,200 kWhまで使える条件で、在庫減少をJSONに併記する。季節別の合計を連続21日間の費用とは扱わない。2026年時刻表・2025年評価日・2024年のみのclimatology予測であり、実運行再現やSolcast予測技能を示さない。", "",
+        "季節別入力は日付ごとのPV履歴と学習済みPV予測を扱う。走行需要は固定の電費・燃費を用いた距離ベースの設定で、気温に応じた空調負荷の月別変化は入力していない。したがって、結果を冷暖房等を含む季節的な需要変化の評価とは解釈しない。", "",
         "Stage 1 gap、二段階解法の統合最適性、正式research fleet contract、既存PowerPoint証拠2件の採用条件は別に残る。**DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS、研究採用BLOCKED**。各月1週から月平均・年平均・季節一般やPV単独の因果を主張しない。", "",
         "[選択日・固定条件・集計規則](SHIBU21_23_MONTHLY_FAIR_WEEKS_20260914.md)"]
     return "\n".join(lines) + "\n"
