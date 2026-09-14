@@ -71,3 +71,5 @@ C:/master-course/.venv/Scripts/python.exe -X utf8 scripts/benchmarks/run_exact_s
 ## 実行場所
 
 凍結branchは `codex/shibu21-23-monthly-fair-20260914`、worktreeは `C:/master-course-worktrees/shibu21-23-monthly-fair-20260914`。進捗はその配下の `output/monthly_fair_weeks_campaign_20260914/progress.json`、週別結果は `cases/<開始日>/summary.json`、全体結果は完了後の `summary.json`。全体ログは `output/monthly_fair_weeks_campaign_20260914.log`。失敗時は後続を未実行と明示して停止する。監視と独立照合は、ユーザーの既存希望どおりGPT-5.6 Lunaが担当する。
+
+このタスクの既存heartbeatへ完了後の結果整理を追加した。月別計算中の状態確認は30分間隔だが、Solcastの確認・取得は日本時間12時以降、同日未確認の場合だけ、一日最大1リクエストの既存制限を維持する。通常の計算中は通知せず、完了・失敗等だけを知らせる。月別報告後は元の日次12時のSolcast取得設定へ戻す。
