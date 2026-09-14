@@ -2,6 +2,8 @@
 
 ## 2026-09-14 Stage 2の厳密SOC境界に対する数値集約の停止
 
+新clean版による単一時間の再検査では、ネイティブmetadataにAggregate=0を記録した上でfeasibleを確認した。公開solver_metadataへの転送も追加し、監査側が他の数値設定と同じ場所から検査できるようにする。旧状態を使ったこの再検査は回帰診断専用であり、新週間結果として採用しない。
+
 4月のhour 023を元のPrepared・固定day-ahead・引き継ぎ状態から再構築し、Aggregate=0だけでfeasibleを確認した。Stage 2へ一律に同設定を適用しmetadataにも記録する。制約・科学的許容誤差・FeasibilityTol/IntFeasTol・時間予算を維持し、fallback/repairや選択的再試行を追加しない。関連75テスト通過。全月を新clean版から再実行し、旧3週を新版へ流用しない。[原因・原本・比較への影響](docs/notes/SHIBU21_23_APRIL_NUMERIC_DIAGNOSIS_20260914.md)。
 
 ## 2026-09-14 月別12週の運行日構成と予測来歴の照合
