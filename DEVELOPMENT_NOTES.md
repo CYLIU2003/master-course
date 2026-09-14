@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-14 17:49 JST 新版1月の完走・独立照合と結果表
+
+`8acd8beb` の1月6日週が168/168時間・672/672 slotを完走。Lunaの独立監査は物理・会計、台帳差0.0円、60台（BEV35/ICE25）、5/1/1、全接続・pruning0・repair/fallbackなし、前後clean一致、day-ahead＋全168 hourlyのnative Aggregate0・FeasibilityTol/IntFeasTol各1e-9を通過した。監査のstatusを原本case statusへ揃え、独立監査状態をaudit_statusへ分離、canonical hashキーを追加し、集計CLIとの記録形式の不一致を解消した。
+
+主担当の集計CLIでも原本hash、日別台帳、費用内訳、672区間のPV/購入flow、受電ピーク、契約超過料金を再照合。確定費用4,327,543.646205円、車両使用費以外227,543.646205円、使用車両日数205、購入量6,251.190 kWh、ピーク200 kW、PV抑制率17.17%。`SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md/.json` に1/12週の途中結果として保存し、旧版の3週は別の履歴として保持した。2月のday-ahead計算を実PID40896で確認。全12週・季節別の最終整理は未完了、研究採用BLOCKEDを維持する。
+
 ## 2026-09-14 季節比較に含める需要変化の範囲
 
 固定版 `8acd8beb` のconfigure_doc、距離ベース需要計算、車両別電費・燃費の求解経路と1月canonical Preparedを照合した。`trip_energy_model=distance_average_v0`、需要倍率はいずれも1.0、`weather_factor_scalar=1.0`、月別の気温・空調負荷系列は入力していない。PV履歴・予測と配車・充電の対応を記述する比較であり、冷暖房等を含む季節的需要変化の検証と解釈しない旨を計画・結果レポートの定型文へ追記した。証拠は `monthly_energy_scope_audit.json`。入力やモデルを追加・変更していない。直前のLunaレビューは `61d9f260` の数値集計部分を対象とし、この追記は主張範囲の明確化のみである。
