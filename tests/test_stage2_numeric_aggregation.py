@@ -35,6 +35,8 @@ def test_exact_boundary_is_solved_without_accepting_real_soc_surplus(
             assert model.Params.IntFeasTol == 1.0e-9
             assert model.Params.Presolve == 0
             assert model.Params.Aggregate == 0
+            assert model.Params.MIPFocus == 1
+            assert model.Params.Method == 1
             if expected_feasible:
                 assert model.Status == gp.GRB.OPTIMAL
                 assert model.ConstrVio <= 1.0e-9
@@ -71,6 +73,8 @@ def test_march_native_model_preserves_replayed_soc_without_presolve(tmp_path):
             _configure_stage2_numerics(model, OptimizationConfig())
             assert model.Params.Aggregate == 0
             assert model.Params.Presolve == 0
+            assert model.Params.MIPFocus == 1
+            assert model.Params.Method == 1
             model.Params.Seed = 42
             model.Params.Threads = 12
             model.Params.MIPGap = 0.1

@@ -3267,6 +3267,11 @@ def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[s
         # never repair states, relax tolerances, or retry failed hours.
         "Aggregate": 0,
         "Presolve": 0,
+        # The identical November MPS had no incumbent after 600 s with the
+        # automatic method. This uniform search policy passed independent
+        # physical replay in 21.32 s without changing the feasible region.
+        "MIPFocus": 1,
+        "Method": 1,
     }
     for name, value in parameters.items():
         model.setParam(name, value)
@@ -23228,6 +23233,8 @@ class GurobiMILPAdapter:
                 "stage2_gurobi_integrality_tol": stage2_integrality_tol,
                 "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
                 "stage2_gurobi_presolve": stage2_numerics["Presolve"],
+                "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"],
+                "stage2_gurobi_method": stage2_numerics["Method"],
                 "gurobi_threads": configured_threads,
                 "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
                 "stage1_time_limit_sec_effective": (
@@ -23573,6 +23580,8 @@ class GurobiMILPAdapter:
             "stage2_gurobi_integrality_tol": stage2_integrality_tol,
             "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
             "stage2_gurobi_presolve": stage2_numerics["Presolve"],
+            "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"],
+            "stage2_gurobi_method": stage2_numerics["Method"],
             "gurobi_threads": configured_threads,
             "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
             "stage2_contract_overage_enabled": (

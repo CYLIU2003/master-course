@@ -41,3 +41,12 @@ campaignの `completed_weeks` は成功週だけではなく、失敗で終了�
 MIPFocus=1は実行可能解の発見を優先する設定であり、[Gurobiのパラメータ仕様](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parameter-MIPFocus)を参照した。Method=1はdual simplexで、数値的な問題の診断候補として[公式の数値計算ガイド](https://docs.gurobi.com/projects/optimizer/en/current/concepts/numericguide/numeric_parameters.html)を参照した。今回のモデルで改善するかは未確定。物理制約、許容差1e-9、Aggregate/Presolve=0、seed42、threads12、gap0.1を保持する。各整数モデルのMPS SHAを原本と照合し、解が出た場合のみ独立物理検証を行う。primal/dual residual等のnative情報と詳細ログを保存する。
 
 探索診断の実Python PIDは41240、2026-09-15 01:57:12 JST開始。終了時に限って同じスクリプトから既存taskへ1回queueし、`dispatch.json` に試行・受理結果を保存する。全12週は未完了、メールは未送信。モデル修正や本実験の予算変更は、この限定診断の結果を確認してから判断する。
+
+
+## 探索診断の結論と全月共通の再実行（2026-09-15）
+
+同一配車・同一MPSのLP緩和は46.68秒で最適、目的値158,438.784618。MIPFocus=1だけでは120秒で解なし。MIPFocus=1・Method=1では21.32秒で実行可能解を取得し、目的値158,564.361884、bound158,438.784618、gap0.0791964%。独立FeasibilityCheckerのerrorsは空、物理検証VALID/accepted=trueで全違反件数0だった。native ConstrVio=7.401e-11、BoundVio/IntVio=0。モデルSHAは上記原本と一致し、固定fa0c22bfは前後cleanである。
+
+採用する共通探索設定はMIPFocus=1・Method=1。到達する `_solve_thesis_stage2_charging_dispatch` の `_configure_stage2_numerics` へ適用し、成功・解なし両経路のmetadataに保存する。day-aheadとrolling全月に同じ設定を使う。制約、目的関数、時間枠、許容差、Presolve/Aggregate、入力は維持する。探索経路が変わるため旧10週は引き継がず、新clean release branchで全12週を一からPrepare・求解する。11月の診断は設定選定用で、週間結果にも独立した効果検証にも数えない。11月だけで校正した設定が他月でも成立するかは新規全12週で確認する。
+
+47 focused tests通過。全体は2323 passed / 既存PPT原本・構成不一致2 failed（109.51秒）、新しい失敗なし。observer/report/evidenceは51 tests通過。独立レビューのsolver変更P0/P1残件0。新しい保存先は `output/monthly_search_20260915/`、結果表は `SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.md`。旧版の監査・通知記録・図表は別に保存。全12週と最終図表の検査が完了するまでメールは送らない。研究採用BLOCKEDを維持する。

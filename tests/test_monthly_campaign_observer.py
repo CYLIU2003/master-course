@@ -61,6 +61,27 @@ def test_no_model_or_report_calls_for_unchanged_running_case(setup, monkeypatch)
     assert watcher.read_json(observer.output / "state.json")["status"] == "RUNNING"
 
 
+def test_first_week_runs_without_inventing_a_completed_report(setup, monkeypatch):
+    observer, progress = setup
+    progress["completed_weeks"] = []
+    watcher.write_json(observer.campaign / "progress.json", progress)
+    watcher.write_json(observer.audit, {"expected_sha": "frozen-sha", "weeks": {}})
+    observer.report.with_suffix(".json").unlink()
+    monkeypatch.setattr(watcher, "solver_is_alive", lambda *_: True)
+    monkeypatch.setattr(watcher.subprocess, "run", lambda *_args, **_kw: pytest.fail("Unexpected command"))
+    assert observer.step() is False
+    assert not observer.report.with_suffix(".json").exists()
+    assert watcher.read_json(observer.output / "state.json")["independently_audited_weeks"] == 0
+
+
+def test_release_deployments_have_separate_binding_and_artifacts():
+    old = watcher.deployment_paths({})
+    new = watcher.deployment_paths({"deployment": "search"})
+    assert all(left != right for left, right in zip(old, new))
+    with pytest.raises(ValueError, match="Unknown"):
+        watcher.deployment_paths({"deployment": "arbitrary-output"})
+
+
 def test_exited_solver_is_not_completion(setup, monkeypatch):
     observer, _ = setup
     monkeypatch.setattr(watcher, "solver_is_alive", lambda *_: False)

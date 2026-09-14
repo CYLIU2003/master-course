@@ -49,3 +49,9 @@ observerと既存の月別集計・証拠収集のfocused testsは47件通過（
 引継ぎ試験中にREADMEへ別担当の導入段落が追加され、旧checkpoint helperの固定段落位置が不一致となった。週間監査とソルバーは正常だった。更新対象の一意な段落を検索する方式へ修正し、他の導入文とLF/CRLFを保存する回帰テストを通過。試験停止のqueue `01a0a00f-3fd7-70c2-8224-702a351f882b` は解決済みで、`setup_failure_resolution.json` と旧state/dispatchを保持した。この古い試験イベントで重複の調査や停止を行わない。4月の監査・集計・文書同期を修正版で実行し成功した。
 
 独立レビューでは設定の再開同一性とfrozenへの書込み境界にP1が2件あり、固定設定SHA・許可path境界を追加して解消した。修正後の再確認で対象observerとcheckpoint処理のP0/P1残件0。このコードレビュー通過は研究採用BLOCKEDを解除しない。
+
+## 2026-09-15 探索設定版への切替
+
+旧fa0c22bf campaignは10週成功・11月停止・12月未実行として保存し、旧observerは終了した。以下の旧版手順の固定パスを新しい検索設定版へ読み替える。新しいobserver設定/state/bundle/dispatch/receiptは `output/monthly_search_20260915/script_observer/`、launchと独立監査はその親ディレクトリ。固定SHAは新launch/config/bundleの一致を必ず確認する。新しいsubjectは `MC2025-<新SHA先頭8文字>`、Gmail送信済み検索もその一意件名を使う。旧版の10週や診断の解を新しい完了判定へ混ぜない。
+
+新しい結果表は `docs/notes/SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.md/.json`、図は `docs/notes/figures/shibu21_23_monthly_search_20260915.png/.svg`。監視は同じスクリプトのallowlisted search deploymentを使い、別の固定bindingで二重通知を防ぐ。0週段階では結果表を作らず、1週目が独立監査を通過してから自動生成する。全12週の完了後の実図確認・承認済み宛先への1通送信・実ID保存という手順は上記と同じ。

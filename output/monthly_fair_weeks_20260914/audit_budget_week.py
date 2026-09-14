@@ -27,6 +27,7 @@ FORECAST_DIR = FROZEN_ROOT / "output" / "monthly_fair_weeks_20260914" / "forecas
 MONTHLY_INPUT_IMPORT = FROZEN_ROOT / "output" / "monthly_input_import.json"
 TOLERANCE = 1.0e-6
 NATIVE_COUNT = 169
+EXPECTED_SEARCH_CONTROLS: dict[str, int] = {}
 
 sys.path.insert(0, str(ROOT))
 from scripts.benchmarks.monthly_week_contract import validate_balanced_week
@@ -245,9 +246,10 @@ def audit_native_entries(
             "stage2_gurobi_presolve": 0,
             "stage2_gurobi_feasibility_tol": 1.0e-9,
             "stage2_gurobi_integrality_tol": 1.0e-9,
+            **EXPECTED_SEARCH_CONTROLS,
         }
         for key, value in expected.items():
-            if metadata[key] != value:
+            if metadata.get(key) != value:
                 reasons.append(key)
         if metadata["stage2_has_feasible_incumbent"] is not True:
             reasons.append("stage2_has_feasible_incumbent")
@@ -271,6 +273,7 @@ def audit_native_entries(
             "stage2_gurobi_integrality_tol": metadata["stage2_gurobi_integrality_tol"],
             "feasible": document.get("feasible"),
             "quality": quality_data,
+            "search_controls": {key: metadata.get(key) for key in EXPECTED_SEARCH_CONTROLS},
         })
 
     def one_value(key: str) -> Any:
@@ -576,7 +579,7 @@ def write_audit(week: str, output: Path) -> dict[str, Any]:
     if existing:
         require(existing.get("expected_sha") == EXPECTED_SHA, "existing audit has a different source SHA")
         require(existing.get("frozen_root") == str(FROZEN_ROOT), "existing audit has a different frozen root")
-        require(existing.get("campaign_output") == "output/monthly_budget_campaign_20260914",
+        require(existing.get("campaign_output") == CAMPAIGN.relative_to(FROZEN_ROOT).as_posix(),
                 "existing audit has a different campaign")
     campaign_design = read_json(CAMPAIGN / "design.json")
     declared_weeks = campaign_design.get("campaign_declared_weeks")
@@ -602,7 +605,7 @@ def write_audit(week: str, output: Path) -> dict[str, Any]:
     report.update({
         "schema_version": "monthly_budget_independent_audit_v1",
         "frozen_root": str(FROZEN_ROOT), "expected_sha": EXPECTED_SHA,
-        "campaign_output": "output/monthly_budget_campaign_20260914", "status": campaign_status,
+        "campaign_output": CAMPAIGN.relative_to(FROZEN_ROOT).as_posix(), "status": campaign_status,
         "observed_at_utc": datetime.now(timezone.utc).isoformat(), "weeks": weeks,
         "expected_week_count": len(declared_weeks), "selected_weeks": declared_weeks,
         "campaign_progress": {

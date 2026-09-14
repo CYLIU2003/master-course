@@ -372,9 +372,11 @@ def main() -> None:
     parser.add_argument("--audit", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=ROOT / "docs/notes/SHIBU21_23_MONTHLY_RESULTS_20260914")
     parser.add_argument("--partial", action="store_true")
+    parser.add_argument("--figure-name", default="shibu21_23_monthly_20260914")
     args = parser.parse_args()
     data = collect(args.campaign, args.audit, partial=args.partial)
-    figure_name = "shibu21_23_monthly_20260914" if data["status"] == "COMPLETED" else None
+    require(Path(args.figure_name).name == args.figure_name, "Figure name must be a filename stem")
+    figure_name = args.figure_name if data["status"] == "COMPLETED" else None
     if figure_name:
         render_figure(data["weeks"], args.output.parent / "figures" / figure_name)
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -24,6 +24,15 @@ ROOT = Path(__file__).resolve().parents[1]
 DEPLOYMENT_RELATIVE = Path("output/monthly_fair_weeks_20260914")
 
 
+def deployment_paths(config: dict) -> tuple[Path, str, str]:
+    version = config.get("deployment", "budget")
+    require(version in {"budget", "search"}, "Unknown observer deployment")
+    if version == "search":
+        return (Path("output/monthly_search_20260915"),
+                "SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915", "shibu21_23_monthly_search_20260915")
+    return DEPLOYMENT_RELATIVE, "SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914", "shibu21_23_monthly_20260914"
+
+
 def config_hash(config: dict) -> str:
     return hashlib.sha256(json.dumps(config, sort_keys=True, ensure_ascii=False,
                                      separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -33,12 +42,13 @@ def validate_configuration(config: dict) -> None:
     """Keep all mutable paths in main, with a stable lock and authorized addressee."""
     root = ROOT.resolve()
     require(Path(config["root"]).resolve() == root, "Observer root must be the main checkout")
-    base = root / DEPLOYMENT_RELATIVE
+    relative, report_name, figure_name = deployment_paths(config)
+    base = root / relative
     expected = {"output": base / "script_observer", "audit": base / "monthly_budget_independent_audit.json",
                 "audit_script": base / "audit_budget_week.py", "checkpoint_script": base / "update_monthly_checkpoint.py",
                 "report_script": root / "scripts/build_monthly_interpretation.py",
-                "report_stem": root / "docs/notes/SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914",
-                "figure_stem": root / "docs/notes/figures/shibu21_23_monthly_20260914",
+                "report_stem": root / "docs/notes" / report_name,
+                "figure_stem": root / "docs/notes/figures" / figure_name,
                 "python": root / ".venv/Scripts/python.exe"}
     for key, path in expected.items():
         require(Path(config[key]).resolve() == path.resolve(), f"Unexpected observer {key} path")
@@ -59,7 +69,7 @@ def validate_configuration(config: dict) -> None:
 def bind_configuration(config: dict, *, read_only: bool) -> None:
     """Binding lives at a fixed main path so changing output cannot reset deduplication."""
     digest = config_hash(config)
-    binding = ROOT / DEPLOYMENT_RELATIVE / "observer_binding.json"
+    binding = ROOT / deployment_paths(config)[0] / "observer_binding.json"
     if binding.exists():
         require(read_json(binding).get("config_sha256") == digest, "Observer configuration changed")
     state_path = Path(config["output"]) / "state.json"
@@ -204,6 +214,8 @@ class Observer:
     def publish(self, *, complete: bool) -> None:
         arguments = ["--campaign", str(self.campaign), "--audit", str(self.audit),
                      "--output", str(self.report)]
+        if self.config.get("deployment") == "search":
+            arguments.extend(["--figure-name", Path(self.config["figure_stem"]).name])
         if not complete:
             arguments.append("--partial")
         self.run_python(self.config["report_script"], *arguments)
@@ -220,6 +232,12 @@ class Observer:
         audit = read_json(self.audit)
         require(audit["expected_sha"] == self.config["source_git_sha"], "Wrong independent audit SHA")
         require(set(audit["weeks"]) <= set(completed), "Audit contains an uncompleted week")
+        if not eligible:
+            require(solver_is_alive(self.config["solver_pid"], self.config["solver_started_at_utc"]),
+                    "Solver exited before the first completed week")
+            self.checkpoint("RUNNING", completed_weeks=[], independently_audited_weeks=0,
+                            active_week=progress.get("active_week"), published_audit_sha256=sha256(self.audit))
+            return False
         changed = False
         for week in eligible:
             record = audit["weeks"].get(week, {})
@@ -233,8 +251,9 @@ class Observer:
         if complete and audit["status"] != "COMPLETED":
             self.run_python(self.config["audit_script"], "--week", eligible[-1], "--audit-output", str(self.audit))
             changed = True
-        report = read_json(self.report.with_suffix(".json"))
-        stale = report["independent_audit"]["sha256"] != sha256(self.audit)
+        report_path = self.report.with_suffix(".json")
+        report = read_json(report_path) if report_path.exists() else {}
+        stale = report.get("independent_audit", {}).get("sha256") != sha256(self.audit)
         state_path = self.output / "state.json"
         state = read_json(state_path) if state_path.exists() else {}
         unpublished = state.get("published_audit_sha256") != sha256(self.audit)

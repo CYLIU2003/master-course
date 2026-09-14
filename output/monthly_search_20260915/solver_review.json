@@ -1,0 +1,12 @@
+{
+  "scope": "Stage2 common numerical search controls",
+  "reviewer": "four_route_diagnostic_luna",
+  "p0": 0,
+  "p1": 0,
+  "path_verified": true,
+  "later_override": false,
+  "physical_guards_unchanged": true,
+  "same_mps": true,
+  "physical_accepted": true,
+  "claim": "Calibration diagnostic only, no weekly result, research BLOCKED"
+}
