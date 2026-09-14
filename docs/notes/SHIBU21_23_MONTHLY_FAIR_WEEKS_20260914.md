@@ -1,6 +1,6 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
-最新の月別12週は2026-09-14 20:02 JSTに固定 `fa0c22bf` から新規実行を開始した。前日Stage 2を全月最大120秒へ揃え、他の時間枠・制約・予測・週選択を保持する。開始時点0/12週、1月Prepare中。rootは `C:/master-course-worktrees/shibu21-23-monthly-budget-20260914`、campaignは `output/monthly_budget_campaign_20260914`。mainの起動記録は `output/monthly_fair_weeks_20260914/budget_rerun_launch.json`、独立監査は `monthly_budget_independent_audit.json`。完走・週会計・12月分の季節別整理は未完了。以下の停止版と混ぜない。
+最新の固定版 `fa0c22bf` は1月の1週間が完走・独立監査済み（1/12週、2026-09-14 20:52 JST）。総費用4,309,467.438809円、購入量5,631.900 kWh、最大受電206.497 kW。168時間・672 slot、物理・会計・日別台帳差0円、全169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。2月以降の計算と最終季節別整理を継続中で、研究採用はBLOCKED。 [新版の結果表・原本hash](SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
 
 最新実行: 2026-09-14 19:15 JST開始の固定 `829e3983` は1月の前日計画で停止した（19:37 JST確認）。Stage 2の30秒制限でincumbentなし、`DAY_AHEAD_FAILED`、完走0/12週、rolling未開始。worktree `C:/master-course-worktrees/shibu21-23-monthly-presolve-20260914`、campaign `output/monthly_presolve_campaign_v3_20260914`、main監査 `output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json`。同一nativeモデルの120秒枠で最初の解が約36.5秒後に得られ、SOC・物理検証を通過した。全月の前日Stage 2を最大120秒へ揃えて新規実行する。[変更根拠と診断](SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)。停止週の週間費用を補完せず、以下の過去版の完走週も流用しない。[数値修正・検証](SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。
 

@@ -4319,3 +4319,8 @@ The monthly report now explains that fixed seed/threads/time limits do not ensur
 ## 2026-09-14 共通予算の固定版で12週を開始
 
 最新の月別12週は2026-09-14 20:02 JSTに固定 `fa0c22bf` から新規実行を開始した。前日Stage 2を全月最大120秒へ揃え、他の時間枠・制約・予測・週選択を保持する。開始時点0/12週、1月Prepare中。rootは `C:/master-course-worktrees/shibu21-23-monthly-budget-20260914`、campaignは `output/monthly_budget_campaign_20260914`。mainの起動記録は `output/monthly_fair_weeks_20260914/budget_rerun_launch.json`、独立監査は `monthly_budget_independent_audit.json`。完走・週会計・12月分の季節別整理は未完了。以下の停止版と混ぜない。 凍結後25 passed（4.36秒）、47入力同hash・親metadata参照移設とcleanを確認した。新しい実行中ソースは変更しない。
+
+
+## 2026-09-14 共通120秒版の1月完走と結果表
+
+最新の固定版 `fa0c22bf` は1月の1週間が完走・独立監査済み（1/12週、2026-09-14 20:52 JST）。総費用4,309,467.438809円、購入量5,631.900 kWh、最大受電206.497 kW。168時間・672 slot、物理・会計・日別台帳差0円、全169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。2月以降の計算と最終季節別整理を継続中で、研究採用はBLOCKED。 受電200 kWの契約超過1.624250000553 kWhに812.125000276318円を計上しており、物理上限と有料契約超過を混同しない。監査schemaで欠けていたPV fallback flagと全接続数を原本から補い、169件のfallback/PV proxy補完なし、接続候補before/after78,647,760・pruned0を照合。監査記録を受けた独立の集計CLIも原本hash・PV収支・台帳・費用を再検証し、SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md/.jsonを生成した。季節平均・図は12週完了まで生成しない。

@@ -1,6 +1,6 @@
 # Current research release blockers
 
-最新の月別12週は2026-09-14 20:02 JSTに固定 `fa0c22bf` から新規実行を開始した。前日Stage 2を全月最大120秒へ揃え、他の時間枠・制約・予測・週選択を保持する。開始時点0/12週、1月Prepare中。rootは `C:/master-course-worktrees/shibu21-23-monthly-budget-20260914`、campaignは `output/monthly_budget_campaign_20260914`。mainの起動記録は `output/monthly_fair_weeks_20260914/budget_rerun_launch.json`、独立監査は `monthly_budget_independent_audit.json`。完走・週会計・12月分の季節別整理は未完了。以下の停止版と混ぜない。
+最新の固定版 `fa0c22bf` は1月の1週間が完走・独立監査済み（1/12週、2026-09-14 20:52 JST）。総費用4,309,467.438809円、購入量5,631.900 kWh、最大受電206.497 kW。168時間・672 slot、物理・会計・日別台帳差0円、全169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。2月以降の計算と最終季節別整理を継続中で、研究採用はBLOCKED。 [新版の結果表・原本hash](SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
 
 最新実行: 固定 `829e3983` は1月day-aheadで `DAY_AHEAD_FAILED / STAGE2_NO_INCUMBENT`、campaignは `STOPPED_AFTER_FAILED_CASE`（2026-09-14 19:37 JST確認）。完走0/12週、rolling受理0時間。全Stage 2共通のAggregate=0/Presolve=0と許容誤差1e-9を保持した30秒制限でincumbentが得られなかった。週間費用は未成立。同一nativeモデルの120秒枠で約36.5秒後に最初の実行可能解を得て、独立SOC・物理検証が通過した。[全月共通120秒への変更根拠](SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)。新しいclean固定版から12週の新規実行が必要。全体2297 passed/既存PPT証拠2failed、独立レビュー残P0/P1/P2ゼロ、凍結後20testsと元の失敗時刻のSOC検証通過はコード検証の証拠であり、週間実行を保証しない。12週の完走/独立監査、最終季節別の整理、既存研究採用条件は未完了でBLOCKEDを維持する。記録はmainの `output/monthly_fair_weeks_20260914/presolve_rerun_launch.json` と `monthly_presolve_independent_audit.json`。
 
