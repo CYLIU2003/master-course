@@ -52,3 +52,5 @@ MIPFocus=1は実行可能解の発見を優先する設定であり、[Gurobiの
 47 focused tests通過。全体は2323 passed / 既存PPT原本・構成不一致2 failed（109.51秒）、新しい失敗なし。observer/report/evidenceは51 tests通過。独立レビューのsolver変更P0/P1残件0。新しい保存先は `output/monthly_search_20260915/`、結果表は `SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915.md`。旧版の監査・通知記録・図表は別に保存。全12週と最終図表の検査が完了するまでメールは送らない。研究採用BLOCKEDを維持する。
 
 開始前の追加独立レビューで集計・checkpointの監査状態チェック不足2件を修正。status・audit_status・fully_audited・failure、source/campaign/case rootを必須照合し、未監査・他版データを拒否する。search図は専用名を自動選択し旧版図名を拒否する。追加検証を含む報告系60 tests通過（2.05秒）、再レビューP0/P1残件0。ソルバーの数式・探索設定に追加変更なし。
+
+最終固定版は `10a40c9faa00d0a4725ae0062d6dbaa223f82bfd`。開始前clean、入力47件およびrefs移設11件を再照合し、固定後107 tests通過（3.95秒）。2026-09-15 02:16 JSTに新規12週campaignを開始。solver PID44204、observer PID43300。原本は `C:/master-course-worktrees/shibu21-23-monthly-search-20260915/output/monthly_search_campaign_20260915/`。通常監視はローカルスクリプトのみで、終了時の既存taskへのqueueと最終検査後のメール送信を維持する。
