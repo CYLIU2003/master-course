@@ -79,3 +79,5 @@ mainの独立監査だけを修正し、原本metadataの両値を必須照合�
 ## 2026-09-15 全12週の最終配信前確認
 
 固定7c7c2334の全12週についてcampaign summary/progressのCOMPLETED、前後clean・同一SHA、独立監査12件、最終図表4ファイルのSHAとメール添付のバイト一致を確認した。実PNGの6パネルを表示し、12か月・単位・凡例・余白・診断結果の注記を確認、修正不要。README・開発記録・blocker・計画書は12/12完了と研究採用BLOCKEDで整合。検査記録は現行observerの `final_visual_review.json`。送信の成立は同ディレクトリの `email_receipt.json` に保存する実Gmail message IDで確認し、bundleの作成時email_sent=falseは書き換えない。
+
+送信完了: 2026-09-15、承認済み `g2681320@tcu.ac.jp` へ結果4点を添付して1通送信。Gmailの実message ID / thread IDは `1a0a32dde20e11bc`。送信前の一致0件、送信後の一致1件で実IDも一致した。`email_receipt.json` に送信成功・bundle/payload SHA・結果コミット `0e1b8f86` を保存。GmailのSENT確認であり、相手の受信トレイへの配達確認とは区別する。月別比較と季節別整理の完了を通知し、研究採用BLOCKEDは維持する。
