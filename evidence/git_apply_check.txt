@@ -1,0 +1,2 @@
+Pinned source blob verified.
+git apply --check exit code: 0

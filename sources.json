@@ -1,0 +1,114 @@
+{
+  "checked_on_jst": "2026-09-10",
+  "repository_commit": "5fac09d9a5775192ab8d3e507c5e72a6fd36afe2",
+  "sources": [
+    {
+      "id": "S01",
+      "title": "現行の複数日便複製処理",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/src/optimization/common/builder.py",
+      "scope": "読取範囲830–995行。初日の便を1440分ずつずらす実装。"
+    },
+    {
+      "id": "S02",
+      "title": "暦の検証関数",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/src/optimization/common/service_calendar.py",
+      "scope": "全文を取得。Git blob SHA 65445c15882b11301c7c552c0fd56c1395fe2ab4との一致をローカルで確認。"
+    },
+    {
+      "id": "S03",
+      "title": "既存天候分類",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/src/preprocess/weather/solcast_typical/classify.py",
+      "scope": "日積算capacity factorの大小でrainy/cloudy/sunnyを割り当てる。"
+    },
+    {
+      "id": "S04",
+      "title": "既存代表曲線集計",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/src/preprocess/weather/solcast_typical/aggregate.py",
+      "scope": "季節で分けず、天候クラス別に平均する。"
+    },
+    {
+      "id": "S05",
+      "title": "Solcast取得台帳",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json",
+      "scope": "弦巻の座標・既存CSV・720レコード・8月1日～30日を確認。"
+    },
+    {
+      "id": "S06",
+      "title": "弦巻既存Solcast CSVの末尾",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/data/external/solcast_raw/tsurumaki_2025_08_60min.csv",
+      "scope": "末尾のperiod_endは2025-08-31T00:00:00+09:00。8月31日日中は含まれない。"
+    },
+    {
+      "id": "S07",
+      "title": "開発ノート",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/DEVELOPMENT_NOTES.md",
+      "scope": "2026-09-07/08のSOC上限不整合と未修正状態。今回の再実験記録ではない。"
+    },
+    {
+      "id": "S08",
+      "title": "現在の二条件と研究結果の説明",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/outcome/研究の現在地と進捗資料の詳しい解説.md",
+      "scope": "固定運行日2025-08-05、264便・16路線レコード、別日のPVを与えた比較。数値は診断用。"
+    },
+    {
+      "id": "S09",
+      "title": "Solcast台帳同期",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/scripts/sync_solcast_registry.py",
+      "scope": "CSVを複数見つけても先頭候補だけ選択。複数月の統合ではない。"
+    },
+    {
+      "id": "S10",
+      "title": "時刻表shard読込み",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/src/tokyu_shard_loader.py",
+      "scope": "不明service_idのweekday既定値、SAT_HOLのsaturday扱い等を確認。今回未修正。"
+    },
+    {
+      "id": "S11",
+      "title": "研究コードの作業規約",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5fac09d9a5775192ab8d3e507c5e72a6fd36afe2/AGENTS.md",
+      "scope": "入力・物理・会計・実行証跡の制約。"
+    },
+    {
+      "id": "S12",
+      "title": "東急バス・2026年9月ダイヤ改正",
+      "url": "https://www.tokyubus.co.jp/news/003835.html",
+      "scope": "2026-08-21公表、9月1日実施。弦巻渋21～24の途中停留所時刻変更、始発停留所は変更なし。"
+    },
+    {
+      "id": "S13",
+      "title": "東急バス公式時刻表入口",
+      "url": "https://transfer.navitime.biz/tokyubus/pc/map/Top",
+      "scope": "公式導線を閲覧。agent-browserによる操作・全便取得は未実施。"
+    },
+    {
+      "id": "S14",
+      "title": "渋23時刻表の標本閲覧",
+      "url": "https://transfer.navitime.biz/tokyu/pc/diagram/BusDiagram?orvCode=00018469&rrCd=00005401&updown=1",
+      "scope": "曜日別表の存在を確認。ただし取得表示の基準日が検索表示と不一致で、現行全便の検証済み証拠には用いない。"
+    },
+    {
+      "id": "S15",
+      "title": "Solcast Historic Irradiance API",
+      "url": "https://docs.solcast.com.au/docs/section/irradiance-weather-data",
+      "scope": "Historic endpoint、31日以内、period_end/period、estimated_actuals、Bearer認証、取得フィールドを確認。"
+    },
+    {
+      "id": "S16",
+      "title": "Solcast出力項目",
+      "url": "https://docs.solcast.com.au/docs/output-parameters",
+      "scope": "日射強度の単位・気象項目の定義。"
+    },
+    {
+      "id": "S17",
+      "title": "Solcastプラン・取得条件",
+      "url": "https://www.solcast.com/pricing/irradiance-weather",
+      "scope": "分解能や履歴データの権限は契約条件による。利用者の残枠・権限・料金は未確認。"
+    },
+    {
+      "id": "S18",
+      "title": "agent-browser公式導入",
+      "url": "https://agent-browser.dev/installation",
+      "scope": "指定ツールはこの環境に未導入。npm接続の名前解決に失敗。"
+    }
+  ]
+}

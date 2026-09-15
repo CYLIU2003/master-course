@@ -1,0 +1,22 @@
+{
+  "date_jst": "2026-09-10",
+  "repository": "CYLIU2003/master-course",
+  "read_commit": "5fac09d9a5775192ab8d3e507c5e72a6fd36afe2",
+  "delivery_kind": "source_audit_narrow_patch_preprocessing_prototype_and_implementation_specification",
+  "calendar_source_git_blob": "65445c15882b11301c7c552c0fd56c1395fe2ab4",
+  "calendar_source_hash_verified": true,
+  "calendar_patch_application_checked": true,
+  "local_tests_passed": 33,
+  "test_scope": "isolated calendar module and synthetic weather fixtures",
+  "official_route_timetable_review": "partial_web_review_not_agent_browser_not_all_trips",
+  "solcast_new_records_downloaded": 0,
+  "empirical_seasonal_curves_computed": 0,
+  "solcast_authenticated_http_path_tested": false,
+  "full_repository_tests_run": false,
+  "soc_solver_bug_fixed": false,
+  "seven_day_optimizer_integrated": false,
+  "seven_day_solver_run_executed": false,
+  "github_remote_modified": false,
+  "primary_document": "調査結果と拡張仕様書.md",
+  "agent_document": "実装エージェント指示書.md"
+}

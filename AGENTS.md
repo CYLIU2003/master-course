@@ -72,17 +72,40 @@ priority over convenience or attractive output.
 
 ## Required working procedure
 
-1. Trace the reachable path from the user-facing entrypoint to the actual
-   solver and reporting finalizer. Do not modify dead or legacy code as a
-   substitute.
+1. For optimization behavior changes, trace the affected reachable path from
+   the user-facing entrypoint to the solver and reporting finalizer. For other
+   tasks, inspect only the relevant path. Do not fix dead code as a substitute.
 2. Separate verified facts from inference.
 3. Use the smallest safe change and preserve dispatch/timetable/operator
    contracts.
 4. For changes to formulas, costs, constraints, units, or acceptance, document
    the mathematical and comparability effects.
-5. Add focused regression tests and run the relevant integration/full suite.
-6. Update `README.md`, `DEVELOPMENT_NOTES.md`, and the current blocker document
-   whenever behavior or claim scope changes.
+5. For executable behavior changes, add focused regression coverage and run
+   affected tests; run integration/full suites when the impact warrants them.
+   For instruction or documentation changes, validate syntax, links, and rule
+   consistency. Reuse checks for the same content, inputs, and environment;
+   repeat only for new changes, failures, or unresolved concerns.
+6. Record changes in the relevant explanation document. Update `README.md`
+   when user-facing guidance changes and `DEVELOPMENT_NOTES.md` for development
+   decisions. Update `docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md` only when
+   research blockers or research claim scope change. Do not read or rewrite
+   unrelated documents merely to satisfy a checklist.
+
+## Task scope and skill selection
+
+- Apply a skill when the requested deliverable matches its scope or the user
+  explicitly invokes it. Generic words such as "write", "analyze", or "review"
+  alone do not require unrelated skills. Load only relevant supporting files.
+- In this project, `.codex/skills/<name>/SKILL.md` is the maintained source for
+  project skills. Do not additionally load a same-name user-wide copy. Existing
+  `.skill` archives are distribution snapshots, not active instruction sources;
+  refresh them only when packaging or distributing a skill is requested.
+- Resolve routine questions using available evidence and existing authorization.
+  Ask only when a material ambiguity cannot be resolved by inspection, or an
+  action requires authorization that has not been given. Do not ask again for
+  an already authorized action; continue independent work while a question waits.
+- Findings must be evidence-backed; do not invent defects to satisfy a review
+  format. A review-only request authorizes findings and proposals, not edits.
 
 ## Repository and experiment discipline
 
@@ -98,6 +121,14 @@ priority over convenience or attractive output.
 
 ## Review completion
 
-P0/P1 issues, required tests, documentation, independent review, and a fresh
-clean-commit formal run must all pass before `LGTM`, `READY`, or “model
-complete” is reported.
+- Code-review approval requires resolution of P0/P1 findings and the tests and
+  documentation applicable to the change. CI and coverage gates apply only if
+  configured and relevant; record why a check is not applicable or could not run.
+  Do not enable CI or paid services merely to satisfy a review checklist.
+- Report self-review and independent review separately. If independent review
+  is required for a merge or release, leave that approval pending until obtained;
+  do not make it a prerequisite for reporting local work and validation complete.
+- Research approval (`READY` for research use or "model complete") additionally
+  requires independent review and a fresh clean-commit formal run satisfying
+  every applicable research gate above. Code-review `LGTM` does not imply
+  research approval. Documentation-only work does not require a formal solve.

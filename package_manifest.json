@@ -1,0 +1,104 @@
+{
+  "files": [
+    {
+      "path": "DELIVERY_STATUS.json",
+      "sha256": "302d17c3648f2221c6bac9561d1a8c08b9b847515578f58b8242ce8a50684da2",
+      "bytes": 1037
+    },
+    {
+      "path": "README.md",
+      "sha256": "93d2fb425bf287662b9b077d86f5e7ee8117300be6fecfe219bf7bc6e88a2ce0",
+      "bytes": 6776
+    },
+    {
+      "path": "acquisition_plan_cy2025/request_plan_2025-01-01_2026-01-01.json",
+      "sha256": "114c0d1be838274b8df7a6e434477dad628f1809644f941daf2200235511dd72",
+      "bytes": 7883
+    },
+    {
+      "path": "acquisition_plan_union/request_plan_2025-01-01_2026-04-01.json",
+      "sha256": "827feab18eb343ef5c0fc61653eb10895b53db391c47723b034f9ba34c55f67d",
+      "bytes": 9830
+    },
+    {
+      "path": "evidence/calendar_reproduction.json",
+      "sha256": "8049f3df482c1df1423314bb2b616739ca59149fee8640d3e0b59cc4c135272a",
+      "bytes": 3712
+    },
+    {
+      "path": "evidence/git_apply_check.txt",
+      "sha256": "eb10212198f7f1e82a15c96509a525ae2b8fa0a676b1692a86103d0bd1d676f1",
+      "bytes": 60
+    },
+    {
+      "path": "evidence/pytest_output.txt",
+      "sha256": "71fbeca0fe01a5a9d587828b682d476f2618b13566ef14c4be2da16b723837d8",
+      "bytes": 99
+    },
+    {
+      "path": "evidence/pytest_results.xml",
+      "sha256": "246e041bb16fbe8fc1529b241c98333e053a773d6765867ff144906065116623",
+      "bytes": 3939
+    },
+    {
+      "path": "evidence/service_calendar_original.py",
+      "sha256": "9edf50a93941d816daaf9010c364fc8865274aec9573c3ca902475b739e4d1e2",
+      "bytes": 8620
+    },
+    {
+      "path": "patches/0001_calendar_alias_and_unknown_rows.patch",
+      "sha256": "914ce14470821036a77e8182f1411eca48882dd9250d3de16c787f4396355925",
+      "bytes": 1834
+    },
+    {
+      "path": "seasonal_curve_readiness.json",
+      "sha256": "ff27cd7d94664219c99b8a9e61c9c9de09cc2e8aeb69e00ec15ce5a3fbce9b09",
+      "bytes": 2601
+    },
+    {
+      "path": "sources.json",
+      "sha256": "836c132cda520ed7cb812d87e0709f89cf83a35451f5e286701d89a03fd35fbb",
+      "bytes": 5605
+    },
+    {
+      "path": "tests/test_extension.py",
+      "sha256": "a20eb5e28f61d1f1ddf01516a595a981c638481b780c861ccb1e9f11cab1b653",
+      "bytes": 8551
+    },
+    {
+      "path": "tools/calendar_patch.py",
+      "sha256": "e49d38f8f2160145947c5d274841994e6a6d35a15ef90b1da42df2d4647cb849",
+      "bytes": 3104
+    },
+    {
+      "path": "tools/seasonal_curves.py",
+      "sha256": "40cb5b2fb6a297ca691f528b9579ea34aa188df5243a26b32394fe83672b3f3d",
+      "bytes": 9695
+    },
+    {
+      "path": "tools/solcast_year.py",
+      "sha256": "ca1d8275c0a84d5f0f15eb374131b9666e4362a39b964fdea7198e88b86e3077",
+      "bytes": 11007
+    },
+    {
+      "path": "tsurumaki_site.json",
+      "sha256": "a7461f1b56d0e0dd6b24e8b36082b2d88bd3fcc046eb0052b21cd23bd9940e8d",
+      "bytes": 434
+    },
+    {
+      "path": "weather_labels_template.csv",
+      "sha256": "598efc7e7b6c0aa3c8ca9895529e259e20f0c20a1712b0126d0b45b54aed16f9",
+      "bytes": 62
+    },
+    {
+      "path": "実装エージェント指示書.md",
+      "sha256": "c71c3fb45ba0fe63751653f17b15b09b25e6405b355c1cecaa0d3794627e59f1",
+      "bytes": 10300
+    },
+    {
+      "path": "調査結果と拡張仕様書.md",
+      "sha256": "d04b30c27a5b41b7f4234834f12cc18e7839979493a7a122508abb5d6784a23f",
+      "bytes": 33615
+    }
+  ]
+}

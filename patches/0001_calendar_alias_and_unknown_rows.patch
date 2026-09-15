@@ -1,0 +1,53 @@
+--- a/src/optimization/common/service_calendar.py
++++ b/src/optimization/common/service_calendar.py
+@@ -30,13 +30,19 @@
+         "sunday",
+         "sun",
+         "holiday",
++        "sunhol",
++        "sunholiday",
++        "sundayorholiday",
+         "日曜",
+         "日曜日",
+         "休日",
+         "祝日",
+     }:
+         return "sunday_or_holiday"
+-    if text in {"saturdayholiday", "weekendholiday", "土休日"}:
++    if text in {
++        "saturdayholiday", "weekendholiday", "土休日",
++        "sathol", "satholiday", "weekendorholiday",
++    }:
+         return "weekend_or_holiday"
+     return None
+ 
+@@ -173,6 +179,11 @@
+             if day_type
+         }
+     )
++    unverifiable_row_indices = [
++        index
++        for index, row in enumerate(timetable_rows)
++        if not isinstance(row, Mapping) or _trip_day_type(row) is None
++    ]
+     declared_holiday_dates = _declared_holiday_dates(simulation_config)
+     expected_type = _calendar_day_type(
+         service_date,
+@@ -192,6 +203,8 @@
+         or ""
+     ).strip()
+     errors: list[str] = []
++    if unverifiable_row_indices:
++        errors.append("timetable_contains_unverifiable_day_type_rows")
+     waiver = _fixed_weekday_timetable_pv_counterfactual_waiver(
+         service_date=service_date,
+         observed_types=observed_types,
+@@ -236,6 +249,8 @@
+         "expected_service_day_type": expected_type,
+         "observed_timetable_day_types": observed_types,
+         "timetable_row_count": len(timetable_rows),
++        "unverifiable_row_count": len(unverifiable_row_indices),
++        "unverifiable_row_indices": unverifiable_row_indices,
+         "comparison_type": effective_comparison_type,
+         "weather_observation_date": weather_observation_date,
+         "weather_profile_source": weather_profile_source or None,

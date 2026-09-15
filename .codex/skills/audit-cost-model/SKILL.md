@@ -1,6 +1,6 @@
 ---
 name: audit-cost-model
-description: Use when: reviewing or changing charging cost, PV, battery, SOC, TOU pricing, or demand charge logic.
+description: "Use when reviewing or changing charging cost, PV, battery, SOC, TOU pricing, or demand charge logic."
 ---
 
 # audit-cost-model

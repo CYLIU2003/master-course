@@ -1,0 +1,90 @@
+{
+  "schema_version": "readiness_only_v1",
+  "is_curve_dataset": false,
+  "cells": [
+    {
+      "season": "spring",
+      "weather_class": "sunny",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "spring",
+      "weather_class": "cloudy",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "spring",
+      "weather_class": "rainy",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "summer",
+      "weather_class": "sunny",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "summer",
+      "weather_class": "cloudy",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "summer",
+      "weather_class": "rainy",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "autumn",
+      "weather_class": "sunny",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "autumn",
+      "weather_class": "cloudy",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "autumn",
+      "weather_class": "rainy",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "winter",
+      "weather_class": "sunny",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "winter",
+      "weather_class": "cloudy",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    },
+    {
+      "season": "winter",
+      "weather_class": "rainy",
+      "status": "NOT_COMPUTED_ANNUAL_DATA_AND_WEATHER_LABELS_UNAVAILABLE",
+      "source_day_count": null,
+      "irradiance_curve": null
+    }
+  ]
+}

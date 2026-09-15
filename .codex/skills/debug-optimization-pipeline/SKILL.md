@@ -1,6 +1,6 @@
 ---
 name: debug-optimization-pipeline
-description: Use when: debugging why optimization does not run, why a run mode behaves unexpectedly, or which solver path is actually invoked in the repository.
+description: "Use when debugging why optimization does not run, why a run mode behaves unexpectedly, or which solver path is actually invoked in the repository."
 ---
 
 # debug-optimization-pipeline

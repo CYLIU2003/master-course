@@ -1,6 +1,6 @@
 ---
 name: prepare-thesis-pr
-description: Use when: preparing a research-code pull request, thesis-facing change summary, or advisor-facing implementation explanation.
+description: "Use when preparing a research-code pull request, thesis-facing change summary, or advisor-facing implementation explanation."
 ---
 
 # prepare-thesis-pr

@@ -1,9 +1,11 @@
 ---
 name: mit-literature-review
-description: MIT・トップジャーナル水準の先行文献調査・引用・参考文献管理を実施するスキル。文献調査、サーベイ論文執筆、Related Workの記述、引用の書式、参考文献リストの作成、先行研究との差分分析が必要な場面では必ずこのスキルを使うこと。「文献を調べて」「先行研究は？」「Related Workを書いて」「引用して」「参考文献をまとめて」などのキーワードでも積極的にトリガーすること。
+description: "学術文献の調査・評価、Related Work、学術引用・参考文献の整備に使う。一般文章の引用やローカルファイルへの出典リンクだけには適用しない。"
 ---
 
 # MIT-Style Literature Review Skill
+
+調査の深さは依頼に合わせる。単一の引用整形にPRISMA全工程や新規の網羅的検索を要求しない。主張の裏付けに必要な原典確認と、単なる書式変更を区別する。
 
 系統的文献調査（Systematic Literature Review）とトップジャーナル品質のRelated Work記述。
 

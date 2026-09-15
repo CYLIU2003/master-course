@@ -5,6 +5,11 @@
 <!-- /monthly-search-status -->
 
 
+AI作業の適用範囲・確認条件・コードレビューと研究承認の区別は
+[AGENTS.md](AGENTS.md)を参照してください。プロジェクトSkillの正本は
+`.codex/skills/<name>/SKILL.md`です。2026-09-14の指示整理は
+[Development Notes](DEVELOPMENT_NOTES.md#2026-09-14-agentsmdとskillの適用範囲整理)に記録しています。
+
 旧固定版 `fa0c22bf` は1〜10月の10週間が完走・独立監査済み（10/12週、2026-09-15 01:34 JST）。10月の総費用4,269,784.456240円、購入量4,354.188 kWh、最大受電200.795 kW。各週168時間・672 slot、物理検証、会計と日別台帳の差1e-6円以内、各169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。11月で計算停止。失敗理由と未実行の週は結果表に記載し、原因を診断中。研究採用はBLOCKED。 [新版の結果表・原本hash](docs/notes/SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
 
 月別12週はローカルスクリプトで監視・監査・集計し、全12週と季節別整理後に承認済みアドレスへ1通メール通知する。通常の30分ごとのAI監視は解除した。[実行・完了通知の手順](docs/notes/MONTHLY_COMPLETION_DELIVERY_20260914.md)。

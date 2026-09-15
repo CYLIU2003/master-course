@@ -1,0 +1,110 @@
+{
+  "retrieved_source_commit": "5fac09d9a5775192ab8d3e507c5e72a6fd36afe2",
+  "source_blob_sha1": "65445c15882b11301c7c552c0fd56c1395fe2ab4",
+  "source_exactly_matches_github_blob": true,
+  "evaluation_scope": "isolated calendar source and synthetic fixtures, not full application/solver",
+  "unknown_rows": {
+    "before": {
+      "schema_version": "service_calendar_validation_v1",
+      "status": "OK",
+      "strict": false,
+      "service_date": "2025-08-05",
+      "service_date_weekday": "Tuesday",
+      "service_date_declared_holiday": false,
+      "expected_service_day_type": "weekday",
+      "observed_timetable_day_types": [
+        "weekday"
+      ],
+      "timetable_row_count": 2,
+      "comparison_type": "actual_service_day",
+      "weather_observation_date": "2025-08-05",
+      "weather_profile_source": null,
+      "service_date_weather_date_equal": true,
+      "service_date_forecast_claim": true,
+      "errors": [],
+      "calendar_policy": null,
+      "calendar_validation_status": "matched",
+      "waiver": null
+    },
+    "after": {
+      "schema_version": "service_calendar_validation_v1",
+      "status": "ERROR",
+      "strict": false,
+      "service_date": "2025-08-05",
+      "service_date_weekday": "Tuesday",
+      "service_date_declared_holiday": false,
+      "expected_service_day_type": "weekday",
+      "observed_timetable_day_types": [
+        "weekday"
+      ],
+      "timetable_row_count": 2,
+      "unverifiable_row_count": 1,
+      "unverifiable_row_indices": [
+        1
+      ],
+      "comparison_type": "actual_service_day",
+      "weather_observation_date": "2025-08-05",
+      "weather_profile_source": null,
+      "service_date_weather_date_equal": true,
+      "service_date_forecast_claim": true,
+      "errors": [
+        "timetable_contains_unverifiable_day_type_rows"
+      ],
+      "calendar_policy": null,
+      "calendar_validation_status": "matched",
+      "waiver": null
+    }
+  },
+  "sun_hol": {
+    "before": {
+      "schema_version": "service_calendar_validation_v1",
+      "status": "ERROR",
+      "strict": false,
+      "service_date": "2025-08-10",
+      "service_date_weekday": "Sunday",
+      "service_date_declared_holiday": false,
+      "expected_service_day_type": "sunday_or_holiday",
+      "observed_timetable_day_types": [],
+      "timetable_row_count": 1,
+      "comparison_type": "actual_service_day",
+      "weather_observation_date": "2025-08-10",
+      "weather_profile_source": null,
+      "service_date_weather_date_equal": true,
+      "service_date_forecast_claim": true,
+      "errors": [
+        "timetable_service_day_type_unverifiable"
+      ],
+      "calendar_policy": null,
+      "calendar_validation_status": "matched",
+      "waiver": null
+    },
+    "after": {
+      "schema_version": "service_calendar_validation_v1",
+      "status": "OK",
+      "strict": false,
+      "service_date": "2025-08-10",
+      "service_date_weekday": "Sunday",
+      "service_date_declared_holiday": false,
+      "expected_service_day_type": "sunday_or_holiday",
+      "observed_timetable_day_types": [
+        "sunday_or_holiday"
+      ],
+      "timetable_row_count": 1,
+      "unverifiable_row_count": 0,
+      "unverifiable_row_indices": [],
+      "comparison_type": "actual_service_day",
+      "weather_observation_date": "2025-08-10",
+      "weather_profile_source": null,
+      "service_date_weather_date_equal": true,
+      "service_date_forecast_claim": true,
+      "errors": [],
+      "calendar_policy": null,
+      "calendar_validation_status": "matched",
+      "waiver": null
+    }
+  },
+  "new_solcast_records_downloaded": 0,
+  "auth_live_api_tested": false,
+  "git_remote_modified": false,
+  "seven_day_solver_run_executed": false
+}
