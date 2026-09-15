@@ -1,0 +1,141 @@
+# 2026年9月 進捗報告 発表者ノート
+
+本文は1〜18枚、補足は19〜23枚です。
+
+## スライド 1
+
+今回は、各月から曜日構成を揃えた1週間を選び、12週間の運用を比較した結果を報告します。12週すべての物理・会計検証が完了しました。一方、最適性や季節全体への一般化はまだ主張しません。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 2
+
+研究の目的は前回と共通です。便を欠かさず運行する制約の下で、車種の担当と充電・電源の使い方を考えます。今回の受電200 kWは有料超過を許す契約基準であり、物理的な上限ではありません。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 3
+
+前回は高PV・低PVの一日比較でした。今回は2025年の各月から1週を選び、全便運行と電力・会計の整合を週間単位で確認しています。前回のSOC不一致を含む古い数値は、新しい結果へ混ぜていません。BESSの終端条件と受電超過の扱いが変わったことも明示します。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 4
+
+公平性として揃えたのは曜日構成と運行・設備条件です。各月の最初の、祝日を含まない月内完結の月曜から日曜を選びました。年末年始や祝日がある月は後の週になります。同じ便原本、1,704便、営業便の代理距離13,925.43 kmを確認しました。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 5
+
+入力はBEV35台とICE25台ですが、毎週全60台を使うことを強制していません。15分で計算し、1時間ごとに残りの充電を更新します。BEVは週末の残量復元を守り、BESSは最低残量を守る条件です。両者を同じ終端条件として説明しないことが大切です。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 6
+
+Stage 1は便の担当を決める配車側の探索です。Stage 2はその配車に対する充電・PV・蓄電池の計画を求めます。その後、毎時残りの充電計画を更新し、実際のPVを反映して先頭1時間だけを採用します。最後に168時間の計画全体と費用を独立に検算します。前回の22案比較と同じ実験ではありません。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 7
+
+12週すべてで168時間の更新と672区間の実行が完了しました。物理検証では未担当便、時間重複、SOC上下限、充電器の容量や同時利用などを検査しています。確定費用と日別台帳の差は1e-6円以内です。旧版で成功した週は流用せず、同じ固定版で全12週を実行しました。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 8
+
+7月は選択12週で最も発電が多い一方、14.1 MWh程度を抑制しています。3月は発電14.9 MWhで最少でした。発電量だけで費用を説明せず、いつ使えるか、どれだけ蓄電池へ回るかを見ます。抑制の原因を設備容量だけに断定することはできません。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 9
+
+購入量は3月が最多、7月が最少で、差は約6,048 kWhです。月によってピークの違いもあり、購入量が少なければ必ずピークが小さいという関係ではありません。3月の最大ピークがいつ発生したかは補足21ページで確認します。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 10
+
+左は総費用で、約422万円から466万円です。大部分は車両使用費なので、右の使用費以外の内訳も示しました。3月は契約超過費が大きく、11月や12月は電力費も増えています。係数が一定でも、使用車両日数が205と206で2万円変わる点に注意します。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 11
+
+夏は選択3週の平均購入量と費用が最も低く、PV抑制率は最も高い結果です。春は3月の大きな費用とピークの影響を受けています。冬も2月の購入量が少なく、季節内のばらつきがあります。そのため季節の平均だけで順位を一般化しません。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 12
+
+費用最大の3月と最小の7月は、どちらも車両使用費412万円です。総費用差44.6万円は電力・燃料・CO2・契約超過費の差で説明できます。3月の超過料金は約27万円で、車両使用費を除いた費用の半分を占めます。PVだけの効果を分けるには、同じ配車などを固定した追加比較が必要です。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 13
+
+各点は1時間に発電・購入した電力量です。1週間の始めを0時間とし、24時間ごとに日が変わります。3月には開始直後に購入が集中し、7月には日中の発電量が大きい日が並びます。この図だけで充電集中の原因や最適な設備容量を断定しません。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 14
+
+図は3月と7月のBESS残量を同じ軸で示しています。上下限は守っていますが、終端は初期より低くなっています。各週を同じ初期残量から独立に開始しているため、毎週同じ在庫を無料で取り出せるような年間計算はできません。連続運用や始終端一致は今後の検証条件です。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 15
+
+1週の使用台数は毎日使用した台数の合計とは異なります。週に一度でも使用した車両は32台ですが、使用車両日数は205または206です。BEV担当便は1539便から1571便で月ごとに違います。前回の28台と21台という一日比較を今回の結果へ流用していません。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 16
+
+前日処理の時間は各ケースsummaryのday_ahead_secondsを用いました。これはsolver内部時間だけを意味しません。Stage 1のgapは目標10%に届いておらず、得られた実行可能解を比較している状態です。12週を完走したことと、最適性を証明したことは別です。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 17
+
+三つの大きな制限があります。第一に月1週のため天候の偏りがあり、3月は月平均より日射が35.2%少ない週です。第二に気温による空調負荷が未入力で、2026年時刻表を使う診断です。第三に初期BESS在庫と費用範囲、最適性未達があるため、年間費用や設備採算にそのまま拡張できません。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 18
+
+今回の成果は、12週すべてで物理と会計を確認した運用比較を得られたことです。夏は買電が少ない一方でPV抑制が大きく、3月は受電集中と超過費が目立ちます。まず同じ気象・配車を固定し、受電ピークと充電時刻を変える比較を行うと、その効果を切り分けられます。BESS終端条件と連続運用、比較週数の拡充、最適性の改善は別に検証します。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 19
+
+質問時に月別の数値を確認するための表です。費用の合計には車両使用費、電力、燃料、CO2、契約超過を含みます。台日は日ごとの使用台数の合計です。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 20
+
+質問時に月別の数値を確認するための表です。費用の合計には車両使用費、電力、燃料、CO2、契約超過を含みます。台日は日ごとの使用台数の合計です。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 21
+
+3月の最大ピークは昼ではなく、初日の1時15分です。この15分には10台が正の電力で充電し、全量を系統から購入していました。BESSが放電しなかった事実は確認できますが、その理由を容量不足や帰庫時刻と断定してはいけません。元の制約と他の候補を比較して原因を調べる必要があります。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 22
+
+前日充電はMethod1、毎時はMethod0とし、どの月も同じ規則を使いました。両方MIPFocus1、PresolveとAggregateは0、制約と整数の許容値は1e-9です。これらは数値求解の設定で、物理制約を緩めたものではありません。旧版の1〜10月や1〜7月の成功週は今回の集計には混ぜていません。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
+
+## スライド 23
+
+BEVは電気バス、ICEはエンジンバス、BESSは定置用蓄電池です。PV利用は直接充電とBESS充電の和で、BESS放電を再加算しません。前回資料に掲載された先行研究の数値は今回の実験と条件が異なるので、この資料では直接比較していません。原本へのリンクは下記と各ページのノートに記載しています。
+
+出典：docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json。固定ソースSHA 7c7c2334040d54722d2f1c354634269d35f8d1de。各週の最終費用は rolling_hourly_chain/executed_day_accounting.json。原本パスとSHAは同JSONのsource_evidence、追加集計：tmp/monthly_progress_20260915/evidence.json。月1週を選んだ記述的な診断比較であり、研究採用はBLOCKED。
