@@ -1,7 +1,7 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
 <!-- monthly-search-status -->
-最新の月別再実行: 固定 `7c7c2334` で全12週を新規実行開始（2026-09-15 06:29 JST、solver PID43852、observer PID29580）。全月共通で前日Method=1・毎時Method=0、MIPFocus=1、許容差1e-9。現時点は1月準備中・独立監査0/12週。固定後116 tests通過、入力47ファイル照合済み。旧10a40c9fの7週・fa0c22bfの10週は別版であり混ぜない。研究採用BLOCKED、メール未送信。状態: `output/monthly_phase_search_20260915/script_observer/state.json`。
+最新の月別再実行: 固定 `7c7c2334`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。旧10a40c9fの7週・fa0c22bfの10週は旧版の記録として保存し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.md`。
 <!-- /monthly-search-status -->
 
 

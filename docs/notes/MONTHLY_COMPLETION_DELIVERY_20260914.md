@@ -74,3 +74,8 @@ mainの独立監査だけを修正し、原本metadataの両値を必須照合�
 ## 段階別探索版の配信経路
 
 次の現行版は `output/monthly_phase_search_20260915/script_observer/`。source SHAは同ディレクトリconfigと親のlaunchで照合する。旧monthly_searchの7週は停止記録として保存し、その監視を再開しない。新しいPHASE_SEARCH_RESULTSの表・専用図・専用bindingから、全12週完了時のみ同じ宛先へ1通送信する。件名のMC2025-<新SHA>で送信済みを照合する。通常のAI監視は行わない。
+
+
+## 2026-09-15 全12週の最終配信前確認
+
+固定7c7c2334の全12週についてcampaign summary/progressのCOMPLETED、前後clean・同一SHA、独立監査12件、最終図表4ファイルのSHAとメール添付のバイト一致を確認した。実PNGの6パネルを表示し、12か月・単位・凡例・余白・診断結果の注記を確認、修正不要。README・開発記録・blocker・計画書は12/12完了と研究採用BLOCKEDで整合。検査記録は現行observerの `final_visual_review.json`。送信の成立は同ディレクトリの `email_receipt.json` に保存する実Gmail message IDで確認し、bundleの作成時email_sent=falseは書き換えない。
