@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-16 Solcast日次取得
+
+- 取得済み24か月・70,176件を月次マニフェストとrequest/raw SHA、月内連続性、地点、PT15M、7項目の有限値から再確認した。
+- 現ユーザーDPAPI認証を子プロセスの環境変数だけへ渡し、検証済みCLIで不足2023年1月を1リクエスト取得。2,976件を検証し、合計25/36か月・73,152件、残り2023年2〜12月の11か月。新原本SHAは `77af840aab1f73c384d6c65b42077c8b5c47c6e16ee51d214f0b74b37947484e`。
+- 残量未確認のため追加取得を停止。契約・料金設定、既存原本、2024年学習モデル、凍結済み月別比較は変更していない。取得状況と `output/seven_day_extension_20260910/solcast_heartbeat_20260916.json` に記録した。
+- 月別完了メールのSENT記録を確認し、再送しなかった。日次設定から完了済み月別監視の古い説明を除き、Solcast不足月取得だけを継続する。
+
 <!-- monthly-search-status -->
 最新の月別再実行: 固定 `7c7c2334`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。旧10a40c9fの7週・fa0c22bfの10週は旧版の記録として保存し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.md`。
 <!-- /monthly-search-status -->
