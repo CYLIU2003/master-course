@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-17: Solcastの2023年2月（2,688件）を追加取得・検証しました。学習対象2022〜2024年は26/36か月・75,840件、残りは2023年3〜12月の10か月です。残量不明のため今回は1リクエストで終了しました。既存学習モデル・月別比較の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
+
 2026-09-16: Solcastの2023年1月（2,976件）を追加取得・検証しました。学習対象2022〜2024年は25/36か月・73,152件、残りは2023年2〜12月の11か月です。残量不明のため今回は1リクエストで終了し、既存2024年学習モデルと完了済み月別12週の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
 
 <!-- monthly-search-status -->
