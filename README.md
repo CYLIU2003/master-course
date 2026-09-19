@@ -4,6 +4,11 @@
 
 2026-09-19: BESSの明示0残量の保存・終端目標と、月別準備時のBESS設定引き継ぎを修正しました。週末に初期残量へ戻す[全12週の別設定](config/shibu21_23_monthly_cyclic_draft_20260919.json)は実行無効で保存しています。関連128テスト通過。**シミュレーションは開始していません。** [変更点・条件・残る課題](docs/notes/MODEL_SCENARIO_REVISION_20260919.md)。
 
+<!-- monthly-cyclic-status -->
+最新の月別再実行: 固定 `2ff239e1`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESS週末復元条件。旧7c7c2334の12週は旧条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919.md`。
+<!-- /monthly-cyclic-status -->
+
+
 2026-09-19: 占部先生の指摘を受け、研究資料の「受電ピーク」の名称・定義を全ページで統一しました。[修正版資料と未送信の返信案](outcome/2026-09-19_urabe_terminology/README.md)。今後の資料作成ルールを [research-presentation/SKILL.md](.codex/skills/research-presentation/SKILL.md) にまとめ、用語表・数値の根拠・編集可能な図表・ユーザー編集の保全・表示確認を記載しました。
 
 2026-09-19: Solcastの2023年4月（2,880件）を追加取得・検証しました。学習対象2022〜2024年は28/36か月・81,696件、残りは2023年5〜12月の8か月です。残量不明のため今回は1リクエストで終了しました。既存学習モデル・月別比較の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
@@ -3821,3 +3826,6 @@ provided. The progress bundle under
 `output/progress_report_ac0115e_day_ahead_pair_20260815/` is explicitly marked
 `DIAGNOSTIC`, contains the canonical comparison CSVs, seven PNG/SVG figures and
 a five-sheet workbook, and does not upgrade the research-release status.
+
+
+月別BESS週末復元条件の4月停止原因を確認: 残り予測PVを全量充電しても目標3,000 kWhへ54.411 kWh不足する。3/12週通過・5〜12月未実行。次の予備残量／供給源条件の選択待ちで、計算・監視は停止、完了メール未送信。[停止原因と対応](docs/notes/SHIBU21_23_APRIL_BESS_TERMINAL_FAILURE_20260919.md)。

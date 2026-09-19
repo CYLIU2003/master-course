@@ -6,6 +6,11 @@
 
 ## 2026-09-19 新しいモデル・シナリオは実行保留
 
+<!-- monthly-cyclic-status -->
+最新の月別再実行: 固定 `2ff239e1`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESS週末復元条件。旧7c7c2334の12週は旧条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919.md`。
+<!-- /monthly-cyclic-status -->
+
+
 BESSの明示0初期残量・0終端目標と月別準備の設定引き継ぎを修正した。週末BESS残量を初期値に戻す別designは `execution_enabled=false` で保存。関連128テストは求解なしの検証であり、新条件のPrepare・day-ahead・rolling・会計・独立レビューは未実施。ユーザーの指示により実行を開始していない。下記 `7c7c2334` の完了済み12週を新HEADや新条件の証拠へ転用しない。研究採用BLOCKEDを維持する。[変更と比較条件](MODEL_SCENARIO_REVISION_20260919.md)。
 
 <!-- monthly-search-status -->
@@ -5431,3 +5436,8 @@ or validation rule will be relaxed to promote it.
 元の年単独曲線と前年追加の補助曲線を区別し、少数標本曲線は日数を開示して使用可能とする。
 
 月別費用の順位は同一計算条件で得られた実行可能解の比較であり、探索の到達度が同一と保証された順位ではない。Stage1 gapを確定週間費用の信頼区間や季節差の統計的有意性へ読み替えない。生成レポートの限界にも明記する。
+
+
+## 2026-09-19 追加: cyclic条件の実行可能性
+
+固定2ff239e1は1〜3月のみ通過、4月hour158で週末BESS復元に最低54.411 kWh不足し停止。PV専用充電と予測誤差に対する終端到達可能性の扱いが未解決。4月週間会計・5〜12月・全季節比較は成立していない。研究採用BLOCKEDを維持。[原因と次の条件選択](SHIBU21_23_APRIL_BESS_TERMINAL_FAILURE_20260919.md)。

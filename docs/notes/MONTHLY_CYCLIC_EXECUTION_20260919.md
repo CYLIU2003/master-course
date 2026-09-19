@@ -1,5 +1,10 @@
 # BESS週末復元条件の月別12週・スクリプト実行
 
+<!-- monthly-cyclic-status -->
+最新の月別再実行: 固定 `2ff239e1`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESS週末復元条件。旧7c7c2334の12週は旧条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919.md`。
+<!-- /monthly-cyclic-status -->
+
+
 2026-09-19、ユーザーが再開始と `g2681320@tcu.ac.jp` への完了メールを承認した。前の実行保留指示は、この新しい実行について解除された。
 
 18:09 JSTに起動。固定SHAは `2ff239e1dc488409e8cf215bff918953fd36346f`、作業場所は `C:/Users/RTDS_admin/.codex/worktrees/monthly-cyclic-20260919/master-course`。campaign実PID42140、observer実PID30992。開始確認時は1月のPrepare、完了0/12週、監視RUNNING。固定版の関連70テスト、入力47件・metadata refs11件、helper hash・Gmail接続を確認した。現在の進捗は以下のstateを参照する。
@@ -17,3 +22,8 @@
 準備検証は、監視・報告・証拠収集・月別BESS設定・campaignの関連89テスト通過。前回のモデル修正128テストは同じ内容として再利用した。独立した研究承認は未取得であり、今回もDIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS、研究採用BLOCKED。BESS放電0の原因や費用・ピーク削減効果を実行前に断定しない。
 
 計算はローカルPC上で進む。最終結果・完了メールが実際に成立するまでは、起動を完了と表記しない。
+
+
+## 2026-09-19 20:14 JSTの停止
+
+現在は3/12週通過、4月hour158で停止、5〜12月は未実行。既存solver PID42140とobserver PID30992は終了を確認した。失敗イベントは処理済みで、同じ通知から監視再開やメール再送を行わない。系統からBESSへ充電できず、残り予測PVによる終端上界が目標に54.411 kWh届かないことを確認。次のモデル条件選択待ちで、計算・監視は停止のまま。詳細は[4月停止原因](SHIBU21_23_APRIL_BESS_TERMINAL_FAILURE_20260919.md)、対応記録は `script_observer/failure_handling_april_20260919.json`。新条件を採用する場合は全12週を新clean固定版で実行する。
