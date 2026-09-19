@@ -78,6 +78,13 @@ def test_release_deployments_have_separate_binding_and_artifacts():
     old = watcher.deployment_paths({})
     new = watcher.deployment_paths({"deployment": "search"})
     assert all(left != right for left, right in zip(old, new))
+
+
+def test_cyclic_deployment_does_not_reuse_any_old_delivery_paths():
+    cyclic = watcher.deployment_paths({"deployment": "cyclic"})
+    for version in ("budget", "search", "phase_search"):
+        previous = watcher.deployment_paths({"deployment": version})
+        assert all(left != right for left, right in zip(cyclic, previous))
     with pytest.raises(ValueError, match="Unknown"):
         watcher.deployment_paths({"deployment": "arbitrary-output"})
 

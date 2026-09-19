@@ -26,7 +26,10 @@ DEPLOYMENT_RELATIVE = Path("output/monthly_fair_weeks_20260914")
 
 def deployment_paths(config: dict) -> tuple[Path, str, str]:
     version = config.get("deployment", "budget")
-    require(version in {"budget", "search", "phase_search"}, "Unknown observer deployment")
+    require(version in {"budget", "search", "phase_search", "cyclic"}, "Unknown observer deployment")
+    if version == "cyclic":
+        return (Path("output/monthly_cyclic_20260919"),
+                "SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919", "shibu21_23_monthly_cyclic_20260919")
     if version == "phase_search":
         return (Path("output/monthly_phase_search_20260915"),
                 "SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915", "shibu21_23_monthly_phase_search_20260915")
@@ -321,7 +324,7 @@ class Observer:
                 "位置付け：DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS、研究採用BLOCKED。"
                 "Stage 1 gap未達、二段階解法、代理距離、2026年時刻表と2025年評価日、2024年climatology予測等の制約が残ります。"
                 "気温・空調需要の季節変化は未入力で、月1週から季節一般・年平均・PV単独の因果を主張しません。"
-                "各週のBESS初期在庫利用も含む比較です。\n"
+                "各週のBESS終端条件と初期・終端の在庫増減も結果表に記載しています。\n"
                 "別途継続している2023年Solcast履歴の追加収集は、この12週比較の完了条件には含めていません。\n")
         parts = [{"mime_type": "text/plain", "charset": "utf-8", "body": {"content": body}}]
         for path in artifacts:

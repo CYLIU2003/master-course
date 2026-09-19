@@ -54,6 +54,23 @@ def test_zero_generation_ratio_is_unavailable_not_zero_percent():
     assert ratio_percent(0, 0) is None
 
 
+def test_cyclic_terminal_is_independently_checked_and_described():
+    from scripts.build_monthly_interpretation import bess_condition_text, verify_bess_terminal
+
+    design = {"bess_terminal_soc_policy": "return_to_initial"}
+    terminal = {"policy": "return_to_initial", "balanced": True,
+                "initial_soc_kwh": 3000.0, "target_soc_kwh": 3000.0,
+                "terminal_soc_kwh": 3000.0}
+    verify_bess_terminal(terminal, design)
+    assert "週末にその週の初期残量へ戻す" in bess_condition_text(design)
+    assert "最低1,200" not in bess_condition_text(design)
+    for change in ({"policy": "minimum_only"}, {"balanced": False},
+                   {"target_soc_kwh": 1200.0}, {"terminal_soc_kwh": 1200.0},
+                   {"terminal_soc_kwh": float("nan")}, {"target_soc_kwh": None}):
+        with pytest.raises(ValueError):
+            verify_bess_terminal({**terminal, **change}, design)
+
+
 @pytest.mark.parametrize("status", ["STOPPED_AFTER_FAILED_CASE", "BLOCKED_SOURCE_STATE_DRIFT"])
 def test_partial_report_preserves_failure_instead_of_claiming_run_is_active(status):
     assert report_status(status, 3) == status

@@ -107,6 +107,7 @@ def verify_week(week: str, audited: dict, design: dict, source_sha: str) -> dict
     require_close(math.fsum(max(value - 50, 0) for value in slots["grid_import_kwh"]), cost["contract_over_limit_kwh"], "200 kW contractual excess")
     require_close(cost["contract_over_limit_kwh"] * 500, cost["contract_overage_cost"], "overage price")
     terminal = accounting["bess_terminal_soc_by_depot"]["tsurumaki"]
+    verify_bess_terminal(terminal, design)
     row = {key: cost[key] for key in COST_KEYS}
     row.update(month=int(week[5:7]), week=week, status=summary["status"],
                trip_count=summary["trip_count"], scheduled_trip_distance_km=summary["distance_km"],
@@ -123,6 +124,27 @@ def verify_week(week: str, audited: dict, design: dict, source_sha: str) -> dict
                bess_inventory_drawdown_kwh=terminal["initial_soc_kwh"] - terminal["terminal_soc_kwh"],
                source_evidence=evidence)
     return row
+
+
+def verify_bess_terminal(terminal: dict, design: dict) -> None:
+    """Check a cyclic result's target and actual residual against the declaration."""
+    if design.get("bess_terminal_soc_policy") != "return_to_initial":
+        return
+    require(terminal.get("policy") == "return_to_initial", "Cyclic BESS policy mismatch")
+    require(terminal.get("balanced") is True, "Cyclic BESS terminal is not balanced")
+    for key in ("initial_soc_kwh", "target_soc_kwh", "terminal_soc_kwh"):
+        value = terminal.get(key)
+        require(isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value), f"Invalid cyclic BESS {key}")
+    require_close(terminal["target_soc_kwh"], terminal["initial_soc_kwh"], "Cyclic BESS target")
+    require_close(terminal["terminal_soc_kwh"], terminal["initial_soc_kwh"], "Cyclic BESS inventory")
+
+
+def bess_condition_text(data: dict) -> str:
+    if data.get("bess_terminal_soc_policy") == "return_to_initial":
+        return ("BESSは週末にその週の初期残量へ戻す条件。途中のrolling窓はday-ahead予測計画の境界残量を保持する。"
+                "旧下限のみの結果と条件が異なり、単一制約だけの因果効果とは解釈しない。")
+    return "BESSは初期3,000 kWhから最低1,200 kWhまで使える条件で、在庫減少をJSONに併記する。"
 
 
 def ratio_percent(numerator: float, denominator: float) -> float | None:
@@ -213,6 +235,8 @@ def collect(campaign: Path, audit_path: Path, *, partial: bool) -> dict:
         "source_git_sha": audit["expected_sha"], "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "completed_count": len(rows), "declared_week_count": 12,
         "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
+        "bess_terminal_soc_policy": design.get("bess_terminal_soc_policy", "minimum_only"),
+        "rolling_bess_terminal_policy": design.get("rolling_bess_terminal_policy", "minimum_only"),
         "independent_audit": {"path": str(audit_path), "sha256": audit_hash},
         "weeks": rows, "seasons": seasonal_summary(rows) if complete else [],
         "failed_weeks": failed_weeks,
@@ -269,7 +293,7 @@ def render_figure(rows: list[dict], destination: Path, *, is_layout_preview: boo
              else "各月1週・平日5日＋土休日2日の診断結果")
     figure.suptitle(title, fontsize=19)
     figure.text(.03, .035, "2025年の選択週／同じ時刻表・60台入力・全接続保持。月平均・年平均の推計ではありません。\n"
-                "各週は同じ初期状態から開始。BESS初期在庫を使用する条件。最適性gap・研究採用条件は未達。", fontsize=11)
+                "各週は同じ初期状態から開始。BESS終端条件・在庫増減は結果表参照。最適性gap・研究採用条件は未達。", fontsize=11)
     figure.tight_layout(rect=(0, .085, 1, .95), h_pad=3)
     destination.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(destination.with_suffix(".png"), dpi=170)
@@ -326,7 +350,8 @@ def observation_paragraphs(data: dict) -> list[str]:
         "契約基準200 kWは有料超過を許す条件であり、購入電力量と受電ピークを別々に評価する。"
         "充電時刻や受電制限の政策を変える効果は、同じ気象・配車条件を固定した追加比較で確かめる必要がある。",
         f"各週のBESS在庫減少量（初期−終端）は{min(inventory):,.1f}〜{max(inventory):,.1f} kWhだった。"
-        "毎週同じ初期状態から始めた計算なので、この在庫利用を繰り返し使える運用上の節約とは解釈しない。"
+        + bess_condition_text(data)
+        + "毎週同じ初期状態から始めた独立ケースであり、連続運用の結果ではない。"
         "PVからBESSへの充電はPV利用として数えるが、その全量が評価週内にバスへ供給されたことまでは示さない。",
     ]
 
@@ -361,7 +386,7 @@ def markdown(data: dict, figure_name: str | None) -> str:
     lines += ["", "## 原本・定義・限界", "",
         "費用原本は各週の `rolling_hourly_chain/executed_day_accounting.json`。日別台帳、PV/購入flowの672 slot合計、ピーク、費用内訳、契約超過量×500円/kWhを再照合した。丸め前の値と原本パス・SHAは同名JSONに保存する。PV利用量はバスへの直接供給とBESSへの充電の和であり、BESS放電を再加算しない。営業便距離は停留所座標に基づく地理的代理距離で、回送を含む実道路走行距離ではない。", "",
         "[選択週の日射量と月全体の比較](SHIBU21_23_MONTHLY_IRRADIANCE_CONTEXT_20260914.md)では、3月の選択週は月全体の日平均GHIより35.2%少なく、10月は20.2%多い。週選択は固定し、この天候条件も解釈へ含める。冬12/1/2月は同年内の非連続な週である。", "",
-        "各週は同じ初期状態へ戻して開始する。BESSは初期3,000 kWhから最低1,200 kWhまで使える条件で、在庫減少をJSONに併記する。季節別の合計を連続21日間の費用とは扱わない。2026年時刻表・2025年評価日・2024年のみのclimatology予測であり、実運行再現やSolcast予測技能を示さない。", "",
+        "各週は同じ初期状態へ戻して開始する。" + bess_condition_text(data) + "季節別の合計を連続21日間の費用とは扱わない。2026年時刻表・2025年評価日・2024年のみのclimatology予測であり、実運行再現やSolcast予測技能を示さない。", "",
         "季節別入力は日付ごとのPV履歴と学習済みPV予測を扱う。走行需要は固定の電費・燃費を用いた距離ベースの設定で、気温に応じた空調負荷の月別変化は入力していない。したがって、結果を冷暖房等を含む季節的な需要変化の評価とは解釈しない。", "",
         "同じseed・threads・時間制限でも、各月の探索の到達度が同じとは限らない。費用の順位は、その条件で得られた実行可能解の順位として読む。Stage 1 gapはその目的関数の最適性指標であり、確定週間費用の誤差幅・信頼区間や季節差の統計的有意性を表さない。", "",
         "Stage 1 gap、二段階解法の統合最適性、正式research fleet contract、既存PowerPoint証拠2件の採用条件は別に残る。**DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS、研究採用BLOCKED**。各月1週から月平均・年平均・季節一般やPV単独の因果を主張しない。", "",
