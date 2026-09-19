@@ -75,8 +75,8 @@ def resolve_bess_terminal_soc_target_kwh(
         raw_target = max(float(initial_soc_kwh or 0.0), 0.0)
     else:
         raw_target = configured_target
-    if normalized == BESS_TERMINAL_POLICY_FIXED_TARGET and raw_target <= 0.0:
-        return None
+    # An explicit zero target is an equality too. Only a missing legacy
+    # policy/target maps to minimum_only during normalization above.
 
     lower = max(float(terminal_soc_floor_kwh or 0.0), 0.0)
     upper = max(float(maximum_soc_kwh or 0.0), lower)

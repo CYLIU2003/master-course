@@ -80,6 +80,27 @@ def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
     assert asset.bess_terminal_soc_deviation_penalty_yen_per_kwh == 20.0
 
 
+def test_explicit_zero_bess_state_survives_api_and_canonical_builder() -> None:
+    from bff.routers.scenarios import normalize_depot_energy_asset_config
+    from src.optimization.common.bess_terminal_policy import resolve_bess_terminal_soc_target_kwh
+
+    scenario = _scenario()
+    raw = scenario["simulation_config"]["depot_energy_assets"][0]
+    raw.update(bess_initial_soc_kwh=0.0, bess_soc_min_kwh=0.0,
+               bess_terminal_soc_min_kwh=0.0, bess_terminal_soc_target_kwh=0.0,
+               bess_terminal_soc_policy="fixed_target")
+    scenario["simulation_config"]["depot_energy_assets"][0] = normalize_depot_energy_asset_config(raw)
+    asset = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY").depot_energy_assets["dep-1"]
+    assert asset.bess_initial_soc_kwh == 0.0
+    assert resolve_bess_terminal_soc_target_kwh(
+        policy=asset.bess_terminal_soc_policy,
+        initial_soc_kwh=asset.bess_initial_soc_kwh,
+        configured_target_kwh=asset.bess_terminal_soc_target_kwh,
+        terminal_soc_floor_kwh=asset.bess_terminal_soc_min_kwh,
+        maximum_soc_kwh=asset.bess_soc_max_kwh,
+    ) == 0.0
+
+
 @pytest.mark.parametrize(
     "field, value, message",
     [

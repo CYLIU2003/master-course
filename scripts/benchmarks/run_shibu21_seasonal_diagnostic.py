@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from bff.store import scenario_store
+from scripts.benchmarks.seasonal_design_contract import require_execution_enabled
 from bff.services.run_preparation import load_prepared_input, materialize_scenario_from_prepared_input
 from bff.services.optimization_run.rolling_chain import _prepare_actual_pv_execution_file
 from scripts.run_hourly_charging_reoptimization import _build_executed_day_accounting, _EXECUTED_SLOT_MAP_FIELDS
@@ -75,6 +76,7 @@ def solve_week(
     design: dict,
     contract_validator: Callable[[object, dict], dict] | None = None,
 ) -> dict:
+    require_execution_enabled(design)
     manifest = json.loads((ROOT/design['input_manifests_directory']/week/'derived_scenarios.json').read_text(encoding='utf-8'))
     case = manifest['cases'][0]
     if case.get('prepared_input_namespace') == 'candidate_prepared_inputs':

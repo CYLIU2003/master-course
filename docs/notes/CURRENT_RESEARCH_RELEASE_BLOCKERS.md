@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-19 新しいモデル・シナリオは実行保留
+
+BESSの明示0初期残量・0終端目標と月別準備の設定引き継ぎを修正した。週末BESS残量を初期値に戻す別designは `execution_enabled=false` で保存。関連128テストは求解なしの検証であり、新条件のPrepare・day-ahead・rolling・会計・独立レビューは未実施。ユーザーの指示により実行を開始していない。下記 `7c7c2334` の完了済み12週を新HEADや新条件の証拠へ転用しない。研究採用BLOCKEDを維持する。[変更と比較条件](MODEL_SCENARIO_REVISION_20260919.md)。
+
 <!-- monthly-search-status -->
 最新の月別再実行: 固定 `7c7c2334`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。旧10a40c9fの7週・fa0c22bfの10週は旧版の記録として保存し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.md`。
 <!-- /monthly-search-status -->

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pytest
+from fastapi import HTTPException
+
 from bff.routers import scenarios
 
 
@@ -226,3 +229,61 @@ def test_normalize_depot_energy_asset_minimum_only_clears_stale_target() -> None
 
     assert asset["bess_terminal_soc_policy"] == "minimum_only"
     assert asset["bess_terminal_soc_target_kwh"] == 0.0
+
+
+@pytest.mark.parametrize("initial_key,target_key", [
+    ("bess_initial_soc_kwh", "bess_terminal_soc_target_kwh"),
+    ("bessInitialSocKwh", "bessTerminalSocTargetKwh"),
+    ("bess_initial_soc_ratio", "bess_terminal_soc_target_ratio"),
+    ("bess_initial_soc_percent", "bess_terminal_soc_target_percent"),
+])
+def test_normalize_bess_preserves_explicit_zero_initial_and_terminal_state(initial_key, target_key):
+    row = {"depot_id": "dep-1", "bess_enabled": True, "bess_energy_kwh": 100.0,
+           "bess_soc_min_kwh": 0.0, "bess_soc_max_kwh": 90.0,
+           "bess_terminal_soc_policy": "fixed_target", initial_key: 0.0, target_key: 0.0}
+    asset = scenarios.normalize_depot_energy_asset_config(row)
+    assert asset["bess_initial_soc_kwh"] == 0.0
+    assert asset["bess_terminal_soc_target_kwh"] == 0.0
+    assert asset["bess_terminal_soc_policy"] == "fixed_target"
+
+
+def test_normalize_bess_retains_legacy_missing_initial_and_target_defaults():
+    asset = scenarios.normalize_depot_energy_asset_config({
+        "depot_id": "dep-1", "bess_enabled": True, "bess_energy_kwh": 100.0,
+    })
+    assert asset["bess_initial_soc_kwh"] == 50.0
+    assert asset["bess_terminal_soc_policy"] == "minimum_only"
+
+
+def test_normalize_bess_zero_fixed_target_below_physical_floor_is_rejected():
+    with pytest.raises(HTTPException):
+        scenarios.normalize_depot_energy_asset_config({
+            "depot_id": "dep-1", "bess_enabled": True, "bess_energy_kwh": 100.0,
+            "bess_initial_soc_kwh": 50.0, "bess_soc_min_kwh": 20.0,
+            "bess_terminal_soc_policy": "fixed_target", "bess_terminal_soc_target_kwh": 0.0,
+        })
+
+
+def test_normalize_bess_fixed_target_requires_explicit_value():
+    with pytest.raises(HTTPException):
+        scenarios.normalize_depot_energy_asset_config({
+            "depot_id": "dep-1", "bess_enabled": True, "bess_energy_kwh": 100.0,
+            "bess_terminal_soc_policy": "fixed_target",
+        })
+
+
+def test_normalize_bess_return_to_initial_preserves_zero_target():
+    asset = scenarios.normalize_depot_energy_asset_config({
+        "depot_id": "dep-1", "bess_enabled": True, "bess_energy_kwh": 100.0,
+        "bess_initial_soc_kwh": 0.0, "bess_terminal_soc_policy": "return_to_initial",
+    })
+    assert asset["bess_initial_soc_kwh"] == 0.0
+    assert asset["bess_terminal_soc_target_kwh"] == 0.0
+
+
+def test_normalize_bess_blank_fields_remain_missing():
+    row = {"depot_id": "dep-1", "bess_enabled": True, "bess_energy_kwh": 100.0,
+           "bess_initial_soc_kwh": "", "bess_terminal_soc_target_kwh": ""}
+    assert scenarios.normalize_depot_energy_asset_config(row)["bess_initial_soc_kwh"] == 50.0
+    with pytest.raises(HTTPException):
+        scenarios.normalize_depot_energy_asset_config({**row, "bess_terminal_soc_policy": "fixed_target"})

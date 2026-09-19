@@ -71,6 +71,34 @@ def test_unknown_policy_is_rejected() -> None:
         normalize_bess_terminal_policy("invented")
 
 
+def test_explicit_fixed_zero_target_is_not_missing_legacy_target() -> None:
+    controls = dict(
+        initial_soc_kwh=50.0, configured_target_kwh=0.0,
+        terminal_soc_floor_kwh=0.0, maximum_soc_kwh=90.0,
+    )
+    assert resolve_bess_terminal_soc_target_kwh(policy="fixed_target", **controls) == 0.0
+    assert resolve_bess_terminal_soc_target_kwh(policy="", **controls) is None
+
+
+def test_independent_validation_rejects_residual_energy_for_fixed_zero_target() -> None:
+    from src.optimization.common.feasibility import FeasibilityChecker
+    from src.optimization.common.problem import AssignmentPlan, EnergyPriceSlot
+
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="explicit-zero"),
+        dispatch_context=None, trips=(), vehicles=(),
+        price_slots=(EnergyPriceSlot(slot_index=0),),
+        depot_energy_assets={"dep-1": DepotEnergyAsset(
+            depot_id="dep-1", bess_enabled=True, bess_energy_kwh=100.0,
+            bess_power_kw=50.0, bess_initial_soc_kwh=50.0,
+            bess_soc_max_kwh=90.0, bess_terminal_soc_policy="fixed_target",
+            bess_terminal_soc_target_kwh=0.0,
+        )},
+    )
+    metrics = FeasibilityChecker()._evaluate_bess_metrics(problem, AssignmentPlan())
+    assert metrics["terminal_deviation_kwh"] == 50.0
+
+
 def test_problem_rejects_fixed_target_outside_hard_soc_range() -> None:
     with pytest.raises(ValueError, match="fixed terminal BESS SOC target"):
         CanonicalOptimizationProblem(

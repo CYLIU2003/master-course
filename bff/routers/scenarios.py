@@ -195,6 +195,11 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
         _first_present_from_mapping(row, "bess_initial_soc_kwh", "bessInitialSocKwh"),
         "bess_initial_soc_kwh",
     )
+    initial_soc_provided = any(row.get(key) not in (None, "") for key in (
+        "bess_initial_soc_kwh", "bessInitialSocKwh",
+        "bess_initial_soc_ratio", "bessInitialSocRatio",
+        "bess_initial_soc_percent", "bessInitialSocPercent",
+    ))
     soc_min = _coerce_non_negative_float(
         _first_present_from_mapping(row, "bess_soc_min_kwh", "bessSocMinKwh"),
         "bess_soc_min_kwh",
@@ -213,6 +218,11 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
         "bess_terminal_soc_target_kwh",
     )
     terminal_target_explicit = terminal_target > 0.0
+    terminal_target_provided = any(row.get(key) not in (None, "") for key in (
+        *terminal_target_keys,
+        "bess_terminal_soc_target_ratio", "bessTerminalSocTargetRatio",
+        "bess_terminal_soc_target_percent", "bessTerminalSocTargetPercent",
+    ))
     if capacity > 0.0:
         ratio_value = _ratio_to_kwh(row, capacity, "bess_initial_soc_ratio", "bessInitialSocRatio")
         if ratio_value is not None:
@@ -256,7 +266,7 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
             )
         if soc_max <= 0.0:
             soc_max = capacity
-        if initial_soc <= 0.0 and soc_min <= 0.0:
+        if not initial_soc_provided and initial_soc <= 0.0 and soc_min <= 0.0:
             initial_soc = capacity * 0.5
         if soc_min <= 0.0 and soc_max <= 0.0:
             soc_min = capacity * 0.2
@@ -294,22 +304,23 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
             terminal_target_explicit = False
         elif terminal_policy == BESS_TERMINAL_POLICY_RETURN_TO_INITIAL:
             terminal_target = initial_soc
-            terminal_target_explicit = terminal_target > 0.0
         elif (
             terminal_policy == BESS_TERMINAL_POLICY_FIXED_TARGET
-            and not terminal_target_explicit
+            and not terminal_target_provided
         ):
             raise HTTPException(
                 status_code=400,
                 detail={
                     "code": "INVALID_DEPOT_ENERGY_ASSET",
-                    "message": "fixed_target policy requires a positive bess_terminal_soc_target_kwh",
+                    "message": "fixed_target policy requires an explicit bess_terminal_soc_target_kwh (zero is valid within bounds)",
                 },
             )
-        if terminal_target_explicit and not (terminal_min <= terminal_target <= soc_max):
+        if terminal_policy != BESS_TERMINAL_POLICY_MINIMUM_ONLY and not (
+            max(soc_min, terminal_min) <= terminal_target <= soc_max
+        ):
             raise HTTPException(
                 status_code=400,
-                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_terminal_soc_target_kwh must be between bess_terminal_soc_min_kwh and bess_soc_max_kwh"},
+                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_terminal_soc_target_kwh must be within [max(bess_soc_min_kwh, bess_terminal_soc_min_kwh), bess_soc_max_kwh]"},
             )
 
     if not enabled:

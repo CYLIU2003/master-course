@@ -16,6 +16,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 import sys
 import time
@@ -48,6 +49,7 @@ from bff.services.run_preparation import (
 from bff.store import output_paths, scenario_store
 from scripts.audits.audit_shibu24_source import sha256
 from scripts.benchmarks.monthly_week_contract import validate_balanced_week
+from scripts.benchmarks.seasonal_design_contract import seasonal_bess_controls
 from src.runtime_scope import resolve_scope
 from src.value_normalization import normalize_for_python
 from src.optimization.common.date_series import (
@@ -75,18 +77,18 @@ BESS_SOC_MIN_RATIO = 0.20
 BESS_SOC_MAX_RATIO = 0.80
 
 
-def apply_seasonal_bess_policy(asset: dict) -> dict:
+def apply_seasonal_bess_policy(asset: dict, *, design: dict | None = None) -> dict:
     """Apply the declared seasonal BESS operating range without changing the asset.
 
     Capacity, initial SOC, power, efficiency, and price controls come from the
     untouched parent asset. Only the operating bounds and terminal policy are
-    derived here: 20%/80% hard bounds and a 20% terminal floor with no target.
-    This keeps day and weekend boundaries free of an initial-SOC restoration
-    obligation while retaining physical SOC bounds.
+    derived here: 20%/80% hard bounds and the declared evaluation-end target.
+    Omitted design controls preserve the legacy minimum-only experiment.
     """
+    controls = seasonal_bess_controls(design)
     configured = deepcopy(asset)
     capacity_kwh = float(configured.get("bess_energy_kwh") or 0.0)
-    if capacity_kwh <= 0.0:
+    if not math.isfinite(capacity_kwh) or capacity_kwh <= 0.0:
         raise ValueError("Seasonal BESS policy requires a positive bess_energy_kwh")
     soc_min_kwh = capacity_kwh * BESS_SOC_MIN_RATIO
     soc_max_kwh = capacity_kwh * BESS_SOC_MAX_RATIO
@@ -95,12 +97,15 @@ def apply_seasonal_bess_policy(asset: dict) -> dict:
         raise ValueError(
             "Parent BESS initial SOC is outside the declared seasonal 20%-80% range"
         )
+    policy = controls["bess_terminal_soc_policy"]
+    target_kwh = initial_soc_kwh if policy == "return_to_initial" else 0.0
     configured.update(
+        bess_balance_period=controls["bess_balance_period"],
         bess_soc_min_kwh=soc_min_kwh,
         bess_soc_max_kwh=soc_max_kwh,
         bess_terminal_soc_min_kwh=soc_min_kwh,
-        bess_terminal_soc_policy="minimum_only",
-        bess_terminal_soc_target_kwh=0.0,
+        bess_terminal_soc_policy=policy,
+        bess_terminal_soc_target_kwh=target_kwh,
         bess_initial_soc_percent=(initial_soc_kwh / capacity_kwh) * 100.0,
         bess_soc_min_percent=BESS_SOC_MIN_RATIO * 100.0,
         bess_soc_max_percent=BESS_SOC_MAX_RATIO * 100.0,
@@ -109,8 +114,8 @@ def apply_seasonal_bess_policy(asset: dict) -> dict:
         bess_soc_min_ratio=BESS_SOC_MIN_RATIO,
         bess_soc_max_ratio=BESS_SOC_MAX_RATIO,
         bess_terminal_soc_min_ratio=BESS_SOC_MIN_RATIO,
-        bess_terminal_soc_target_ratio=0.0,
-        bess_terminal_soc_target_percent=0.0,
+        bess_terminal_soc_target_ratio=target_kwh / capacity_kwh,
+        bess_terminal_soc_target_percent=target_kwh / capacity_kwh * 100.0,
     )
     return configured
 
@@ -299,6 +304,7 @@ def build_source_candidate(*, route_codes: Sequence[str] = DEFAULT_ROUTE_CODES) 
 
 def configure_doc(doc: dict, start_date: str, source: dict, *, design: dict | None = None) -> dict:
     """Materialize one seven-day case from the immutable candidate source."""
+    bess_controls = seasonal_bess_controls(design)
     source_directory = ROOT / str(
         source.get("source_directory") or SOURCE_CANDIDATE_DIR.relative_to(ROOT)
     )
@@ -309,10 +315,9 @@ def configure_doc(doc: dict, start_date: str, source: dict, *, design: dict | No
                service_dates=[], planning_days=7, planning_horizon_hours=168,
                time_step_min=15, timestep_min=15, start_time="00:00", end_time="23:59",
                operation_time_window_enabled=False, rolling_lookahead_hours=24,
-               bess_balance_period="evaluation_period", bess_terminal_soc_policy="minimum_only",
-               rolling_bess_terminal_policy="minimum_only",
-               bess_terminal_soc_floor_percent=20.0, pv_information_mode="training_only_forecast_proxy",
+               pv_information_mode="training_only_forecast_proxy",
                daily_return_depot_id="tsurumaki", rolling_window_terminal_policy="day_ahead_boundary_state")
+    cfg.update(bess_controls)
     cfg.pop("calendar_policy", None)
     cfg["allow_fixed_weekday_timetable_pv_counterfactual"] = False
     terminal = {"bev_terminal_soc_policy": "return_to_initial",
@@ -387,7 +392,7 @@ def configure_doc(doc: dict, start_date: str, source: dict, *, design: dict | No
                  depot_load_model="explicit_zero_nontraction_load",
                  depot_load_kwh_by_slot=[0.0] * (1440 // step * len(dates)),
                  bess_balance_period="evaluation_period")
-    asset = apply_seasonal_bess_policy(asset)
+    asset = apply_seasonal_bess_policy(asset, design=design)
     dated_capacity_factors(asset, dates, step)
     cfg["depot_energy_assets"] = [asset]
     doc.setdefault("scenario_overlay", {})["depot_energy_assets"] = {"tsurumaki": deepcopy(asset)}
@@ -396,16 +401,14 @@ def configure_doc(doc: dict, start_date: str, source: dict, *, design: dict | No
     doc["pv_profiles"] = []
     contract.update(pv_source_sha256=[source["sha256"] for source in actual_sources],
                     daily_return_depot_id="tsurumaki", rolling_window_terminal_policy="day_ahead_boundary_state",
-                    rolling_bess_terminal_policy="minimum_only",
                     selected_route_ids=selected_ids, depot_load_model="explicit_zero_nontraction_load",
-                    bess_balance_period="evaluation_period", bess_terminal_soc_policy="minimum_only",
-                    bess_terminal_soc_floor_percent=20.0,
                     rolling_lookahead_hours=cfg.get("rolling_lookahead_hours"),
                     pv_capacity_factor_rows_sha256=content_hash(profiles),
                     pv_information_mode="training_only_forecast_proxy", forecast_audit=forecast_audit,
                     pv_execution_input=execution_input,
                     bev_terminal_soc_policy="return_to_initial", final_soc_target_tolerance_percent=0.0,
                     solar_semantics="training_only_forecast_for_planning_separate_actuals_for_execution")
+    contract.update(bess_controls)
     cfg.update(service_dates=dates, service_date=dates[0], date_series_contract=contract,
                date_series_source_id=source_id, holiday_dates=list(holiday_manifest["holiday_dates"]),
                pv_input_semantics="gross_generation_before_depot_load", weather_observation_date=dates[0],
@@ -529,6 +532,7 @@ def prepare_week(
     validation_mode: bool = False,
     design: dict | None = None,
 ) -> dict:
+    seasonal_bess_controls(design)
     parent = scenario_store._load(PARENT_SCENARIO_ID, skip_graph_arcs=True)
     before_hash = parent_hash(parent)
     record = existing or {}

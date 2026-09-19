@@ -26,6 +26,9 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from scripts.benchmarks.seasonal_design_contract import require_execution_enabled, seasonal_bess_controls
+
+
 def canonical_design_hash(design: dict) -> str:
     """Hash the source design before campaign-only overrides are applied."""
 
@@ -168,6 +171,9 @@ def run_campaign(
     selected_week: str | None = None,
 ) -> dict:
     """Execute the sequential campaign without reusing prior week artifacts."""
+
+    require_execution_enabled(design)
+    seasonal_bess_controls(design)
 
     # Keep pure campaign-contract helpers importable in a lightweight test
     # environment.  These existing runners pull the full pandas/Gurobi stack;

@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.benchmarks.run_shibu21_seasonal_diagnostic import solve_week, write_json
 from scripts.benchmarks.monthly_week_contract import validate_balanced_week
+from scripts.benchmarks.seasonal_design_contract import require_execution_enabled, seasonal_bess_controls
 from src.optimization.common.bess_terminal_policy import resolve_bess_terminal_soc_target_kwh
 from src.optimization.common.date_series import content_hash
 from src.optimization.common.soc_helpers import (
@@ -37,6 +38,7 @@ from src.optimization.common.soc_helpers import (
 
 def verify_evaluation_contract(problem, design: dict) -> dict:
     """Verify BEV and seasonal BESS terminal controls before a diagnostic solve."""
+    controls = seasonal_bess_controls(design)
     metadata = problem.metadata
     if metadata.get("bev_terminal_soc_policy") != design["bev_evaluation_terminal_policy"]:
         raise ValueError("Prepared BEV terminal policy differs from the declared evaluation")
@@ -83,7 +85,7 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
         if str(asset.bess_balance_period) != design["bess_balance_period"]:
             raise ValueError(f"BESS {depot_id} balance period differs from the declared evaluation")
         if str(asset.bess_terminal_soc_policy) != design["bess_terminal_soc_policy"]:
-            raise ValueError(f"BESS {depot_id} terminal policy is not minimum_only")
+            raise ValueError(f"BESS {depot_id} terminal policy differs from the declared evaluation")
         target = resolve_bess_terminal_soc_target_kwh(
             policy=asset.bess_terminal_soc_policy,
             initial_soc_kwh=asset.bess_initial_soc_kwh,
@@ -91,8 +93,15 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
             terminal_soc_floor_kwh=asset.bess_terminal_soc_min_kwh,
             maximum_soc_kwh=asset.bess_soc_max_kwh,
         )
-        if target is not None:
-            raise ValueError(f"BESS {depot_id} unexpectedly retains a terminal SOC target")
+        expected_target = (
+            float(asset.bess_initial_soc_kwh)
+            if controls["bess_terminal_soc_policy"] == "return_to_initial"
+            else None
+        )
+        if (target is None) != (expected_target is None) or (
+            target is not None and abs(target - expected_target) > 1.0e-6
+        ):
+            raise ValueError(f"BESS {depot_id} terminal SOC target differs from the declared evaluation")
         bess_controls[str(depot_id)] = {
             "capacity_kwh": capacity,
             "initial_soc_kwh": float(asset.bess_initial_soc_kwh),
@@ -100,7 +109,7 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
             "soc_max_kwh": float(asset.bess_soc_max_kwh),
             "terminal_soc_floor_kwh": float(asset.bess_terminal_soc_min_kwh),
             "terminal_soc_policy": str(asset.bess_terminal_soc_policy),
-            "terminal_soc_target_kwh": None,
+            "terminal_soc_target_kwh": target,
         }
     return {
         "status": "DECLARED_TERMINAL_CONTROLS_VERIFIED",
@@ -553,6 +562,7 @@ def run_preflight(config: dict, output: Path) -> dict:
 
 
 def run_diagnostic(config: dict, output: Path) -> list[dict]:
+    require_execution_enabled(config)
     preflight = run_preflight(config, output)
     if preflight["worktree_dirty"]:
         raise RuntimeError("Diagnostic run requires the parent to freeze and commit the source first")
@@ -673,6 +683,8 @@ def main() -> None:
     parser.add_argument("--run", action="store_true", help="run only after an unblocked preflight")
     args = parser.parse_args()
     config = json.loads(args.config.read_text(encoding="utf-8"))
+    if args.run:
+        require_execution_enabled(config)
     args.output.mkdir(parents=True, exist_ok=False)
     write_json(args.output / "design.json", config)
     if args.run:
