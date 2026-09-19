@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-19 18:09 JST BESS週末復元条件を新規実行
+
+ユーザーの開始承認を受け、新しいclean固定 `2ff239e1` から全12週をスクリプトで開始。確認時点は1月Prepare・0/12週、監視RUNNING。物理・会計・週末BESS復元の独立検算と全週完了は未成立。通常のAI監視はせず、完了または失敗時だけ一度タスクへ通知する。研究採用BLOCKEDを維持する。[実行と配信](MONTHLY_CYCLIC_EXECUTION_20260919.md)。以下の「実行保留」は開始承認前の記録。
+
 ## 2026-09-19 新しいモデル・シナリオは実行保留
 
 BESSの明示0初期残量・0終端目標と月別準備の設定引き継ぎを修正した。週末BESS残量を初期値に戻す別designは `execution_enabled=false` で保存。関連128テストは求解なしの検証であり、新条件のPrepare・day-ahead・rolling・会計・独立レビューは未実施。ユーザーの指示により実行を開始していない。下記 `7c7c2334` の完了済み12週を新HEADや新条件の証拠へ転用しない。研究採用BLOCKEDを維持する。[変更と比較条件](MODEL_SCENARIO_REVISION_20260919.md)。

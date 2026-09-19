@@ -2,6 +2,8 @@
 
 2026-09-19、ユーザーが再開始と `g2681320@tcu.ac.jp` への完了メールを承認した。前の実行保留指示は、この新しい実行について解除された。
 
+18:09 JSTに起動。固定SHAは `2ff239e1dc488409e8cf215bff918953fd36346f`、作業場所は `C:/Users/RTDS_admin/.codex/worktrees/monthly-cyclic-20260919/master-course`。campaign実PID42140、observer実PID30992。開始確認時は1月のPrepare、完了0/12週、監視RUNNING。固定版の関連70テスト、入力47件・metadata refs11件、helper hash・Gmail接続を確認した。現在の進捗は以下のstateを参照する。
+
 - 設定: `config/shibu21_23_monthly_cyclic_20260919.json`。編集保留版は別に保存したまま、実行用だけ `execution_enabled=true` とする。
 - 全12週を新しいclean固定版から新規Prepare・day-ahead・168時間rollingの順で逐次実行。旧 `7c7c2334` の12週や失敗版の週を流用しない。元の親シナリオ、入力47ファイルと予測はハッシュ照合してコピーし、親metadataのrefsだけ新しい作業場所へ移す。
 - 新条件はBESS週末の初期残量復元と、中間rolling窓の固定day-ahead予測境界。20–80%範囲、全接続、物理許容差、共通時間予算、車両・時刻表・単価は前の修正案を維持する。実行中にコードや条件を変更しない。

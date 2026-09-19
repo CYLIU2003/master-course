@@ -1,6 +1,6 @@
 # master-course
 
-2026-09-19: ユーザーの再開始指示を受け、BESS週末復元条件の[全12週スクリプト実行](docs/notes/MONTHLY_CYCLIC_EXECUTION_20260919.md)を準備しました。通常はAIを呼ばず、計算・保存結果の監査・集計をスクリプトへ任せ、検証済み完了時に承認済み宛先へメールを1通送ります。実行状態・固定版は `output/monthly_cyclic_20260919/budget_rerun_launch.json` に記録します。
+2026-09-19 18:09 JST: BESS週末復元条件の[全12週スクリプト実行](docs/notes/MONTHLY_CYCLIC_EXECUTION_20260919.md)を固定 `2ff239e1` から開始しました。開始確認時は1月の新規Prepare、完了0/12週。通常はAIを呼ばず、計算・保存結果の監査・集計をスクリプトへ任せ、検証済み完了時に承認済み宛先へメールを1通送ります。状態は `output/monthly_cyclic_20260919/script_observer/state.json`、固定版・実PIDは同親の `budget_rerun_launch.json` に記録しています。
 
 2026-09-19: BESSの明示0残量の保存・終端目標と、月別準備時のBESS設定引き継ぎを修正しました。週末に初期残量へ戻す[全12週の別設定](config/shibu21_23_monthly_cyclic_draft_20260919.json)は実行無効で保存しています。関連128テスト通過。**シミュレーションは開始していません。** [変更点・条件・残る課題](docs/notes/MODEL_SCENARIO_REVISION_20260919.md)。
 
