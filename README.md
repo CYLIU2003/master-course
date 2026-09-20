@@ -11,7 +11,7 @@
 
 2026-09-19: 占部先生の指摘を受け、研究資料の「受電ピーク」の名称・定義を全ページで統一しました。[修正版資料と未送信の返信案](outcome/2026-09-19_urabe_terminology/README.md)。今後の資料作成ルールを [research-presentation/SKILL.md](.codex/skills/research-presentation/SKILL.md) にまとめ、用語表・数値の根拠・編集可能な図表・ユーザー編集の保全・表示確認を記載しました。
 
-2026-09-19: Solcastの2023年4月（2,880件）を追加取得・検証しました。学習対象2022〜2024年は28/36か月・81,696件、残りは2023年5〜12月の8か月です。残量不明のため今回は1リクエストで終了しました。既存学習モデル・月別比較の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
+2026-09-20: Solcastの2023年5月（2,976件）を追加取得・検証しました。学習対象2022〜2024年は29/36か月・84,672件、残りは2023年6〜12月の7か月です。残量不明のため今回は1リクエストで終了しました。既存学習モデル・月別比較の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
 
 2026-09-18: Solcastの2023年3月（2,976件）を追加取得・検証しました。学習対象2022〜2024年は27/36か月・78,816件、残りは2023年4〜12月の9か月です。残量不明のため今回は1リクエストで終了しました。既存学習モデル・月別比較の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
 
