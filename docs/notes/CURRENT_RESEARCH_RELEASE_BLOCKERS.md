@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-21 費用計画とBESS実行方針の不整合
+
+新規確認: 実行時に守る3,000 kWhの予備残量が、前日とrolling将来区間の予測に共通制約として入っていない。5月hour012では将来1,395.87465 kWhまで利用する計画が残り、実行時にはその利用が禁止される。総費用増の主因は有料超過で、PV単独の影響と解釈しない。Stage1は全12週で初回incumbentからの目的値改善を確認できず、Stage2にも3件のtime-limit incumbentがある。全12週の物理・会計通過と週末復元は維持するが、費用最小化の妥当性の課題として、方針の整合化と別版の比較が必要。研究採用BLOCKEDを継続する。[読取り診断](MONTHLY_RESERVE_COST_DIAGNOSIS_20260921.md)。
+
 <!-- monthly-reserve-status -->
 最新の月別再実行: 固定 `68f2f4e5`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVのみで充電、初期残量を毎時の予備残量として保持し週末に復元。旧2ff239e1の3週・旧7c7c2334の12週は別条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md`。
 <!-- /monthly-reserve-status -->

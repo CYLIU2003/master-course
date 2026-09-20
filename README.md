@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-21: [PVが多い週の高費用と最適性の診断](docs/notes/MONTHLY_RESERVE_COST_DIAGNOSIS_20260921.md)を追加しました。1月→5月の費用差95.48%は契約超過費。実行時3,000 kWhのBESS保護が将来の予測軌道へ整合しておらず、先では1,200 kWhまで使う計画が残ります。全12週完走は確認済みですが、費用最小化の妥当性には追加修正・別版検証が必要です。今回は保存結果の読取りのみで、モデル変更・再計算は行っていません。
+
 <!-- monthly-reserve-status -->
 最新の月別再実行: 固定 `68f2f4e5`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVのみで充電、初期残量を毎時の予備残量として保持し週末に復元。旧2ff239e1の3週・旧7c7c2334の12週は別条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md`。
 <!-- /monthly-reserve-status -->
