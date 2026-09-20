@@ -2,6 +2,7 @@
 
 ## 2026-09-21 配車の根探索停滞を確認し、次の診断を実装
 
+- 08:17 JSTにclean固定daa9ef5997f7e92b1df18372ad592c8489633d74からbarrier/NoRelの逐次診断を開始。実coordinator PID45744、venv launcher30784。入力47件のSHAと参照移設11件、固定版26 tests通過を確認。初回barrierのRUNNINGを確認し、以後はスクリプトに任せる。終了時の既存タスクqueueは1回のみ、AI定期監視・メール送信・全12週実行はなし。起動原本は output/stage1_root_search_20260921/launch.json。
 - 関連131 tests通過。全体回帰2428 passed / 既存資料2 failed、106.17秒。PPTX原本・期待ハッシュを変更せず、最適化関連の新規失敗は0件。
 
 - 固定3662b81aのsummary/4原本SHA・clean・物理検証と、DA/Stage1緩和それぞれ672区間のBESS保護を保存値から照合。配車gap47.8709%、初期解改善0円、充電gap0.36796%。実績費用は未評価。

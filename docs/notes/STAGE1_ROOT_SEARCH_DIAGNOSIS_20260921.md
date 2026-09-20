@@ -71,3 +71,21 @@ NoRel自体は良い下界を保証しないため、実行可能解の改善用
 自己レビューと独立研究レビューは別であり、独立承認はPENDING。
 
 検証結果: 関連131 tests通過。UTF-8指定の全体回帰は2428 passed / 既存資料2 failed（106.17秒）。失敗は既存PowerPoint原本・構成の差で、本変更の最適化テスト失敗は0件。原本と期待ハッシュは保全。自己レビューの新規P0/P1残件0、独立研究レビューPENDING。
+
+## 固定版からの起動記録
+
+2026-09-21 08:17 JST、clean固定 `daa9ef5997f7e92b1df18372ad592c8489633d74`
+（branch `codex/stage1-root-search-20260921`）から限定診断を開始した。
+実行場所は `C:/Users/RTDS_admin/.codex/worktrees/stage1-root-search-20260921/master-course`。
+旧版から47件の入力SHAを照合して移し、親シナリオの参照11件を移設した。
+新規Prepareを使い、以前の求解結果は入力へ流用しない。固定版の関連26 testsも通過。
+
+- 制御記録: `C:/master-course/output/stage1_root_search_20260921/launch.json`
+- 実coordinator PID: 45744（venv launcher: 30784）。各条件の求解は別の子プロセス。
+- 結果先: 固定worktreeの `output/stage1_root_search_diagnosis_20260921/`
+- 起動時確認: `RUNNING`、active profile `bounded_presolve_barrier`、Git clean。
+- 起動スクリプトSHA256: `dfbd734bef268a35825a31b4966bd35d46d38dce578b0ee150c4ba93c7adb8fc`
+
+起動スクリプトは待機後に完了／失敗を保存し、既存タスクへ1回だけqueueする。
+通常のAI監視、メール送信、全12週の計算は行わない。実行中の固定コードは変更しない。
+この起動記録は結果や最適性の証明ではなく、各条件の結果判定は終了後に行う。
