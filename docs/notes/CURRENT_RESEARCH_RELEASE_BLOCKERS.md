@@ -1,8 +1,10 @@
 # Current research release blockers
 
 <!-- monthly-reserve-status -->
-2026-09-20 17:26 JST: 予備残量を保持する固定 `68f2f4e5` で全12週を新規開始。起動確認時は1月Prepare、独立監査0/12週、observer RUNNING。局所回帰と固定版57 testsは通過したが、全12週の物理・会計・予備残量監査と独立研究承認は未完了。研究採用BLOCKED。旧2ff239e1の3週・旧7c7c2334の12週は新条件の結果へ流用しない。[今回の実行](MONTHLY_RESERVE_EXECUTION_20260920.md)。以下は過去の起動・停止記録。
+最新の月別再実行: 固定 `68f2f4e5`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVのみで充電、初期残量を毎時の予備残量として保持し週末に復元。旧2ff239e1の3週・旧7c7c2334の12週は別条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md`。
 <!-- /monthly-reserve-status -->
+
+2026-09-20の配信前再照合: 全12週・2,016時間・8,064区間の物理違反0件、会計一致、BESS予備残量と週末復元を確認した。旧4月で停止した経路は新版の全12週では再発していない。残るStage 1 gap、統合最適性、正式fleet contract、入力の代理条件、独立研究承認等の課題を完走で解除しない。最大900 kWの受電と有料超過費も結果へ明記した。[完成報告](SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md)。
 
 ## 2026-09-19 18:09 JST BESS週末復元条件を新規実行
 

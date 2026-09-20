@@ -1,7 +1,7 @@
 # master-course
 
 <!-- monthly-reserve-status -->
-2026-09-20 17:26 JST: BESSのPV専用充電と週末復元を維持し、予測PVに依存しない予備残量を追加した固定 `68f2f4e5` で全12週を新規開始。起動確認時は1月の新規Prepare、独立監査0/12週。通常処理はスクリプトのみ、全週監査・図表完成後に承認済み宛先へメールを1通送る。全体2,400 tests・固定版57 tests通過（既存資料の原本照合2件は未解消）。旧結果の流用なし、研究採用BLOCKED。[修正内容](docs/notes/BESS_FORECAST_RESERVE_FIX_20260920.md)・[実行状態](docs/notes/MONTHLY_RESERVE_EXECUTION_20260920.md)。
+最新の月別再実行: 固定 `68f2f4e5`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVのみで充電、初期残量を毎時の予備残量として保持し週末に復元。旧2ff239e1の3週・旧7c7c2334の12週は別条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md`。
 <!-- /monthly-reserve-status -->
 
 

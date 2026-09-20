@@ -1,5 +1,10 @@
 # BESS予備残量を保持する月別12週の実行
 
+<!-- monthly-reserve-status -->
+最新の月別再実行: 固定 `68f2f4e5`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVのみで充電、初期残量を毎時の予備残量として保持し週末に復元。旧2ff239e1の3週・旧7c7c2334の12週は別条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md`。
+<!-- /monthly-reserve-status -->
+
+
 2026-09-20にユーザーは4月停止の完全な修正を指示した。PV専用BESSを維持し、予測誤差への予備残量とrolling窓末を整合させた新条件を全12週へ適用する。過去の再実行・完了時メールの承認を引き継ぎ、再承認は不要。
 
 - 設計: `config/shibu21_23_monthly_reserve_20260920.json`。
@@ -29,3 +34,11 @@
 - 配信識別子は `MC2025-68f2f4e5`。メール未送信。全12週の監査と最終図表が揃った時だけ既存タスクを一度復帰させ、承認済み宛先へ1通送信する。
 
 上記PID・開始時刻は起動時の記録。最新状態は `script_observer/state.json` とcampaign `progress.json`を参照する。
+
+## 2026-09-20 全12週完了と配信前確認
+
+固定 `68f2f4e5` の全12週が完走し、保存原本による独立監査を通過した。2026-09-20 23:55 JSTの配信前照合では、2,016受理時間・8,064区間、物理違反0件、確定会計と日別台帳の一致を確認した。BESS予備残量監査の4,032原本ハッシュと添付4ファイルも一致した。最小BESS残量は数値許容差内で3,000 kWh、週末初期残量との差の最大値は `4.23e-11 kWh`。旧4月の停止はこの全12週の実行では再発しなかった。
+
+`script_observer/final_verification.json` にbundle・payload・監査・campaign原本のSHAを保存した。PNGを表示し、6パネルすべての12か月・凡例・単位・注記と欠け／重なりを確認、`final_visual_review.json` にPASSを記録した。計算原本や図表の修正は不要だった。
+
+完成結果は [月別・季節別報告](SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md)。購入電力量が最多なのは5月、最少は2月。受電ピークは最大900 kWで、200 kWの契約基準を有料超過する条件の費用が大きい。完走は費用改善や最適性の証明ではない。研究採用BLOCKEDを維持し、配信の実成否は `script_observer/email_receipt.json` を原本とする。

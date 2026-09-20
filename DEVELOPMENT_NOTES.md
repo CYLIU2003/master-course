@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-20 予備残量版の全12週完了・配信前照合
+
+- 固定 `68f2f4e5` で全12週・2,016時間・8,064区間を受理、物理違反0件。全週の確定会計、初期BESS残量への週末復元、ゼロPVでの予備残量を保存結果から独立検算した。旧4月の停止は再発していない。
+- `collect(..., partial=False)` で全週の物理・会計・同一条件・4032予備残量原本SHAを再照合し、保存済み報告の時刻以外の全項目と一致した。bundleの4成果物とメール添付をバイト単位で照合。最終PNGを表示し、ラベル・凡例・単位・12か月・重なりなしを確認した。検査原本は `output/monthly_reserve_20260920/script_observer/final_verification.json` と `final_visual_review.json`。
+- 最大受電900 kWと大きな有料超過費を結果表・本文・図へ明記。費用最適性や研究承認とは区別し、研究採用BLOCKEDを維持する。[完成報告](docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md)。メール成功は専用 `email_receipt.json` の実message IDで確認する。
+
 ## 2026-09-20 17:26 JST 予備残量修正版を固定して開始
 
 - clean固定 `68f2f4e5aa7b242de467ceece487a4c43da00c70`、`codex/monthly-reserve-20260920` の隔離worktreeから全12週を新規実行。入力47ファイルの同一SHA・metadata参照11件の移設と、固定版57 tests通過を確認した。
@@ -14,6 +20,11 @@
 - 固定 `2ff239e1dc488409e8cf215bff918953fd36346f` を専用worktreeへ展開し、入力47件のSHAと親metadata refs11件の移設を確認。固定版の関連70テストも通過。18:09 JSTにcampaign実PID42140、observer実PID30992を起動し、1月Prepare・監視RUNNINGを確認した。新しいメールはまだ送っていない。Gmail接続と宛先、専用件名MC2025-2ff239e1、helper hashを確認した。
 
 ## 2026-09-19 モデルと月別シナリオの修正・実行保留
+
+<!-- monthly-reserve-status -->
+最新の月別再実行: 固定 `68f2f4e5`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVのみで充電、初期残量を毎時の予備残量として保持し週末に復元。旧2ff239e1の3週・旧7c7c2334の12週は別条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md`。
+<!-- /monthly-reserve-status -->
+
 
 ## 2026-09-20 BESS予測誤差への予備残量と全月再実行
 
