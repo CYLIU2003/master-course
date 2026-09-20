@@ -597,43 +597,8 @@ class RollingReoptimizer:
     def _freeze_bess_terminal_soc_targets(
         problem: CanonicalOptimizationProblem,
     ) -> CanonicalOptimizationProblem:
-        """Keep stationary-battery day-start targets fixed while SOC changes."""
-
-        assets = dict(problem.depot_energy_assets or {})
-        updated_assets = dict(assets)
-        frozen_targets: dict[str, float] = {}
-        for depot_id, asset in assets.items():
-            target = resolve_bess_terminal_soc_target_kwh(
-                policy=asset.bess_terminal_soc_policy,
-                initial_soc_kwh=asset.bess_initial_soc_kwh,
-                configured_target_kwh=asset.bess_terminal_soc_target_kwh,
-                terminal_soc_floor_kwh=asset.bess_terminal_soc_min_kwh,
-                maximum_soc_kwh=(
-                    asset.bess_soc_max_kwh or asset.bess_energy_kwh
-                ),
-            )
-            if target is None:
-                continue
-            depot_key = str(depot_id)
-            frozen_targets[depot_key] = float(target)
-            updated_assets[depot_key] = replace(
-                asset,
-                bess_terminal_soc_policy="fixed_target",
-                bess_terminal_soc_target_kwh=float(target),
-            )
-        if not frozen_targets:
-            return problem
-        metadata = dict(problem.metadata or {})
-        metadata["bess_terminal_soc_target_kwh_by_depot"] = frozen_targets
-        metadata.setdefault("bess_daily_balance_target_kwh_by_depot",frozen_targets)
-        metadata["bess_terminal_soc_target_source"] = (
-            "day_start_problem_before_rolling_state_update"
-        )
-        return replace(
-            problem,
-            depot_energy_assets=updated_assets,
-            metadata=metadata,
-        )
+        from src.optimization.common.bess_reserve_policy import freeze_bess_terminal_soc_targets
+        return freeze_bess_terminal_soc_targets(problem)
 
     def _apply_actual_soc(
         self,

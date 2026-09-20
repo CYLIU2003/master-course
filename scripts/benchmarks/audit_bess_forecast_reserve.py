@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 
 POLICY = "evaluation_target_zero_pv"
+PLANNING_POLICY = "evaluation_target_every_prefix"
 TOLERANCE_KWH = 1e-6
 
 
@@ -54,7 +55,8 @@ def verify_prefix(rows: list[dict], forecast: dict, *, depot: str, target: float
 
 
 def audit_week(case: Path, design: dict, terminal: dict, assets: dict) -> dict:
-    require(design.get("bess_forecast_reserve_policy") == POLICY, "wrong design")
+    policy = design.get("bess_forecast_reserve_policy")
+    require(policy in (POLICY, PLANNING_POLICY), "wrong design")
     hashes, depots = {}, {}
     def evidence(path):
         hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -65,6 +67,11 @@ def audit_week(case: Path, design: dict, terminal: dict, assets: dict) -> dict:
         eta_c, eta_d = finite(asset["bess_charge_efficiency"]), finite(asset["bess_discharge_efficiency"])
         require(0 < eta_c <= 1 and 0 < eta_d <= 1, "invalid efficiencies")
         require(asset["allow_grid_to_bess"] is False, "source permission changed")
+        if policy == PLANNING_POLICY:
+            day_ahead = evidence(case / "canonical_solver_result.json")
+            verify_planning_reserve(day_ahead, depot=depot, target=target,
+                                    eta_charge=eta_c, eta_discharge=eta_d,
+                                    slots=list(range(672)), block_size=4)
         previous = target
         minimum = target
         for hour in range(168):
@@ -72,7 +79,7 @@ def audit_week(case: Path, design: dict, terminal: dict, assets: dict) -> dict:
             native = evidence(folder / "forecast_result.json")
             execution = evidence(folder / "pv_execution_audit.json")
             audit = native["metadata"]["rolling_pv_execution_reserve"]
-            require(audit["enabled"] is True and audit["bess_reserve_policy"] == POLICY, "missing native reserve")
+            require(audit["enabled"] is True and audit["bess_reserve_policy"] == policy, "missing native reserve")
             slots = list(range(hour * 4, (hour + 1) * 4))
             require(audit["committed_slot_indices"] == slots, "wrong issued slots")
             require(abs(finite(audit["protected_floor_kwh_by_depot"][depot]) - target) <= TOLERANCE_KWH,
@@ -86,9 +93,31 @@ def audit_week(case: Path, design: dict, terminal: dict, assets: dict) -> dict:
             previous = result["actual_end_kwh"]
             minimum = min(minimum, result["minimum_realized_kwh"])
             end = min((hour + 24) * 4, 672) - 1
+            if policy == PLANNING_POLICY:
+                verify_planning_reserve(native, depot=depot, target=target,
+                                        eta_charge=eta_c, eta_discharge=eta_d,
+                                        slots=list(range(hour * 4, end + 1)), block_size=4)
             require(abs(finite(native["bess_soc_kwh_by_depot_slot"][depot][str(end)]) - target) <= TOLERANCE_KWH,
                     "rolling terminal differs from original evaluation target")
         require(abs(previous - target) <= TOLERANCE_KWH, "weekly restoration failed")
         depots[depot] = {"target_kwh": target, "minimum_realized_kwh": minimum, "terminal_kwh": previous}
-    return {"status": "ALL_168_PREFIXES_RESERVE_VERIFIED", "policy": POLICY,
+    return {"status": "ALL_168_PREFIXES_RESERVE_VERIFIED", "policy": policy,
             "depots": depots, "hashes": hashes, "future_actuals_used": False}
+
+
+def verify_planning_reserve(native: dict, *, depot: str, target: float,
+                            eta_charge: float, eta_discharge: float,
+                            slots: list[int], block_size: int) -> None:
+    """Reconstruct each forecast block from saved start states and flows."""
+    metadata = native["metadata"]
+    starts = metadata["bess_soc_start_kwh_by_depot_slot"][depot]
+    for offset in range(0, len(slots), block_size):
+        block = slots[offset:offset + block_size]
+        lower = finite(starts[str(block[0])])
+        for slot in block:
+            key = str(slot)
+            grid = finite(native["grid_to_bess_kwh_by_depot_slot"].get(depot, {}).get(key, 0.0))
+            discharge = finite(native["bess_to_bus_kwh_by_depot_slot"].get(depot, {}).get(key, 0.0))
+            require(abs(grid) <= TOLERANCE_KWH and discharge >= -TOLERANCE_KWH, "forecast source permission changed")
+            lower += eta_charge * grid - discharge / eta_discharge
+            require(lower >= target - TOLERANCE_KWH, "future forecast block spends terminal reserve")

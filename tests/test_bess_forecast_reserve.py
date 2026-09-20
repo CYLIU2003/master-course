@@ -4,7 +4,7 @@ from dataclasses import replace
 import pytest
 
 from src.optimization.common.bess_reserve_policy import (
-    EVALUATION_TARGET_ZERO_PV, POLICY_KEY, bess_reserve_policy, bess_reserve_targets,
+    EVALUATION_TARGET_ZERO_PV, EVALUATION_TARGET_EVERY_PREFIX, POLICY_KEY, bess_reserve_policy, bess_reserve_targets,
 )
 from src.optimization.common.problem import OptimizationConfig
 from src.optimization.milp.pv_execution_reserve import add_pv_execution_reserve_constraints
@@ -13,15 +13,15 @@ from test_rolling_bess_boundary_policy import _boundary_problem, _CaptureEngine
 from test_rolling_pv_execution_reserve import _problem, _flow_model, _fix, _config
 
 
-def protected(problem):
+def protected(problem, policy=EVALUATION_TARGET_ZERO_PV):
     return replace(problem, depot_energy_assets={
         d: replace(a, bess_balance_period="evaluation_period", allow_grid_to_bess=False,
                    bess_terminal_soc_policy="return_to_initial")
         for d, a in problem.depot_energy_assets.items()
-    }, metadata={**problem.metadata, POLICY_KEY: EVALUATION_TARGET_ZERO_PV,
+    }, metadata={**problem.metadata, POLICY_KEY: policy,
                  "enable_contract_overage_penalty": True,
                  "date_series_contract": {"pv_information_mode": "training_only_forecast_proxy",
-                                          POLICY_KEY: EVALUATION_TARGET_ZERO_PV}})
+                                          POLICY_KEY: policy}})
 
 
 @pytest.mark.parametrize("current_min,reference", [(0, 1200.0), (24 * 60, 4800.0)])
@@ -121,7 +121,8 @@ def test_legacy_policy_does_not_add_a_terminal_reserve():
 
 
 @pytest.mark.parametrize("bright_hours", [0, 12])
-def test_native_48_hour_chain_survives_forecast_overprediction_and_restores_inventory(bright_hours):
+@pytest.mark.parametrize("policy", [EVALUATION_TARGET_ZERO_PV, EVALUATION_TARGET_EVERY_PREFIX])
+def test_native_48_hour_chain_survives_forecast_overprediction_and_restores_inventory(bright_hours, policy):
     pytest.importorskip("gurobipy")
     from src.optimization.rolling.pv_execution import execute_pv_prefix
     from src.optimization.rolling.day_ahead_hourly import build_next_execution_state
@@ -130,7 +131,7 @@ def test_native_48_hour_chain_survives_forecast_overprediction_and_restores_inve
     from test_daily_return_policy import daily_problem
     from test_multiday_rolling_contract import _fixed_plan
 
-    p = protected(daily_problem())
+    p = protected(daily_problem(), policy)
     p = replace(p, depot_energy_assets={"DEPOT": replace(p.depot_energy_assets["DEPOT"],
         bess_soc_min_kwh=20.0, pv_generation_kwh_by_slot=(30.0,) * 48)},
         metadata={**p.metadata, "rolling_window_terminal_policy": "day_ahead_boundary_state"})

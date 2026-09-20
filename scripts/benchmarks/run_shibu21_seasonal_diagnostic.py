@@ -105,6 +105,8 @@ def solve_week(
         time_limit_sec=design['day_ahead_wall_time_limit_sec'],
         stage1_time_limit_sec=design['stage1_time_limit_sec'], stage2_time_limit_sec=design['stage2_time_limit_sec'],
         mip_gap=design['mip_gap'], gurobi_threads=design['threads'], random_seed=design['seed'],
+        stage1_gurobi_search_profile=design.get('stage1_gurobi_search_profile', 'default'),
+        rolling_execution_minutes=design['execution_minutes'],
         research_run=False, allow_postsolve_repair=False, stage1_best_obj_stop_enabled=False)
     problem = ProblemBuilder().build_from_scenario(scenario, depot_id='tsurumaki',service_id='WEEKDAY',config=config,planning_days=7)
     problem = replace(problem, metadata={**problem.metadata,
@@ -148,6 +150,14 @@ def solve_week(
     summary['day_ahead_physical_accepted'] = physical['accepted']
     if not physical['accepted']:
         summary.update(status='DAY_AHEAD_PHYSICAL_FAILED',physical_violations=physical['violations'])
+        return summary
+    from scripts.benchmarks.optimization_quality import day_ahead_quality
+    quality = day_ahead_quality(result.plan.metadata, target_gap=float(design['mip_gap']))
+    write_json(output/'day_ahead_optimization_quality.json', quality)
+    summary['day_ahead_optimization_quality'] = quality
+    if design.get('diagnostic_stop_after_day_ahead') is True:
+        summary['status'] = 'DAY_AHEAD_ONLY_DIAGNOSIS_COMPLETE'
+        write_json(output/'progress.json', summary)
         return summary
     reference = result.plan
     rolling = RollingReoptimizer()

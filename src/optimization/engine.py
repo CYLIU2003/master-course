@@ -30,6 +30,10 @@ from src.optimization.common.strict_precheck import (
     StrictCoveragePrecheckResult,
     evaluate_strict_coverage_precheck,
 )
+from src.optimization.common.bess_reserve_policy import (
+    EVALUATION_TARGET_EVERY_PREFIX, bess_reserve_policy,
+    freeze_bess_terminal_soc_targets, bess_reserve_targets,
+)
 from src.optimization.common.strict_precheck_cache import strict_precheck_input_fingerprint
 from src.optimization.common.seed_fingerprint import (
     phase4_seed_plan_fingerprint,
@@ -940,6 +944,13 @@ class OptimizationEngine:
                 'movement, fuel/location handoff and executed-week acceptance are still under validation'
             )
         problem, config = self._apply_phase_contract(problem, config)
+        if bess_reserve_policy(problem) == EVALUATION_TARGET_EVERY_PREFIX:
+            if config.mode != OptimizationMode.MILP or config.phase not in (
+                "phase3_two_stage", "phase1_charging_only",
+            ):
+                raise ValueError("Every-prefix BESS reserve requires the Phase 3 / fixed-path MILP pipeline")
+            problem = freeze_bess_terminal_soc_targets(problem)
+            bess_reserve_targets(problem)
         if (getattr(problem.dispatch_context, "daily_return_depot_id", "")
                 and not str(config.phase).startswith("phase3_two_stage")
                 and str(config.phase) != "phase1_charging_only"):

@@ -54,7 +54,7 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
         raise ValueError("Prepared BESS balance period differs from the declared evaluation")
     if metadata.get("bess_forecast_reserve_policy", "physical_floor_only") != controls["bess_forecast_reserve_policy"]:
         raise ValueError("Prepared BESS forecast reserve differs from the declared evaluation")
-    if controls["bess_forecast_reserve_policy"] == "evaluation_target_zero_pv":
+    if controls["bess_forecast_reserve_policy"] in ("evaluation_target_zero_pv", "evaluation_target_every_prefix"):
         from src.optimization.rolling.reoptimizer import RollingReoptimizer
         from src.optimization.common.bess_reserve_policy import bess_reserve_targets
         bess_reserve_targets(RollingReoptimizer._freeze_bess_terminal_soc_targets(problem))

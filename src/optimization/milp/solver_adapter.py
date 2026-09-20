@@ -2021,9 +2021,12 @@ def _configured_stage1_gurobi_search_controls(
             "heuristics": 0.5,
             "presolve": 2,
         }
+    if profile == "bounded_presolve":
+        return {**default_controls, "profile": profile, "mip_focus": 1,
+                "heuristics": 0.2, "presolve": 1, "pre_passes": 3}
     raise ValueError(
         "stage1_gurobi_search_profile must be 'default', 'bound_focus', "
-        "'root_cut_focus', or 'incumbent_focus'"
+        "'root_cut_focus', 'incumbent_focus', or 'bounded_presolve'"
     )
 
 
@@ -13636,6 +13639,7 @@ class GurobiMILPAdapter:
         stage1.Params.MIPFocus = int(stage1_search_controls["mip_focus"])
         stage1.Params.Heuristics = float(stage1_search_controls["heuristics"])
         stage1.Params.Presolve = int(stage1_search_controls["presolve"])
+        stage1.Params.PrePasses = int(stage1_search_controls.get("pre_passes", -1))
         stage1.Params.Cuts = int(stage1_search_controls["cuts"])
         stage1.Params.Method = int(stage1_search_controls["root_method"])
         stage1.Params.NodeMethod = int(stage1_search_controls["node_method"])
@@ -14527,8 +14531,16 @@ class GurobiMILPAdapter:
         strict_precheck = dict(
             problem.metadata.get("strict_coverage_precheck") or {}
         )
+        from src.optimization.common.vehicle_day_bound import vehicle_day_overlap_lower_bounds
+        vehicle_day_bounds = vehicle_day_overlap_lower_bounds(problem.trips, trip_day_index_by_trip_id)
+        for day, lower_bound in vehicle_day_bounds.items():
+            stage1.addConstr(
+                gp.quicksum(var for (vehicle_id, day_idx), var in used_vehicle_day.items() if day_idx == day)
+                >= lower_bound, name=f"stage1_vehicle_day_overlap_lb__{day}",
+            )
         stage1_vehicle_count_lower_bound = max(
             int(strict_precheck.get("relaxed_vehicle_lower_bound") or 0),
+            sum(vehicle_day_bounds.values()),
             0,
         )
         stage1_vehicle_count_lower_bound_constraint_count = 0
@@ -15070,6 +15082,7 @@ class GurobiMILPAdapter:
                 problem=problem,
                 recourse_state=stage1_energy_recourse_state,
                 component_flags=component_flags,
+                config=config,
             )
         )
         objective1 = gp.LinExpr(
@@ -16198,8 +16211,9 @@ class GurobiMILPAdapter:
                         )
                         or 0
                     ),
+                    "stage1_vehicle_day_overlap_lower_bounds": dict(vehicle_day_bounds),
                     "stage1_vehicle_count_lower_bound_semantics": (
-                        "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
+                        "max_global_path_cover_and_sum_daily_overlap_vehicle_day_lb"
                     ),
                     "minimum_used_bev_count": minimum_used_bev_count,
                     "minimum_used_bev_count_policy_enabled": (
@@ -16580,8 +16594,9 @@ class GurobiMILPAdapter:
                     )
                     or 0
                 ),
-                "stage1_vehicle_count_lower_bound_semantics": (
-                    "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
+                "stage1_vehicle_day_overlap_lower_bounds": dict(vehicle_day_bounds),
+                    "stage1_vehicle_count_lower_bound_semantics": (
+                    "max_global_path_cover_and_sum_daily_overlap_vehicle_day_lb"
                 ),
                 "minimum_used_bev_count": minimum_used_bev_count,
                 "minimum_used_bev_count_policy_enabled": (
@@ -22929,6 +22944,7 @@ class GurobiMILPAdapter:
             is_remaining_day_reoptimization=is_remaining_day_reoptimization,
             grid_to_bus_var=g2bus_var, pv_to_bus_var=pv2bus_var,
             grid_to_bess_var=g2bess_var, bess_to_bus_var=bess2bus_var,
+            bess_soc_start_var=bess_soc_var,
         )
         if w_on_depot_var:
             w_on_var = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_on")
@@ -26174,6 +26190,7 @@ class GurobiMILPAdapter:
         problem: CanonicalOptimizationProblem,
         recourse_state: Mapping[str, Any],
         component_flags: Mapping[str, bool],
+        config: OptimizationConfig | None = None,
     ) -> Stage1TimeIndexedEnergyRecourseRelaxation:
         """Connect assignment-dependent charging to slot-level depot energy.
 
@@ -26743,6 +26760,14 @@ class GurobiMILPAdapter:
                     model.addConstr(terminal_soc == terminal_target)
                     constraint_count += 1
 
+        from src.optimization.milp.bess_planning_reserve import add_bess_planning_reserve_constraints
+        planning_reserve = add_bess_planning_reserve_constraints(
+            model, problem, slot_indices,
+            execution_minutes=(config or OptimizationConfig()).rolling_execution_minutes,
+            bess_soc_start_var=bess_soc, grid_to_bess_var=grid_to_bess,
+            bess_to_bus_var=bess_to_bus,
+        )
+        constraint_count += planning_reserve["bess_floor_constraint_count"]
         global_on_peak = None
         global_off_peak = None
         if on_peak_by_depot:
@@ -26780,6 +26805,7 @@ class GurobiMILPAdapter:
                 )
 
         recourse_input_payload = {
+            "bess_planning_reserve": planning_reserve,
             "timestep_min": int(problem.scenario.timestep_min),
             "slot_indices": list(slot_indices),
             "price_yen_per_kwh_by_slot": {
@@ -26842,6 +26868,7 @@ class GurobiMILPAdapter:
             ).encode("utf-8")
         ).hexdigest()
         configuration = {
+            "bess_planning_reserve": planning_reserve,
             "enabled": True,
             "used_in_stage1_objective": True,
             "semantics": (

@@ -87,15 +87,17 @@ def verify_week(week: str, audited: dict, design: dict, source_sha: str) -> dict
             and controls["allow_postsolve_repair"] is False
             and controls["synthetic_pv_fallback_applied"] is False, f"{week}: control drift")
     contract = prepared["simulation_config"]["date_series_contract"]
-    if design.get("bess_forecast_reserve_policy") == "evaluation_target_zero_pv":
+    if design.get("bess_forecast_reserve_policy") in ("evaluation_target_zero_pv", "evaluation_target_every_prefix"):
         reserve = audited.get("bess_forecast_reserve_audit", {})
         require(reserve.get("status") == "ALL_168_PREFIXES_RESERVE_VERIFIED"
-                and reserve.get("policy") == "evaluation_target_zero_pv", f"{week}: missing BESS reserve audit")
-        require(contract.get("bess_forecast_reserve_policy") == "evaluation_target_zero_pv",
+                and reserve.get("policy") == design["bess_forecast_reserve_policy"], f"{week}: missing BESS reserve audit")
+        require(contract.get("bess_forecast_reserve_policy") == design["bess_forecast_reserve_policy"],
                 f"{week}: prepared reserve declaration differs")
         expected_files = {str(chain / f"hour_{hour:03d}" / filename)
                           for hour in range(168)
                           for filename in ("forecast_result.json", "pv_execution_audit.json")}
+        if design["bess_forecast_reserve_policy"] == "evaluation_target_every_prefix":
+            expected_files.add(str(chain.parent / "canonical_solver_result.json"))
         require(set(reserve["hashes"]) == expected_files, f"{week}: incomplete reserve evidence")
         for filename, digest in reserve["hashes"].items():
             require(hashlib.sha256(Path(filename).read_bytes()).hexdigest() == digest,
@@ -154,6 +156,10 @@ def verify_bess_terminal(terminal: dict, design: dict) -> None:
 
 
 def bess_condition_text(data: dict) -> str:
+    if data.get("bess_forecast_reserve_policy") == "evaluation_target_every_prefix":
+        return ("BESSの保護残量をday-ahead・配車の充電費用評価・毎時の将来計画にも適用する。"
+                "各1時間の開始残量から、その時間内の未観測PVを使わず保護残量を保つ。"
+                "前の時間に蓄えたPVは利用できる。週末残量・設備・料金は同じ条件で評価する。")
     if data.get("bess_forecast_reserve_policy") == "evaluation_target_zero_pv":
         return ("BESSはPVのみで充電し、週末に初期残量へ戻す。毎時の指令はPVがゼロでも初期残量を下回らない予備残量を持つ。"
                 "BESSの各rolling窓末も同じ初期残量、車両の途中目標は固定day-ahead境界とする。"

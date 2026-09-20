@@ -34,9 +34,9 @@ def seasonal_bess_controls(design: dict | None = None) -> dict:
     if policy == "return_to_initial" and rolling != "scenario":
         raise ValueError("return_to_initial requires rolling BESS policy=scenario to retain its target")
     reserve = controls["bess_forecast_reserve_policy"]
-    if reserve not in ("physical_floor_only", "evaluation_target_zero_pv"):
+    if reserve not in ("physical_floor_only", "evaluation_target_zero_pv", "evaluation_target_every_prefix"):
         raise ValueError("Unsupported seasonal BESS forecast reserve policy")
-    if reserve == "evaluation_target_zero_pv" and (policy != "return_to_initial" or rolling != "scenario"):
+    if reserve != "physical_floor_only" and (policy != "return_to_initial" or rolling != "scenario"):
         raise ValueError("BESS forecast reserve requires the retained evaluation return_to_initial target")
     return controls
 

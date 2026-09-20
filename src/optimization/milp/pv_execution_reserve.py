@@ -6,6 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from src.optimization.common.problem import CanonicalOptimizationProblem, OptimizationConfig
 from src.optimization.common.bess_reserve_policy import bess_reserve_policy, bess_reserve_targets
+from src.optimization.milp.bess_planning_reserve import add_bess_planning_reserve_constraints
 
 
 POLICY = "committed_prefix_no_unobserved_pv_credit_v1"
@@ -45,6 +46,7 @@ def add_pv_execution_reserve_constraints(
     pv_to_bus_var: Mapping[tuple[str, int], Any],
     grid_to_bess_var: Mapping[tuple[str, int], Any],
     bess_to_bus_var: Mapping[tuple[str, int], Any],
+    bess_soc_start_var: Mapping[tuple[str, int], Any] | None = None,
 ) -> dict[str, Any]:
     """Keep each committed slot executable for any nonnegative actual PV.
 
@@ -71,6 +73,15 @@ def add_pv_execution_reserve_constraints(
         "protected_floor_kwh_by_depot": {},
         "evaluation_terminal_target_kwh_by_depot": {},
     }
+    planning = add_bess_planning_reserve_constraints(
+        model, problem, slot_indices, execution_minutes=config.rolling_execution_minutes,
+        bess_soc_start_var=bess_soc_start_var or {},
+        grid_to_bess_var=grid_to_bess_var, bess_to_bus_var=bess_to_bus_var,
+    )
+    audit["planning_reserve"] = planning
+    if planning["enabled"]:
+        audit.update(enabled=True,
+                     evaluation_terminal_target_kwh_by_depot=planning["evaluation_terminal_target_kwh_by_depot"])
     if not slots:
         return audit
     reserve_targets = bess_reserve_targets(problem)

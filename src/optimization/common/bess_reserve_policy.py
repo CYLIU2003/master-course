@@ -1,21 +1,24 @@
 """Explicit forecast-error protection for PV-only, cyclic stationary storage."""
 from __future__ import annotations
 
+from dataclasses import replace
 import math
 from typing import Mapping
 
 from .problem import CanonicalOptimizationProblem
+from .bess_terminal_policy import resolve_bess_terminal_soc_target_kwh
 
 POLICY_KEY = "bess_forecast_reserve_policy"
 PHYSICAL_FLOOR_ONLY = "physical_floor_only"
 EVALUATION_TARGET_ZERO_PV = "evaluation_target_zero_pv"
+EVALUATION_TARGET_EVERY_PREFIX = "evaluation_target_every_prefix"
 
 
 def bess_reserve_policy(problem: CanonicalOptimizationProblem) -> str:
     """Reject conflicting declarations instead of silently dropping protection."""
     contract = problem.metadata.get("date_series_contract") or {}
     policy = problem.metadata.get(POLICY_KEY, contract.get(POLICY_KEY, PHYSICAL_FLOOR_ONLY))
-    if policy not in (PHYSICAL_FLOOR_ONLY, EVALUATION_TARGET_ZERO_PV):
+    if policy not in (PHYSICAL_FLOOR_ONLY, EVALUATION_TARGET_ZERO_PV, EVALUATION_TARGET_EVERY_PREFIX):
         raise ValueError(f"Unsupported {POLICY_KEY}: {policy}")
     if POLICY_KEY in contract and contract[POLICY_KEY] != policy:
         raise ValueError("BESS reserve policy differs from the date-series contract")
@@ -58,3 +61,45 @@ def bess_reserve_targets(problem: CanonicalOptimizationProblem) -> dict[str, flo
             raise ValueError("BESS reserve requires explicit zero nontraction depot load")
         targets[str(depot_id)] = target
     return targets
+
+
+def freeze_bess_terminal_soc_targets(
+    problem: CanonicalOptimizationProblem,
+) -> CanonicalOptimizationProblem:
+    """Keep stationary-battery day-start targets fixed while SOC changes."""
+
+    assets = dict(problem.depot_energy_assets or {})
+    updated_assets = dict(assets)
+    frozen_targets: dict[str, float] = {}
+    for depot_id, asset in assets.items():
+        target = resolve_bess_terminal_soc_target_kwh(
+            policy=asset.bess_terminal_soc_policy,
+            initial_soc_kwh=asset.bess_initial_soc_kwh,
+            configured_target_kwh=asset.bess_terminal_soc_target_kwh,
+            terminal_soc_floor_kwh=asset.bess_terminal_soc_min_kwh,
+            maximum_soc_kwh=(
+                asset.bess_soc_max_kwh or asset.bess_energy_kwh
+            ),
+        )
+        if target is None:
+            continue
+        depot_key = str(depot_id)
+        frozen_targets[depot_key] = float(target)
+        updated_assets[depot_key] = replace(
+            asset,
+            bess_terminal_soc_policy="fixed_target",
+            bess_terminal_soc_target_kwh=float(target),
+        )
+    if not frozen_targets:
+        return problem
+    metadata = dict(problem.metadata or {})
+    metadata["bess_terminal_soc_target_kwh_by_depot"] = frozen_targets
+    metadata.setdefault("bess_daily_balance_target_kwh_by_depot",frozen_targets)
+    metadata["bess_terminal_soc_target_source"] = (
+        "day_start_problem_before_rolling_state_update"
+    )
+    return replace(
+        problem,
+        depot_energy_assets=updated_assets,
+        metadata=metadata,
+    )
