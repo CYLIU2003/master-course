@@ -2,6 +2,7 @@
 
 ## 2026-09-21 配車診断のsource参照漏れと失敗理由の欠落を修正
 
+- 08:55 JSTにclean固定4f9799825ed8af0217575c9ef94a78b90f4137e3から再診断を開始。実coordinator30116／venv launcher39172。固定版22 tests・入力47 SHA・参照移設11件を確認。dualのRUNNINGとcase内の実auditパスがそのcampaignのsourceに一致することを確認。制御先 output/stage1_input_binding_20260921、終了時だけ既存タスクへ1回queue。
 - 固定4a85de14は新規Prepare1,704便・60台が通過したが、route scopeが旧source_candidateを読んで0便と判定。最初の条件は求解未実行、NoRelは未着手。nativeログ・メモリ値・gap・物理検証は未評価。failure SHAとcleanを確認した。
 - campaign/case/diagnosticのsource参照を同一captureに束縛。wrapperはprogress読取り前にcampaignの状態を検査し、元のreasonsと子failure SHAをcoordinatorへ保存する。day-aheadのみの正常終了を専用状態で区別した。
 - 旧保存先を空にした実source作成→route preflight→diagnostic runnerの2 campaign回帰、failure原因保存・専用完了状態など関連60 tests通過。今回の実データの読取りでは、元設計BLOCKED→参照修正後READY、Prepared READYを確認。実求解へ旧Preparedは流用しない。

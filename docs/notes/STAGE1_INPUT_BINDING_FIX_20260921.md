@@ -60,3 +60,17 @@ NoRel条件は最初の条件の失敗により未着手。nativeログは生成
 5月12日開始の7日間、Stage1 600秒／Stage2 120秒／wall1200秒、4 threads、18 GB、seed42、gap1%。
 双対単体法のNoRelHeurWork=0/120だけを比較し、制約やsolver設定を今回さらに変更しない。
 通常処理はスクリプトが実行し、終了時だけ既存タスクへ1回通知する。メール・全12週計算は行わない。
+
+## 起動記録
+
+2026-09-21 08:55 JST、clean固定 `4f9799825ed8af0217575c9ef94a78b90f4137e3`
+（branch `codex/stage1-input-binding-20260921`）から開始。
+実行先は `C:/Users/RTDS_admin/.codex/worktrees/stage1-input-binding-20260921/master-course`。
+固定版の関連22 tests通過、入力47件SHA・参照11件の移設を確認。旧prepared／結果は取り込んでいない。
+実coordinator PID30116／venv launcher39172。初回dualのRUNNING、実際のcase設計の検査先が
+そのcampaignのsource_candidateに一致し、ファイルが存在することとworktree cleanを確認した。
+
+制御記録: `C:/master-course/output/stage1_input_binding_20260921/launch.json` と
+`startup_verification.json`。結果先: 固定worktreeの `output/stage1_input_binding_diagnosis_20260921/`。
+起動スクリプトSHA256: `8069f588d0ade6b2dc850ba25259b84826c397a364df57cec7aba9cf1cc9a0e5`。
+以後はスクリプトが実行し、完了／失敗で既存タスクへ1回だけqueueする。
