@@ -99,6 +99,22 @@ def test_three_route_scope_rejects_any_route_outside_declared_set() -> None:
         inputs._validated_route_codes(("渋21", "渋22", "渋24"))
 
 
+def test_custom_source_namespace_rejects_overwrite_and_escape(tmp_path, monkeypatch):
+    old = tmp_path / "raw"
+    _write_three_route_source(old)
+    monkeypatch.setattr(inputs, "ROOT", tmp_path)
+    monkeypatch.setattr(inputs, "OLD_SOURCE_DIR", old)
+    output = tmp_path / "campaign/source_candidate"
+    inputs.build_source_candidate(route_codes=inputs.THREE_ROUTE_CODES, output_directory=output)
+    snapshot = {p.name: p.read_bytes() for p in output.iterdir()}
+    with pytest.raises(FileExistsError):
+        inputs.build_source_candidate(route_codes=inputs.THREE_ROUTE_CODES, output_directory=output)
+    with pytest.raises(ValueError):
+        inputs.build_source_candidate(route_codes=inputs.THREE_ROUTE_CODES,
+                                      output_directory=tmp_path / "../escaped_candidate")
+    assert {p.name: p.read_bytes() for p in output.iterdir()} == snapshot
+
+
 def test_route_matching_accepts_source_route_number_provenance() -> None:
     row = {
         "routeCode": "渋２３",

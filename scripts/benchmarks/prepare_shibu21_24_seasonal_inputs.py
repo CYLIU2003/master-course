@@ -162,11 +162,19 @@ def _source_directory_and_id(route_codes: tuple[str, ...]) -> tuple[Path, str]:
     return THREE_ROUTE_SOURCE_CANDIDATE_DIR, THREE_ROUTE_SOURCE_ID
 
 
-def build_source_candidate(*, route_codes: Sequence[str] = DEFAULT_ROUTE_CODES) -> dict:
+def build_source_candidate(
+    *, route_codes: Sequence[str] = DEFAULT_ROUTE_CODES,
+    output_directory: Path | None = None,
+) -> dict:
     """Build the declared route scope with immutable source provenance."""
 
     route_codes = _validated_route_codes(route_codes)
     source_directory, source_id = _source_directory_and_id(route_codes)
+    if output_directory is not None:
+        source_directory = output_directory.resolve()
+        source_directory.relative_to(ROOT.resolve())
+        if source_directory.exists():
+            raise FileExistsError(f"Source output already exists: {source_directory}")
     old_manifest_path = OLD_SOURCE_DIR / "manifest.json"
     route24_manifest_path = SHIBU24_SOURCE_DIR / "manifest.json"
     old_routes_all = read_json(OLD_SOURCE_DIR / "selected_routes.json")
@@ -246,7 +254,7 @@ def build_source_candidate(*, route_codes: Sequence[str] = DEFAULT_ROUTE_CODES) 
             prior["source_provenance"] = row["source_provenance"]
     if route_codes == THREE_ROUTE_CODES and source_directory.exists():
         raise FileExistsError(f"Three-route source output already exists: {source_directory}")
-    source_directory.mkdir(parents=True, exist_ok=True)
+    source_directory.mkdir(parents=True, exist_ok=output_directory is None)
     for name, payload in (("selected_routes.json", routes), ("timetable_rows.json", rows),
                           ("stop_sequences.json", sequences),
                           ("stops.json", stops if route_codes == THREE_ROUTE_CODES else

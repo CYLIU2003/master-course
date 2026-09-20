@@ -14,12 +14,14 @@ sys.path.insert(0, str(ROOT))
 from scripts.benchmarks.run_shibu21_24_seasonal_diagnostic import git_state, write_json
 
 PROFILES = ("bounded_presolve_barrier", "bounded_presolve_norel")
+MEMORY_BOUNDED_PROFILES = ("bounded_presolve_dual", "bounded_presolve_norel")
 
 
 def run(design_path: Path, output: Path) -> dict:
     design = json.loads(design_path.read_text(encoding="utf-8"))
-    if tuple(design.get("diagnostic_profiles", ())) != PROFILES:
-        raise ValueError("Run exactly the two predeclared root strategies, once each")
+    profiles = tuple(design.get("diagnostic_profiles", ()))
+    if profiles not in (PROFILES, MEMORY_BOUNDED_PROFILES):
+        raise ValueError("Run exactly one supported pair of predeclared root strategies, once each")
     before = git_state()
     if not before.get("sha") or before["status_porcelain"]:
         raise RuntimeError("Root-search diagnosis requires a clean frozen commit")
@@ -27,11 +29,11 @@ def run(design_path: Path, output: Path) -> dict:
     output.relative_to(ROOT)
     output.mkdir(parents=True, exist_ok=False)
     results = []
-    state = {"status": "RUNNING", "source_state": before, "profiles": list(PROFILES),
+    state = {"status": "RUNNING", "source_state": before, "profiles": list(profiles),
              "monthly_complete": False, "email_sent": False}
     write_json(output / "state.json", state)
     try:
-        for profile in PROFILES:
+        for profile in profiles:
             if git_state() != before:
                 raise RuntimeError("Source state changed between root strategies")
             case = output / profile
@@ -56,6 +58,9 @@ def run(design_path: Path, output: Path) -> dict:
                 "summary_sha256": hashlib.sha256(summary_path.read_bytes()).hexdigest(),
                 "physical_accepted": summary["physical_accepted"], "quality": summary["quality"],
                 "daily_path_cover_bounds": summary["daily_path_cover_bounds"],
+                "native_memory": summary.get("native_memory"),
+                "stage1_search_controls": summary.get("stage1_search_controls"),
+                "gurobi_threads": summary.get("gurobi_threads"),
                 "stage1_native_log_path": summary["stage1_native_log_path"]})
             write_json(output / "partial_results.json", results)
         state.update(status="ROOT_SEARCH_DIAGNOSIS_COMPLETE", results=results,

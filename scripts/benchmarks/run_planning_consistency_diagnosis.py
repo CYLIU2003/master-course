@@ -50,6 +50,8 @@ def run(design_path: Path, output: Path) -> dict:
             "physical_accepted": progress["day_ahead_physical_accepted"],
             "quality": quality, "elapsed_seconds": progress["day_ahead_seconds"],
             "stage1_search_controls": metadata.get("stage1_gurobi_search_controls"),
+            "gurobi_threads": metadata.get("gurobi_threads"),
+            "native_memory": metadata.get("stage1_search_telemetry", {}).get("native_memory"),
             "daily_path_cover_bounds": metadata.get("stage1_vehicle_day_path_cover_lower_bounds"),
             "daily_overlap_bounds": metadata.get("stage1_vehicle_day_overlap_lower_bounds"),
             "stage1_native_log_path": native_log_path,

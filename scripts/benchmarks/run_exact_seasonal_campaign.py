@@ -244,7 +244,11 @@ def run_campaign(
         },
     )
 
-    source = build_source_candidate(route_codes=design["route_codes"])
+    # A second fresh campaign in the same checkout must not collide with or
+    # overwrite the first campaign's immutable source capture.
+    source = build_source_candidate(
+        route_codes=design["route_codes"], output_directory=output / "source_candidate",
+    )
     if git_state() != source_state:
         raise RuntimeError("Git SHA or dirty state changed while building source candidate")
 

@@ -85,7 +85,7 @@ def test_path_cover_matches_exhaustive_four_trip_vehicle_assignments():
         assert vehicle_day_path_cover_lower_bounds(trips, {str(i): 0 for i in range(4)}, rows, full_network=True) == {0: best}
 
 
-@pytest.mark.parametrize("profile,method,work", [("bounded_presolve_barrier", 2, 0), ("bounded_presolve_norel", 1, 120)])
+@pytest.mark.parametrize("profile,method,work", [("bounded_presolve_barrier", 2, 0), ("bounded_presolve_dual", 1, 0), ("bounded_presolve_norel", 1, 120)])
 def test_root_profiles_preserve_bounds_and_have_explicit_memory_limit(profile, method, work):
     from bff.routers.optimization import RunOptimizationBody
     from src.optimization.common.problem import OptimizationConfig
@@ -97,7 +97,7 @@ def test_root_profiles_preserve_bounds_and_have_explicit_memory_limit(profile, m
     assert controls["soft_mem_limit_gb"] == 18
 
 
-@pytest.mark.parametrize("profile", ["bounded_presolve_barrier", "bounded_presolve_norel"])
+@pytest.mark.parametrize("profile", ["bounded_presolve_barrier", "bounded_presolve_dual", "bounded_presolve_norel"])
 def test_native_daily_bound_and_effective_search_parameters(profile, tmp_path):
     from src.optimization.milp.engine import MILPOptimizer
     from test_milp_soc_validator_roundtrip import _soc_roundtrip_problem
@@ -116,6 +116,11 @@ def test_native_daily_bound_and_effective_search_parameters(profile, tmp_path):
     effective = metadata["stage1_gurobi_search_controls"]
     assert effective["pre_passes"] == 3
     assert effective["root_method"] == (2 if profile.endswith("barrier") else 1)
-    assert effective["no_rel_heur_work"] == (0 if profile.endswith("barrier") else 120)
+    assert effective["no_rel_heur_work"] == (120 if profile.endswith("norel") else 0)
+    memory = metadata["stage1_search_telemetry"]["native_memory"]
+    assert memory["after_optimize"]["peak_gb"] >= memory["after_optimize"]["used_gb"] > 0
+    assert memory["before_optimize"]["used_gb"] > 0
+    assert memory["soft_limit_gb"] == 18
+    assert memory["threads"] == 1
     from pathlib import Path
     assert Path(metadata["stage1_native_log_path"]).is_file()

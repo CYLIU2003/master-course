@@ -88,6 +88,42 @@ def test_failed_case_record_is_explicitly_not_executed() -> None:
     assert record["reasons"]
 
 
+def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, monkeypatch):
+    from scripts.benchmarks import prepare_shibu21_24_seasonal_inputs as preparation
+    from scripts.benchmarks import run_shibu21_24_seasonal_diagnostic as diagnostic
+    from test_shibu21_24_source_scopes import _write_three_route_source
+
+    raw = tmp_path / "raw"
+    _write_three_route_source(raw)
+    monkeypatch.setattr(campaign, "ROOT", tmp_path)
+    monkeypatch.setattr(preparation, "ROOT", tmp_path)
+    monkeypatch.setattr(preparation, "OLD_SOURCE_DIR", raw)
+    legacy = tmp_path / "legacy_source"
+    monkeypatch.setattr(preparation, "THREE_ROUTE_SOURCE_CANDIDATE_DIR", legacy)
+    preparation.build_source_candidate(route_codes=preparation.THREE_ROUTE_CODES)
+    snapshot = {p.name: p.read_bytes() for p in legacy.iterdir()}
+    monkeypatch.setattr(diagnostic, "git_state", lambda: {"sha": "frozen", "status_porcelain": ""})
+    sources = []
+
+    def prepare(week, output, source, *, existing, validation_mode):
+        assert existing is None and validation_mode is True
+        sources.append(source)
+        return {"formal_prepared": True, "input_preparation_valid": True}
+
+    monkeypatch.setattr(preparation, "prepare_week", prepare)
+    monkeypatch.setattr(diagnostic, "run_diagnostic", lambda *_: [{"status": "DIAGNOSTIC_EXECUTION_PASSED"}])
+    design = {"evaluation_weeks": ["2025-05-12"], "route_codes": list(preparation.THREE_ROUTE_CODES)}
+    for profile in ("dual", "norel"):
+        campaign.run_campaign(design, tmp_path / profile)
+    assert len(sources) == 2
+    assert sources[0]["source_directory"] != sources[1]["source_directory"]
+    assert sources[0]["artifacts"] == sources[1]["artifacts"]
+    for source in sources:
+        copied = tmp_path / source["source_directory"] / "timetable_rows.json"
+        assert json.loads(copied.read_text()) == json.loads((raw / "timetable_rows.json").read_text())
+    assert {p.name: p.read_bytes() for p in legacy.iterdir()} == snapshot
+
+
 def test_phase_summary_keeps_rolling_physical_and_accounting_separate() -> None:
     phases = _phase_summary(
         {

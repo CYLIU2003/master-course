@@ -1,5 +1,13 @@
 # Development Notes
 
+## 2026-09-21 根探索2条件の停止原因を修正
+
+- 全体回帰2434 passed / 既存PowerPoint関連2 failed（103.63秒）。前回と同じ資料hash・部品構成の不一致で、資料と期待hashを保全。新規P0/P1残件0、独立レビューPENDING。
+- daa9ef59のcompletion/failure・barrier summaryと5原本のSHA・clean状態を照合。barrierは124.4秒で18 GB上限、根LP完了記録なし。日別下界200車両日・400万円でgap6.91227%だが初期解改善0円。Stage2 gap0.36796%・物理通過。NoRelは共通source_candidateのFileExistsErrorで求解未実行。
+- campaignからsource builderへ専用出力先を渡し、既存出力を変更しない新規入力作成へ修正。実builderを含む連続2 campaign回帰と上書き／root外出力拒否を追加。関連57 tests通過。
+- dual simplex/NoRelの2条件を4 threads・18 GBで比べる設計を追加。Modelのoptimize前後のnative memoryを記録し、旧結果のメモリ使用量は推定で埋めない。料金・制約・完全網・gap1%は維持。
+- [詳細](docs/notes/STAGE1_MEMORY_SEARCH_DIAGNOSIS_20260921.md)。研究採用BLOCKED、独立研究レビューPENDING。今回は全12週やメール配信を行わない。
+
 ## 2026-09-21 配車の根探索停滞を確認し、次の診断を実装
 
 - 08:17 JSTにclean固定daa9ef5997f7e92b1df18372ad592c8489633d74からbarrier/NoRelの逐次診断を開始。実coordinator PID45744、venv launcher30784。入力47件のSHAと参照移設11件、固定版26 tests通過を確認。初回barrierのRUNNINGを確認し、以後はスクリプトに任せる。終了時の既存タスクqueueは1回のみ、AI定期監視・メール送信・全12週実行はなし。起動原本は output/stage1_root_search_20260921/launch.json。

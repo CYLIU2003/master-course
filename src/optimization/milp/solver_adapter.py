@@ -2024,7 +2024,7 @@ def _configured_stage1_gurobi_search_controls(
     if profile == "bounded_presolve":
         return {**default_controls, "profile": profile, "mip_focus": 1,
                 "heuristics": 0.2, "presolve": 1, "pre_passes": 3}
-    if profile in ("bounded_presolve_barrier", "bounded_presolve_norel"):
+    if profile in ("bounded_presolve_barrier", "bounded_presolve_dual", "bounded_presolve_norel"):
         return {**default_controls, "profile": profile, "mip_focus": 1,
                 "heuristics": 0.2, "presolve": 1, "pre_passes": 3,
                 "root_method": 2 if profile == "bounded_presolve_barrier" else 1,
@@ -2033,8 +2033,19 @@ def _configured_stage1_gurobi_search_controls(
     raise ValueError(
         "stage1_gurobi_search_profile must be 'default', 'bound_focus', "
         "'root_cut_focus', 'incumbent_focus', 'bounded_presolve', "
-        "'bounded_presolve_barrier', or 'bounded_presolve_norel'"
+        "'bounded_presolve_barrier', 'bounded_presolve_dual', or 'bounded_presolve_norel'"
     )
+
+
+def _gurobi_memory_snapshot(model: Any) -> Dict[str, Optional[float]]:
+    """Read environment-wide native GB values; unavailable is not zero."""
+    snapshot = {}
+    for key, attribute in (("used_gb", "MemUsed"), ("peak_gb", "MaxMemUsed")):
+        value = getattr(model, attribute, None)
+        snapshot[key] = (
+            float(value) if value is not None and math.isfinite(float(value)) else None
+        )
+    return snapshot
 
 
 def _configured_stage1_gurobi_scale_flag(config: OptimizationConfig) -> int:
@@ -15884,7 +15895,9 @@ class GurobiMILPAdapter:
             ),
         )
         stage1.Params.TimeLimit = max(stage_time_limit, 0.001)
+        stage1_memory_before_optimize = _gurobi_memory_snapshot(stage1)
         stage1.optimize(_stage1_search_callback)
+        stage1_memory_after_optimize = _gurobi_memory_snapshot(stage1)
         if (
             stage1_fragment_lazy_separator is not None
             and stage1_fragment_lazy_separator.callback_error
@@ -15952,6 +15965,13 @@ class GurobiMILPAdapter:
             final_simplex_iteration_count=getattr(stage1, "IterCount", None),
             final_barrier_iteration_count=getattr(stage1, "BarIterCount", None),
         )
+        stage1_search_telemetry_result["native_memory"] = {
+            "before_optimize": stage1_memory_before_optimize,
+            "after_optimize": stage1_memory_after_optimize,
+            "semantics": "Gurobi environment-wide GB (1e9 bytes), including other live models; not process RSS",
+            "soft_limit_gb": float(stage1.Params.SoftMemLimit),
+            "threads": int(stage1.Params.Threads),
+        }
         stage1_gap = (
             max(
                 float(stage1_objective_value) - float(stage1_bound),
