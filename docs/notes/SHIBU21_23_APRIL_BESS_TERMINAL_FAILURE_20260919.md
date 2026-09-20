@@ -52,3 +52,5 @@
 **DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS、研究採用BLOCKED**。
 
 報告・停止状態・通知の関連テスト50件通過。凍結原本のhashとclean SHA、ユーザー編集中のPowerPointのhash不変、今回の完了bundle・payload・送信receiptが未生成であることを確認した。
+
+2026-09-20追記: ユーザーが完全な修正を指示したため、PV専用を維持する予備残量案で実装・回帰を進めた。条件選択待ちは解除。[新しい修正と検証](BESS_FORECAST_RESERVE_FIX_20260920.md)を参照。旧失敗原本は変更しない。

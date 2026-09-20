@@ -87,6 +87,19 @@ def verify_week(week: str, audited: dict, design: dict, source_sha: str) -> dict
             and controls["allow_postsolve_repair"] is False
             and controls["synthetic_pv_fallback_applied"] is False, f"{week}: control drift")
     contract = prepared["simulation_config"]["date_series_contract"]
+    if design.get("bess_forecast_reserve_policy") == "evaluation_target_zero_pv":
+        reserve = audited.get("bess_forecast_reserve_audit", {})
+        require(reserve.get("status") == "ALL_168_PREFIXES_RESERVE_VERIFIED"
+                and reserve.get("policy") == "evaluation_target_zero_pv", f"{week}: missing BESS reserve audit")
+        require(contract.get("bess_forecast_reserve_policy") == "evaluation_target_zero_pv",
+                f"{week}: prepared reserve declaration differs")
+        expected_files = {str(chain / f"hour_{hour:03d}" / filename)
+                          for hour in range(168)
+                          for filename in ("forecast_result.json", "pv_execution_audit.json")}
+        require(set(reserve["hashes"]) == expected_files, f"{week}: incomplete reserve evidence")
+        for filename, digest in reserve["hashes"].items():
+            require(hashlib.sha256(Path(filename).read_bytes()).hexdigest() == digest,
+                    f"{week}: reserve source hash changed")
     balanced = validate_balanced_week(prepared["trips"], contract, week=week)
     require(contract["source_provenance"]["holiday_source_sha256"] == design["calendar_source_sha256"],
             f"{week}: holiday source drift")
@@ -141,6 +154,10 @@ def verify_bess_terminal(terminal: dict, design: dict) -> None:
 
 
 def bess_condition_text(data: dict) -> str:
+    if data.get("bess_forecast_reserve_policy") == "evaluation_target_zero_pv":
+        return ("BESSはPVのみで充電し、週末に初期残量へ戻す。毎時の指令はPVがゼロでも初期残量を下回らない予備残量を持つ。"
+                "BESSの各rolling窓末も同じ初期残量、車両の途中目標は固定day-ahead境界とする。"
+                "物理20–80%範囲に加え、この条件では3,000 kWh（50%）を運用上確保するため、旧条件とは利用可能量・費用が異なる。")
     if data.get("bess_terminal_soc_policy") == "return_to_initial":
         return ("BESSは週末にその週の初期残量へ戻す条件。途中のrolling窓はday-ahead予測計画の境界残量を保持する。"
                 "旧下限のみの結果と条件が異なり、単一制約だけの因果効果とは解釈しない。")
@@ -237,6 +254,7 @@ def collect(campaign: Path, audit_path: Path, *, partial: bool) -> dict:
         "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
         "bess_terminal_soc_policy": design.get("bess_terminal_soc_policy", "minimum_only"),
         "rolling_bess_terminal_policy": design.get("rolling_bess_terminal_policy", "minimum_only"),
+        "bess_forecast_reserve_policy": design.get("bess_forecast_reserve_policy", "physical_floor_only"),
         "independent_audit": {"path": str(audit_path), "sha256": audit_hash},
         "weeks": rows, "seasons": seasonal_summary(rows) if complete else [],
         "failed_weeks": failed_weeks,
@@ -404,6 +422,8 @@ def main() -> None:
     args = parser.parse_args()
     data = collect(args.campaign, args.audit, partial=args.partial)
     separate_figures = {
+        "SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919": "shibu21_23_monthly_cyclic_20260919",
+        "SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920": "shibu21_23_monthly_reserve_20260920",
         "SHIBU21_23_MONTHLY_SEARCH_RESULTS_20260915": "shibu21_23_monthly_search_20260915",
         "SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915": "shibu21_23_monthly_phase_search_20260915",
     }

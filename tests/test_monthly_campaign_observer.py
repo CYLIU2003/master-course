@@ -89,6 +89,42 @@ def test_cyclic_deployment_does_not_reuse_any_old_delivery_paths():
         watcher.deployment_paths({"deployment": "arbitrary-output"})
 
 
+def test_reserve_deployment_has_separate_paths_and_preserves_failed_status(setup, monkeypatch):
+    reserve = watcher.deployment_paths({"deployment": "reserve"})
+    for version in ("budget", "search", "phase_search", "cyclic"):
+        assert all(a != b for a, b in zip(reserve, watcher.deployment_paths({"deployment": version})))
+    observer, progress = setup
+    observer.config["deployment"] = "reserve"
+    progress["status"] = "STOPPED_AFTER_FAILED_CASE"
+    failed_week = progress["selected_weeks"][3]
+    progress["completed_weeks"].append(failed_week)
+    watcher.write_json(observer.campaign / "progress.json", progress)
+    watcher.write_json(observer.campaign / "cases" / failed_week / "diagnostic" / failed_week / "summary.json",
+                       {"status": "HOURLY_SOLVE_FAILED", "hourly_steps_accepted": 158})
+    calls = []
+    monkeypatch.setattr(observer, "publish", lambda *, complete: calls.append(complete))
+    monkeypatch.setattr(observer, "prepare_delivery", lambda: pytest.fail("No incomplete email"))
+    with pytest.raises(ValueError, match="partial status recorded"):
+        observer.step()
+    audit = watcher.read_json(observer.audit)
+    assert audit["status"] == "STOPPED_AFTER_FAILED_CASE"
+    assert audit["weeks"][failed_week]["fully_audited"] is False
+    assert calls == [False]
+    assert watcher.read_json(observer.output / "stopped_campaign.json")["independently_audited_weeks"] == 3
+
+
+@pytest.mark.parametrize("deployment", ["cyclic", "reserve"])
+def test_new_reports_always_use_their_own_figure_name(setup, monkeypatch, deployment):
+    observer, _ = setup
+    observer.config["deployment"] = deployment
+    _, _, figure = watcher.deployment_paths(observer.config)
+    observer.config["figure_stem"] = str(observer.root / figure)
+    calls = []
+    monkeypatch.setattr(observer, "run_python", lambda *args: calls.append(args))
+    observer.publish(complete=True)
+    assert calls[0][-2:] == ("--figure-name", figure)
+
+
 def test_exited_solver_is_not_completion(setup, monkeypatch):
     observer, _ = setup
     monkeypatch.setattr(watcher, "solver_is_alive", lambda *_: False)

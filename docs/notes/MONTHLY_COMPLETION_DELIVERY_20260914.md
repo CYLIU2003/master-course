@@ -1,5 +1,9 @@
 # 月別12週のスクリプト実行と完了メール
 
+## 2026-09-20 予備残量修正版
+
+最新の実行先は `output/monthly_reserve_20260920/script_observer/`。[専用実行手順](MONTHLY_RESERVE_EXECUTION_20260920.md)を参照する。旧cyclicの4月停止は原因を確認済みで、新条件の成功週へ流用しない。今回のsource SHA・全12週・予備残量の独立監査・専用図とbundleを照合し、この版の未送信を確認したうえで、承認済み宛先へ1通だけ送る。以下に残る過去版のパス・SHAを今回の配信に使わない。
+
 ## 2026-09-19 BESS週末復元条件の新規実行
 
 今回の制御先は `output/monthly_cyclic_20260919/script_observer/`。新しい固定版の全12週を、旧 `7c7c2334` と別の条件・出力・配信IDで処理する。[今回の手順](MONTHLY_CYCLIC_EXECUTION_20260919.md)を先に参照する。source SHAは新launch/config/bundleで照合し、以下に残る旧SHA・PID・保存先を現行値として使わない。通常処理はスクリプトのみ、全12週と独立監査・最終図表の完了後に、承認済み宛先へGmailを1通送信する。

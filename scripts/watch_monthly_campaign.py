@@ -26,7 +26,10 @@ DEPLOYMENT_RELATIVE = Path("output/monthly_fair_weeks_20260914")
 
 def deployment_paths(config: dict) -> tuple[Path, str, str]:
     version = config.get("deployment", "budget")
-    require(version in {"budget", "search", "phase_search", "cyclic"}, "Unknown observer deployment")
+    require(version in {"budget", "search", "phase_search", "cyclic", "reserve"}, "Unknown observer deployment")
+    if version == "reserve":
+        return (Path("output/monthly_reserve_20260920"),
+                "SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920", "shibu21_23_monthly_reserve_20260920")
     if version == "cyclic":
         return (Path("output/monthly_cyclic_20260919"),
                 "SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919", "shibu21_23_monthly_cyclic_20260919")
@@ -177,7 +180,7 @@ def solver_is_alive(pid: int, started_at: str) -> bool:
         kernel.CloseHandle(handle)
 
 
-def validate_progress(progress: dict, config: dict) -> list[str]:
+def validate_progress(progress: dict, config: dict, *, allow_stopped: bool = False) -> list[str]:
     weeks = config["selected_weeks"]
     require(len(weeks) == len(set(weeks)) == 12, "Exactly twelve unique declared weeks required")
     require(progress["base_git_sha"] == config["source_git_sha"], "Campaign source SHA changed")
@@ -185,7 +188,10 @@ def validate_progress(progress: dict, config: dict) -> list[str]:
     completed = progress["completed_weeks"]
     require(completed == weeks[:len(completed)], "Completed weeks are not a unique declared prefix")
     status = progress["status"]
-    require(status in {"RUNNING_WEEK", "PREPARING_WEEK", "COMPLETED"}, f"Campaign stopped: {status}")
+    allowed = {"RUNNING_WEEK", "PREPARING_WEEK", "COMPLETED"}
+    if allow_stopped:
+        allowed.add("STOPPED_AFTER_FAILED_CASE")
+    require(status in allowed, f"Campaign stopped: {status}")
     require(status != "COMPLETED" or completed == weeks, "Completion without all twelve weeks")
     return completed
 
@@ -220,7 +226,7 @@ class Observer:
     def publish(self, *, complete: bool) -> None:
         arguments = ["--campaign", str(self.campaign), "--audit", str(self.audit),
                      "--output", str(self.report)]
-        if self.config.get("deployment") in {"search", "phase_search"}:
+        if self.config.get("deployment") in {"search", "phase_search", "cyclic", "reserve"}:
             arguments.extend(["--figure-name", Path(self.config["figure_stem"]).name])
         if not complete:
             arguments.append("--partial")
@@ -231,6 +237,9 @@ class Observer:
     def step(self) -> bool:
         self.check_helpers()
         progress = read_json(self.campaign / "progress.json")
+        if self.config.get("deployment") == "reserve" and progress["status"] == "STOPPED_AFTER_FAILED_CASE":
+            self.publish_stopped(progress)
+            raise ValueError("Campaign stopped: STOPPED_AFTER_FAILED_CASE (partial status recorded)")
         completed = validate_progress(progress, self.config)
         complete = progress["status"] == "COMPLETED"
         # Wait for the campaign finalizer before publishing month twelve.
@@ -281,6 +290,42 @@ class Observer:
                         independently_audited_weeks=len(audit["weeks"]), active_week=progress.get("active_week"),
                         published_audit_sha256=sha256(self.audit))
         return False
+
+    def publish_stopped(self, progress: dict) -> None:
+        """Preserve failed cases and publish the stop before the one-shot alert."""
+        completed = validate_progress(progress, self.config, allow_stopped=True)
+        audit = read_json(self.audit)
+        require(audit["expected_sha"] == self.config["source_git_sha"], "Wrong independent audit SHA")
+        require(set(audit["weeks"]) <= set(completed), "Audit contains an uncompleted week")
+        for week in completed:
+            case = self.campaign / "cases" / week / "diagnostic" / week
+            summary_path = case / "summary.json"
+            if not summary_path.exists():
+                # Prepare can fail before any solve artifact exists. The case
+                # summary/progress remains the failure source, never a pass.
+                continue
+            summary = read_json(summary_path)
+            if summary["status"] == "DIAGNOSTIC_EXECUTION_PASSED":
+                if not audit["weeks"].get(week, {}).get("fully_audited"):
+                    self.run_python(self.config["audit_script"], "--week", week, "--audit-output", str(self.audit))
+                    audit = read_json(self.audit)
+                continue
+            audit["weeks"][week] = {
+                "status": summary["status"], "audit_status": "FAILED_CASE_DIAGNOSTIC_ONLY",
+                "failure": True, "fully_audited": False,
+                "case_root": str(case), "hashes": {"case_summary": sha256(summary_path)},
+            }
+        audit["status"] = progress["status"]
+        audit["observed_at_utc"] = now()
+        write_json(self.audit, audit)
+        passed = sum(row.get("fully_audited") is True for row in audit["weeks"].values())
+        if passed:
+            self.publish(complete=False)
+        write_json(self.output / "stopped_campaign.json", {
+            "status": progress["status"], "independently_audited_weeks": passed,
+            "campaign_progress_sha256": sha256(self.campaign / "progress.json"),
+            "audit_sha256": sha256(self.audit), "email_sent": False,
+        })
 
     def prepare_delivery(self) -> None:
         report = read_json(self.report.with_suffix(".json"))

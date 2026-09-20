@@ -1401,6 +1401,7 @@ class ProblemBuilder:
                 "rolling_window_terminal_policy": input_config.get('rolling_window_terminal_policy','return_to_evaluation_initial'),
                 "rolling_bess_terminal_policy": input_config.get('rolling_bess_terminal_policy', 'scenario'),
                 "bess_balance_period": input_config.get('bess_balance_period', 'evaluation_period'),
+                "bess_forecast_reserve_policy": input_config.get('bess_forecast_reserve_policy', 'physical_floor_only'),
                 "service_calendar_validation": service_calendar_validation,
                 "comparison_type": service_calendar_validation.get(
                     "comparison_type",

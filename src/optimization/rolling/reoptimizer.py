@@ -24,6 +24,7 @@ from src.optimization.common.soc_helpers import (
 from src.optimization.common.bess_terminal_policy import (
     resolve_bess_terminal_soc_target_kwh,
 )
+from src.optimization.common.bess_reserve_policy import bess_reserve_targets
 from src.optimization.engine import OptimizationEngine
 from src.optimization.milp.solver_adapter import (
     ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT,
@@ -482,6 +483,9 @@ class RollingReoptimizer:
     def _apply_window_terminal_targets(problem: CanonicalOptimizationProblem, plan: AssignmentPlan,
                                        current_min: int, lookahead_hours: int | None, *,
                                        bess_terminal_policy: str = "scenario") -> CanonicalOptimizationProblem:
+        reserve_targets = bess_reserve_targets(problem)
+        if reserve_targets and str(bess_terminal_policy or "scenario").strip().lower() != "scenario":
+            raise ValueError("BESS reserve must retain the scenario evaluation target")
         policy = problem.metadata.get("rolling_window_terminal_policy", "return_to_evaluation_initial")
         if policy == "return_to_evaluation_initial":
             return problem
@@ -521,6 +525,15 @@ class RollingReoptimizer:
         for depot, asset in assets.items():
             if not asset.bess_enabled:
                 continue
+            if depot in reserve_targets:
+                # Use a reachable, invariant boundary under PV shortfall. BEV
+                # boundaries still follow the fixed day-ahead charging plan.
+                assets[depot] = replace(
+                    asset, bess_terminal_soc_policy="fixed_target",
+                    bess_terminal_soc_target_kwh=reserve_targets[depot],
+                    bess_terminal_soc_min_kwh=float(asset.bess_soc_min_kwh),
+                )
+                continue
             # A minimum-only window has no BESS reference equality. Building a
             # discarded fixed target here can reject harmless solver roundoff
             # before the explicit rolling policy is applied below.
@@ -545,6 +558,8 @@ class RollingReoptimizer:
         return replace(problem,depot_energy_assets=assets,metadata={**problem.metadata,
             BEV_TERMINAL_SOC_TARGET_KWH_BY_VEHICLE_KEY:targets,
             "rolling_window_terminal_reference":{"policy":policy,"boundary_slot":boundary,
+                **({"bess_policy": "evaluation_target_zero_pv",
+                    "bess_target_kwh_by_depot": reserve_targets} if reserve_targets else {}),
                 "charge_session_continuation_slots_by_vehicle":continuation_slots,
                 "source":"fixed_day_ahead_forecast_plan_not_future_actuals"}})
 

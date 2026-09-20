@@ -18,6 +18,7 @@ def seasonal_bess_controls(design: dict | None = None) -> dict:
         "bess_terminal_soc_policy": source.get("bess_terminal_soc_policy", "minimum_only"),
         "bess_terminal_soc_floor_percent": float(source.get("bess_terminal_soc_floor_percent", 20.0)),
         "rolling_bess_terminal_policy": source.get("rolling_bess_terminal_policy", "minimum_only"),
+        "bess_forecast_reserve_policy": source.get("bess_forecast_reserve_policy", "physical_floor_only"),
     }
     if controls["bess_balance_period"] != "evaluation_period":
         raise ValueError("Seasonal design requires bess_balance_period=evaluation_period")
@@ -32,6 +33,11 @@ def seasonal_bess_controls(design: dict | None = None) -> dict:
         raise ValueError("Seasonal rolling BESS policy must be scenario or minimum_only")
     if policy == "return_to_initial" and rolling != "scenario":
         raise ValueError("return_to_initial requires rolling BESS policy=scenario to retain its target")
+    reserve = controls["bess_forecast_reserve_policy"]
+    if reserve not in ("physical_floor_only", "evaluation_target_zero_pv"):
+        raise ValueError("Unsupported seasonal BESS forecast reserve policy")
+    if reserve == "evaluation_target_zero_pv" and (policy != "return_to_initial" or rolling != "scenario"):
+        raise ValueError("BESS forecast reserve requires the retained evaluation return_to_initial target")
     return controls
 
 

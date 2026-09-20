@@ -6,6 +6,10 @@
 
 ## 2026-09-19 新しいモデル・シナリオは実行保留
 
+## 2026-09-20 予備残量修正の検証範囲
+
+旧4月のPV予測誤差後に週末BESS目標へ到達不能になる経路を、予備残量と共通rolling終端目標で修正した。48時間のゼロPV連鎖・関連回帰は通過。全12週の新clean版実行、全週独立物理・会計・予備残量監査はこれからであり、研究採用BLOCKEDを維持する。旧2ff239e1の失敗と3週成功は旧条件の記録として残す。[修正](BESS_FORECAST_RESERVE_FIX_20260920.md)・[実行](MONTHLY_RESERVE_EXECUTION_20260920.md)。
+
 <!-- monthly-cyclic-status -->
 最新の月別再実行: 固定 `2ff239e1`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESS週末復元条件。旧7c7c2334の12週は旧条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919.md`。
 <!-- /monthly-cyclic-status -->

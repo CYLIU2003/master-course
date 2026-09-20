@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from src.optimization.common.problem import CanonicalOptimizationProblem, OptimizationConfig
+from src.optimization.common.bess_reserve_policy import bess_reserve_policy, bess_reserve_targets
 
 
 POLICY = "committed_prefix_no_unobserved_pv_credit_v1"
@@ -66,9 +67,14 @@ def add_pv_execution_reserve_constraints(
         "hard_import_constraint_count": 0,
         "initial_bess_soc_kwh_by_depot": {},
         "physical_floor_kwh_by_depot": {},
+        "bess_reserve_policy": bess_reserve_policy(problem),
+        "protected_floor_kwh_by_depot": {},
+        "evaluation_terminal_target_kwh_by_depot": {},
     }
     if not slots:
         return audit
+    reserve_targets = bess_reserve_targets(problem)
+    audit["evaluation_terminal_target_kwh_by_depot"] = reserve_targets
     depots = {depot.depot_id: depot for depot in problem.depots}
     duration = problem.scenario.timestep_min / 60.0
     hard_import = problem.metadata.get("enable_contract_overage_penalty") is not True
@@ -78,6 +84,8 @@ def add_pv_execution_reserve_constraints(
             lower = float(asset.bess_soc_min_kwh)
             audit["initial_bess_soc_kwh_by_depot"][depot_id] = remaining_energy
             audit["physical_floor_kwh_by_depot"][depot_id] = lower
+            lower = max(lower, reserve_targets.get(depot_id, lower))
+            audit["protected_floor_kwh_by_depot"][depot_id] = lower
             for slot in slots:
                 key = (depot_id, slot)
                 remaining_energy = (remaining_energy

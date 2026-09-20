@@ -9,6 +9,14 @@
 
 ## 2026-09-19 モデルと月別シナリオの修正・実行保留
 
+## 2026-09-20 BESS予測誤差への予備残量と全月再実行
+
+- `evaluation_target_zero_pv` を明示した場合、評価開始時の目標を凍結し、issued prefixの全slotでゼロPV下界を保つ。BESS各窓末も同じ評価初期量へ戻し、BEVのday-ahead境界は維持する。物理20–80%、PV専用充電、SOC/受電/充電/配車制約の検証を残す。
+- 48時間ずっと実PVゼロ／途中からゼロとなるnative連鎖で、予備残量・週末復元・系統からBESSへの供給ゼロを確認。実績が多くても不正な指令を隠せない独立監査を追加した。今後の確定報告は全168回・672 slotと336原本SHAを照合する。
+- 新版の図が旧版の保存先へ落ちる不具合と、停止時に途中報告が進行中のまま残る不具合を修正。reserve専用の結果・監視・配信パスで、失敗は成功数へ数えず通知前に保存する。
+- 関連163 tests通過後、追加回帰を含む全体は2,400 passed / 既存資料2 failed（109.18秒）。失敗は `test_august_progress_revision::test_original_and_all_bound_sources_unchanged` と `thesis_authoring/test_progress_speaker_notes::test_unrelated_presentation_parts_remain_byte_identical`。原本PPTXを変更して照合を通す処理はしない。ログ: `output/monthly_reserve_20260920/full_regression.log`。
+- 自己レビューで今回のP0/P1残件なし。独立した研究承認は未取得、研究採用BLOCKED。CI・課金機能は起動しない。新clean固定版から全12週を新規実行し、通常AI監視を追加せず、完了した場合だけ承認済み宛先へメールを1通送る。[数式・限界](docs/notes/BESS_FORECAST_RESERVE_FIX_20260920.md)。
+
 ## 2026-09-20 Solcast日次取得
 
 - 月次マニフェストから取得済み28か月・81,696件のrequest/raw SHA、月内連続性、地点、PT15M、7項目の有限値を確認。不足2023年5〜12月から5月を選んだ。

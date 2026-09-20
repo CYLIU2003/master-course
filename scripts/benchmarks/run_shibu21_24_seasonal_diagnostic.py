@@ -52,6 +52,12 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
         raise ValueError("The declared rolling BESS terminal policy was not preserved")
     if metadata.get("bess_balance_period") != design["bess_balance_period"]:
         raise ValueError("Prepared BESS balance period differs from the declared evaluation")
+    if metadata.get("bess_forecast_reserve_policy", "physical_floor_only") != controls["bess_forecast_reserve_policy"]:
+        raise ValueError("Prepared BESS forecast reserve differs from the declared evaluation")
+    if controls["bess_forecast_reserve_policy"] == "evaluation_target_zero_pv":
+        from src.optimization.rolling.reoptimizer import RollingReoptimizer
+        from src.optimization.common.bess_reserve_policy import bess_reserve_targets
+        bess_reserve_targets(RollingReoptimizer._freeze_bess_terminal_soc_targets(problem))
 
     vehicle_targets = {}
     for vehicle in problem.vehicles:
@@ -117,6 +123,7 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
         "bess_controls": bess_controls,
         "bess_balance_period": design["bess_balance_period"],
         "rolling_bess_terminal_policy": design["rolling_bess_terminal_policy"],
+        "bess_forecast_reserve_policy": controls["bess_forecast_reserve_policy"],
     }
 
 
