@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-21 メモリ対策版は入力検査で停止し、求解未実行
+
+固定4a85de14のPrepareは通過したが、後続検査の旧source参照により停止。双対単体法・NoRelとも物理・gap・費用・メモリ改善は未評価。作成と検査の参照を揃え、元の停止理由を保存する修正を60 testsと実データの読み取りで検証した。同じ探索条件で新規固定版・新規Prepareから再診断する。旧版の値を新結果へ転記しない。研究採用BLOCKED、独立承認PENDING。[根拠](STAGE1_INPUT_BINDING_FIX_20260921.md)。
+
 ## 2026-09-21 根探索はメモリ停止、2条件目は求解未実行
 
 固定daa9ef59のbarrierは物理検証・Stage2 gap0.368%を通過したが、Stage1は18 GB上限で根LP完了前に停止。認証下界400万円・gap6.91%は下界だけの改善で、目的値改善は0円。NoRelは入力保存先の衝突で未実行。衝突を修正し、別固定版・新規Prepareで4 threadsのdual simplex +/- NoRelを診断する。旧12週を混ぜず、実績費用改善・全12週・独立承認は未確認のまま。[根拠](STAGE1_MEMORY_SEARCH_DIAGNOSIS_20260921.md)。

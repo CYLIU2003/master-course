@@ -26,8 +26,26 @@ def run(design_path: Path, output: Path) -> dict:
     output.mkdir(parents=True, exist_ok=False)
     write_json(output / "state.json", {"status": "RUNNING", "source_state": before,
                                        "email_sent": False, "monthly_complete": False})
+    campaign_outcome = None
     try:
-        run_campaign(design, output / "campaign", selected_week="2025-05-12")
+        campaign = run_campaign(design, output / "campaign", selected_week="2025-05-12")
+        cases = campaign.get("summaries", [])
+        case_summary = cases[0] if len(cases) == 1 else {}
+        diagnostic = case_summary.get("diagnostic_result") or {}
+        reasons = list(diagnostic.get("reasons") or case_summary.get("reasons") or [])
+        if case_summary.get("error") and not reasons:
+            reasons.append(case_summary["error"])
+        campaign_outcome = {
+            "status": campaign.get("status"), "case_status": case_summary.get("status"),
+            "solve_attempted": diagnostic.get("solve_attempted"), "reasons": reasons,
+            "summary_path": str(output / "campaign/summary.json"),
+        }
+        if (campaign.get("status") != "DAY_AHEAD_ONLY_CAMPAIGN_COMPLETE"
+                or case_summary.get("status") != "DAY_AHEAD_ONLY_DIAGNOSIS_COMPLETE"):
+            raise RuntimeError(
+                f"Day-ahead campaign stopped: {campaign_outcome['case_status']}; "
+                + "; ".join(reasons or [str(campaign.get("status"))])
+            )
         case = output / "campaign/cases/2025-05-12/diagnostic/2025-05-12"
         progress = json.loads((case / "progress.json").read_text(encoding="utf-8"))
         after = git_state()
@@ -63,7 +81,8 @@ def run(design_path: Path, output: Path) -> dict:
         return summary
     except Exception as exc:
         failure = {"status": "DIAGNOSIS_FAILED", "error": f"{type(exc).__name__}: {exc}",
-                   "source_state": git_state(), "monthly_complete": False, "email_sent": False}
+                   "source_state": git_state(), "monthly_complete": False, "email_sent": False,
+                   "campaign_outcome": campaign_outcome}
         write_json(output / "failure.json", failure)
         write_json(output / "state.json", failure)
         raise

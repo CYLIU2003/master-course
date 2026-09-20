@@ -52,6 +52,15 @@ def run(design_path: Path, output: Path) -> dict:
                 raise RuntimeError("Source state changed during root strategy")
             summary_path = case / "run/summary.json"
             if completed.returncode or not summary_path.is_file():
+                failure_path = case / "run/failure.json"
+                if failure_path.is_file():
+                    failure = json.loads(failure_path.read_text(encoding="utf-8"))
+                    state["failed_profile"] = {
+                        "profile": profile, "failure_path": str(failure_path),
+                        "failure_sha256": hashlib.sha256(failure_path.read_bytes()).hexdigest(),
+                        "error": failure.get("error"),
+                        "campaign_outcome": failure.get("campaign_outcome"),
+                    }
                 raise RuntimeError(f"{profile} failed; inspect its failure.json and logs; no automatic retry")
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             results.append({"profile": profile, "summary_path": str(summary_path),

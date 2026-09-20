@@ -58,6 +58,19 @@ def _declared_weeks(design: dict) -> tuple[str, ...]:
     return weeks
 
 
+def campaign_source_design(design: dict, source_directory: Path) -> dict:
+    """Use the same fresh source capture for Prepare and the later scope audit."""
+    routes = _root_relative(source_directory / "selected_routes.json")
+    return {
+        **deepcopy(design),
+        "route_source": routes,
+        # A complete campaign capture must stand on its own; an unrelated
+        # fallback catalog must not hide missing patterns in this capture.
+        "route_source_fallback": routes,
+        "route_timetable_audit_source": _root_relative(source_directory / "timetable_rows.json"),
+    }
+
+
 def campaign_case_design(
     design: dict,
     *,
@@ -221,6 +234,7 @@ def run_campaign(
     inputs_root = output / "inputs"
     cases_root = output / "cases"
     input_manifests_directory = _root_relative(inputs_root)
+    bound_design = campaign_source_design(design, output / "source_candidate")
     progress = {
         "schema_version": "exact_seasonal_campaign_progress_v1",
         "status": "BUILDING_SOURCE_CANDIDATE", "base_git_sha": source_state["sha"],
@@ -232,7 +246,7 @@ def run_campaign(
     write_json(
         output / "design.json",
         {
-            **deepcopy(design),
+            **bound_design,
             "campaign_id": campaign_id,
             "campaign_source_design_sha256": source_design_sha256,
             "campaign_declared_weeks": list(declared_weeks),
@@ -261,7 +275,7 @@ def run_campaign(
         prepare_output = inputs_root / week
         case_root.mkdir(parents=True)
         case_design = campaign_case_design(
-            design,
+            bound_design,
             week=week,
             declared_weeks=declared_weeks,
             input_manifests_directory=input_manifests_directory,
@@ -330,7 +344,12 @@ def run_campaign(
                 "diagnostic_result": diagnostic_result,
                 **_phase_summary(prepare_result, diagnostic_result),
             }
-            failed = summary["status"] != "DIAGNOSTIC_EXECUTION_PASSED"
+            expected_status = (
+                "DAY_AHEAD_ONLY_DIAGNOSIS_COMPLETE"
+                if design.get("diagnostic_stop_after_day_ahead") is True
+                else "DIAGNOSTIC_EXECUTION_PASSED"
+            )
+            failed = summary["status"] != expected_status
             if failed:
                 stopped = True
                 stop_reason = f"{week}: case failed with status {summary['status']}"
@@ -362,6 +381,8 @@ def run_campaign(
 
     final_state = git_state()
     campaign_status = "COMPLETED" if not stopped else "STOPPED_AFTER_FAILED_CASE"
+    if not stopped and design.get("diagnostic_stop_after_day_ahead") is True:
+        campaign_status = "DAY_AHEAD_ONLY_CAMPAIGN_COMPLETE"
     if final_state != source_state:
         campaign_status = "BLOCKED_SOURCE_STATE_DRIFT"
     campaign_summary = {

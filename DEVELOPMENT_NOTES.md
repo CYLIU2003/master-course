@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-21 配車診断のsource参照漏れと失敗理由の欠落を修正
+
+- 固定4a85de14は新規Prepare1,704便・60台が通過したが、route scopeが旧source_candidateを読んで0便と判定。最初の条件は求解未実行、NoRelは未着手。nativeログ・メモリ値・gap・物理検証は未評価。failure SHAとcleanを確認した。
+- campaign/case/diagnosticのsource参照を同一captureに束縛。wrapperはprogress読取り前にcampaignの状態を検査し、元のreasonsと子failure SHAをcoordinatorへ保存する。day-aheadのみの正常終了を専用状態で区別した。
+- 旧保存先を空にした実source作成→route preflight→diagnostic runnerの2 campaign回帰、failure原因保存・専用完了状態など関連60 tests通過。今回の実データの読取りでは、元設計BLOCKED→参照修正後READY、Prepared READYを確認。実求解へ旧Preparedは流用しない。
+- solver・数式・費用・制約・探索設定は変更なし。同じ600/120秒・4 threads・18 GB・1%目標で新しい固定版から両条件を診断する。[詳細](docs/notes/STAGE1_INPUT_BINDING_FIX_20260921.md)。独立研究承認PENDING、メール・全12週実行なし。
+
 ## 2026-09-21 根探索2条件の停止原因を修正
 
 - 08:42 JSTにclean固定4a85de14d7741a33fb6dbf2530978ed00b95fecbから新2条件を開始。実coordinator52208／venv launcher32300。固定版35 tests、入力47 SHA・参照移設11件を確認。新campaign固有source生成とdual条件RUNNINGを確認した。制御先 output/stage1_memory_search_20260921。終了時のみ既存タスクへ1回queueし、通常AI監視・メールはなし。

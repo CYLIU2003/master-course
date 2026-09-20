@@ -18,6 +18,9 @@ def setup(monkeypatch, tmp_path, *, fail=False, profiles=runner.PROFILES):
         folder = Path(command[-1])
         folder.mkdir()
         if fail:
+            (folder / "failure.json").write_text(json.dumps({
+                "error": "Day-ahead campaign stopped: BLOCKED_CASE_PREFLIGHT",
+                "campaign_outcome": {"case_status": "BLOCKED_CASE_PREFLIGHT", "solve_attempted": False}}))
             return SimpleNamespace(returncode=1)
         (folder / "summary.json").write_text(json.dumps({
             "physical_accepted": True, "quality": {"subproblem_gap_targets_met": False},
@@ -47,3 +50,5 @@ def test_root_diagnosis_stops_after_failure_without_retry(monkeypatch, tmp_path)
     failure = json.loads((tmp_path / "output/failure.json").read_text())
     assert failure["status"] == "ROOT_SEARCH_DIAGNOSIS_FAILED"
     assert not failure["email_sent"]
+    assert failure["failed_profile"]["campaign_outcome"]["solve_attempted"] is False
+    assert failure["failed_profile"]["failure_sha256"]

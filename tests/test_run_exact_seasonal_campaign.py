@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 from pathlib import Path
+import pytest
 
 import scripts.benchmarks.run_exact_seasonal_campaign as campaign
 
@@ -88,7 +89,8 @@ def test_failed_case_record_is_explicitly_not_executed() -> None:
     assert record["reasons"]
 
 
-def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, monkeypatch):
+@pytest.mark.parametrize("day_ahead_only", [False, True])
+def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, monkeypatch, day_ahead_only):
     from scripts.benchmarks import prepare_shibu21_24_seasonal_inputs as preparation
     from scripts.benchmarks import run_shibu21_24_seasonal_diagnostic as diagnostic
     from test_shibu21_24_source_scopes import _write_three_route_source
@@ -98,9 +100,13 @@ def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, m
     monkeypatch.setattr(campaign, "ROOT", tmp_path)
     monkeypatch.setattr(preparation, "ROOT", tmp_path)
     monkeypatch.setattr(preparation, "OLD_SOURCE_DIR", raw)
+    monkeypatch.setattr(diagnostic, "ROOT", tmp_path)
     legacy = tmp_path / "legacy_source"
     monkeypatch.setattr(preparation, "THREE_ROUTE_SOURCE_CANDIDATE_DIR", legacy)
     preparation.build_source_candidate(route_codes=preparation.THREE_ROUTE_CODES)
+    # Poison the old audit location so this test cannot pass by accidentally
+    # reading a previous campaign's otherwise identical input.
+    (legacy / "timetable_rows.json").write_text("[]")
     snapshot = {p.name: p.read_bytes() for p in legacy.iterdir()}
     monkeypatch.setattr(diagnostic, "git_state", lambda: {"sha": "frozen", "status_porcelain": ""})
     sources = []
@@ -111,10 +117,36 @@ def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, m
         return {"formal_prepared": True, "input_preparation_valid": True}
 
     monkeypatch.setattr(preparation, "prepare_week", prepare)
-    monkeypatch.setattr(diagnostic, "run_diagnostic", lambda *_: [{"status": "DIAGNOSTIC_EXECUTION_PASSED"}])
-    design = {"evaluation_weeks": ["2025-05-12"], "route_codes": list(preparation.THREE_ROUTE_CODES)}
+    monkeypatch.setattr(diagnostic, "audit_prepared_inputs", lambda _: {
+        "cases": {"2025-05-12": {"status": "READY"}}, "blockers": []})
+    monkeypatch.setattr(diagnostic, "audit_parent_fleet", lambda _: {"blockers": []})
+    monkeypatch.setattr(diagnostic, "build_public_evaluation", lambda *_: {})
+    case_status = "DAY_AHEAD_ONLY_DIAGNOSIS_COMPLETE" if day_ahead_only else "DIAGNOSTIC_EXECUTION_PASSED"
+    solver_calls = []
+
+    def solve(week, output, config, **kwargs):
+        solver_calls.append(week)
+        return {"week": week, "status": case_status, "day_ahead_feasible": True}
+
+    monkeypatch.setattr(diagnostic, "solve_week", solve)
+    design = {"evaluation_weeks": ["2025-05-12"], "route_codes": list(preparation.THREE_ROUTE_CODES),
+              "route_source": "legacy_source/selected_routes.json",
+              "route_source_fallback": "missing_catalog.json",
+              "route_timetable_audit_source": "legacy_source/timetable_rows.json",
+              "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
+              "diagnostic_stop_after_day_ahead": day_ahead_only}
+    original_design = deepcopy(design)
     for profile in ("dual", "norel"):
-        campaign.run_campaign(design, tmp_path / profile)
+        result = campaign.run_campaign(design, tmp_path / profile)
+        assert result["status"] == ("DAY_AHEAD_ONLY_CAMPAIGN_COMPLETE" if day_ahead_only else "COMPLETED")
+        audit = json.loads((tmp_path / profile / "cases/2025-05-12/diagnostic/scope_audit.json").read_text())
+        assert audit["route_scope_complete"]
+        assert all(row["trip_count"] == 1 for row in audit["timetable_evidence"].values())
+        for filename in ("design.json", "cases/2025-05-12/design.json", "cases/2025-05-12/diagnostic/design.json"):
+            effective = json.loads((tmp_path / profile / filename).read_text())
+            assert effective["route_timetable_audit_source"] == f"{profile}/source_candidate/timetable_rows.json"
+    assert solver_calls == ["2025-05-12", "2025-05-12"]
+    assert design == original_design
     assert len(sources) == 2
     assert sources[0]["source_directory"] != sources[1]["source_directory"]
     assert sources[0]["artifacts"] == sources[1]["artifacts"]
