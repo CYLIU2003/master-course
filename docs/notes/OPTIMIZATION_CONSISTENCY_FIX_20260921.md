@@ -69,3 +69,9 @@ P0/P1として扱った計画／実行の残量差、DAとrollingの発行間隔
 大規模性能・実費の改善を未検証のまま「十分最適化済み」と表示しない。
 
 検証記録: 全体回帰は2411 passed / 4 failed（116.71秒）。うち2件は既存PowerPoint原本の差、2件は既存テストのcp932読取りで、後者はUTF-8指定の再検証で通過。新しい品質判定を含む関連53件も通過。資料原本や期待ハッシュを変更して試験を通す操作はしていない。
+
+## 2026-09-21 07:36 JST 起動
+
+固定 `3662b81ae0f677f9cc42bf1ad40ed31c007b32b0`、release branch `codex/optimization-consistency-20260921`。隔離worktreeで入力47件のSHA・参照11件の移設・clean・関連31試験通過を確認。実solver PID52488（venv launcher41456）、起動時点は5月の新規Prepare。計算は単一ローカルスクリプトが実行し、終了時だけ既存タスクへ1回queueする。通常のAI監視は追加しない。
+
+起動原本は `output/planning_consistency_20260921/launch.json`、計算原本は固定worktree内 `output/planning_consistency_diagnosis_20260921/`。この起動は診断開始であり、診断通過・月別再計算完了・メール送信ではない。実行中の固定コードを変更しない。

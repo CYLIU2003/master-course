@@ -2,6 +2,8 @@
 
 ## 2026-09-21 計画整合・配車下界・探索設定の改善
 
+- 07:36 JSTにclean固定3662b81aから5月の前日計画診断を開始（実solver PID52488、venv launcher41456）。入力47件SHA、参照移設11件、固定版31試験通過を確認。終了時だけ既存タスクへ1回queueし、通常AI監視・完了メールは行わない。起動原本 output/planning_consistency_20260921/launch.json。
+
 - 別ポリシー evaluation_target_every_prefix をDA/Stage1連続充電緩和/rolling将来区間へ共通適用。原初終端目標の固定をcommonへ共有し、発行間隔をdesignからDAへ渡す。旧ポリシーの結果は保全。
 - 出発日別の同時運行便数から有効な車両日数下界を追加。料金を変えず、PrePasses=3のbounded_presolveをAPIと実行設計へ公開。Stage1/2のgap、初期解改善、実行費用を別に記録。
 - 新しい5月の前日計画診断はclean固定版・新規Prepare・600/120秒・1%目標で限定実行する。全12週の完了やメール送信とは区別。数学的範囲・回帰は[修正記録](docs/notes/OPTIMIZATION_CONSISTENCY_FIX_20260921.md)。独立研究承認PENDING。
