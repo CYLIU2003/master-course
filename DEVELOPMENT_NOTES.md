@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-20 17:26 JST 予備残量修正版を固定して開始
+
+- clean固定 `68f2f4e5aa7b242de467ceece487a4c43da00c70`、`codex/monthly-reserve-20260920` の隔離worktreeから全12週を新規実行。入力47ファイルの同一SHA・metadata参照11件の移設と、固定版57 tests通過を確認した。
+- campaign実PID38308、observer実PID34900。1月の新規Prepare・完了0/12・監視RUNNINGを確認。通常処理はローカルスクリプト、開始後の固定コード変更・旧成功週の流用・追加AI監視はない。
+- `monthly_reserve_20260920` 専用の配信識別子は `MC2025-68f2f4e5`。メール未送信、全12週の独立監査と図表完成後に既存タスクへ1回queueする。[起動原本と手順](docs/notes/MONTHLY_RESERVE_EXECUTION_20260920.md)。研究採用BLOCKED、独立研究レビューはPENDING。
+
 ## 2026-09-19 BESS週末復元条件のスクリプト再開始
 
 - ユーザーが全12週の再開始・通常処理のスクリプト化・完了時メールを明示承認。保留版を保存し、実行有効な別designを追加した。

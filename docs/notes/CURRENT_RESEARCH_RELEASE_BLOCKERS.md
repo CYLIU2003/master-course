@@ -1,5 +1,9 @@
 # Current research release blockers
 
+<!-- monthly-reserve-status -->
+2026-09-20 17:26 JST: 予備残量を保持する固定 `68f2f4e5` で全12週を新規開始。起動確認時は1月Prepare、独立監査0/12週、observer RUNNING。局所回帰と固定版57 testsは通過したが、全12週の物理・会計・予備残量監査と独立研究承認は未完了。研究採用BLOCKED。旧2ff239e1の3週・旧7c7c2334の12週は新条件の結果へ流用しない。[今回の実行](MONTHLY_RESERVE_EXECUTION_20260920.md)。以下は過去の起動・停止記録。
+<!-- /monthly-reserve-status -->
+
 ## 2026-09-19 18:09 JST BESS週末復元条件を新規実行
 
 ユーザーの開始承認を受け、新しいclean固定 `2ff239e1` から全12週をスクリプトで開始。確認時点は1月Prepare・0/12週、監視RUNNING。物理・会計・週末BESS復元の独立検算と全週完了は未成立。通常のAI監視はせず、完了または失敗時だけ一度タスクへ通知する。研究採用BLOCKEDを維持する。[実行と配信](MONTHLY_CYCLIC_EXECUTION_20260919.md)。以下の「実行保留」は開始承認前の記録。
@@ -8,7 +12,7 @@
 
 ## 2026-09-20 予備残量修正の検証範囲
 
-旧4月のPV予測誤差後に週末BESS目標へ到達不能になる経路を、予備残量と共通rolling終端目標で修正した。48時間のゼロPV連鎖・関連回帰は通過。全12週の新clean版実行、全週独立物理・会計・予備残量監査はこれからであり、研究採用BLOCKEDを維持する。旧2ff239e1の失敗と3週成功は旧条件の記録として残す。[修正](BESS_FORECAST_RESERVE_FIX_20260920.md)・[実行](MONTHLY_RESERVE_EXECUTION_20260920.md)。
+旧4月のPV予測誤差後に週末BESS目標へ到達不能になる経路を、予備残量と共通rolling終端目標で修正した。48時間のゼロPV連鎖・関連回帰は通過。全12週の新clean版実行を開始したが、全週独立物理・会計・予備残量監査は未完了であり、研究採用BLOCKEDを維持する。旧2ff239e1の失敗と3週成功は旧条件の記録として残す。[修正](BESS_FORECAST_RESERVE_FIX_20260920.md)・[実行](MONTHLY_RESERVE_EXECUTION_20260920.md)。
 
 <!-- monthly-cyclic-status -->
 最新の月別再実行: 固定 `2ff239e1`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESS週末復元条件。旧7c7c2334の12週は旧条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919.md`。

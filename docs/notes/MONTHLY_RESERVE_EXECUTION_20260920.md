@@ -17,4 +17,15 @@
 
 研究採用BLOCKED。独立した研究承認は別途必要であり、この実行の開始を研究承認・全12週完了・メール送信済みと同一視しない。
 
-全体回帰: 2,400 passed / 既存資料2 failed（109.18秒）。今回の実装に関するP0/P1は自己レビューで解消。独立した研究承認はPENDING。新しい固定版での全12週実行前で、実験結果はまだない。
+全体回帰: 2,400 passed / 既存資料2 failed（109.18秒）。今回の実装に関するP0/P1は自己レビューで解消。独立した研究承認はPENDING。
+
+## 2026-09-20 17:26 JST 起動確認
+
+- 固定コミット: `68f2f4e5aa7b242de467ceece487a4c43da00c70`、release branch `codex/monthly-reserve-20260920`。
+- 固定作業場所: `C:/Users/RTDS_admin/.codex/worktrees/monthly-reserve-20260920/master-course`。
+- 同一入力47ファイルのSHA・親metadata参照11件の移設・cleanを照合。旧結果をコピーせず、固定版で関連57テストも通過した。
+- campaign実PID `38308`、開始 `2026-09-20T08:26:09.1757270Z`。observer実PID `34900`。いずれも非表示のローカルスクリプト。
+- 起動確認時点: `PREPARING_WEEK`、対象 `2025-01-06`、完了・独立監査 `0/12`。新規Prepareを開始し、observer `RUNNING` と設定・helper SHA照合を確認した。これは週間計算・監査の完了を示さない。
+- 配信識別子は `MC2025-68f2f4e5`。メール未送信。全12週の監査と最終図表が揃った時だけ既存タスクを一度復帰させ、承認済み宛先へ1通送信する。
+
+上記PID・開始時刻は起動時の記録。最新状態は `script_observer/state.json` とcampaign `progress.json`を参照する。

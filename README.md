@@ -1,12 +1,15 @@
 # master-course
 
+<!-- monthly-reserve-status -->
+2026-09-20 17:26 JST: BESSのPV専用充電と週末復元を維持し、予測PVに依存しない予備残量を追加した固定 `68f2f4e5` で全12週を新規開始。起動確認時は1月の新規Prepare、独立監査0/12週。通常処理はスクリプトのみ、全週監査・図表完成後に承認済み宛先へメールを1通送る。全体2,400 tests・固定版57 tests通過（既存資料の原本照合2件は未解消）。旧結果の流用なし、研究採用BLOCKED。[修正内容](docs/notes/BESS_FORECAST_RESERVE_FIX_20260920.md)・[実行状態](docs/notes/MONTHLY_RESERVE_EXECUTION_20260920.md)。
+<!-- /monthly-reserve-status -->
+
+
 2026-09-19 18:09 JST: BESS週末復元条件の[全12週スクリプト実行](docs/notes/MONTHLY_CYCLIC_EXECUTION_20260919.md)を固定 `2ff239e1` から開始しました。開始確認時は1月の新規Prepare、完了0/12週。通常はAIを呼ばず、計算・保存結果の監査・集計をスクリプトへ任せ、検証済み完了時に承認済み宛先へメールを1通送ります。状態は `output/monthly_cyclic_20260919/script_observer/state.json`、固定版・実PIDは同親の `budget_rerun_launch.json` に記録しています。
 
 2026-09-19: BESSの明示0残量の保存・終端目標と、月別準備時のBESS設定引き継ぎを修正しました。週末に初期残量へ戻す[全12週の別設定](config/shibu21_23_monthly_cyclic_draft_20260919.json)は実行無効で保存しています。関連128テスト通過。**シミュレーションは開始していません。** [変更点・条件・残る課題](docs/notes/MODEL_SCENARIO_REVISION_20260919.md)。
 
-<!-- monthly-reserve-status -->
-最新の修正: BESSのPV専用充電と週末復元を維持し、予測PVに依存しない予備残量を追加した。旧4月の停止原因への回帰と全体2,400 testsが通過（既存資料の原本照合2件は未解消）。全12週の新規実行を準備中、旧結果の流用なし。[修正内容](docs/notes/BESS_FORECAST_RESERVE_FIX_20260920.md)・[実行状態](docs/notes/MONTHLY_RESERVE_EXECUTION_20260920.md)。
-<!-- /monthly-reserve-status -->
+
 
 <!-- monthly-cyclic-status -->
 最新の月別再実行: 固定 `2ff239e1`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESS週末復元条件。旧7c7c2334の12週は旧条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919.md`。
