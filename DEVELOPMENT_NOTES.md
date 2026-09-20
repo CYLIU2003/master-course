@@ -2,6 +2,7 @@
 
 ## 2026-09-21 根探索2条件の停止原因を修正
 
+- 08:42 JSTにclean固定4a85de14d7741a33fb6dbf2530978ed00b95fecbから新2条件を開始。実coordinator52208／venv launcher32300。固定版35 tests、入力47 SHA・参照移設11件を確認。新campaign固有source生成とdual条件RUNNINGを確認した。制御先 output/stage1_memory_search_20260921。終了時のみ既存タスクへ1回queueし、通常AI監視・メールはなし。
 - 全体回帰2434 passed / 既存PowerPoint関連2 failed（103.63秒）。前回と同じ資料hash・部品構成の不一致で、資料と期待hashを保全。新規P0/P1残件0、独立レビューPENDING。
 - daa9ef59のcompletion/failure・barrier summaryと5原本のSHA・clean状態を照合。barrierは124.4秒で18 GB上限、根LP完了記録なし。日別下界200車両日・400万円でgap6.91227%だが初期解改善0円。Stage2 gap0.36796%・物理通過。NoRelは共通source_candidateのFileExistsErrorで求解未実行。
 - campaignからsource builderへ専用出力先を渡し、既存出力を変更しない新規入力作成へ修正。実builderを含む連続2 campaign回帰と上書き／root外出力拒否を追加。関連57 tests通過。

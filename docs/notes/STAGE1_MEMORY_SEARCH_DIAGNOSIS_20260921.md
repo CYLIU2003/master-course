@@ -69,3 +69,17 @@ Stage 2は固定配車の充電部分であり、その目的値とStage 1の総
 全体回帰は2434 passed / 既存PowerPoint関連2 failed（103.63秒）。失敗は前回と同じ原本hash・
 部品構成の不一致で、最適化関連の新規失敗は0件。資料と期待hashは変更していない。
 ログは `output/stage1_memory_search_regression_20260921.log`。自己レビューの新規P0/P1残件0。
+
+## 起動記録
+
+2026-09-21 08:42 JST、clean固定 `4a85de14d7741a33fb6dbf2530978ed00b95fecb`
+（branch `codex/stage1-memory-search-20260921`）から新診断を開始した。
+実行場所は `C:/Users/RTDS_admin/.codex/worktrees/stage1-memory-search-20260921/master-course`。
+固定版でも関連35 tests通過。入力47件のSHAと親シナリオの参照移設11件を照合し、
+参照以外の値と参照先の有無を保全した。前回のprepared／求解結果は取り込んでいない。
+
+実coordinator PID52208、venv launcher32300。最初の `bounded_presolve_dual` がRUNNINGで、
+campaign固有のsource_candidateが作られ、実行worktreeがcleanであることを確認した。
+制御記録は `C:/master-course/output/stage1_memory_search_20260921/launch.json` と
+`startup_verification.json`。実結果は固定worktreeの `output/stage1_memory_search_diagnosis_20260921/`。
+スクリプトが終了まで待機し、この既存タスクへ1回だけ通知する。AI定期監視やメールは行わない。
