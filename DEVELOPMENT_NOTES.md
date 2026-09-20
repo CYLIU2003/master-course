@@ -2,6 +2,7 @@
 
 ## 2026-09-20 予備残量版の全12週完了・配信前照合
 
+- 配信完了: 23:57 JST、承認済み `g2681320@tcu.ac.jp` へGmailで1通送信。送信前のreceipt不在・一意件名検索0件、送信後の実message ID `1a0bf523c1c61c5c`・SENT・同件名1件・添付4件を照合した。実時刻とbundle/payload SHAは `email_receipt.json` へ保存。受信トレイ到達は未確認。監視終了時のstateを保全したうえで `COMPLETED_EMAIL_SENT` を記録した。
 - 固定 `68f2f4e5` で全12週・2,016時間・8,064区間を受理、物理違反0件。全週の確定会計、初期BESS残量への週末復元、ゼロPVでの予備残量を保存結果から独立検算した。旧4月の停止は再発していない。
 - `collect(..., partial=False)` で全週の物理・会計・同一条件・4032予備残量原本SHAを再照合し、保存済み報告の時刻以外の全項目と一致した。bundleの4成果物とメール添付をバイト単位で照合。最終PNGを表示し、ラベル・凡例・単位・12か月・重なりなしを確認した。検査原本は `output/monthly_reserve_20260920/script_observer/final_verification.json` と `final_visual_review.json`。
 - 最大受電900 kWと大きな有料超過費を結果表・本文・図へ明記。費用最適性や研究承認とは区別し、研究採用BLOCKEDを維持する。[完成報告](docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md)。メール成功は専用 `email_receipt.json` の実message IDで確認する。

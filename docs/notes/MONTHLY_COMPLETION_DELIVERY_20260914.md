@@ -2,6 +2,8 @@
 
 ## 2026-09-20 予備残量修正版
 
+**配信完了:** 固定 `68f2f4e5` の全12週・最終図表を確認し、2026-09-20 23:57 JSTに `g2681320@tcu.ac.jp` へ1通送信済み。実message ID `1a0bf523c1c61c5c`、SENTと一意件名検索1件を確認。`output/monthly_reserve_20260920/script_observer/email_receipt.json` を照合し、同じイベントで再計算・監視再開・メール再送を行わない。研究採用BLOCKEDは継続する。
+
 最新の実行先は `output/monthly_reserve_20260920/script_observer/`。[専用実行手順](MONTHLY_RESERVE_EXECUTION_20260920.md)を参照する。旧cyclicの4月停止は原因を確認済みで、新条件の成功週へ流用しない。今回のsource SHA・全12週・予備残量の独立監査・専用図とbundleを照合し、この版の未送信を確認したうえで、承認済み宛先へ1通だけ送る。以下に残る過去版のパス・SHAを今回の配信に使わない。
 
 ## 2026-09-19 BESS週末復元条件の新規実行

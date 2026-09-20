@@ -4,6 +4,8 @@
 最新の月別再実行: 固定 `68f2f4e5`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVのみで充電、初期残量を毎時の予備残量として保持し週末に復元。旧2ff239e1の3週・旧7c7c2334の12週は別条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md`。
 <!-- /monthly-reserve-status -->
 
+2026-09-20 23:57 JST: 全12週の最終図・成果物SHAを確認し、月別・季節別報告と図表4ファイルを承認済み宛先へGmailで1通送信しました。実message ID `1a0bf523c1c61c5c`、送信済み検索1件を照合。配信原本は `output/monthly_reserve_20260920/script_observer/email_receipt.json`。研究採用BLOCKEDは継続します。
+
 
 2026-09-19 18:09 JST: BESS週末復元条件の[全12週スクリプト実行](docs/notes/MONTHLY_CYCLIC_EXECUTION_20260919.md)を固定 `2ff239e1` から開始しました。開始確認時は1月の新規Prepare、完了0/12週。通常はAIを呼ばず、計算・保存結果の監査・集計をスクリプトへ任せ、検証済み完了時に承認済み宛先へメールを1通送ります。状態は `output/monthly_cyclic_20260919/script_observer/state.json`、固定版・実PIDは同親の `budget_rerun_launch.json` に記録しています。
 

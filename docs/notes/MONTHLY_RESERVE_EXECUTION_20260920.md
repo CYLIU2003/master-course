@@ -42,3 +42,9 @@
 `script_observer/final_verification.json` にbundle・payload・監査・campaign原本のSHAを保存した。PNGを表示し、6パネルすべての12か月・凡例・単位・注記と欠け／重なりを確認、`final_visual_review.json` にPASSを記録した。計算原本や図表の修正は不要だった。
 
 完成結果は [月別・季節別報告](SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md)。購入電力量が最多なのは5月、最少は2月。受電ピークは最大900 kWで、200 kWの契約基準を有料超過する条件の費用が大きい。完走は費用改善や最適性の証明ではない。研究採用BLOCKEDを維持し、配信の実成否は `script_observer/email_receipt.json` を原本とする。
+
+## 配信完了
+
+2026-09-20 23:57:12 JST、承認済み `g2681320@tcu.ac.jp` へ報告・数値JSON・PNG・SVGを1通送信した。Gmail実message ID / thread IDは `1a0bf523c1c61c5c`。件名 `BESS予備残量・月別12週の整理完了 [MC2025-68f2f4e5]`。送信前はreceiptなし・送信済み検索0件、送信後は同IDのSENT・宛先・件名・添付4件と検索結果1件を確認した。実ID、Gmail時刻、bundle/payload SHA、重複防止の確認を `email_receipt.json` に保存した。Gmailによる送信成功であり、受信者の受信トレイ到達確認ではない。
+
+同じ完了イベントが再来しても、このreceiptとGmailを照合して再送しない。`completion_bundle.json` は未送信時点の不変の配信準備記録として保持し、現在の配信成否はreceiptを優先する。新しい計算や監視の再起動は不要。
