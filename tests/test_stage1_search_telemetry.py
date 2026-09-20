@@ -1,6 +1,17 @@
 from src.optimization.milp.solver_adapter import _Stage1SearchTelemetry
 
 
+def test_root_completion_requires_optimal_root_mipnode_event():
+    t = _Stage1SearchTelemetry(requested_gap_ratio=.01)
+    t.record_progress(runtime_sec=1, incumbent_objective=100, best_bound=0, explored_node_count=0, solution_count=1)
+    assert t.root_node_relaxation_optimal_callback_runtime_sec is None
+    t.record_root_node_relaxation(runtime_sec=2, node_count=0, optimal=False)
+    t.record_root_node_relaxation(runtime_sec=3, node_count=1, optimal=True)
+    assert t.root_node_relaxation_optimal_callback_runtime_sec is None
+    t.record_root_node_relaxation(runtime_sec=4, node_count=0, optimal=True)
+    assert t.root_node_relaxation_optimal_callback_runtime_sec == 4
+
+
 def test_stage1_search_telemetry_samples_progress_and_gap_time() -> None:
     telemetry = _Stage1SearchTelemetry(
         requested_gap_ratio=0.025,

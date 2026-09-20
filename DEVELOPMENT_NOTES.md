@@ -1,5 +1,14 @@
 # Development Notes
 
+## 2026-09-21 配車の根探索停滞を確認し、次の診断を実装
+
+- 関連131 tests通過。全体回帰2428 passed / 既存資料2 failed、106.17秒。PPTX原本・期待ハッシュを変更せず、最適化関連の新規失敗は0件。
+
+- 固定3662b81aのsummary/4原本SHA・clean・物理検証と、DA/Stage1緩和それぞれ672区間のBESS保護を保存値から照合。配車gap47.8709%、初期解改善0円、充電gap0.36796%。実績費用は未評価。
+- 約677万変数・604秒・単体法258308反復・native下界0。旧root_relaxation_boundは最初のMIP callback値で、根LPの完了証明ではなかった。OPTIMAL MIPNODE時刻を別記録し、PrePasses等のnative設定とログ保存を追加。
+- 完全後続網の車両間合併から日別の最小経路被覆下界を追加。4便の全64 DAGを割当全列挙と比較。barrier/NoRel-workの2プロファイルを同じ600秒・1%目標・18 GB soft limitで逐次診断する。候補削除・料金変更・旧結果の流用はない。
+- [数学的根拠・診断設計](docs/notes/STAGE1_ROOT_SEARCH_DIAGNOSIS_20260921.md)。自己検証と独立研究承認を分け、研究採用BLOCKEDを維持。
+
 ## 2026-09-21 計画整合・配車下界・探索設定の改善
 
 - 07:36 JSTにclean固定3662b81aから5月の前日計画診断を開始（実solver PID52488、venv launcher41456）。入力47件SHA、参照移設11件、固定版31試験通過を確認。終了時だけ既存タスクへ1回queueし、通常AI監視・完了メールは行わない。起動原本 output/planning_consistency_20260921/launch.json。

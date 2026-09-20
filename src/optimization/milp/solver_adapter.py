@@ -2024,9 +2024,16 @@ def _configured_stage1_gurobi_search_controls(
     if profile == "bounded_presolve":
         return {**default_controls, "profile": profile, "mip_focus": 1,
                 "heuristics": 0.2, "presolve": 1, "pre_passes": 3}
+    if profile in ("bounded_presolve_barrier", "bounded_presolve_norel"):
+        return {**default_controls, "profile": profile, "mip_focus": 1,
+                "heuristics": 0.2, "presolve": 1, "pre_passes": 3,
+                "root_method": 2 if profile == "bounded_presolve_barrier" else 1,
+                "no_rel_heur_work": 120.0 if profile == "bounded_presolve_norel" else 0.0,
+                "soft_mem_limit_gb": 18.0}
     raise ValueError(
         "stage1_gurobi_search_profile must be 'default', 'bound_focus', "
-        "'root_cut_focus', 'incumbent_focus', or 'bounded_presolve'"
+        "'root_cut_focus', 'incumbent_focus', 'bounded_presolve', "
+        "'bounded_presolve_barrier', or 'bounded_presolve_norel'"
     )
 
 
@@ -4295,6 +4302,7 @@ class _Stage1SearchTelemetry:
     first_incumbent_objective: Optional[float] = None
     root_relaxation_bound: Optional[float] = None
     root_relaxation_runtime_sec: Optional[float] = None
+    root_node_relaxation_optimal_callback_runtime_sec: Optional[float] = None
     presolve_callback_count: int = 0
     first_presolve_callback_runtime_sec: Optional[float] = None
     last_presolve_callback_runtime_sec: Optional[float] = None
@@ -4418,6 +4426,14 @@ class _Stage1SearchTelemetry:
             self.first_presolve_callback_runtime_sec = runtime
         self.last_presolve_callback_runtime_sec = runtime
 
+    def record_root_node_relaxation(self, *, runtime_sec: Any,
+                                   node_count: Any, optimal: bool) -> None:
+        """Require an OPTIMAL MIPNODE event; a MIP bound of zero is not proof."""
+        runtime = self._finite_or_none(runtime_sec)
+        if (optimal and self._finite_or_none(node_count) == 0 and runtime is not None
+                and self.root_node_relaxation_optimal_callback_runtime_sec is None):
+            self.root_node_relaxation_optimal_callback_runtime_sec = runtime
+
     def record_mip_callback(self, *, runtime_sec: Any) -> None:
         """Record the first MIP callback timestamp after presolve."""
 
@@ -4484,6 +4500,8 @@ class _Stage1SearchTelemetry:
             "first_incumbent_runtime_sec": self.first_incumbent_runtime_sec,
             "first_incumbent_objective": self.first_incumbent_objective,
             "root_relaxation_bound": self.root_relaxation_bound,
+            "root_relaxation_bound_semantics": "legacy_first_MIP_bound_at_zero_nodes_not_proof_of_solved_root_LP",
+            "root_node_relaxation_optimal_callback_runtime_sec": self.root_node_relaxation_optimal_callback_runtime_sec,
             "root_relaxation_runtime_sec": (
                 self.root_relaxation_runtime_sec
             ),
@@ -13630,6 +13648,17 @@ class GurobiMILPAdapter:
         )
         stage1 = gp.Model("thesis_stage1_vehicle_scheduling")
         stage1.Params.OutputFlag = 0
+        stage1_native_log_path = None
+        if problem.metadata.get("stage1_native_log_enabled") is True:
+            log_root = problem.metadata.get("phase3_diagnostics_dir")
+            if not log_root:
+                raise ValueError("Native Stage 1 logging requires a diagnostic output directory")
+            native_log = Path(log_root) / f"stage1_native_{time.time_ns()}.log"
+            native_log.parent.mkdir(parents=True, exist_ok=True)
+            stage1.Params.LogToConsole = 0
+            stage1.Params.OutputFlag = 1
+            stage1.Params.LogFile = str(native_log)
+            stage1_native_log_path = str(native_log)
         stage1.Params.TimeLimit = max(stage_time_limit, 0.001)
         stage1.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage1.Params.Seed = int(config.random_seed)
@@ -13640,6 +13669,9 @@ class GurobiMILPAdapter:
         stage1.Params.Heuristics = float(stage1_search_controls["heuristics"])
         stage1.Params.Presolve = int(stage1_search_controls["presolve"])
         stage1.Params.PrePasses = int(stage1_search_controls.get("pre_passes", -1))
+        if "no_rel_heur_work" in stage1_search_controls:
+            stage1.Params.NoRelHeurWork = float(stage1_search_controls["no_rel_heur_work"])
+            stage1.Params.SoftMemLimit = float(stage1_search_controls["soft_mem_limit_gb"])
         stage1.Params.Cuts = int(stage1_search_controls["cuts"])
         stage1.Params.Method = int(stage1_search_controls["root_method"])
         stage1.Params.NodeMethod = int(stage1_search_controls["node_method"])
@@ -14533,6 +14565,19 @@ class GurobiMILPAdapter:
         )
         from src.optimization.common.vehicle_day_bound import vehicle_day_overlap_lower_bounds
         vehicle_day_bounds = vehicle_day_overlap_lower_bounds(problem.trips, trip_day_index_by_trip_id)
+        vehicle_day_overlap_bounds = dict(vehicle_day_bounds)
+        vehicle_day_path_cover_bounds = {}
+        if problem.metadata.get("stage1_daily_path_cover_bound") is True:
+            from src.optimization.common.vehicle_day_bound import vehicle_day_path_cover_lower_bounds
+            if not isinstance(arc_pairs, ArcDomain):
+                raise ValueError("Daily path-cover bound requires the complete factored arc domain")
+            vehicle_day_path_cover_bounds = vehicle_day_path_cover_lower_bounds(
+                problem.trips, trip_day_index_by_trip_id,
+                ((row.origin, row.targets) for row in arc_pairs.rows),
+                full_network=_supports_full_candidate_network_exact_milp(arc_pruning_summary),
+            )
+            vehicle_day_bounds = {day: max(bound, vehicle_day_path_cover_bounds.get(day, 0))
+                                  for day, bound in vehicle_day_bounds.items()}
         for day, lower_bound in vehicle_day_bounds.items():
             stage1.addConstr(
                 gp.quicksum(var for (vehicle_id, day_idx), var in used_vehicle_day.items() if day_idx == day)
@@ -15775,11 +15820,14 @@ class GurobiMILPAdapter:
                     stage1_search_telemetry.record_presolve_callback(
                         runtime_sec=model.cbGet(GRB.Callback.RUNTIME)
                     )
-                elif (
-                    where == GRB.Callback.MIPNODE
-                    and stage1_fragment_lazy_separator is not None
-                ):
-                    stage1_fragment_lazy_separator.callback(model, where)
+                elif where == GRB.Callback.MIPNODE:
+                    stage1_search_telemetry.record_root_node_relaxation(
+                        runtime_sec=model.cbGet(GRB.Callback.RUNTIME),
+                        node_count=model.cbGet(GRB.Callback.MIPNODE_NODCNT),
+                        optimal=model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.OPTIMAL,
+                    )
+                    if stage1_fragment_lazy_separator is not None:
+                        stage1_fragment_lazy_separator.callback(model, where)
                 elif where == GRB.Callback.MIPSOL:
                     lazy_cut_count = (
                         stage1_fragment_lazy_separator.callback(
@@ -16033,6 +16081,10 @@ class GurobiMILPAdapter:
                         "node_method": int(stage1.Params.NodeMethod),
                         "symmetry": int(stage1.Params.Symmetry),
                         "scale_flag": int(stage1.Params.ScaleFlag),
+                        **({"pre_passes": int(stage1.Params.PrePasses)} if "pre_passes" in stage1_search_controls else {}),
+                        **({"no_rel_heur_work": float(stage1.Params.NoRelHeurWork),
+                            "soft_mem_limit_gb": float(stage1.Params.SoftMemLimit)}
+                           if "no_rel_heur_work" in stage1_search_controls else {}),
                     },
                     "stage1_gurobi_feasibility_tol": stage1_feasibility_tol,
                     "stage2_gurobi_feasibility_tol": (
@@ -16211,9 +16263,11 @@ class GurobiMILPAdapter:
                         )
                         or 0
                     ),
-                    "stage1_vehicle_day_overlap_lower_bounds": dict(vehicle_day_bounds),
+                    "stage1_vehicle_day_overlap_lower_bounds": dict(vehicle_day_overlap_bounds),
+                    "stage1_vehicle_day_path_cover_lower_bounds": dict(vehicle_day_path_cover_bounds),
+                    "stage1_native_log_path": stage1_native_log_path,
                     "stage1_vehicle_count_lower_bound_semantics": (
-                        "max_global_path_cover_and_sum_daily_overlap_vehicle_day_lb"
+                        "max_global_path_cover_and_sum_daily_overlap_or_path_cover_vehicle_day_lb"
                     ),
                     "minimum_used_bev_count": minimum_used_bev_count,
                     "minimum_used_bev_count_policy_enabled": (
@@ -16420,6 +16474,10 @@ class GurobiMILPAdapter:
                     "node_method": int(stage1.Params.NodeMethod),
                     "symmetry": int(stage1.Params.Symmetry),
                     "scale_flag": int(stage1.Params.ScaleFlag),
+                    **({"pre_passes": int(stage1.Params.PrePasses)} if "pre_passes" in stage1_search_controls else {}),
+                    **({"no_rel_heur_work": float(stage1.Params.NoRelHeurWork),
+                        "soft_mem_limit_gb": float(stage1.Params.SoftMemLimit)}
+                       if "no_rel_heur_work" in stage1_search_controls else {}),
                 },
                 "stage1_gurobi_feasibility_tol": stage1_feasibility_tol,
                 "stage2_gurobi_feasibility_tol": (
@@ -16594,9 +16652,11 @@ class GurobiMILPAdapter:
                     )
                     or 0
                 ),
-                "stage1_vehicle_day_overlap_lower_bounds": dict(vehicle_day_bounds),
-                    "stage1_vehicle_count_lower_bound_semantics": (
-                    "max_global_path_cover_and_sum_daily_overlap_vehicle_day_lb"
+                "stage1_vehicle_day_overlap_lower_bounds": dict(vehicle_day_overlap_bounds),
+                "stage1_vehicle_day_path_cover_lower_bounds": dict(vehicle_day_path_cover_bounds),
+                "stage1_native_log_path": stage1_native_log_path,
+                "stage1_vehicle_count_lower_bound_semantics": (
+                    "max_global_path_cover_and_sum_daily_overlap_or_path_cover_vehicle_day_lb"
                 ),
                 "minimum_used_bev_count": minimum_used_bev_count,
                 "minimum_used_bev_count_policy_enabled": (
@@ -21420,6 +21480,10 @@ class GurobiMILPAdapter:
                 "node_method": int(stage1.Params.NodeMethod),
                 "symmetry": int(stage1.Params.Symmetry),
                 "scale_flag": int(stage1.Params.ScaleFlag),
+                **({"pre_passes": int(stage1.Params.PrePasses)} if "pre_passes" in stage1_search_controls else {}),
+                **({"no_rel_heur_work": float(stage1.Params.NoRelHeurWork),
+                    "soft_mem_limit_gb": float(stage1.Params.SoftMemLimit)}
+                   if "no_rel_heur_work" in stage1_search_controls else {}),
             },
             "stage1_root_lp_diagnostic": stage1_root_lp_diagnostic,
             "stage1_numeric_coefficient_diagnostic": (

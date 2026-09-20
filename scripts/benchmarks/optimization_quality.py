@@ -28,6 +28,7 @@ def day_ahead_quality(metadata: dict, *, target_gap: float) -> dict:
         "first_incumbent_objective_jpy": first,
         "incumbent_improvement_jpy": first - final if first is not None and final is not None else None,
         "first_mip_callback_runtime_sec": telemetry.get("first_mip_callback_runtime_sec"),
+        "root_node_relaxation_optimal_callback_runtime_sec": telemetry.get("root_node_relaxation_optimal_callback_runtime_sec"),
         "last_presolve_callback_runtime_sec": telemetry.get("last_presolve_callback_runtime_sec"),
         "integrated_global_optimum_proven": False,
         "executed_week_cost_comparison": "NOT_EVALUATED_BY_THIS_CERTIFICATE"}

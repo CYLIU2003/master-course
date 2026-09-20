@@ -110,6 +110,8 @@ def solve_week(
         research_run=False, allow_postsolve_repair=False, stage1_best_obj_stop_enabled=False)
     problem = ProblemBuilder().build_from_scenario(scenario, depot_id='tsurumaki',service_id='WEEKDAY',config=config,planning_days=7)
     problem = replace(problem, metadata={**problem.metadata,
+        'stage1_daily_path_cover_bound': bool(design.get('stage1_daily_path_cover_bound', False)),
+        'stage1_native_log_enabled': bool(design.get('stage1_native_log_enabled', False)),
         'phase3_diagnostics_dir':str(output/'day_ahead_failure_diagnostics'),
         'stage1_exact_depot_connection_factors': bool(
             design.get('stage1_exact_depot_connection_factors', False)

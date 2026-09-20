@@ -39,9 +39,20 @@ def run(design_path: Path, output: Path) -> dict:
         evidence = [case / name for name in ("canonical_solver_result.json",
                     "day_ahead_physical_validation.json", "day_ahead_optimization_quality.json",
                     "input_audit.json")]
+        native = json.loads((case / "canonical_solver_result.json").read_text(encoding="utf-8"))
+        metadata = native["metadata"]
+        native_log_path = metadata.get("stage1_native_log_path")
+        if design.get("stage1_native_log_enabled") is True:
+            if not native_log_path or not Path(native_log_path).is_file():
+                raise RuntimeError("Requested native Stage 1 log is missing")
+            evidence.append(Path(native_log_path))
         summary = {"status": "DIAGNOSIS_COMPLETE", "source_state": after,
             "physical_accepted": progress["day_ahead_physical_accepted"],
             "quality": quality, "elapsed_seconds": progress["day_ahead_seconds"],
+            "stage1_search_controls": metadata.get("stage1_gurobi_search_controls"),
+            "daily_path_cover_bounds": metadata.get("stage1_vehicle_day_path_cover_lower_bounds"),
+            "daily_overlap_bounds": metadata.get("stage1_vehicle_day_overlap_lower_bounds"),
+            "stage1_native_log_path": native_log_path,
             "evidence_sha256": {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in evidence},
             "monthly_complete": False, "email_sent": False,
             "research_acceptance": "BLOCKED_PENDING_FRESH_WEEKLY_EVALUATION_AND_INDEPENDENT_REVIEW"}
