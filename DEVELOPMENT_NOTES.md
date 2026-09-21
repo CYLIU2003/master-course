@@ -1,5 +1,13 @@
 # Development Notes
 
+## 2026-09-21 研究目標の再点検と日次帰庫CO₂の計上漏れ修正
+
+- Phase3と総費用統合の範囲を再点検。既存Phase4はdaily_return条件をengineで拒否しており、現行探索profileの調整だけでは週間総費用最適を証明できない。guardは保持し、同一目的関数・物理領域・U/L・対照比較の条件を[明文化](docs/notes/RESEARCH_OPTIMALITY_CONTRACT_20260921.md)した。
+- CostEvaluatorの燃料費は物理timeline、CO₂はDutyLeg注記を使っていた。daily_returnのCO₂を既存の燃料消費イベントへ統一し車両別係数を適用。非daily経路・燃料L・物理量・料金は不変。
+- 固定d6fe5b31を読取り再構築。原本のCO₂漏れは両案70.883272235kg、1円/kgで同額の費用漏れ。修正evaluatorの再集計はseed4157098.222019487円、final4147020.0228355685円、差10078.199184円不変。新コードの求解結果とは扱わない。原本 `output/research_optimality_review_20260921/cost_consistency.json`。
+- 再現3件の旧版失敗→修正後通過、native2日間、係数別、統合実費・rolling会計など関連182 tests通過。各時刻の追加PVを無料抑制すれば元と同費用・同配車・同BESS残量を維持できる反証用の回帰も通過。
+- 実行中6aab4424と旧d6fe5b31はcleanのまま、PPT SHA不変。2threads終了時は旧CO₂式の原本として検査し、新条件の研究結果に混ぜない。独立レビューPENDING、研究BLOCKED。追加の長時間診断・メールは起動していない。
+
 ## 2026-09-21 初期配車の予測総費用改善を確認、次は2threads
 
 - 13:50 JST、clean固定6aab442433cb02bffa95cab12b11ce98a7bcb221、codex/barrier-two-threads-seed-cost-20260921で新規Prepareを開始。入力47 SHA・親11参照・case3参照・実効条件を照合、固定版でも46 tests通過。実runner55144/venv launcher9996、起動確認RUNNING・stderr空。制御先 `output/barrier_two_threads_seed_cost_20260921/startup_verification.json`。固定コード不変、通常はscript、終了時だけ既存タスクへ1回通知。

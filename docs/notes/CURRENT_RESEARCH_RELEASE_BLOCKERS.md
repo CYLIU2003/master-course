@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-21 総費用統合の未対応とCO₂会計の訂正
+
+週間・毎日帰庫のPhase4は未対応（engineのDAILY_RETURN_PHASE_UNSUPPORTED）。Stage1/2の精度だけで総費用の大域最適としない。日次帰庫のCO₂回送漏れをmainで修正し、d6fe5b31の両案で70.883272円ずつの不足を確認。再集計後の総費用は4157098.222019／4147020.022836円、差は不変だが新規求解ではない。修正後の実規模評価・全12週・U/Lによる統合最適性・入力仮定の根拠・独立研究レビューは未完了。[根拠と実施順序](RESEARCH_OPTIMALITY_CONTRACT_20260921.md)。
+
 ## 2026-09-21 入力初期案の予測費用改善は確認、最適性は未達
 
 固定d6fe5b31で同一problemの入力seed→最終配車の予測総費用10,078.199184円減を確認。双方の独立物理、Stage2 gap0%、BESS672区間が通過した。初期BESSは共通3000kWhだが終端は1238.847113／1200kWhなので、PV単独効果や継続週の節約額とはしない。Stage1は702.67秒memory_limit、最大18.012GB、gap3.545197%で1%未達。根LP native終了行とMIPNODE記録なしを区別する。次はthreadsだけ4→2の限定診断。最初のincumbent固定Stage2費用、修正後12週、実績会計、入力仮定確認、独立研究承認は未完了。[最新根拠](PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。

@@ -2349,8 +2349,18 @@ class CostEvaluator:
                     return value
             return ice_co2_kg_per_l
 
-        # ICE trip and deadhead fuel CO₂.
-        for duty in plan.duties:
+        # Daily-return fuel accounting reconstructs startup, depot visits and
+        # final return from physical events. Duty deadhead annotations can be
+        # incomplete after exact arc factoring; carbon must use those same
+        # consumed liters, independent of purchases and duty fragmentation.
+        physical_daily_return = bool(getattr(problem.dispatch_context, "daily_return_depot_id", ""))
+        if physical_daily_return:
+            for vehicle_id, _depot, _minute, fuel_l in self._collect_fuel_drive_events(problem, plan):
+                vehicle = vehicle_by_id[str(vehicle_id)]
+                ice_co2_kg += fuel_l * _ice_co2_kg_per_l_for_vehicle_type(vehicle.vehicle_type)
+
+        # Preserve the existing event convention outside the daily-return path.
+        for duty in (() if physical_daily_return else plan.duties):
             if not self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
                 continue
             vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
