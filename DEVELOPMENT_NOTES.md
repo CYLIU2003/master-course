@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-21 端点表現の結果とBESS方針の次診断
+
+- 固定00aed18eのcompletion、全体/2 summary、各5原本のSHA、native log、cleanを検証。設定差はsupport flagだけで、便数・車両・日付・パラメータ・配車・充電指令が一致。確認原本output/stage1_support_20260921/review.json。
+- 非零係数81,379,204→26,377,614（67.5868%減）、最大native memory16.218→12.599GB（22.3142%減）。両方とも物理VALID・Stage2 gap0.36796%、Stage1初期解改善0円・認証gap6.91227%、native下界0・gap100%、根LP未完了の時間切れ。
+- 次の設定は端点表現true、BESS minimum_only/physical_floor_only、追加予備と復元なし。600/120秒、4threads、18GB、1%は維持し、新clean版から5月のみ新規Prepare。関連67 tests通過。新しいコード経路は追加せず、前回の全体回帰と既存BESS136 testsを再利用。
+- 自己レビューP0/P1残件0、独立研究承認PENDING、研究採用BLOCKED。全12週・メールなし。[結果](docs/notes/STAGE1_CHARGE_WINDOW_SUPPORT_20260921.md)。
+
 ## 2026-09-21 ユーザー指定のBESS運転範囲のみの方針
 
 - 初期在庫3,000 kWhの追加予備と週末/rolling窓末の復元を外す新設計を追加。既存minimum_only/physical_floor_only経路を利用し、1,200–4,800 kWh、900 kW、効率、系統→BESS禁止、BEV制約を維持。ソルバー本体・原本scenarioは変更なし。

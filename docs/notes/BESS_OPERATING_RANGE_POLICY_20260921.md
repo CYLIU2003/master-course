@@ -66,3 +66,12 @@ Stage1の小規模nativeモデルで後続PVなしに初期在庫を利用でき
 エネルギー保存・会計を検証する。全12週・メールは今回開始していない。
 費用改善、実運用の全期間成立、最適性は未確認。自己レビューのP0/P1残件なし、
 独立研究レビューPENDING、研究採用BLOCKEDを維持する。
+
+## 10:27 JSTの表現比較終了後
+
+固定00aed18eの比較は完了し、メモリ負荷の小さい端点表現を選択した。
+新設計のstage1_sparse_charge_window_support=true、execution_enabled=trueへ更新。
+BESSは上記minimum_only/physical_floor_onlyのまま、Stage1 600秒/Stage2 120秒、
+4threads、18GB、gap1%の新規5月day-aheadだけを実行する。関連67 tests通過。
+旧previewとpolicy_validationは保留時点の記録として保持し、新実行は別固定SHAと
+新しい入力import/launch記録へ紐付ける。上記の「保留・実行中」は変更当時の経緯。
