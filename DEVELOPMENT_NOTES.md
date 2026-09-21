@@ -1,5 +1,10 @@
 # Development Notes
 
+<!-- monthly-session-recovery -->
+2026-09-22: 固定3289f07bは1～3月監査済み、4月前日計画で充電不成立。接続・切離し時間を配車段階の必要条件へ追加し166 tests通過。新固定版の4月事前検証が通った場合だけ全12週を新規開始する。旧結果は混ぜず、最適性・研究採用は未達。[原因と修正](docs/notes/MONTHLY_AUXILIARY_SESSION_TIME_20260922.md)。
+<!-- /monthly-session-recovery -->
+
+
 ## 2026-09-21 3月hour152のSOC数値持越し
 
 818e78d0の2/12週監査後、3月hour152 infeasible。前時間の最大制約違反2.85e-7と次初期SOC不足1.90e-7を再現し、同一MPSのPresolve0では前時間の違反が5.10e-11へ縮小した。初期状態修正/許容差緩和は行わない。前日2/毎時0の事前宣言・入口構築・169原本監査を実装し、前時間MPSの回帰fixtureを追加。監査のrequired_presolve固定表示をphase別表示に直す。全月開始前の17時間連続・初日窓の検証をスクリプトへ任せる。[詳細](docs/notes/MONTHLY_AUXILIARY_ROLLING_NUMERICS_20260921.md)。

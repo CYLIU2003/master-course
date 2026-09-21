@@ -1,7 +1,8 @@
-"""Run one fresh May day-ahead under a frozen revision; never send email."""
+"""Run one declared day-ahead under a frozen revision; never send email."""
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import hashlib
 import json
 import math
@@ -59,6 +60,7 @@ def run(design_path: Path, output: Path) -> dict:
     design = json.loads(design_path.read_text(encoding="utf-8"))
     if design.get("diagnostic_stop_after_day_ahead") is not True:
         raise ValueError("This diagnosis must stop before rolling/monthly execution")
+    selected_week = date.fromisoformat(str(design.get("diagnostic_week", "2025-05-12"))).isoformat()
     before = git_state()
     if not before.get("sha") or before["status_porcelain"]:
         raise RuntimeError("Diagnosis requires a clean frozen commit")
@@ -69,7 +71,7 @@ def run(design_path: Path, output: Path) -> dict:
                                        "email_sent": False, "monthly_complete": False})
     campaign_outcome = None
     try:
-        campaign = run_campaign(design, output / "campaign", selected_week="2025-05-12")
+        campaign = run_campaign(design, output / "campaign", selected_week=selected_week)
         cases = campaign.get("summaries", [])
         case_summary = cases[0] if len(cases) == 1 else {}
         diagnostic = case_summary.get("diagnostic_result") or {}
@@ -93,7 +95,7 @@ def run(design_path: Path, output: Path) -> dict:
                 f"Day-ahead campaign stopped: {campaign_outcome['case_status']}; "
                 + "; ".join(reasons or [str(campaign.get("status"))])
             )
-        case = output / "campaign/cases/2025-05-12/diagnostic/2025-05-12"
+        case = output / "campaign/cases" / selected_week / "diagnostic" / selected_week
         progress = json.loads((case / "progress.json").read_text(encoding="utf-8"))
         after = git_state()
         if after != before:

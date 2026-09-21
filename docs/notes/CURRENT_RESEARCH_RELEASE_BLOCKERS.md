@@ -1,5 +1,8 @@
 # Current research release blockers
 
+2026-09-22: 3289f07bの独立監査は3/12、4月Stage2 infeasible。Stage1のセッション時間必要条件を強化し局所不成立案を排除したが、新固定版の全月物理・会計・gap・独立研究レビューは未完了。研究採用BLOCKEDを維持。詳細: [修正記録](MONTHLY_AUXILIARY_SESSION_TIME_20260922.md)。
+
+
 2026-09-21: 818e78d0は1・2月監査済み、3月152/168時間で停止。前時間のnative制約誤差が次初期SOCへ持ち越された。前日2/毎時0の数値設定を別診断で検証し、ゲート通過後のみ新固定全12週を実行する。SOC補正・許容差緩和・旧成功2週の流用は行わない。[数値再現と修正](MONTHLY_AUXILIARY_ROLLING_NUMERICS_20260921.md)。既存の統合最適性/Stage1/研究承認blockerは継続。
 
 2026-09-21 19:03 JST: 27253fa8はPrepare後、内部seedチェックのログ設定矛盾により本Stage1前に停止。成功0/12、物理/会計の新規成果なし。原因を修正し同条件の新固定版へ移行する。Stage1 gap/メモリ、週間統合最適性、独立承認の既存blockerは継続。[今回の修正](MONTHLY_AUXILIARY_LOGGING_RECOVERY_20260921.md)。
