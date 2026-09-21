@@ -32,6 +32,7 @@ from src.optimization.rolling.day_ahead_hourly import build_next_execution_state
 from src.optimization.rolling.pv_execution import execute_pv_prefix
 from src.optimization.rolling.reoptimizer import RollingReoptimizer
 from src.optimization.validation.physical_event_schedule import validate_physical_event_schedule
+from scripts.benchmarks.optimization_quality import stage2_execution_quality
 
 
 def write_json(path: Path, value: object) -> None:
@@ -44,7 +45,25 @@ def rolling_config_for_design(config: OptimizationConfig, design: dict) -> Optim
     return replace(config, time_limit_sec=design['rolling_hour_time_limit_sec'],
         stage2_time_limit_sec=design['rolling_hour_time_limit_sec'],
         stage2_gurobi_presolve=design.get('stage2_search_policy', {}).get('rolling_Presolve', config.stage2_gurobi_presolve),
-        stage2_gurobi_numeric_focus=design.get('stage2_search_policy', {}).get('rolling_NumericFocus', config.stage2_gurobi_numeric_focus))
+        stage2_gurobi_numeric_focus=design.get('stage2_search_policy', {}).get('rolling_NumericFocus', config.stage2_gurobi_numeric_focus),
+        stage2_gurobi_mip_focus=design.get('stage2_search_policy', {}).get('rolling_MIPFocus', config.stage2_gurobi_mip_focus))
+
+
+def check_stage2_execution_quality(result, design: dict, folder: Path, summary: dict, *, hour: int | None = None) -> bool:
+    """Persist a failed quality gate without executing or counting its prefix."""
+    report = stage2_execution_quality(result.plan.metadata, target_gap=float(design["mip_gap"]))
+    write_json(folder / "stage2_execution_quality.json", report)
+    if not report["accepted"]:
+        summary.update(
+            status="DAY_AHEAD_QUALITY_FAILED" if hour is None else "HOURLY_QUALITY_FAILED",
+            failed_hour=hour, failed_stage2_quality=report,
+            failed_solver_status=result.solver_status,
+        )
+        write_json(folder / "quality_failure.json", {
+            "status": summary["status"], "hour": hour,
+            "quality": report, "execution_prefix_applied": False,
+        })
+    return report["accepted"]
 
 
 def source_snapshot() -> dict:
@@ -115,6 +134,7 @@ def solve_week(
         mip_gap=design['mip_gap'], gurobi_threads=design['threads'], random_seed=design['seed'],
         stage2_gurobi_presolve=design.get('stage2_search_policy', {}).get('Presolve', 0),
         stage2_gurobi_numeric_focus=design.get('stage2_search_policy', {}).get('NumericFocus', 0),
+        stage2_gurobi_mip_focus=design.get('stage2_search_policy', {}).get('MIPFocus', 1),
         stage1_gurobi_search_profile=design.get('stage1_gurobi_search_profile', 'default'),
         rolling_execution_minutes=design['execution_minutes'],
         research_run=False, allow_postsolve_repair=False, stage1_best_obj_stop_enabled=False)
@@ -180,6 +200,9 @@ def solve_week(
         write_json(output/'progress.json', summary)
         return summary
     reference = result.plan
+    if not check_stage2_execution_quality(result, design, output, summary):
+        write_json(output/'progress.json', summary)
+        return summary
     rolling = RollingReoptimizer()
     rolling_config = rolling_config_for_design(config, design)
     state = None
@@ -214,6 +237,9 @@ def solve_week(
                 failure_diagnostics=str(folder/'failure_diagnostics'),
                 failed_initial_bess_soc_kwh=dict(state.actual_bess_soc_kwh) if state else {
                     depot:asset.bess_initial_soc_kwh for depot,asset in problem.depot_energy_assets.items()})
+            return summary
+        if not check_stage2_execution_quality(result, design, folder, summary, hour=hour):
+            write_json(output/'progress.json', summary)
             return summary
         prefix = {depot:{slot:float(values[slot]) for slot in range(start,stop)} for depot,values in actuals.items()}
         initial_bess = state.actual_bess_soc_kwh if state else {depot:asset.bess_initial_soc_kwh for depot,asset in problem.depot_energy_assets.items()}

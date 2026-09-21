@@ -54,6 +54,21 @@ def test_budget_release_changes_only_hourly_limit_and_keeps_all_months_identical
         assert hourly.time_limit_sec == hourly.stage2_time_limit_sec == 120
     assert base.time_limit_sec == 2400 and base.stage2_time_limit_sec == 120
 
+
+def test_quality_release_changes_only_hourly_mip_focus_with_same_physical_controls():
+    root = Path(__file__).resolve().parents[1]
+    before = json.loads((root/"config/shibu21_23_monthly_auxiliary_budget_20260922.json").read_text(encoding="utf-8"))
+    after = json.loads((root/"config/shibu21_23_monthly_auxiliary_quality_20260922.json").read_text(encoding="utf-8"))
+    assert {key for key in before.keys() | after.keys() if before.get(key) != after.get(key)} == {
+        "input_manifests_directory", "stage2_search_policy", "require_stage2_execution_quality", "limitations"}
+    assert after["require_stage2_execution_quality"] is True
+    base = OptimizationConfig(stage2_gurobi_presolve=2,stage2_gurobi_numeric_focus=0,stage2_gurobi_mip_focus=1)
+    previous = rolling_config_for_design(base,before)
+    for _week in after["evaluation_weeks"]:
+        hourly = rolling_config_for_design(base,after)
+        assert {key for key,value in asdict(previous).items() if asdict(hourly)[key]!=value} == {"stage2_gurobi_mip_focus"}
+        assert hourly.stage2_gurobi_mip_focus==2 and base.stage2_gurobi_mip_focus==1
+
 @pytest.mark.parametrize('hourly_presolve,accepted',[(0,True),(2,False)])
 @pytest.mark.parametrize("numeric_focus", ["legacy", 3, None, 0, "3"])
 @pytest.mark.parametrize("wall_budget", [15, 120, "stale_15"])

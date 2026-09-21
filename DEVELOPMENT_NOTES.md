@@ -1,5 +1,8 @@
 # Development Notes
 
+2026-09-22: hour155の可行候補がgap71.0609%のため事前連続検証を停止した。毎時120秒のままMIPFocus1→2で同一MPSの下界が改善し、gap0.97394%を確認。費用削減ではない。OptimizationConfigから実Stage2、前日/毎時の選択、元metadata監査まで接続し、候補のnative gapと目的値/下界による再計算gapの両方を実行前に検査する。未達時はhour・元status・理由を保存し、prefix/次状態/受理数を進めない。関連188 tests通過、自己レビューでP0/P1残件なし。独立レビューと新規全週の物理/会計は未完了。[詳細](docs/notes/MONTHLY_AUXILIARY_STAGE2_QUALITY_20260922.md)。
+
+
 2026-09-22 07:30 JST 起動確認: clean固定 `b1916e56` で毎時共通120秒・42時間の連続検証を開始。一度きりの制御PID36772、診断実PID59324、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_budget_20260922/gate_startup_verification.json`。
 
 

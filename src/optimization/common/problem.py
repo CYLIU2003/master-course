@@ -441,6 +441,8 @@ class OptimizationConfig:
     stage2_gurobi_presolve: int = 0
     # Declared numerical strategy, separate from physical acceptance tolerances.
     stage2_gurobi_numeric_focus: int = 0
+    # Select before execution; unchanged feasible region and physical tolerances.
+    stage2_gurobi_mip_focus: int = 1
     # Phase 3 may retain several distinct Stage 1 assignments and run the
     # fixed-assignment Stage 2 dispatch for each one.  The selected plan is the
     # feasible candidate with the lowest canonical evaluated cost; this remains

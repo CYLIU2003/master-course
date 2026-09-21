@@ -3293,6 +3293,9 @@ def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[s
     numeric_focus = config.stage2_gurobi_numeric_focus
     if type(numeric_focus) is not int or numeric_focus not in (0, 1, 2, 3):
         raise ValueError("stage2_gurobi_numeric_focus must be an integer in {0, 1, 2, 3}")
+    mip_focus = config.stage2_gurobi_mip_focus
+    if type(mip_focus) is not int or mip_focus not in (0, 1, 2, 3):
+        raise ValueError("stage2_gurobi_mip_focus must be an integer in {0, 1, 2, 3}")
     parameters = {
         "FeasibilityTol": _configured_gurobi_feasibility_tol(config, stage=2),
         "IntFeasTol": _configured_gurobi_integrality_tol(config, stage=2),
@@ -3309,7 +3312,7 @@ def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[s
         # The identical November MPS had no incumbent after 600 s with the
         # automatic method. This uniform search policy passed independent
         # physical replay in 21.32 s without changing the feasible region.
-        "MIPFocus": 1,
+        "MIPFocus": mip_focus,
         # August's identical rolling MPS is falsely infeasible under dual
         # simplex but admits a validated execution prefix under primal simplex.
         # Select once from the declared phase, uniformly across every month;
