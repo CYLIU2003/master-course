@@ -2,6 +2,8 @@
 
 ## 2026-09-21 2threads未達の確認と人工2日間の総費用基準解検査
 
+- 新clean固定dd21fedc、codex/daily-assignment-reference-20260921から人工例を逐次実行。PVなし最小総費用U/L≈693.947368円、昼間PV+100kWhのみの例U/L≈200円、全8候補物理/固定Stage2/総費用一致。24証拠SHA・source前後clean・PV以外の入力一致を `output/daily_assignment_reference_20260921/audit.json` で確認。週間実規模の結論には使わない。
+
 - 固定6aab4424原本9 SHA・clean・seed配車保存前後不変・両案独立物理とBESS672収支・Stage2 gap0%を照合。Stage1は931.25秒memory_limit、最大18.015136GB、gap3.610277%。根LP終了243.12秒とOPTIMAL MIPNODE nullを別記。
 - CO₂式修正後の再集計はseed4157098.222019487円→final4149820.012222808円、7278.209797円減。両原本に70.883272235円の漏れ。前回4threads最終案より2799.989387円高く、2threadsを採用しない。再集計を新規求解としない。
 - 実規模設定だけの再試行を止め、scripts/benchmarks/run_daily_assignment_reference.pyで人工2日間・BEV2台・全4割当の固定Stage2と総費用の上下界を比較。失敗候補の黙示除外を拒否し、各候補のcanonical/physical・SHA・入力・source前後を保存する。研究/週間Phase4のguardは不変。
