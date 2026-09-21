@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-21 BESS新方針の前日計画は通過、配車探索は未改善
+
+固定534aba0bは車両物理とBESS672区間の収支/境界を通過。予測上の買電0、初期在庫1,761.15 kWhを取り崩した。Stage1の初期解改善0・認証gap3.78%・native gap100%・根LP未完了で、1%目標未達。充電目的値0は総費用0ではない。旧BESS条件との費用差を探索改善とせず、同条件のNoRel候補を新規診断する。週間実行・全12週・研究承認は未完了。[根拠](BESS_OPERATING_RANGE_POLICY_20260921.md)。
+
 ## 2026-09-21 行列・メモリ改善を確認、費用最適化は未達
 
 固定00aed18eの端点表現は非零係数67.6%、最大native memory22.3%減。denseと同じ物理VALID・Stage2 gap0.368%だが、両方ともStage1改善0円・認証gap6.91%、native gap100%、根LP未完了。端点表現をBESS追加予備・復元なし条件へ採用し、10:34 JSTにclean固定534aba0bから5月診断を開始した。費用条件が変わるため、在庫取り崩しと求解改善を区別し、新規Prepare・独立物理確認が必要。全12週・実績費用・研究承認は未完了。[詳細](STAGE1_CHARGE_WINDOW_SUPPORT_20260921.md)。

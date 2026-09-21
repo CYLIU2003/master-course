@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-21 BESSの運転範囲のみの診断結果とNoRel候補
+
+- 固定534aba0bは10:55 JSTに完了。completion/summary/5原本SHA・clean・nativeを照合。物理VALID、Prepared設備値でBESS672区間の収支/境界/出力/モードを検査し違反0・収支残差0。原本output/bess_operating_range_20260921_launchfix/review.json。
+- BESS初期3,000→最終1,238.847113 kWh、取り崩し1,761.152887、損失1,686.680512 kWh。予測PV31,515.09125、直接3,434.769518、PV→BESS16,396.131979、BESS→bus16,470.604354、抑制11,684.189753、買電0 kWh。実行rollingではない。
+- Stage1目的値4,157,098.222019495円・初期解改善0、native下界0/gap100%、認証下界400万円/gap3.77904%。600.568秒、根LP524,253反復で未完了、最大12.599GB。Stage2充電目的値0/gap0%、総費用4,157,027.3387472522円とは別。
+- 端点表現とBESS方針を保ち、既存bounded_presolve_norel（NoRelHeurWork120）だけを切り替える新設計。4threads/18GB/600-120秒/1%/seed42を維持。関連23 tests通過、新規solverコード変更なし。次の新clean固定版から新規Prepare1回、script終了時のみ通知。旧結果を混ぜず全12週・メールなし。[詳細](docs/notes/BESS_OPERATING_RANGE_POLICY_20260921.md)。独立研究承認PENDING。
+
 ## 2026-09-21 端点表現の結果とBESS方針の次診断
 
 - 10:34 JST、clean固定534aba0b0a8f8d906c8ad24014b122471afd965eでBESS新方針の5月診断を開始。実runner48300／venv launcher50600。固定版67 tests・入力47 SHA・移設11参照・case source3参照とBESS/solver設定を確認。制御先output/bess_operating_range_20260921_launchfix、終了時だけ1回queue。
