@@ -2,6 +2,7 @@
 
 ## 2026-09-21 配車の停滞を確認し、充電可能時間の行列を疎に表現
 
+- 09:45 JSTにclean固定00aed18e1652645ed5b0a34958bb66dcb339044dからdense/endpoint比較を起動。実coordinator32760／venv launcher34448。固定版83 tests、入力47 SHA・移設11参照、caseのsource3参照とdual設定を確認。制御先output/stage1_support_20260921、終了時だけ既存タスクへ1回queue。
 - 全体回帰2442 passed／既存PPT関連2 failed（108.09秒）。最適化の新規失敗0。原本・期待値を保全し、自己レビューP0/P1残件0、独立研究承認PENDING。
 - 固定4f979982のcompletion/全体/2 summaryと各5原本SHA・cleanを確認。native fingerprint一致。両方の物理とStage2 gap0.36796%が通過。Stage1目的値4,297,021.92円、初期解改善0円、認証下界400万円・gap6.91227%。dualのnative下界0、601秒・16.218GB、NoRelはnative下界400万円、225秒・19.882GBでメモリ停止。根LP完了記録なし。
 - opt-inのstage1_sparse_charge_window_supportを追加。開始/終了/明示接続のslot別supportを差分連続状態で表現し、重複・穴・有効slot集合を保つ。既存factored supportと制約・料金は維持。defaultは旧表現。整数・分数とも射影が等価で、新上界や候補削除はない。

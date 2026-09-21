@@ -73,3 +73,14 @@ presolveが表現を再展開する可能性や、根LPの縮退が残る可能�
 全体回帰: 2442 passed／既存PowerPoint関連2 failed（108.09秒）。前回と同じ資料hash・部品構成の
 不一致で、資料と期待値は変更していない。最適化関連の新規失敗は0件。ログは
 `output/stage1_support_regression_20260921.log`。自己レビューの新規P0/P1残件0。
+
+## 固定実行の開始記録
+
+2026-09-21 09:45 JST、clean固定 `00aed18e1652645ed5b0a34958bb66dcb339044d`、
+branch `codex/stage1-charge-support-20260921` から開始。
+固定版で83 tests通過（5.17秒）。入力47ファイルのSHA、親scenarioの11参照移設、
+caseのsource3参照とdual設定を確認した。実coordinator PID32760、venv launcher34448。
+制御先は `output/stage1_support_20260921`、確認記録は `startup_verification.json`。
+出力は固定worktreeの `output/stage1_support_diagnosis_20260921`。
+開始時点でdenseがRUNNING。通常処理と逐次実行はスクリプトのみ、終了時に1回queueする。
+実行中のコードは変更しない。
