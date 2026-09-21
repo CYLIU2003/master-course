@@ -1,5 +1,8 @@
 # Development Notes
 
+2026-09-22 hour138の時間切れ対応: 旧INFEASIBLEとは別に、NumericFocus3でも15秒では初期解が得られなかった。同一fingerprint0x699742e9でTimeLimitだけ変更し、120秒枠の17.130秒時点で解1/gap0/最大違反6.422e-11を確認。毎時120秒を全月共通に宣言し、独立監査へ実wall上限の原本照合を追加。旧15秒原本の混入を拒否。81 tests通過、自己レビューP0/P1残件0、独立レビュー未実施。ソルバー制約の変更なし。[詳細](docs/notes/MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。
+
+
 2026-09-22 07:13 JST 起動確認: clean固定 `c5c1eff7` で42時間の連続検証を開始。一度きりの制御PID57968、診断実PID56952、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_numeric_20260922/gate_startup_verification.json`。
 
 

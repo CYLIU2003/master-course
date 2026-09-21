@@ -26,7 +26,10 @@ DEPLOYMENT_RELATIVE = Path("output/monthly_fair_weeks_20260914")
 
 def deployment_paths(config: dict) -> tuple[Path, str, str]:
     version = config.get("deployment", "budget")
-    require(version in {"budget", "search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric"}, "Unknown observer deployment")
+    require(version in {"budget", "search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric", "auxiliary_budget"}, "Unknown observer deployment")
+    if version == "auxiliary_budget":
+        return (Path("output/monthly_auxiliary_budget_20260922"),
+                "SHIBU21_23_MONTHLY_AUXILIARY_BUDGET_RESULTS_20260922", "shibu21_23_monthly_auxiliary_budget_20260922")
     if version == "auxiliary_numeric":
         return (Path("output/monthly_auxiliary_numeric_20260922"),
                 "SHIBU21_23_MONTHLY_AUXILIARY_NUMERIC_RESULTS_20260922", "shibu21_23_monthly_auxiliary_numeric_20260922")
@@ -249,7 +252,7 @@ class Observer:
     def publish(self, *, complete: bool) -> None:
         arguments = ["--campaign", str(self.campaign), "--audit", str(self.audit),
                      "--output", str(self.report)]
-        if self.config.get("deployment") in {"search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric"}:
+        if self.config.get("deployment") in {"search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric", "auxiliary_budget"}:
             arguments.extend(["--figure-name", Path(self.config["figure_stem"]).name])
         if not complete:
             arguments.append("--partial")
@@ -260,7 +263,7 @@ class Observer:
     def step(self) -> bool:
         self.check_helpers()
         progress = read_json(self.campaign / "progress.json")
-        if self.config.get("deployment") in {"reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric"} and progress["status"] == "STOPPED_AFTER_FAILED_CASE":
+        if self.config.get("deployment") in {"reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric", "auxiliary_budget"} and progress["status"] == "STOPPED_AFTER_FAILED_CASE":
             self.publish_stopped(progress)
             raise ValueError("Campaign stopped: STOPPED_AFTER_FAILED_CASE (partial status recorded)")
         completed = validate_progress(progress, self.config)

@@ -1,5 +1,10 @@
 # 月別12週のスクリプト実行と完了メール
 
+## 2026-09-22 毎時120秒版
+
+旧numeric固定c5c1eff7は42時間診断の途中、hour138の15秒time_limit/解なしで停止。月別全12週は未開始。新制御先 `output/monthly_auxiliary_budget_20260922/` のpreflight_stateを先に確認する。[原因と手順](MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。全月・全毎時を120秒の共通条件にし、clean固定版の42時間連続・独立物理検証後だけ全12週を新規開始する。旧failure/queueは保持、通常AI監視なし、失敗時は停止して1回通知。全12週監査・実図表示・receipt/Gmail重複確認前に完了メールを送らない。
+
+
 ## 2026-09-22 数値安定性修正版
 
 旧timeline固定c022ece7は1月hour126でStage2不成立、完了0/12で停止。旧failure/queueは保持しメールは送らない。新制御先 `output/monthly_auxiliary_numeric_20260922/` の `preflight_state.json` を先に確認する。[原因と手順](MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。新clean固定版で42時間の連続状態引継ぎと独立物理検証を通過した場合だけ、新規Prepareから全12週を開始する。通常処理はスクリプト、失敗通知は既存タスクへ一度。全12週の監査・最終実図確認・receiptとGmail重複確認が完了した場合だけ既承認宛先へ1通送る。
