@@ -1,5 +1,10 @@
 # 月別12週のスクリプト実行と完了メール
 
+## 2026-09-22 帰庫タイムライン整合の修正版
+
+固定e5ad8b3bは4月preflight通過後、1月Stage1解なしで停止。旧session failure/queueを保持しメールは送らない。新制御先 `output/monthly_auxiliary_timeline_20260922/` の `preflight_state.json` を先に確認する。[今回の手順](MONTHLY_AUXILIARY_TIMELINE_20260922.md)。1月・4月の物理/Stage2/BESS/seed検査通過後だけ全12週を新規開始。全12週監査・図表・今回のreceipt/Gmail重複確認が完了した場合だけ既承認宛先へ1通送信する。
+
+
 ## 2026-09-22 接続・切離し時間の修正
 
 固定3289f07bは3/12週で4月の前日充電不成立により停止。旧failure/queueを保持し完了メールは送らない。新制御先 `output/monthly_auxiliary_session_20260922/` のpreflight_stateを先に確認する。[原因と手順](MONTHLY_AUXILIARY_SESSION_TIME_20260922.md)。4月の新規事前検証が通過した場合だけ全12週を開始。全12週監査・図表・今回のreceiptとGmail送信済み検索を確認してから承認済み宛先へ1通送信する。

@@ -40,6 +40,28 @@ def _trip_fuel(vehicle: Any, trip: Any) -> float:
     return float(trip.distance_km) * rate if rate > 0 else float(trip.fuel_l)
 
 
+def connection_energy_events(problem: Any, vehicle: Any, previous: Any, following: Any) -> tuple[tuple[int, float], ...]:
+    """Movement-end minutes and energy under the daily-return timeline policy.
+
+    Keep return and outbound consumption separate: posting both at the next
+    departure can falsely exceed the SOC ceiling during overnight charging.
+    Zero-duration legs retain zero energy to preserve the two-leg structure.
+    """
+    context = problem.dispatch_context
+    home = str(vehicle.home_depot_id)
+    ready = int(previous.arrival_min) + context.get_turnaround_min(previous.destination)
+    if requires_daily_return(context, previous, following):
+        returning = checked_deadhead_minutes(context, previous.destination, home)
+        outbound = checked_deadhead_minutes(context, home, following.origin)
+        return (
+            (ready + returning, deadhead_energy_from_minutes_kwh(problem, vehicle, previous, returning)),
+            (int(following.departure_min), deadhead_energy_from_minutes_kwh(problem, vehicle, following, outbound)),
+        )
+    duration = checked_deadhead_minutes(context, previous.destination, following.origin)
+    end = int(following.departure_min) if context.locations_equivalent(previous.destination, home) else ready + duration
+    return ((end, deadhead_energy_from_minutes_kwh(problem, vehicle, previous, duration)),)
+
+
 def build_vehicle_timeline(problem: Any, plan: Any) -> dict[str, tuple[VehicleEvent, ...]]:
     """Materialize native duty boundaries and mandatory daily depot visits."""
     context = problem.dispatch_context

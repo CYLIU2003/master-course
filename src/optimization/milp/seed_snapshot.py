@@ -7,7 +7,12 @@ from src.optimization.common.result import ResultSerializer
 
 
 def write_stage1_seed_snapshot(problem, config, *, applied: bool, source: str, rejection_reason) -> None:
-    if not problem.metadata.get("stage1_seed_cost_diagnostic_enabled", False):
+    # Native failures need the exact supplied assignment even when the optional
+    # extra fixed-Stage-2 cost experiment is disabled.
+    if not (
+        problem.metadata.get("stage1_seed_cost_diagnostic_enabled", False)
+        or problem.metadata.get("stage1_native_log_enabled", False)
+    ):
         return
     directory = problem.metadata.get("phase3_diagnostics_dir")
     if not directory:

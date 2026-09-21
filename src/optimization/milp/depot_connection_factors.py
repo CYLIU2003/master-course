@@ -13,6 +13,7 @@ from typing import Any, Iterable, Iterator, Sequence
 
 from src.dispatch.daily_return import checked_deadhead_minutes, requires_daily_return
 from src.optimization.common.soc_helpers import is_electric_vehicle, vehicle_energy_rate_kwh_per_km
+from src.optimization.common.vehicle_timeline import connection_energy_events
 
 ArcKey = tuple[str, str, str]
 SlotRange = tuple[int, int]
@@ -69,6 +70,10 @@ class ConnectionFactor:
     target_energy_kwh: tuple[float, ...]
     target_fuel_l: tuple[float, ...]
     target_departure_slots: tuple[int, ...]
+    origin_soc_energy_kwh: tuple[float, ...]
+    origin_soc_posting_slots: tuple[int, ...]
+    target_soc_energy_kwh: tuple[float, ...]
+    target_soc_posting_slots: tuple[int, ...]
 
 
 def _interval_slots(adapter: Any, problem: Any, start: int, end: int) -> SlotRange:
@@ -90,6 +95,15 @@ def connection_windows(
     if interval is None:
         return None
     envelope = _interval_slots(adapter, problem, *interval)
+    if requires_daily_return(problem.dispatch_context, origin, target):
+        # Residence already starts after the return leg and ends before the
+        # next outbound leg. Subtracting their combined duration a second
+        # time wrongly removes stationary depot time before the next trip.
+        step = max(int(problem.scenario.timestep_min), 1)
+        horizon_start = adapter._horizon_start_min(problem)
+        first = max(0, (interval[0] - horizon_start + step - 1) // step)
+        end = (interval[1] - horizon_start) // step
+        return envelope, (first, max(first, end))
     left, right = envelope
     if duration > 0:
         travel = adapter._connection_deadhead_interval(
@@ -151,6 +165,16 @@ def _certify_factor(
     def valid_count(interval: SlotRange) -> int:
         return bisect_left(valid_slots, interval[1]) - bisect_left(valid_slots, interval[0])
 
+    origin_events = [connection_energy_events(problem, vehicle, trips[origin], reference_target)[0]
+                     for origin in origins]
+    target_events = [connection_energy_events(problem, vehicle, anchor, trips[target])[-1]
+                     for target in targets]
+    step = max(int(problem.scenario.timestep_min), 1)
+    horizon_start = adapter._horizon_start_min(problem)
+
+    def posting(minute: int) -> int:
+        return (minute - horizon_start + step - 1) // step - 1
+
     return ConnectionFactor(
         vehicle_id=str(vehicle.vehicle_id), origins=origins, targets=targets,
         origin_envelope_counts=tuple(
@@ -171,6 +195,10 @@ def _certify_factor(
         target_departure_slots=tuple(
             adapter._slot_index(problem, trips[target].departure_min) for target in targets
         ),
+        origin_soc_energy_kwh=tuple(energy for _minute, energy in origin_events),
+        origin_soc_posting_slots=tuple(posting(minute) for minute, _energy in origin_events),
+        target_soc_energy_kwh=tuple(energy for _minute, energy in target_events),
+        target_soc_posting_slots=tuple(posting(minute) for minute, _energy in target_events),
     )
 
 
@@ -341,9 +369,13 @@ def add_factor_soc_terms(
     valid_slots = set(slots)
     for entry in factors:
         factor = entry.factor
-        for energy, slot, var in zip(factor.target_energy_kwh, factor.target_departure_slots, entry.targets):
-            if energy > 0:
-                (loads.setdefault(slot, []) if slot in valid_slots else terminal).append(energy * var)
+        for energies, postings, incidence in (
+            (factor.origin_soc_energy_kwh, factor.origin_soc_posting_slots, entry.origins),
+            (factor.target_soc_energy_kwh, factor.target_soc_posting_slots, entry.targets),
+        ):
+            for energy, slot, var in zip(energies, postings, incidence):
+                if energy > 0:
+                    (loads.setdefault(slot, []) if slot in valid_slots else terminal).append(energy * var)
         for intervals, incidence_vars in (
             (factor.origin_soc_ranges, entry.origins),
             (factor.target_soc_ranges, entry.targets),
