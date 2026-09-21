@@ -22,9 +22,26 @@ def test_hourly_policy_changes_only_the_declared_search_control_and_budget():
     legacy=deepcopy(d);legacy['stage2_search_policy'].pop('rolling_Presolve')
     assert rolling_config_for_design(config,legacy).stage2_gurobi_presolve==2
 
+
+def test_numeric_release_applies_focus_only_to_hourly_solves():
+    root = Path(__file__).resolve().parents[1]
+    d = json.loads((root / "config/shibu21_23_monthly_auxiliary_numeric_20260922.json").read_text(encoding="utf-8"))
+    baseline = json.loads((root / "config/shibu21_23_monthly_auxiliary_timeline_20260922.json").read_text(encoding="utf-8"))
+    before = OptimizationConfig(stage2_gurobi_presolve=2, stage2_gurobi_numeric_focus=0)
+    old = rolling_config_for_design(before, baseline)
+    new = rolling_config_for_design(before, d)
+    assert before.stage2_gurobi_numeric_focus == old.stage2_gurobi_numeric_focus == 0
+    assert new.stage2_gurobi_numeric_focus == 3
+    assert {key for key, value in asdict(old).items() if asdict(new)[key] != value} == {"stage2_gurobi_numeric_focus"}
+    assert {key for key, value in baseline.items() if d[key] != value} == {
+        "input_manifests_directory", "stage2_search_policy", "limitations"}
+
 @pytest.mark.parametrize('hourly_presolve,accepted',[(0,True),(2,False)])
-def test_auditor_checks_every_original_hour_against_its_phase(hourly_presolve,accepted,monkeypatch,tmp_path):
+@pytest.mark.parametrize("numeric_focus", ["legacy", 3, None, 0, "3"])
+def test_auditor_checks_every_original_hour_against_its_phase(hourly_presolve,accepted,numeric_focus,monkeypatch,tmp_path):
     d=design()
+    if numeric_focus != "legacy":
+        d["stage2_search_policy"].update(NumericFocus=0, rolling_NumericFocus=3)
     monkeypatch.setattr(auditor,'EXPECTED_SEARCH_CONTROLS_BY_KIND',{
         'day_ahead':{'stage2_gurobi_mip_focus':1,'stage2_gurobi_method':1},
         'hourly':{'stage2_gurobi_mip_focus':1,'stage2_gurobi_method':0}})
@@ -42,10 +59,18 @@ def test_auditor_checks_every_original_hour_against_its_phase(hourly_presolve,ac
         document=deepcopy(base)
         hourly=path.name=='forecast_result.json'
         document['metadata']={'stage2_gurobi_mip_focus':1,'stage2_gurobi_method':0 if hourly else 1}
+        if numeric_focus != "legacy":
+            document["metadata"]["stage2_gurobi_numeric_focus"] = 3 if hourly else 0
+            if hourly and path.parent.name == "hour_167":
+                document["metadata"]["stage2_gurobi_numeric_focus"] = numeric_focus
         document['solver_metadata']['stage2_gurobi_presolve']=hourly_presolve if hourly else 2
         document['solver_metadata']['stage2_time_limit_sec_effective']=15 if hourly else 120
         return document
     monkeypatch.setattr(auditor,'read_json',read)
+    if numeric_focus not in ("legacy", 3):
+        with pytest.raises(ValueError, match="stage2_gurobi_numeric_focus"):
+            auditor.audit_native_entries(tmp_path,tmp_path/'chain',7,d)
+        return
     native,_,_=auditor.audit_native_entries(tmp_path,tmp_path/'chain',7,d)
     assert native['all_native_strict'] is accepted
     assert native['required_presolve'] is None

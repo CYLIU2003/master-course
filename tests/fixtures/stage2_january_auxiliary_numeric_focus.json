@@ -1,0 +1,12 @@
+{
+  "source_path": "C:\\master-course\\output\\monthly_auxiliary_timeline_20260922\\hour126_model_diagnosis\\model.mps",
+  "source_sha": "c022ece753fad8121a54dc54c2b3a4de8b96b3df",
+  "source_mps_sha256": "71370a0ff4ffc80d1b8de80f16e16d1c8b7b77bf0c04dfaee6112b8aa85a05fc",
+  "fixture_sha256": "14ce776917f6b5bcaff01b19c32bc20dbfa80ad6428bea14ff4f4bf1ea092a09",
+  "fingerprint": "0xf590abea",
+  "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+  "original_status": "INFEASIBLE",
+  "numeric_focus3_status": "OPTIMAL",
+  "diagnostic_only": true,
+  "physical_tolerances_unchanged": true
+}

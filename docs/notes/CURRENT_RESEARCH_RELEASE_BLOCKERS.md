@@ -1,5 +1,8 @@
 # Current research release blockers
 
+2026-09-22 現行月別計算c022ece7は1月hour126のStage2で停止、成功0/12。数値的な不成立を同一MPSで再現し、制約・許容差を変えずNumericFocus3で可行性を確認した。旧126時間と新条件の週を混ぜない。次は連続42時間の局所検証後に新規全12週を行う。独立週監査・会計照合・全月完了は未達、研究採用BLOCKED。詳細: [数値診断と実行条件](MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
+
+
 2026-09-22: 固定e5ad8b3bは4月事前検証通過後、1月Stage1のtime_limit・解0件で全月停止（0/12、Stage2未実行）。帰庫時間・電力計上の不整合を修正し、188 testsと既存物理通過充電量の26台受入れを確認。新しい全体求解・週間実行・独立レビュー・統合最適性は未確認。研究採用BLOCKED。[今回の復旧](MONTHLY_AUXILIARY_TIMELINE_20260922.md)。
 
 

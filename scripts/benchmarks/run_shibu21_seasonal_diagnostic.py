@@ -43,7 +43,8 @@ def rolling_config_for_design(config: OptimizationConfig, design: dict) -> Optim
     """Apply the declared hourly policy once, before the first execution prefix."""
     return replace(config, time_limit_sec=design['rolling_hour_time_limit_sec'],
         stage2_time_limit_sec=design['rolling_hour_time_limit_sec'],
-        stage2_gurobi_presolve=design.get('stage2_search_policy', {}).get('rolling_Presolve', config.stage2_gurobi_presolve))
+        stage2_gurobi_presolve=design.get('stage2_search_policy', {}).get('rolling_Presolve', config.stage2_gurobi_presolve),
+        stage2_gurobi_numeric_focus=design.get('stage2_search_policy', {}).get('rolling_NumericFocus', config.stage2_gurobi_numeric_focus))
 
 
 def source_snapshot() -> dict:
@@ -113,6 +114,7 @@ def solve_week(
         stage1_time_limit_sec=design['stage1_time_limit_sec'], stage2_time_limit_sec=design['stage2_time_limit_sec'],
         mip_gap=design['mip_gap'], gurobi_threads=design['threads'], random_seed=design['seed'],
         stage2_gurobi_presolve=design.get('stage2_search_policy', {}).get('Presolve', 0),
+        stage2_gurobi_numeric_focus=design.get('stage2_search_policy', {}).get('NumericFocus', 0),
         stage1_gurobi_search_profile=design.get('stage1_gurobi_search_profile', 'default'),
         rolling_execution_minutes=design['execution_minutes'],
         research_run=False, allow_postsolve_repair=False, stage1_best_obj_stop_enabled=False)
