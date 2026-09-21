@@ -31,7 +31,7 @@ def setup(monkeypatch, tmp_path, *, fail=False, profiles=runner.PROFILES):
     return design, calls
 
 
-@pytest.mark.parametrize("profiles", [runner.PROFILES, runner.MEMORY_BOUNDED_PROFILES])
+@pytest.mark.parametrize("profiles", [runner.PROFILES, runner.MEMORY_BOUNDED_PROFILES, runner.SUPPORT_PROFILES])
 def test_root_profiles_run_once_sequentially_in_separate_outputs(monkeypatch, tmp_path, profiles):
     design, calls = setup(monkeypatch, tmp_path, profiles=profiles)
     result = runner.run(design, tmp_path / "output")
@@ -40,6 +40,10 @@ def test_root_profiles_run_once_sequentially_in_separate_outputs(monkeypatch, tm
     assert [r["profile"] for r in result["results"]] == list(profiles)
     assert result["status"] == "ROOT_SEARCH_DIAGNOSIS_COMPLETE"
     assert not result["monthly_complete"] and not result["email_sent"]
+    if profiles == runner.SUPPORT_PROFILES:
+        designs = [json.loads((tmp_path / "output" / profile / "design.json").read_text()) for profile in profiles]
+        assert all(d["stage1_gurobi_search_profile"] == "bounded_presolve_dual" for d in designs)
+        assert [d["stage1_sparse_charge_window_support"] for d in designs] == [False, True]
 
 
 def test_root_diagnosis_stops_after_failure_without_retry(monkeypatch, tmp_path):

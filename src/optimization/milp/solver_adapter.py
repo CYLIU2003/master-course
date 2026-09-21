@@ -38,6 +38,7 @@ from src.optimization.common.bev_terminal_policy import (
 )
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.milp.pv_execution_reserve import add_pv_execution_reserve_constraints
+from src.optimization.milp.charging_window_support import ChargingWindowSupportEvents
 from src.optimization.milp.depot_connection_factors import (
     ArcDomain, SuccessorRow, FactoredConnectionVariables,
     add_factor_soc_terms, create_factor_variables, factor_depot_connections,
@@ -29106,6 +29107,13 @@ class GurobiMILPAdapter:
         constraint_count = 0
         stage1_charge_power_var: Dict[Tuple[str, int], Any] = {}
         stage1_charge_on_var: Dict[Tuple[str, int], Any] = {}
+        sparse_windows = problem.metadata.get("stage1_sparse_charge_window_support") is True
+        window_support_audit = {
+            "representation": "endpoint_events" if sparse_windows else "dense_slots",
+            "dense_term_occurrences": 0, "endpoint_term_count": 0,
+            "additional_continuous_variables": 0, "additional_constraints": 0,
+            "semantics": "same slot opportunity sums for fractional and integer assignments; existing factored support retained",
+        }
         electric_vehicle_by_id: Dict[str, Any] = {}
         for vehicle in vehicles:
             vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
@@ -29144,6 +29152,15 @@ class GurobiMILPAdapter:
                 slot_idx: [] for slot_idx in slot_indices
             }
             terminal_load_terms: List[Any] = []
+            support_events = ChargingWindowSupportEvents(slot_indices) if sparse_windows else None
+
+            def add_charge_windows(slots, variable):
+                if support_events is not None:
+                    support_events.add_slots(slots, variable)
+                else:
+                    for slot in slots:
+                        charge_terms_by_slot[slot].append(variable)
+                        window_support_audit["dense_term_occurrences"] += 1
 
             for trip_id in trip_ids:
                 trip = trip_by_id.get(trip_id)
@@ -29174,8 +29191,7 @@ class GurobiMILPAdapter:
                         int(startup_precheck.complete_precharge_slot_count),
                         len(slot_indices),
                     )
-                    for slot_idx in slot_indices[:complete_count]:
-                        charge_terms_by_slot[slot_idx].append(start_var)
+                    add_charge_windows(slot_indices[:complete_count], start_var)
                     departure_slot = self._slot_index(
                         problem, trip.departure_min
                     )
@@ -29218,28 +29234,26 @@ class GurobiMILPAdapter:
                     load_terms_by_slot[return_transition_slot].append(
                         return_energy_kwh * end_var
                     )
-                for slot_idx in self._collect_post_return_target_slots(
+                return_charge_slots = self._collect_post_return_target_slots(
                     problem,
                     trip=trip,
                     day_idx=day_idx,
                     return_deadhead_min=int(return_deadhead_min),
-                ):
-                    if slot_idx in valid_slots:
-                        charge_terms_by_slot[slot_idx].append(end_var)
+                )
+                add_charge_windows((slot for slot in return_charge_slots if slot in valid_slots), end_var)
                 if day_idx < planning_days - 1:
                     home_arrival_min = (
                         self._trip_service_arrival_min(problem, trip)
                         + int(return_deadhead_min)
                     )
-                    for slot_idx in self._collect_overnight_home_depot_slots(
+                    overnight_charge_slots = self._collect_overnight_home_depot_slots(
                         problem,
                         day_idx=day_idx,
                         operation_start_min=operation_start_min,
                         operation_end_min=operation_end_min,
                         earliest_home_arrival_min=home_arrival_min,
-                    ):
-                        if slot_idx in valid_slots:
-                            charge_terms_by_slot[slot_idx].append(end_var)
+                    )
+                    add_charge_windows((slot for slot in overnight_charge_slots if slot in valid_slots), end_var)
 
             for from_trip_id, to_trip_id in arc_keys_by_vehicle.get(
                 vehicle_id, ()
@@ -29298,8 +29312,17 @@ class GurobiMILPAdapter:
                             deadhead_interval[1],
                         )
                     )
-                for slot_idx in residence_slots.intersection(valid_slots):
-                    charge_terms_by_slot[slot_idx].append(arc_var)
+                add_charge_windows(residence_slots.intersection(valid_slots), arc_var)
+
+            if support_events is not None:
+                support_vars = support_events.build(model, gp, grb, vehicle_id=vehicle_id)
+                for slot_idx, variable in support_vars.items():
+                    charge_terms_by_slot[slot_idx].append(variable)
+                constraint_count += len(support_vars)
+                window_support_audit["dense_term_occurrences"] += support_events.dense_term_occurrences
+                window_support_audit["endpoint_term_count"] += support_events.endpoint_term_count
+                window_support_audit["additional_continuous_variables"] += len(support_vars)
+                window_support_audit["additional_constraints"] += len(support_vars)
 
             if isinstance(x, FactoredConnectionVariables):
                 factor_support, factor_loads, factor_terminal, factor_count = add_factor_soc_terms(
@@ -29458,6 +29481,7 @@ class GurobiMILPAdapter:
         shared_charger_metadata: Dict[str, Any] = {
             "enabled": bool(stage1_charge_power_var),
             "soc_state_representation": state_representation,
+            "charge_window_support": window_support_audit,
             "relaxation_semantics": (
                 "continuous physical-charger assignment with exact vehicle, "
                 "charger, port, power, depot, and charging-window upper bounds; "

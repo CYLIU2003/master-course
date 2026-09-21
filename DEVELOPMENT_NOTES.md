@@ -1,5 +1,13 @@
 # Development Notes
 
+## 2026-09-21 配車の停滞を確認し、充電可能時間の行列を疎に表現
+
+- 全体回帰2442 passed／既存PPT関連2 failed（108.09秒）。最適化の新規失敗0。原本・期待値を保全し、自己レビューP0/P1残件0、独立研究承認PENDING。
+- 固定4f979982のcompletion/全体/2 summaryと各5原本SHA・cleanを確認。native fingerprint一致。両方の物理とStage2 gap0.36796%が通過。Stage1目的値4,297,021.92円、初期解改善0円、認証下界400万円・gap6.91227%。dualのnative下界0、601秒・16.218GB、NoRelはnative下界400万円、225秒・19.882GBでメモリ停止。根LP完了記録なし。
+- opt-inのstage1_sparse_charge_window_supportを追加。開始/終了/明示接続のslot別supportを差分連続状態で表現し、重複・穴・有効slot集合を保つ。既存factored supportと制約・料金は維持。defaultは旧表現。整数・分数とも射影が等価で、新上界や候補削除はない。
+- 243パターンの代数比較、native LPの同目的値・非零数1/5未満、2日native Stage1/2の費用・独立物理一致など関連83 tests通過。実5月では新固定版のdense/endpoint2条件を同じdual・4threads・18GB・600/120秒・1%で比較する。
+- [数学的説明・結果・比較条件](docs/notes/STAGE1_CHARGE_WINDOW_SUPPORT_20260921.md)。旧出力は再利用せず、全12週・メールはなし。独立承認PENDING、研究採用BLOCKED。
+
 ## 2026-09-21 配車診断のsource参照漏れと失敗理由の欠落を修正
 
 - 08:55 JSTにclean固定4f9799825ed8af0217575c9ef94a78b90f4137e3から再診断を開始。実coordinator30116／venv launcher39172。固定版22 tests・入力47 SHA・参照移設11件を確認。dualのRUNNINGとcase内の実auditパスがそのcampaignのsourceに一致することを確認。制御先 output/stage1_input_binding_20260921、終了時だけ既存タスクへ1回queue。

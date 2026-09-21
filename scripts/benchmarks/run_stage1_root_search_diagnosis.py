@@ -15,12 +15,13 @@ from scripts.benchmarks.run_shibu21_24_seasonal_diagnostic import git_state, wri
 
 PROFILES = ("bounded_presolve_barrier", "bounded_presolve_norel")
 MEMORY_BOUNDED_PROFILES = ("bounded_presolve_dual", "bounded_presolve_norel")
+SUPPORT_PROFILES = ("dense_slot_support", "sparse_slot_support")
 
 
 def run(design_path: Path, output: Path) -> dict:
     design = json.loads(design_path.read_text(encoding="utf-8"))
     profiles = tuple(design.get("diagnostic_profiles", ()))
-    if profiles not in (PROFILES, MEMORY_BOUNDED_PROFILES):
+    if profiles not in (PROFILES, MEMORY_BOUNDED_PROFILES, SUPPORT_PROFILES):
         raise ValueError("Run exactly one supported pair of predeclared root strategies, once each")
     before = git_state()
     if not before.get("sha") or before["status_porcelain"]:
@@ -39,6 +40,9 @@ def run(design_path: Path, output: Path) -> dict:
             case = output / profile
             case.mkdir()
             case_design = {**design, "stage1_gurobi_search_profile": profile}
+            if profiles == SUPPORT_PROFILES:
+                case_design.update(stage1_gurobi_search_profile="bounded_presolve_dual",
+                                   stage1_sparse_charge_window_support=profile == "sparse_slot_support")
             write_json(case / "design.json", case_design)
             state["active_profile"] = profile
             write_json(output / "state.json", state)
@@ -70,6 +74,8 @@ def run(design_path: Path, output: Path) -> dict:
                 "native_memory": summary.get("native_memory"),
                 "stage1_search_controls": summary.get("stage1_search_controls"),
                 "gurobi_threads": summary.get("gurobi_threads"),
+                "charge_window_support": summary.get("charge_window_support"),
+                "stage1_model_size": summary.get("stage1_model_size"),
                 "stage1_native_log_path": summary["stage1_native_log_path"]})
             write_json(output / "partial_results.json", results)
         state.update(status="ROOT_SEARCH_DIAGNOSIS_COMPLETE", results=results,

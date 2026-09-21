@@ -70,6 +70,10 @@ def run(design_path: Path, output: Path) -> dict:
             "stage1_search_controls": metadata.get("stage1_gurobi_search_controls"),
             "gurobi_threads": metadata.get("gurobi_threads"),
             "native_memory": metadata.get("stage1_search_telemetry", {}).get("native_memory"),
+            "charge_window_support": metadata.get("stage1_shared_charger_relaxation", {}).get("charge_window_support"),
+            "stage1_model_size": {key: metadata.get(key) for key in (
+                "stage1_model_variable_count", "stage1_model_constraint_count",
+                "stage1_model_nonzero_coefficient_count", "stage1_model_binary_variable_count")},
             "daily_path_cover_bounds": metadata.get("stage1_vehicle_day_path_cover_lower_bounds"),
             "daily_overlap_bounds": metadata.get("stage1_vehicle_day_overlap_lower_bounds"),
             "stage1_native_log_path": native_log_path,
