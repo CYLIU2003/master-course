@@ -30,6 +30,19 @@ def test_preflight_failure_keeps_original_reasons_without_reading_missing_progre
     assert not failure["email_sent"] and not failure["monthly_complete"]
 
 
+def test_declared_april_week_is_forwarded_to_fresh_campaign(tmp_path, monkeypatch):
+    config = setup(monkeypatch, tmp_path)
+    config.write_text(json.dumps({'diagnostic_stop_after_day_ahead': True, 'diagnostic_week': '2025-04-07'}))
+    observed = []
+    def campaign(_design, _output, *, selected_week):
+        observed.append(selected_week)
+        return {'status': 'STOPPED_AFTER_FAILED_CASE', 'summaries': []}
+    monkeypatch.setattr(runner, 'run_campaign', campaign)
+    with pytest.raises(RuntimeError, match='Day-ahead campaign stopped'):
+        runner.run(config, tmp_path/'run')
+    assert observed == ['2025-04-07']
+
+
 @pytest.mark.parametrize("physical_passed,native_feasible", [(True, True), (False, True), (True, False)])
 def test_successful_day_ahead_diagnosis_requires_consistent_saved_evidence(
     tmp_path, monkeypatch, physical_passed, native_feasible,

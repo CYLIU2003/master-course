@@ -40,6 +40,7 @@ from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.milp.pv_execution_reserve import add_pv_execution_reserve_constraints
 from src.optimization.milp.auxiliary_bess import add_auxiliary_bess_constraints
 from src.optimization.milp.charging_window_support import ChargingWindowSupportEvents
+from src.optimization.milp.charging_session_relaxation import add_session_time_relaxation
 from src.optimization.milp.depot_connection_factors import (
     ArcDomain, SuccessorRow, FactoredConnectionVariables,
     add_factor_soc_terms, create_factor_variables, factor_depot_connections,
@@ -29157,6 +29158,7 @@ class GurobiMILPAdapter:
         constraint_count = 0
         stage1_charge_power_var: Dict[Tuple[str, int], Any] = {}
         stage1_charge_on_var: Dict[Tuple[str, int], Any] = {}
+        session_constraint_count = 0
         sparse_windows = problem.metadata.get("stage1_sparse_charge_window_support") is True
         window_support_audit = {
             "representation": "endpoint_events" if sparse_windows else "dense_slots",
@@ -29423,6 +29425,14 @@ class GurobiMILPAdapter:
                 )
                 stage1_charge_power_var[(vehicle_id, slot_idx)] = charge_power
 
+            session_rows = add_session_time_relaxation(
+                model, grb, vehicle_id=vehicle_id, slot_indices=slot_indices,
+                charge_power=stage1_charge_power_var, charge_on=stage1_charge_on_var,
+                power_limit_kw=self._vehicle_charge_power_max_kw(problem, vehicle),
+                timestep_h=timestep_h, metadata=problem.metadata,
+            )
+            constraint_count += session_rows
+            session_constraint_count += session_rows
             cumulative_load = 0.0
             cumulative_charge_energy = 0.0
             initial_energy = initial_soc_kwh * used_vehicle[vehicle_id]
@@ -29530,6 +29540,8 @@ class GurobiMILPAdapter:
 
         shared_charger_metadata: Dict[str, Any] = {
             "enabled": bool(stage1_charge_power_var),
+            "session_time_constraint_count": session_constraint_count,
+            "session_time_relaxation": "continuous_start_end_with_stage2_setup_teardown;inactive_horizon_boundaries;taper_and_minimum_duration_deferred",
             "soc_state_representation": state_representation,
             "charge_window_support": window_support_audit,
             "relaxation_semantics": (

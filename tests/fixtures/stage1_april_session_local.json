@@ -1,0 +1,9 @@
+{
+  "fixture_sha256": "621f4e9e3b7d2bb52c373e2d26c4314ef26ef557849a2f3bbf19a1ea0073048c",
+  "source_mps_sha256": "2a821ba8d9b301b23dbf71d068aa866a38dd8606a5598b999034b5eafe128135",
+  "source_git_sha": "3289f07b6bd5fbd739a8f2c3cb6092d1e56cbac0",
+  "vehicle_id": "35f95479-c68e-40bc-b31a-1f0a5490227c",
+  "assigned_trips": 82,
+  "semantics": "One-vehicle fixed-path LP from original Stage1 helper with session rows disabled; not full campaign evidence",
+  "assignment_csv_sha256": "1527ba12ff1b203699cf3694ef8199294e54a8763fd3a751b492e09ba1575bbe"
+}
