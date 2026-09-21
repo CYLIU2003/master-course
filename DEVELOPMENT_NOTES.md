@@ -2,6 +2,8 @@
 
 ## 2026-09-21 初期配車の予測総費用改善を確認、次は2threads
 
+- 13:50 JST、clean固定6aab442433cb02bffa95cab12b11ce98a7bcb221、codex/barrier-two-threads-seed-cost-20260921で新規Prepareを開始。入力47 SHA・親11参照・case3参照・実効条件を照合、固定版でも46 tests通過。実runner55144/venv launcher9996、起動確認RUNNING・stderr空。制御先 `output/barrier_two_threads_seed_cost_20260921/startup_verification.json`。固定コード不変、通常はscript、終了時だけ既存タスクへ1回通知。
+
 - 固定d6fe5b31のcompletion/summary/9原本SHA・cleanを確認。入力seedのplan SHAとduties全文/車両/便順を保存後の固定Stage2と照合。両案の独立物理とPrepared設備によるBESS各672区間が通過。原本 `output/barrier_budget_seed_cost_20260921/review.json`。
 - 予測総費用4,157,027.338747→4,146,949.139563円、10,078.199184円（0.242438%）減。206車両日は不変、燃料費9,907.4025円＋CO₂費170.796684円減。両Stage2 optimal/gap0%。Stage1差、入力seed予測差、週間実績を分ける。最初のincumbent固定Stage2総費用は未保存。
 - BESS初期は双方3000、終端seed1238.847113／final1200kWh、取り崩し1761.152887／1800kWh。PV抑制11684.189753／11269.598677、買電双方0。PV効果・在庫減・毎週の節約額へ解釈を拡大しない。

@@ -179,6 +179,15 @@ PV単独の効果には同じ日付・時刻表・車両・初期状態の対比
 - 13:13開始→13:36終了のd6fe5b31は本書の対比較。旧実行と入力・結果の原本は保存し、改変しない。
 - ユーザー編集中PowerPointは保全。CIや課金サービスは有効化しない。
 
+### 2threads診断の開始記録
+
+2026-09-21 13:50 JST、clean固定 `6aab442433cb02bffa95cab12b11ce98a7bcb221`、
+branch `codex/barrier-two-threads-seed-cost-20260921` から新規Prepareを開始。
+入力47原本SHA、親scenario11参照、case source3参照と全条件を照合し、固定版でも46 tests通過。
+実runner55144（venv launcher9996）、起動確認RUNNING・stderr空。
+制御先 `output/barrier_two_threads_seed_cost_20260921/startup_verification.json`。
+通常処理はscript、終了時だけ既存タスクへ1回通知する。開始確認は改善達成の判定ではない。
+
 ### Code Review Summary
 
 Reviewer: Codex自己レビュー、2026-09-21。独立研究レビューはPENDING。
