@@ -1,5 +1,13 @@
 # 月別12週のスクリプト実行と完了メール
 
+## 2026-09-21 Stage2前処理修正版
+
+旧a4b9c679の1月time_limitは原因診断済み。旧failure/queueを保存し、再処理・メールは行わない。
+今回の制御先は `output/monthly_auxiliary_presolve_20260921/script_observer/`、
+[専用手順](MONTHLY_AUXILIARY_PRESOLVE_RECOVERY_20260921.md)と今回のlaunch/config/bundleを確認する。
+同じBESS補助方針でStage2 Presolve2を全月共通に適用する新しい固定版。
+全12週の新規実行/独立監査・図表が揃った後、今回のreceiptと一意件名でGmail重複を防ぎ、承認済み宛先へ1通送る。
+
 ## 2026-09-21 BESS補助運用の新規全月実行
 
 今回の制御先は `output/monthly_auxiliary_20260921/script_observer/`。

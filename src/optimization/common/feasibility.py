@@ -78,7 +78,8 @@ class FeasibilityChecker:
                 feasible=False,
                 errors=("[STAGE2_NO_INCUMBENT] Charging optimization returned "
                         f"{plan.metadata.get('stage2_solver_status', 'no feasible solution')}; "
-                        "no operating plan is available. Inspect the saved IIS diagnostics.",),
+                        "no operating plan is available. Inspect the saved Stage 2 diagnostics; "
+                        "an IIS exists only when infeasibility was established.",),
                 metrics={"stage2_feasible": False, "physical_trajectory_available": False},
             )
         eligible_trip_ids = set(problem.eligible_trip_ids())

@@ -3286,15 +3286,18 @@ def _configured_gurobi_integrality_tol(
 
 def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[str, float | int]:
     """Preserve native SOC transitions without presolve reconstruction error."""
+    presolve = config.stage2_gurobi_presolve
+    if isinstance(presolve, bool) or not isinstance(presolve, int) or presolve not in (0, 1, 2):
+        raise ValueError("stage2_gurobi_presolve must be an integer in {0, 1, 2}")
     parameters = {
         "FeasibilityTol": _configured_gurobi_feasibility_tol(config, stage=2),
         "IntFeasTol": _configured_gurobi_integrality_tol(config, stage=2),
         # April falsely failed at an exact boundary with aggregation enabled.
         # March still accumulated 2.185e-6 kWh of SOC replay error with only
-        # aggregation disabled. Disable presolve uniformly before every solve;
-        # never repair states, relax tolerances, or retry failed hours.
+        # aggregation disabled. Keep presolve disabled unless a new declared
+        # campaign explicitly selects it. Never retry or relax physical checks.
         "Aggregate": 0,
-        "Presolve": 0,
+        "Presolve": presolve,
         # The identical November MPS had no incumbent after 600 s with the
         # automatic method. This uniform search policy passed independent
         # physical replay in 21.32 s without changing the feasible region.
@@ -22272,6 +22275,17 @@ class GurobiMILPAdapter:
 
         stage2 = gp.Model("thesis_stage2_charging_dispatch")
         stage2.Params.OutputFlag = 0
+        stage2_native_log_path = None
+        if problem.metadata.get("stage2_native_log_enabled") is True:
+            log_root = problem.metadata.get("phase3_diagnostics_dir")
+            if not log_root:
+                raise ValueError("Native Stage 2 logging requires a diagnostic output directory")
+            native_log = Path(log_root) / f"stage2_native_{time.time_ns()}.log"
+            native_log.parent.mkdir(parents=True, exist_ok=True)
+            stage2.Params.LogToConsole = 0
+            stage2.Params.OutputFlag = 1
+            stage2.Params.LogFile = str(native_log)
+            stage2_native_log_path = str(native_log)
         stage2_time_limit = _remaining_stage_budget_sec(
             deadline_monotonic=feedback_global_deadline,
             requested_sec=_resolved_stage_time_limit_sec(config, stage=2),
@@ -23367,6 +23381,7 @@ class GurobiMILPAdapter:
                 "stage2_gurobi_method": stage2_numerics["Method"],
                 "gurobi_threads": configured_threads,
                 "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
+                "stage2_native_log_path": stage2_native_log_path,
                 "stage1_time_limit_sec_effective": (
                     0
                     if stage1_status == "phase1_fixed_assignment"
@@ -23714,6 +23729,7 @@ class GurobiMILPAdapter:
             "stage2_gurobi_method": stage2_numerics["Method"],
             "gurobi_threads": configured_threads,
             "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
+            "stage2_native_log_path": stage2_native_log_path,
             "stage2_contract_overage_enabled": (
                 enable_contract_overage_penalty
             ),

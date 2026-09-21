@@ -18,15 +18,17 @@ FIXTURE = Path(__file__).parent / "fixtures/stage2_exact_terminal_boundary.ilp"
 
 @pytest.mark.parametrize("initial_soc_increase,expected_feasible", [(0.0, True), (1.0, False)])
 @pytest.mark.parametrize("rolling", [False, True])
+@pytest.mark.parametrize("presolve", [0, 2])
 def test_exact_boundary_is_solved_without_accepting_real_soc_surplus(
-    initial_soc_increase, expected_feasible, rolling,
+    initial_soc_increase, expected_feasible, rolling, presolve,
 ):
     gp = pytest.importorskip("gurobipy")
     with gp.Env(empty=True) as env:
         env.setParam("OutputFlag", 0)
         env.start()
         with gp.read(str(FIXTURE), env=env) as model:
-            config = OptimizationConfig(rolling_horizon_policy=ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT if rolling else "")
+            config = OptimizationConfig(rolling_horizon_policy=ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT if rolling else "",
+                                        stage2_gurobi_presolve=presolve)
             _configure_stage2_numerics(model, config)
             model.Params.TimeLimit = 10
             model.Params.Threads = 2
@@ -36,7 +38,7 @@ def test_exact_boundary_is_solved_without_accepting_real_soc_surplus(
             model.optimize()
             assert model.Params.FeasibilityTol == 1.0e-9
             assert model.Params.IntFeasTol == 1.0e-9
-            assert model.Params.Presolve == 0
+            assert model.Params.Presolve == presolve
             assert model.Params.Aggregate == 0
             assert model.Params.MIPFocus == 1
             assert model.Params.Method == (0 if rolling else 1)
@@ -56,6 +58,12 @@ def test_exact_boundary_is_solved_without_accepting_real_soc_surplus(
             else:
                 assert model.Status == gp.GRB.INFEASIBLE
                 assert model.SolCount == 0
+
+
+@pytest.mark.parametrize('value', [True, '2', -1, 3, 2.0])
+def test_rejects_undeclared_or_invalid_presolve_value(value):
+    with pytest.raises(ValueError, match='stage2_gurobi_presolve'):
+        _configure_stage2_numerics(None, OptimizationConfig(stage2_gurobi_presolve=value))
 
 
 def test_march_native_model_preserves_replayed_soc_without_presolve(tmp_path):

@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-21 月別1月Stage2 no-incumbentを同一MPSで診断
+
+- 旧a4b9c679はPrepare通過後、Stage1 memory_limit/gap3.728%、Stage2 time_limit/候補0で停止。成功0/12、rolling0。監査コマンド実行前なのでcommands.log未作成。原本/失敗queueは保全、メールなし。
+- 32台1,704便の保存配車を再構築し、同一MPSのPresolve0/2を各120秒で比較。0は候補0、2は37.234秒で初解、59.639秒gap0、物理VALID。モデルやSOCを緩和していない。
+- Stage2 presolveを明示設定化し旧既定0を保持、新全月設計で2。native logと実効metadataを追加。observerの元失敗理由/path/hash保存、IISなしtime_limit説明を修正。143 tests通過、自己レビューP0/P1残件なし。独立研究承認はPENDING。
+- 新規clean固定版から全12週を再Prepareする。旧成功週の転用なし。Stage1メモリ/gap・統合最適性未解決を明記し、通常処理はスクリプトへ。[詳細](docs/notes/MONTHLY_AUXILIARY_PRESOLVE_RECOVERY_20260921.md)。
+
 ## 2026-09-21 修正BESS方針で全12週を新規実行
 
 - 17:59 JSTに固定 `a4b9c679ead3c735a5e759eefb8b9399c0dcb996` を起動。branch `codex/monthly-auxiliary-20260921`、実campaign PID44384・observer PID20964。起動時は1月新規Prepare/0週、開始後も固定版cleanを確認。raw入力47件SHAと親metadata参照11件を照合し、固定版20 tests通過。実行コードは変更しない。原本は `output/monthly_auxiliary_20260921/budget_rerun_launch.json` とstate。

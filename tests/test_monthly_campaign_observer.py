@@ -296,3 +296,20 @@ def test_checkpoint_excludes_failed_finished_case_and_shows_stopped_status(tmp_p
     text = updates[tmp_path / "README.md"].decode("utf-8")
     assert "2月で計算停止" in text and "別担当の導入文" in text
     assert "2月以降の計算と最終季節別整理を継続中" not in text
+
+
+def test_first_week_failure_keeps_original_reason_without_audit_command(setup, monkeypatch):
+    observer, progress = setup
+    week = progress['selected_weeks'][0]
+    progress.update(status='STOPPED_AFTER_FAILED_CASE', completed_weeks=[week])
+    watcher.write_json(observer.campaign/'progress.json', progress)
+    watcher.write_json(observer.audit, {'expected_sha':'frozen-sha','weeks':{}})
+    summary_path=observer.campaign/'cases'/week/'diagnostic'/week/'summary.json'
+    reason='[STAGE2_NO_INCUMBENT] Charging optimization returned time_limit'
+    watcher.write_json(summary_path, {'status':'DAY_AHEAD_FAILED','day_ahead_reasons':[reason]})
+    monkeypatch.setattr(observer,'run_python',lambda *a: pytest.fail('No completed week to audit'))
+    observer.publish_stopped(progress)
+    stopped=watcher.read_json(observer.output/'stopped_campaign.json')
+    assert stopped['independently_audited_weeks']==0 and stopped['email_sent'] is False
+    assert stopped['failed_cases']==[{'week':week,'status':'DAY_AHEAD_FAILED','reasons':[reason],
+        'source_path':str(summary_path),'source_sha256':watcher.sha256(summary_path)}]

@@ -265,7 +265,7 @@ def audit_native_entries(
         reasons: list[str] = []
         expected = {
             "stage2_gurobi_aggregate": 0,
-            "stage2_gurobi_presolve": 0,
+            "stage2_gurobi_presolve": design.get("stage2_search_policy", {}).get("Presolve", 0),
             "stage2_gurobi_feasibility_tol": 1.0e-9,
             "stage2_gurobi_integrality_tol": 1.0e-9,
         }
@@ -381,8 +381,10 @@ def verify_solver_controls(config: dict, design: dict, declared: dict) -> dict:
         "postsolve_repair", "stage1_gurobi_search_profile", "bess_priority_mode",
         "bess_forecast_reserve_policy", "bess_terminal_soc_policy", "bess_operating_range_profile",
         "diagnostic_stop_after_day_ahead", "stage1_sparse_charge_window_support"}
+    keys.add("stage2_search_policy")
     require(all(design.get(key) == declared.get(key) for key in keys), "Frozen design controls drift")
     expected = {key: declared[value] for key, value in mapping.items()}
+    expected["stage2_gurobi_presolve"] = declared.get("stage2_search_policy", {}).get("Presolve", 0)
     require({key: config.get(key) for key in expected} == expected, "Input solver controls drift")
     require(config.get("stage1_gurobi_search_profile") == declared["stage1_gurobi_search_profile"],
             "Input Stage1 profile drift")

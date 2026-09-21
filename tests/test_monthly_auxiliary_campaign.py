@@ -21,6 +21,7 @@ def config(d):
     return dict(phase=d['phase'], time_limit_sec=d['day_ahead_wall_time_limit_sec'],
         stage1_time_limit_sec=d['stage1_time_limit_sec'], stage2_time_limit_sec=d['stage2_time_limit_sec'],
         random_seed=d['seed'], gurobi_threads=d['threads'], mip_gap=d['mip_gap'],
+        stage2_gurobi_presolve=d['stage2_search_policy']['Presolve'],
         stage1_gurobi_search_profile=d['stage1_gurobi_search_profile'], allow_postsolve_repair=False)
 
 
@@ -36,6 +37,17 @@ def test_all_months_enabled_with_fresh_prepare_and_full_rolling():
     assert 'バス充電を優先' in bess_condition_text(d)
     assert deployment_paths({'deployment':'auxiliary'})[0] == Path('output/monthly_auxiliary_20260921')
     assert verify_solver_controls(config(d),d,d)['gurobi_threads'] == 4
+
+
+def test_new_presolve_campaign_is_explicit_and_old_profile_is_rejected():
+    d=json.loads((Path(__file__).resolve().parents[1]/
+        'config/shibu21_23_monthly_auxiliary_presolve_20260921.json').read_text(encoding='utf-8'))
+    assert d['evaluation_weeks']==design()['evaluation_weeks']
+    assert d['stage2_search_policy']['Presolve']==2 and d['stage2_native_log_enabled'] is True
+    assert verify_solver_controls(config(d),d,d)['stage2_gurobi_presolve']==2
+    stale=config(d);stale['stage2_gurobi_presolve']=0
+    with pytest.raises(ValueError,match='Input solver controls drift'):
+        verify_solver_controls(stale,d,d)
 
 
 @pytest.mark.parametrize('field,value', [('stage1_time_limit_sec',120),('threads',12),

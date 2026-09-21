@@ -26,7 +26,10 @@ DEPLOYMENT_RELATIVE = Path("output/monthly_fair_weeks_20260914")
 
 def deployment_paths(config: dict) -> tuple[Path, str, str]:
     version = config.get("deployment", "budget")
-    require(version in {"budget", "search", "phase_search", "cyclic", "reserve", "auxiliary"}, "Unknown observer deployment")
+    require(version in {"budget", "search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve"}, "Unknown observer deployment")
+    if version == "auxiliary_presolve":
+        return (Path("output/monthly_auxiliary_presolve_20260921"),
+                "SHIBU21_23_MONTHLY_AUXILIARY_PRESOLVE_RESULTS_20260921", "shibu21_23_monthly_auxiliary_presolve_20260921")
     if version == "auxiliary":
         return (Path("output/monthly_auxiliary_20260921"),
                 "SHIBU21_23_MONTHLY_AUXILIARY_RESULTS_20260921", "shibu21_23_monthly_auxiliary_20260921")
@@ -229,7 +232,7 @@ class Observer:
     def publish(self, *, complete: bool) -> None:
         arguments = ["--campaign", str(self.campaign), "--audit", str(self.audit),
                      "--output", str(self.report)]
-        if self.config.get("deployment") in {"search", "phase_search", "cyclic", "reserve", "auxiliary"}:
+        if self.config.get("deployment") in {"search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve"}:
             arguments.extend(["--figure-name", Path(self.config["figure_stem"]).name])
         if not complete:
             arguments.append("--partial")
@@ -240,7 +243,7 @@ class Observer:
     def step(self) -> bool:
         self.check_helpers()
         progress = read_json(self.campaign / "progress.json")
-        if self.config.get("deployment") in {"reserve", "auxiliary"} and progress["status"] == "STOPPED_AFTER_FAILED_CASE":
+        if self.config.get("deployment") in {"reserve", "auxiliary", "auxiliary_presolve"} and progress["status"] == "STOPPED_AFTER_FAILED_CASE":
             self.publish_stopped(progress)
             raise ValueError("Campaign stopped: STOPPED_AFTER_FAILED_CASE (partial status recorded)")
         completed = validate_progress(progress, self.config)
@@ -300,12 +303,19 @@ class Observer:
         audit = read_json(self.audit)
         require(audit["expected_sha"] == self.config["source_git_sha"], "Wrong independent audit SHA")
         require(set(audit["weeks"]) <= set(completed), "Audit contains an uncompleted week")
+        failed_cases = []
         for week in completed:
             case = self.campaign / "cases" / week / "diagnostic" / week
             summary_path = case / "summary.json"
             if not summary_path.exists():
                 # Prepare can fail before any solve artifact exists. The case
                 # summary/progress remains the failure source, never a pass.
+                outer_path = self.campaign / "cases" / week / "summary.json"
+                if outer_path.exists():
+                    outer = read_json(outer_path)
+                    failed_cases.append({"week": week, "status": outer.get("status"),
+                        "reasons": outer.get("reasons") or [outer.get("error", "Prepare failed")],
+                        "source_path": str(outer_path), "source_sha256": sha256(outer_path)})
                 continue
             summary = read_json(summary_path)
             if summary["status"] == "DIAGNOSTIC_EXECUTION_PASSED":
@@ -313,6 +323,10 @@ class Observer:
                     self.run_python(self.config["audit_script"], "--week", week, "--audit-output", str(self.audit))
                     audit = read_json(self.audit)
                 continue
+            failed_cases.append({"week": week, "status": summary["status"],
+                "reasons": summary.get("day_ahead_reasons") or summary.get("hourly_reasons")
+                    or summary.get("reasons") or [],
+                "source_path": str(summary_path), "source_sha256": sha256(summary_path)})
             audit["weeks"][week] = {
                 "status": summary["status"], "audit_status": "FAILED_CASE_DIAGNOSTIC_ONLY",
                 "failure": True, "fully_audited": False,
@@ -328,6 +342,7 @@ class Observer:
             "status": progress["status"], "independently_audited_weeks": passed,
             "campaign_progress_sha256": sha256(self.campaign / "progress.json"),
             "audit_sha256": sha256(self.audit), "email_sent": False,
+            "failed_cases": failed_cases,
         })
 
     def prepare_delivery(self) -> None:
@@ -436,8 +451,11 @@ def main() -> int:
                 time.sleep(config.get("poll_seconds", 60))
         except Exception as error:
             observer.checkpoint("NEEDS_ATTENTION", error=str(error), error_type=type(error).__name__)
+            stopped_path = observer.output / "stopped_campaign.json"
+            stopped = read_json(stopped_path) if stopped_path.exists() else {}
             write_json(observer.output / "failure.json", {"failed_at_utc": now(),
-                       "error_type": type(error).__name__, "error": str(error)})
+                       "error_type": type(error).__name__, "error": str(error),
+                       "failed_cases": stopped.get("failed_cases", [])})
             try:
                 observer.queue_once("failure")
             except Exception as dispatch_error:

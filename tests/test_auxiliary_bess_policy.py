@@ -166,7 +166,8 @@ def test_adaptive_rolling_reserve_does_not_require_fixed_bess_discharge():
         model.dispose()
 
 
-def test_fixed_stage2_and_execution_agree_for_two_day_charging():
+@pytest.mark.parametrize('presolve', [0, 2])
+def test_fixed_stage2_and_execution_agree_for_two_day_charging(tmp_path, presolve):
     pytest.importorskip('gurobipy')
     from scripts.benchmarks.run_daily_assignment_reference import build_example,assignment_plan
     from src.optimization.engine import OptimizationEngine
@@ -174,11 +175,15 @@ def test_fixed_stage2_and_execution_agree_for_two_day_charging():
     from src.optimization.validation.physical_event_schedule import validate_physical_event_schedule
     problem=build_example(extra_pv_kwh=20)
     storage=replace(problem.depot_energy_assets['DEPOT'],bess_priority_mode='pv_self_consumption')
-    problem=replace(problem,depot_energy_assets={'DEPOT':storage})
+    problem=replace(problem,depot_energy_assets={'DEPOT':storage},
+        metadata={**problem.metadata,'stage2_native_log_enabled':True,'phase3_diagnostics_dir':str(tmp_path)})
     result=OptimizationEngine().solve(problem,OptimizationConfig(mode=OptimizationMode.MILP,
         phase='phase1_charging_only',fixed_assignment=assignment_plan(problem,('bev-0','bev-0')),
-        time_limit_sec=20,stage2_time_limit_sec=15,mip_gap=0,gurobi_threads=1,allow_postsolve_repair=False))
+        time_limit_sec=20,stage2_time_limit_sec=15,mip_gap=0,gurobi_threads=1,allow_postsolve_repair=False,
+        stage2_gurobi_presolve=presolve))
     assert result.feasible,result.infeasibility_reasons
+    native_log=Path(result.plan.metadata['stage2_native_log_path'])
+    assert native_log.is_file() and 'Solution count' in native_log.read_text(encoding='utf-8')
     physical=validate_physical_event_schedule(problem=problem,serialized_result=ResultSerializer.serialize_plan(result.plan))
     assert physical['accepted'],physical['violations']
     _,executed,audit=execute_pv_prefix(problem,result,

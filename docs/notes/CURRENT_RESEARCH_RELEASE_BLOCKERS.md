@@ -1,5 +1,10 @@
 # Current research release blockers
 
+2026-09-21: a4b9c679の全月計算は1月day-aheadで停止、成功0/12。
+同一配車/同一MPSのPresolve2は充電gap0・物理VALIDを通過したが、週間の完走ではない。
+全月共通の新探索設定で再実行する。Stage1メモリ停止/gap3.728%・週間統合最適性・独立承認は未解決。
+[今回の修正と範囲](MONTHLY_AUXILIARY_PRESOLVE_RECOVERY_20260921.md)。以下は旧時点の記録。
+
 2026-09-21 17:59 JST: 補助BESSの全12週再実行を固定 `a4b9c679` で開始。
 起動時は1月新規Prepare・0/12。1%目標と物理/会計/監査の完了は別ゲートであり、研究採用BLOCKEDを維持する。
 [今回の状態・条件](MONTHLY_AUXILIARY_EXECUTION_20260921.md)。以下は開始前・旧版の記録。

@@ -105,6 +105,7 @@ def solve_week(
         time_limit_sec=design['day_ahead_wall_time_limit_sec'],
         stage1_time_limit_sec=design['stage1_time_limit_sec'], stage2_time_limit_sec=design['stage2_time_limit_sec'],
         mip_gap=design['mip_gap'], gurobi_threads=design['threads'], random_seed=design['seed'],
+        stage2_gurobi_presolve=design.get('stage2_search_policy', {}).get('Presolve', 0),
         stage1_gurobi_search_profile=design.get('stage1_gurobi_search_profile', 'default'),
         rolling_execution_minutes=design['execution_minutes'],
         research_run=False, allow_postsolve_repair=False, stage1_best_obj_stop_enabled=False)
@@ -112,6 +113,7 @@ def solve_week(
     problem = replace(problem, metadata={**problem.metadata,
         'stage1_daily_path_cover_bound': bool(design.get('stage1_daily_path_cover_bound', False)),
         'stage1_native_log_enabled': bool(design.get('stage1_native_log_enabled', False)),
+        'stage2_native_log_enabled': bool(design.get('stage2_native_log_enabled', False)),
         'stage1_sparse_charge_window_support': bool(design.get('stage1_sparse_charge_window_support', False)),
         'stage1_seed_cost_diagnostic_enabled': bool(design.get('stage1_seed_cost_diagnostic_enabled', False)),
         'phase3_diagnostics_dir':str(output/'day_ahead_failure_diagnostics'),

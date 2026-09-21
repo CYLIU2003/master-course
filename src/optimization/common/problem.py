@@ -436,6 +436,9 @@ class OptimizationConfig:
     stage1_gurobi_feasibility_tol: float = 1.0e-6
     stage2_gurobi_feasibility_tol: float = 1.0e-9
     stage2_gurobi_integrality_tol: float = 1.0e-9
+    # Explicit search control; retain the legacy no-presolve default. Auxiliary
+    # MIN rules can require presolve, with independent physical checks retained.
+    stage2_gurobi_presolve: int = 0
     # Phase 3 may retain several distinct Stage 1 assignments and run the
     # fixed-assignment Stage 2 dispatch for each one.  The selected plan is the
     # feasible candidate with the lowest canonical evaluated cost; this remains
