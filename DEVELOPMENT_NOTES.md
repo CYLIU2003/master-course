@@ -1,5 +1,14 @@
 # Development Notes
 
+## 2026-09-21 BESS 2条件の完了監査：緩和効果と未完了探索を分離
+
+- 固定3dcdbffd、16:30 JST終了。33原本SHAとraw入力47件、固定版前後clean、新規Preparedの共通部分、native設定、seed配車保存前後を照合。4案（両profileのseed/最終）の独立物理を再実行し、BESS各672区間・費用再評価・燃料イベントによるCO₂を検算。最大BESS残差5.47e−10kWh、会計差1e−6円以内。
+- 20–80%の予測総費用4,147,020.022836円、10–90%は4,147,615.574125円。同条件seedからは各10,078.199184円/9,482.647895円減。206車両日・使用費412万円・買電0は共通。最終在庫1200/600kWh、PV抑制11,269.598677/11,913.784170kWh。在庫取り崩しをPV効果や継続週節約としない。
+- 20–80%最終案を変更せず10–90%へ適用し、物理・BESS・費用を再検査して同費用の実行可能な証拠を保存。原本の10–90%結果は置換しない。観測595.551289円増を範囲緩和の因果効果とする説明を防止。PV/在庫の同費用解が一意でないことも明記。
+- Stage1は1486.05/1235.27秒memory_limit、gap3.545197/3.559047%、最大18.012102/18.012092GB。設定1800秒に対しnative実効上限1800/1709.634902秒を確認（構築後の共通wall残量による短縮）。根LP終了410.40/417.25秒とOPTIMAL MIPNODE nullを分けて保存。Stage2は4案ともgap0%。
+- 証拠と読取りscript: `output/bess_range_sensitivity_20260921/review.json`、`native_control_review.json`、`baseline_in_expanded_witness.json`。本監査は求解なし。固定コード・原本・ユーザー編集中PPTは変更しない。全12週・メール・追加監視なし。
+- [実測・発表説明](docs/notes/BESS_RANGE_SENSITIVITY_20260921.md)。範囲拡大を全月改善設定として採用しない。既定の小規模総費用基準解と毎日帰庫統合モデルの検証へ戻す。1%・週間統合最適性・実機範囲確認・独立研究レビューは未達。研究BLOCKED。
+
 ## 2026-09-21 BESS運転範囲の緩和を同条件で比較
 
 - 15:06 JST、clean固定3dcdbffd72826d82470edb21d07862f1ec0320cc、codex/bess-range-sensitivity-20260921でpaired script開始。47入力SHA・親11参照・case3参照を検証、固定版13 tests通過。起動RUNNING、baseline新規Prepare、stderr空。launcher参照のファイル名不一致を事前検査で検出し、求解開始前にcontrol scriptだけ修正済み。制御先output/bess_range_sensitivity_20260921。通常script、終了時1回のみ既存タスク通知。実規模効果未確定。
