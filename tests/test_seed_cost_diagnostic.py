@@ -114,6 +114,23 @@ def test_disabled_seed_diagnostic_creates_no_files(tmp_path):
     assert not list(tmp_path.iterdir())
 
 
+def test_native_failure_diagnostics_preserve_seed_without_enabling_cost_experiment(tmp_path):
+    import hashlib
+    problem = daily_problem()
+    seed = _fixed_plan(problem)
+    problem = replace(problem, baseline_plan=seed, metadata={**problem.metadata,
+        'stage1_native_log_enabled': True, 'stage1_seed_cost_diagnostic_enabled': False,
+        'phase3_diagnostics_dir': str(tmp_path)})
+    write_stage1_seed_snapshot(problem, OptimizationConfig(), applied=True,
+        source='baseline', rejection_reason='')
+    snapshot = json.loads((tmp_path/'stage1_supplied_seed.json').read_text(encoding='utf-8'))
+    expected = ResultSerializer.serialize_plan(seed)
+    assert snapshot['plan'] == expected
+    assert snapshot['plan_sha256'] == hashlib.sha256(json.dumps(expected, sort_keys=True,
+        ensure_ascii=False, allow_nan=False).encode('utf-8')).hexdigest()
+    assert problem.metadata['stage1_seed_cost_diagnostic_enabled'] is False
+
+
 def test_rejected_seed_keeps_its_reason_and_does_not_invent_a_baseline_cost(tmp_path):
     problem = daily_problem()
     problem = replace(problem, metadata={**problem.metadata,

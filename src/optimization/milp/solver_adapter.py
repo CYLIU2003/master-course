@@ -15,7 +15,7 @@ from typing import Any, Callable, Collection, Dict, Iterable, Iterator, List, Li
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.dispatch.daily_return import checked_deadhead_minutes, connection_deadhead_minutes, requires_daily_return
-from src.optimization.common.vehicle_timeline import build_vehicle_timeline, fixed_path_slot_loads
+from src.optimization.common.vehicle_timeline import build_vehicle_timeline, connection_energy_events, fixed_path_slot_loads
 from src.dispatch.route_band import duty_route_band_ids, fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
@@ -43,7 +43,7 @@ from src.optimization.milp.charging_window_support import ChargingWindowSupportE
 from src.optimization.milp.charging_session_relaxation import add_session_time_relaxation
 from src.optimization.milp.depot_connection_factors import (
     ArcDomain, SuccessorRow, FactoredConnectionVariables,
-    add_factor_soc_terms, create_factor_variables, factor_depot_connections,
+    add_factor_soc_terms, connection_windows, create_factor_variables, factor_depot_connections,
 )
 from src.optimization.common.weather_strategy import weather_assignment_objective_bias
 from src.route_code_utils import extract_route_series_from_candidates
@@ -29159,6 +29159,7 @@ class GurobiMILPAdapter:
         stage1_charge_power_var: Dict[Tuple[str, int], Any] = {}
         stage1_charge_on_var: Dict[Tuple[str, int], Any] = {}
         session_constraint_count = 0
+        daily_timeline = bool(getattr(problem.dispatch_context, "daily_return_depot_id", ""))
         sparse_windows = problem.metadata.get("stage1_sparse_charge_window_support") is True
         window_support_audit = {
             "representation": "endpoint_events" if sparse_windows else "dense_slots",
@@ -29247,6 +29248,8 @@ class GurobiMILPAdapter:
                     departure_slot = self._slot_index(
                         problem, trip.departure_min
                     )
+                    if daily_timeline:
+                        departure_slot = slot_index_ceil(problem, trip.departure_min) - 1
                     startup_energy_kwh = max(
                         float(startup_precheck.startup_deadhead_energy_kwh),
                         0.0,
@@ -29268,10 +29271,14 @@ class GurobiMILPAdapter:
                 if not return_exists:
                     continue
                 day_idx = self._trip_day_index(problem, trip.departure_min)
+                terminal_return_min = (
+                    self._trip_service_arrival_min(problem, trip)
+                    + int(return_deadhead_min)
+                    + (self._turnaround_min(problem, trip.destination) if daily_timeline else 0)
+                )
                 return_slot = slot_index_ceil(
                     problem,
-                    self._trip_service_arrival_min(problem, trip)
-                    + int(return_deadhead_min),
+                    terminal_return_min,
                 )
                 return_transition_slot = _transition_slot_ending_at_event(
                     slot_indices,
@@ -29286,6 +29293,11 @@ class GurobiMILPAdapter:
                     load_terms_by_slot[return_transition_slot].append(
                         return_energy_kwh * end_var
                     )
+                if daily_timeline:
+                    # After the last selected trip, the bus stays home for
+                    # the rest of the horizon, including wholly idle days.
+                    add_charge_windows((slot for slot in slot_indices if slot >= return_slot), end_var)
+                    continue
                 return_charge_slots = self._collect_post_return_target_slots(
                     problem,
                     trip=trip,
@@ -29315,55 +29327,25 @@ class GurobiMILPAdapter:
                 next_trip = trip_by_id.get(to_trip_id)
                 if arc_var is None or previous_trip is None or next_trip is None:
                     continue
-                deadhead_min = self._connection_deadhead_min(
-                    problem, previous_trip, next_trip
+                if daily_timeline:
+                    for event_end, energy in connection_energy_events(problem, vehicle, previous_trip, next_trip):
+                        posting = slot_index_ceil(problem, event_end) - 1
+                        if energy > 0:
+                            terms = load_terms_by_slot[posting] if posting in valid_slots else terminal_load_terms
+                            terms.append(energy * arc_var)
+                else:
+                    departure_slot = self._slot_index(problem, next_trip.departure_min)
+                    energy = self._deadhead_energy_kwh(problem, vehicle, from_trip_id, to_trip_id)
+                    if departure_slot in valid_slots:
+                        load_terms_by_slot[departure_slot].append(energy * arc_var)
+                    elif energy > 0.0:
+                        terminal_load_terms.append(energy * arc_var)
+                windows = connection_windows(
+                    self, problem, vehicle, previous_trip, next_trip,
                 )
-                departure_slot = self._slot_index(
-                    problem, next_trip.departure_min
-                )
-                deadhead_energy_kwh = self._deadhead_energy_kwh(
-                    problem,
-                    vehicle,
-                    from_trip_id,
-                    to_trip_id,
-                )
-                if departure_slot in valid_slots:
-                    load_terms_by_slot[departure_slot].append(
-                        deadhead_energy_kwh * arc_var
-                    )
-                elif deadhead_energy_kwh > 0.0:
-                    terminal_load_terms.append(deadhead_energy_kwh * arc_var)
-                residence_interval = self._home_depot_residence_interval(
-                    problem,
-                    vehicle,
-                    previous_trip,
-                    next_trip,
-                    deadhead_min=deadhead_min,
-                )
-                if residence_interval is None:
+                if windows is None:
                     continue
-                residence_slots = set(
-                    self._slot_indices_for_interval(
-                        problem,
-                        residence_interval[0],
-                        residence_interval[1],
-                    )
-                )
-                if deadhead_min > 0:
-                    deadhead_interval = self._connection_deadhead_interval(
-                        problem,
-                        vehicle,
-                        previous_trip,
-                        next_trip,
-                        deadhead_min=deadhead_min,
-                    )
-                    residence_slots.difference_update(
-                        self._slot_indices_for_interval(
-                            problem,
-                            deadhead_interval[0],
-                            deadhead_interval[1],
-                        )
-                    )
+                residence_slots = set(range(*windows[1]))
                 add_charge_windows(residence_slots.intersection(valid_slots), arc_var)
 
             if support_events is not None:

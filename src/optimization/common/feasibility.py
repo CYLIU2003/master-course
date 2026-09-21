@@ -70,6 +70,21 @@ class FeasibilityChecker:
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
     ) -> FeasibilityReport:
+        if (
+            plan.metadata.get("stage1_has_feasible_incumbent") is False
+            and plan.metadata.get("stage2_solver_status") == "not_run"
+        ):
+            return FeasibilityReport(
+                feasible=False,
+                errors=(
+                    "[STAGE1_NO_INCUMBENT] Dispatch optimization returned "
+                    f"{plan.metadata.get('stage1_solver_status', 'no feasible solution')}; "
+                    "Stage 2 charging was not run. Inspect the saved Stage 1 diagnostics; "
+                    "absence of an incumbent does not establish infeasibility.",
+                ),
+                metrics={"stage1_has_feasible_incumbent": False,
+                         "stage2_feasible": False, "physical_trajectory_available": False},
+            )
         if plan.metadata.get("stage2_feasible") is False:
             # A failed charging solve has no physical trajectory to replay.
             # In Phase 1 the supplied reference can contain a complete old

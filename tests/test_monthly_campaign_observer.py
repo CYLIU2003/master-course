@@ -89,6 +89,13 @@ def test_release_deployments_have_separate_binding_and_artifacts():
     assert all(left != right for left, right in zip(old, new))
 
 
+def test_daily_timeline_release_has_separate_artifacts_from_failed_session_run():
+    old = watcher.deployment_paths({"deployment": "auxiliary_session"})
+    new = watcher.deployment_paths({"deployment": "auxiliary_timeline"})
+    assert all(left != right for left, right in zip(old, new))
+    assert new[0] == Path("output/monthly_auxiliary_timeline_20260922")
+
+
 def test_cyclic_deployment_does_not_reuse_any_old_delivery_paths():
     cyclic = watcher.deployment_paths({"deployment": "cyclic"})
     for version in ("budget", "search", "phase_search"):

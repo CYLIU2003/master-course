@@ -201,11 +201,9 @@ def test_complete_home_and_away_groups_preserve_domain_coefficients_and_windows(
                 )
                 canonical_slots = set(adapter._slot_indices_for_interval(problem, *residence))
                 assert canonical_slots & valid_slots == set(range(*envelope)) & valid_slots
-                if duration > 0:
-                    travel = adapter._connection_deadhead_interval(
-                        problem, vehicle, origin, target, deadhead_min=duration
-                    )
-                    canonical_slots.difference_update(adapter._slot_indices_for_interval(problem, *travel))
+                # Only complete stationary home slots, with return and
+                # outbound travel already excluded by the residence endpoints.
+                canonical_slots = set(range((residence[0] + 29)//30, residence[1]//30))
                 assert prefix | tail == canonical_slots & valid_slots
                 assert adapter._deadhead_energy_kwh(problem, vehicle, origin_id, target_id) == pytest.approx(
                     factor.target_energy_kwh[target_index]
@@ -213,6 +211,11 @@ def test_complete_home_and_away_groups_preserve_domain_coefficients_and_windows(
                 assert adapter._deadhead_fuel_l(problem, vehicle, origin_id, target_id) == pytest.approx(
                     factor.target_fuel_l[target_index]
                 )
+                assert factor.origin_soc_energy_kwh[origin_index] == pytest.approx(3.0)
+                assert factor.origin_soc_posting_slots[origin_index] == (origin.arrival_min + 10 + 29)//30 - 1
+                outbound_minutes = 0 if target.origin == "depot" else 15
+                assert factor.target_soc_energy_kwh[target_index] == pytest.approx(outbound_minutes * .3)
+                assert factor.target_soc_posting_slots[target_index] == (target.departure_min + 29)//30 - 1
 
 
 def test_home_policy_mismatch_keeps_all_arcs_explicit() -> None:

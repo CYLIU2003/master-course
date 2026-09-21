@@ -1,5 +1,8 @@
 # Current research release blockers
 
+2026-09-22: 固定e5ad8b3bは4月事前検証通過後、1月Stage1のtime_limit・解0件で全月停止（0/12、Stage2未実行）。帰庫時間・電力計上の不整合を修正し、188 testsと既存物理通過充電量の26台受入れを確認。新しい全体求解・週間実行・独立レビュー・統合最適性は未確認。研究採用BLOCKED。[今回の復旧](MONTHLY_AUXILIARY_TIMELINE_20260922.md)。
+
+
 2026-09-21: 818e78d0は1・2月監査済み、3月152/168時間で停止。前時間のnative制約誤差が次初期SOCへ持ち越された。前日2/毎時0の数値設定を別診断で検証し、ゲート通過後のみ新固定全12週を実行する。SOC補正・許容差緩和・旧成功2週の流用は行わない。[数値再現と修正](MONTHLY_AUXILIARY_ROLLING_NUMERICS_20260921.md)。既存の統合最適性/Stage1/研究承認blockerは継続。
 
 2026-09-21 19:03 JST: 27253fa8はPrepare後、内部seedチェックのログ設定矛盾により本Stage1前に停止。成功0/12、物理/会計の新規成果なし。原因を修正し同条件の新固定版へ移行する。Stage1 gap/メモリ、週間統合最適性、独立承認の既存blockerは継続。[今回の修正](MONTHLY_AUXILIARY_LOGGING_RECOVERY_20260921.md)。
