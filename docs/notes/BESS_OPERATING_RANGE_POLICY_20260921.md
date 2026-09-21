@@ -144,3 +144,12 @@ venv launcher50600。制御先 `output/bess_operating_range_20260921_launchfix`�
 事前存在確認を加え、実行コードを変更せず再起動した。旧制御先
 `output/bess_operating_range_20260921/failure_resolution.json` は
 `RESOLVED_NEW_LAUNCH_STARTUP_VERIFIED`。旧completionの遅延通知では再診断・メールを行わない。
+
+## NoRel診断の開始記録
+
+2026-09-21 11:02 JST、clean固定 `48ffb3745156ea4c692046f5a17dcdf62669942c`、
+branch `codex/bess-norel-20260921` から開始。固定版23 tests通過（4.39秒）。
+入力47ファイルのSHA、親scenario11参照の移設、case source3参照とBESS/NoRel設定を確認した。
+実runner PID31904、venv launcher5092。制御先 `output/bess_norel_20260921`、
+確認記録 `startup_verification.json`。出力は新worktreeの
+`output/bess_norel_diagnosis_20260921`。起動時RUNNING、通常処理はscript、終了時だけ既存タスクへ通知。

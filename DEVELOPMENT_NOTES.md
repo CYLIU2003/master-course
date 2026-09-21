@@ -2,6 +2,8 @@
 
 ## 2026-09-21 BESSの運転範囲のみの診断結果とNoRel候補
 
+- 11:02 JST、clean固定48ffb3745156ea4c692046f5a17dcdf62669942cで新規5月NoRel診断を開始。実runner31904／venv launcher5092。固定版23 tests、入力47 SHA・移設11参照、case source3参照とBESS/NoRel設定を確認。制御先output/bess_norel_20260921、終了時のみ既存タスクへ1回queue。
+
 - 固定534aba0bは10:55 JSTに完了。completion/summary/5原本SHA・clean・nativeを照合。物理VALID、Prepared設備値でBESS672区間の収支/境界/出力/モードを検査し違反0・収支残差0。原本output/bess_operating_range_20260921_launchfix/review.json。
 - BESS初期3,000→最終1,238.847113 kWh、取り崩し1,761.152887、損失1,686.680512 kWh。予測PV31,515.09125、直接3,434.769518、PV→BESS16,396.131979、BESS→bus16,470.604354、抑制11,684.189753、買電0 kWh。実行rollingではない。
 - Stage1目的値4,157,098.222019495円・初期解改善0、native下界0/gap100%、認証下界400万円/gap3.77904%。600.568秒、根LP524,253反復で未完了、最大12.599GB。Stage2充電目的値0/gap0%、総費用4,157,027.3387472522円とは別。
