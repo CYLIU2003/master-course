@@ -1,6 +1,6 @@
 # master-course
 
-2026-09-21 18:57 JST 修正版の全12週を開始: 計算固定 `27253fa8`、Stage2 Presolve2を全月・毎時に適用。第一時間の再計画と実測4区間も通過。起動直後の正常な入力候補作成を監視が失敗扱いする問題を制御側で修正し、計算を再起動せず接続します（監視35 tests通過）。[記録](docs/notes/MONTHLY_AUXILIARY_PRESOLVE_RECOVERY_20260921.md)。
+2026-09-21 18:57 JST 修正版の全12週を開始: 計算固定 `27253fa8`、Stage2 Presolve2を全月・毎時に適用。第一時間の再計画と実測4区間も通過。起動直後の正常な入力候補作成を監視が失敗扱いする問題を制御側で修正（監視35 tests通過）。19:00 JSTに計算PID49988・監視PID32576の生存と固定版の無変更を確認。1月準備中・完了0/12、通常処理はスクリプトのみ。[記録](docs/notes/MONTHLY_AUXILIARY_PRESOLVE_RECOVERY_20260921.md)。
 
 2026-09-21 充電計画の停止対応: 旧a4b9c679は1月Stage2の120秒no-incumbentで停止（成功0/12）。同じ配車・同じMPSで前処理だけを有効にすると59.64秒・充電gap0%・独立物理VALIDを確認しました。BESSルールを保持し、全月共通の新設定へ修正。関連143 tests通過。[原因・証拠・新しい実行先](docs/notes/MONTHLY_AUXILIARY_PRESOLVE_RECOVERY_20260921.md)。以下の起動記録は停止した旧版です。
 

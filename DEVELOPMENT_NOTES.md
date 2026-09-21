@@ -4,6 +4,8 @@
 
 固定 `27253fa8` を18:57 JSTに新規起動。47入力hash・11 metadata参照の再配置を検証し、旧結果を流用しない。新固定版の第一時間はPresolve2/Method0/15秒枠でgap0、実測4区間のBESS式・状態引継ぎが通過。監視preflightは正常なBUILDING_SOURCE_CANDIDATEを拒否したため、制御側のみで許可状態へ追加し、完了週0の条件を追加した。監視35 tests通過。solver PID49988を再起動せず初回binding前のhelper hashを更新。固定計算コードは変更しない。
 
+19:00 JSTの起動確認は計算49988・監視32576とも生存、1月PREPARING_WEEK・完了0/12、旧/新固定版clean。制御側修正はe3100dfc、計算固定は27253fa8。`output/monthly_auxiliary_presolve_20260921/startup_verification.json` にPID生成時刻・config/input hashを保存。旧failure/dispatchは保全し、旧制御先の`script_observer/failure_handling.json`に原因診断と新版への移行を記録。メール未送信、以後の通常監視はスクリプトのみ。
+
 ## 2026-09-21 月別1月Stage2 no-incumbentを同一MPSで診断
 
 - 旧a4b9c679はPrepare通過後、Stage1 memory_limit/gap3.728%、Stage2 time_limit/候補0で停止。成功0/12、rolling0。監査コマンド実行前なのでcommands.log未作成。原本/失敗queueは保全、メールなし。

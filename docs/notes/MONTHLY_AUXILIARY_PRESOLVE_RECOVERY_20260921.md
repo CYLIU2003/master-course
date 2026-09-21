@@ -74,3 +74,10 @@ Stage1のメモリ/gap、週間統合最適性、独立研究承認は未解決�
 第一時間の新固定版診断はPresolve2/Method0/gap0、4区間の実測実行と状態引継ぎが通過。
 この追加修正は監視35 tests通過。計算の固定 `27253fa871fa62e9ce62ec1b85fea1bba8b5e302` と
 制御側observerの版/hashを別々に記録し、研究条件を変えない。
+
+19:00 JSTの最終起動確認: solver PID49988（18:57:39開始）、observer PID32576（18:59:45開始）、
+ともに生存。1月PREPARING_WEEK・完了0/12。新固定版と旧a4b9c679のcleanを確認。
+監視修正はe3100dfc、solver固定は27253fa8。47原本と11参照を再照合した。
+`output/monthly_auxiliary_presolve_20260921/startup_verification.json` を起動証拠とする。
+旧 `script_observer/failure_handling.json` に元failure/dispatch hashと今回の移行先を保存。
+通常計算・監視はローカルスクリプトだけで継続し、完了メールはまだ送っていない。
