@@ -2,6 +2,8 @@
 
 ## 2026-09-21 crossover省略の結果と初期配車費用の証拠追加
 
+- 13:13 JST、clean固定d6fe5b3171ce3f2250e9084de6198a1ad41358d9、codex/barrier-budget-seed-cost-20260921で新規Prepare開始。固定版seed13 tests、入力47 SHA・親11参照・case3参照と全条件を照合。実runner31444/venv launcher35836、開始確認RUNNING・stderr空。制御先output/barrier_budget_seed_cost_20260921/startup_verification.json。通常script・終了時1回の既存タスク通知。旧固定版への変更なし。
+
 - 固定19fe856dのcompletion/summary/5原本SHAとclean、独立物理、Prepared設備でBESS672区間を確認。Method2/NodeMethod2/Crossover0、crossover基底生成なし、native根LP終了186.25秒。MIPNODE記録はnullのまま、root探索後に600.48秒time_limit。最大16.124100GB、Stage1改善0円・native/認証gap3.779036%。
 - 予測総費用4157027.338747円、BESS3000→1238.847113kWh・取り崩し1761.152887、買電0、PV抑制11684.189753。前回と同額で費用改善はない。原本output/barrier_no_crossover_20260921/review.json。
 - 根LPのnative終了行をcallbackと別に保存。Stage1へ入力したseedを既存準備後/探索前に保存し、主計画終了後の同条件固定Stage2で予測総費用を比較するopt-in診断を追加。Stage1モデル・既存profile・物理領域は不変。最初のincumbentや実績費用とは区別する。

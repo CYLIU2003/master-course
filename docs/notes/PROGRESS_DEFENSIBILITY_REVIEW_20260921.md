@@ -174,9 +174,18 @@ callbackから時刻を捏造せず、native logの根LP終了行を別の証拠
 今回追加した根LP証拠とseed評価を含め、関連93 tests通過。
 native Phase3で保存したseedを固定Stage2へ渡す往復、改ざん拒否、配車不変、
 物理・gap未達時の費用比較拒否、機能無効時の無副作用を検証した。
-最初の試験用ICE-only例はStage2不要のため比較が正しく拒否された。
-次に充電を含む例で通過を確認した。検査を弱めて通過させていない。
 コード自己レビュー完了、独立研究レビューPENDING。研究採用BLOCKEDを維持する。
+
+### 1800秒診断の開始
+
+2026-09-21 13:13 JST、clean固定 `d6fe5b3171ce3f2250e9084de6198a1ad41358d9`、
+branch `codex/barrier-budget-seed-cost-20260921` で新規Prepareを開始した。
+入力47原本SHA・親scenario11参照・case source3参照と全条件を確認。
+固定版のseed診断13 testsも通過した。実runner PID31444、venv launcher35836、
+開始確認時はRUNNING・stderr空。制御先は `output/barrier_budget_seed_cost_20260921`、
+実行出力は新worktreeの `output/barrier_budget_seed_cost_diagnosis_20260921`。
+通常はscriptだけが処理し、終了時に既存タスクへ1回通知する。
+この開始記録から費用改善や1%達成を推定しない。
 
 前回19fe856dを固定する際には関連71 testsを通過。含む項目はAPIから実効native設定までの小規模実求解、
 日別下界、診断失敗理由、BESS方針、日別路線検査、gap/費用表示の混同防止。
