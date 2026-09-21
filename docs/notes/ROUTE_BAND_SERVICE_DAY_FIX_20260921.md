@@ -81,3 +81,11 @@ BESSと探索設定を確認。実runner PID33728、venv launcher7232、起動�
 制御先 `output/route_band_service_day_20260921` の `startup_verification.json` に記録した。
 出力は新worktreeの `output/route_band_service_day_diagnosis_20260921`。
 通常処理はscript、終了時だけ既存タスクへqueue。診断の完了・最適性達成はまだ確認していない。
+
+## 11:59 JSTの完了確認
+
+固定e79476d9は新規求解でも日別路線検査と独立physicalを通過した。
+BESS672区間収支も通過、3000→1200kWh・買電0。Stage1目的値差132.52円は確認できたが、
+初期解の固定Stage2総費用が未保存のため、実総費用の改善額としては未確認。
+gap3.775968%・根LP未完了・最大23.718GBで品質課題は継続する。
+[結果と次のbarrier限定診断](ENDPOINT_BARRIER_DIAGNOSIS_20260921.md)。

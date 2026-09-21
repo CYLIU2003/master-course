@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-21 日別路線検査の新規通過と端点barrier診断
+
+- e79476d9は11:59 JSTにDIAGNOSIS_COMPLETE。completion/summary/5原本SHAとcleanを照合。physical違反0、Prepared設備値でBESS672区間残差2.595e-10kWh・境界/出力/モード違反0。原本output/route_band_service_day_20260921/review.json。
+- BESS3000→1200kWh、買電0、PV抑制11725.568511kWh。Stage1初期解差132.516318円は目的値差であり、初期解の固定Stage2総費用未保存のため実総費用改善は未確認。最終予測総費用4156638.428392円、native/認証gap3.775968%、根LP476447反復で未完了、最大23.717924GB。
+- 既存bounded_presolve_barrier（Method2/NoRelWork0）を端点表現・4threadsで診断する新設定。数理モデル/solverコード、BESS追加予備・復元なし、完全網、料金、600/120秒、soft18GB、gap1%を維持。設定差分確認と関連36 tests通過。旧dense/12thread版との単独効果比較にはしない。[詳細](docs/notes/ENDPOINT_BARRIER_DIAGNOSIS_20260921.md)。独立承認PENDING、研究採用BLOCKED。
+
 ## 2026-09-21 NoRel候補の日別路線検査と失敗理由を修正
 
 - 11:38 JST、clean固定e79476d93131803a26d4e1a0ed1cb2092b740700から新規Prepareを開始。固定版焦点16 tests、入力47 SHA・移設11参照、case source3参照と全BESS/探索条件を確認。実runner33728／venv launcher7232、RUNNING、stderr空。制御先output/route_band_service_day_20260921、startup_verification.json。通常はscript、終了時のみ既存タスクへ1回通知。
