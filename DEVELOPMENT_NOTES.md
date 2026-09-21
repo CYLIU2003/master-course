@@ -1,5 +1,8 @@
 # Development Notes
 
+2026-09-22 起動確認: clean固定 `4b1cbbb7` で一度きりの検証スクリプトを起動。制御PID23684、入力47ファイル/hashと実モデル0x006d6a65の一致を確認済み。現時点は局所実経路の検証段階で、全月は未開始0/12。局所引継ぎ・連続42時間・gap/数値品質・独立物理/BESSが通過した場合だけ全12週を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、完了メール未送信。記録: `output/monthly_auxiliary_quality_20260922/gate_startup_verification.json`。
+
+
 2026-09-22: hour155の可行候補がgap71.0609%のため事前連続検証を停止した。毎時120秒のままMIPFocus1→2で同一MPSの下界が改善し、gap0.97394%を確認。費用削減ではない。OptimizationConfigから実Stage2、前日/毎時の選択、元metadata監査まで接続し、候補のnative gapと目的値/下界による再計算gapの両方を実行前に検査する。未達時はhour・元status・理由を保存し、prefix/次状態/受理数を進めない。関連188 tests通過、自己レビューでP0/P1残件なし。独立レビューと新規全週の物理/会計は未完了。[詳細](docs/notes/MONTHLY_AUXILIARY_STAGE2_QUALITY_20260922.md)。
 
 
