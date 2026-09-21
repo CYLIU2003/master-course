@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-21 Solcast学習履歴の日次取得
+
+- 当日の初回確認で月次マニフェストと原本SHAから29/36か月を再検証し、最初の不足月2023年6月だけを取得。現ユーザーDPAPI認証を子プロセス環境へ渡し、親環境と他の認証を保持した。キーは表示・保存していない。
+- `scripts/weather/acquire_solcast_history.py` の既存経路で1リクエスト、2,880件取得。地点35.63514694444444/139.6462427777778、PT15M、同じ7項目の有限値・月内連続性・request/raw SHAを確認。既存29か月の原本hashは不変。
+- 合計30/36か月・87,552件。残り2023年7〜12月。statusのlast_check/取得済み月/通知記録と `solcast_heartbeat_20260921.json` を更新。利用枠残量は未取得、契約変更なし。全36か月未完了のため新学習モデルは生成しない。
+- 既存2024年学習・凍結済み月別比較・実行中の固定コード・完了メールへ変更なし。追加監視・エージェントは起動していない。
+
 ## 2026-09-21 日別路線検査の新規通過と端点barrier診断
 
 - 12:07 JST、clean固定8cd06d3f75979422cc7198aee45460153094149cで5月の新規Prepareを開始。固定版barrier2 tests、入力47 SHA・移設11参照、case source3参照と条件を照合。実runner52024／venv launcher43468、RUNNING・stderr空。制御先output/endpoint_barrier_20260921/startup_verification.json。終了時だけ既存タスクへ1回通知。
