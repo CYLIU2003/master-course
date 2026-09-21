@@ -119,6 +119,10 @@ def apply_seasonal_bess_policy(asset: dict, *, design: dict | None = None) -> di
         bess_terminal_soc_target_ratio=target_kwh / capacity_kwh,
         bess_terminal_soc_target_percent=target_kwh / capacity_kwh * 100.0,
     )
+    if design and "bess_priority_mode" in design:
+        configured["bess_priority_mode"] = design["bess_priority_mode"]
+    if configured.get("bess_priority_mode") == "pv_self_consumption":
+        configured["allow_grid_to_bess"] = False
     return configured
 
 

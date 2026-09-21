@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 from src.optimization.common.problem import CanonicalOptimizationProblem, OptimizationConfig
 from src.optimization.common.bess_reserve_policy import bess_reserve_policy, bess_reserve_targets
 from src.optimization.milp.bess_planning_reserve import add_bess_planning_reserve_constraints
+from src.optimization.common.bess_dispatch_policy import uses_auxiliary_bess
 
 
 POLICY = "committed_prefix_no_unobserved_pv_credit_v1"
@@ -72,7 +73,11 @@ def add_pv_execution_reserve_constraints(
         "bess_reserve_policy": bess_reserve_policy(problem),
         "protected_floor_kwh_by_depot": {},
         "evaluation_terminal_target_kwh_by_depot": {},
+        "adaptive_bess_depot_ids": [],
     }
+    if (any(asset.bess_enabled and uses_auxiliary_bess(asset) for asset in problem.depot_energy_assets.values())
+            and bess_reserve_policy(problem) != "physical_floor_only"):
+        raise ValueError("Auxiliary BESS cannot use a forecast inventory reserve")
     planning = add_bess_planning_reserve_constraints(
         model, problem, slot_indices, execution_minutes=config.rolling_execution_minutes,
         bess_soc_start_var=bess_soc_start_var or {},
@@ -90,7 +95,10 @@ def add_pv_execution_reserve_constraints(
     duration = problem.scenario.timestep_min / 60.0
     hard_import = problem.metadata.get("enable_contract_overage_penalty") is not True
     for depot_id, asset in problem.depot_energy_assets.items():
-        if asset.bess_enabled:
+        adaptive = uses_auxiliary_bess(asset)
+        if adaptive:
+            audit["adaptive_bess_depot_ids"].append(depot_id)
+        if asset.bess_enabled and not adaptive:
             remaining_energy = float(asset.bess_initial_soc_kwh)
             lower = float(asset.bess_soc_min_kwh)
             audit["initial_bess_soc_kwh_by_depot"][depot_id] = remaining_energy
@@ -115,6 +123,7 @@ def add_pv_execution_reserve_constraints(
                 key = (depot_id, slot)
                 model.addConstr(
                     grid_to_bus_var[key] + pv_to_bus_var[key] + grid_to_bess_var[key]
+                    + (bess_to_bus_var[key] if adaptive else 0.0)
                     <= limit_kw * duration,
                     name=f"pv_execution_hard_import__{depot_id}__{slot}",
                 )

@@ -38,6 +38,7 @@ from src.optimization.common.bev_terminal_policy import (
 )
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.milp.pv_execution_reserve import add_pv_execution_reserve_constraints
+from src.optimization.milp.auxiliary_bess import add_auxiliary_bess_constraints
 from src.optimization.milp.charging_window_support import ChargingWindowSupportEvents
 from src.optimization.milp.depot_connection_factors import (
     ArcDomain, SuccessorRow, FactoredConnectionVariables,
@@ -9801,6 +9802,11 @@ class GurobiMILPAdapter:
                         bess_terminal_soc_deviation_var[depot_id] = dev_var
                         model.addConstr(dev_var >= final_soc_expr - terminal_soc_target)
                         model.addConstr(dev_var >= terminal_soc_target - final_soc_expr)
+
+            for depot_id, asset in depot_energy_assets.items():
+                add_auxiliary_bess_constraints(model, asset, slot_indices, duration_hours=timestep_h,
+                    grid_bus=g2bus_var, pv_bus=pv2bus_var, bess_bus=bess2bus_var,
+                    pv_charge=pv2bess_var, grid_charge=g2bess_var, soc_start=bess_soc_var)
 
             if w_on_depot_var:
                 w_on_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
@@ -23039,6 +23045,10 @@ class GurobiMILPAdapter:
                                 boundary_key = (depot_id,boundary_slot)
                                 stage2.addConstr(bess_soc_var[boundary_key] + eta_ch*(pv2bess_var[boundary_key]+g2bess_var[boundary_key])
                                                  - bess2bus_var[boundary_key]/eta_dis == daily_target)
+        for depot_id, asset in depot_energy_assets.items():
+            add_auxiliary_bess_constraints(stage2, asset, slot_indices, duration_hours=timestep_h,
+                grid_bus=g2bus_var, pv_bus=pv2bus_var, bess_bus=bess2bus_var,
+                pv_charge=pv2bess_var, grid_charge=g2bess_var, soc_start=bess_soc_var)
         pv_execution_reserve_audit = add_pv_execution_reserve_constraints(
             stage2, problem, config, slot_indices,
             is_remaining_day_reoptimization=is_remaining_day_reoptimization,
@@ -26906,6 +26916,11 @@ class GurobiMILPAdapter:
 
         recourse_input_payload = {
             "bess_planning_reserve": planning_reserve,
+            "bess_dispatch_policy_by_depot": {
+                depot_id: {"priority_mode": asset.bess_priority_mode,
+                           "auxiliary_rule_relaxed_in_stage1": asset.bess_priority_mode == "pv_self_consumption"}
+                for depot_id, asset in assets_by_depot.items()
+            },
             "timestep_min": int(problem.scenario.timestep_min),
             "slot_indices": list(slot_indices),
             "price_yen_per_kwh_by_slot": {

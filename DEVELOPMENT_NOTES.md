@@ -1,5 +1,14 @@
 # Development Notes
 
+## 2026-09-21 BESSをPV優先の補助制御へ
+
+- ユーザーがBESSを本題とせず、範囲内で利用・上下限で待機・PVのバス充電後の余剰で再充電する方針を指定。既存pv_self_consumption modeに明示的な制御を実装。他modeは従来通り。
+- common/bess_dispatch_policy.pyの現時点制御とmilp/auxiliary_bess.pyのmin制約を追加。Stage2/統合充電へ求解前から反映し、固定バス充電に対して予測PVと実PVが同じ場合の配分を揃えた。Stage1連続recourseでは規則を緩和し、その意味をmetadataへ保存する。
+- 実行prefixはPV→バス優先、残需要へ残量/出力以内のBESS、余剰PV→BESS、残りは買電/抑制。以前のBESS指令が現在残量に合わないだけで全体を停止しない。bus充電要求は保持。新policyをdepot別auditに保存。
+- 新modeの固定指令向けprefix予備は外し、硬い系統上限についてはBESSが使えない場合も含む需要側バックアップを検査。追加在庫保護・終端復元は導入しない。Prepare/事前検査でmodeと予備/復元の整合を確認する。
+- 関連222 tests通過（新規12）。境界・再充電・出力/設備方向・買電上限・nativeモデル・2日間48区間の計画/実行一致と独立物理を確認。旧mode回帰も通過。自己レビューの未修正P0/P1なし、独立承認PENDING。
+- 新config/shibu21_23_auxiliary_bess_20260921.jsonは5月のみ、execution_enabled=false。ルール化はBESS自由運用とは別の数理条件で、費用/gap/メモリ改善未評価。固定実験版・原本・PPTを保全。実規模・全月・メール・追加監視なし。[説明](docs/notes/BESS_AUXILIARY_POLICY_20260921.md)。
+
 ## 2026-09-21 BESS 2条件の完了監査：緩和効果と未完了探索を分離
 
 - 固定3dcdbffd、16:30 JST終了。33原本SHAとraw入力47件、固定版前後clean、新規Preparedの共通部分、native設定、seed配車保存前後を照合。4案（両profileのseed/最終）の独立物理を再実行し、BESS各672区間・費用再評価・燃料イベントによるCO₂を検算。最大BESS残差5.47e−10kWh、会計差1e−6円以内。

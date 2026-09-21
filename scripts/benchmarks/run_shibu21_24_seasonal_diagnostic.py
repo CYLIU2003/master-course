@@ -28,6 +28,7 @@ from scripts.benchmarks.run_shibu21_seasonal_diagnostic import solve_week, write
 from scripts.benchmarks.monthly_week_contract import validate_balanced_week
 from scripts.benchmarks.seasonal_design_contract import require_execution_enabled, seasonal_bess_controls, seasonal_bess_range
 from src.optimization.common.bess_terminal_policy import resolve_bess_terminal_soc_target_kwh
+from src.optimization.common.bess_dispatch_policy import validate_auxiliary_bess
 from src.optimization.common.date_series import content_hash
 from src.optimization.common.soc_helpers import (
     effective_final_soc_target_kwh,
@@ -78,6 +79,10 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
     minimum_percent, maximum_percent = seasonal_bess_range(design)
     expected_floor_ratio = minimum_percent / 100.0
     for depot_id, asset in (problem.depot_energy_assets or {}).items():
+        if "bess_priority_mode" in design:
+            if asset.bess_priority_mode != design["bess_priority_mode"]:
+                raise ValueError(f"BESS {depot_id} priority mode differs from the declared evaluation")
+            validate_auxiliary_bess(asset)
         if not asset.bess_enabled:
             continue
         capacity = float(asset.bess_energy_kwh or 0.0)
@@ -117,6 +122,7 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
             "terminal_soc_floor_kwh": float(asset.bess_terminal_soc_min_kwh),
             "terminal_soc_policy": str(asset.bess_terminal_soc_policy),
             "terminal_soc_target_kwh": target,
+            "priority_mode": getattr(asset, "bess_priority_mode", "cost_driven"),
         }
     return {
         "status": "DECLARED_TERMINAL_CONTROLS_VERIFIED",

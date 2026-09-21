@@ -1,9 +1,10 @@
 """Replay issued charging commands against PV observed in the current slot.
 
 This controller is distinct from optimization and post-solve repair. It leaves
-bus charging and scheduled BESS discharge/grid charge unchanged. PV serves the
-remaining bus demand, then the issued PV-to-BESS command; other PV is curtailed.
-Grid supply covers the remaining bus demand under the configured import rule.
+bus charging unchanged. Legacy assets retain their issued BESS commands.
+The explicit pv_self_consumption policy uses PV for buses first, clips BESS
+discharge to available inventory and fills storage only from surplus PV.
+Grid supply covers remaining bus demand under the configured import rule.
 No future observation is accepted by the single-slot control interface.
 """
 
@@ -15,6 +16,9 @@ from typing import Mapping
 
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem, DepotEnergyAsset, OptimizationEngineResult,
+)
+from src.optimization.common.bess_dispatch_policy import (
+    PV_BUS_FIRST_POLICY, auxiliary_bess_flows, uses_auxiliary_bess,
 )
 
 
@@ -79,6 +83,15 @@ def execute_energy_slot(
     if timestep_minutes <= 0:
         raise ValueError("Execution timestep must be positive")
     duration = timestep_minutes / 60.0
+    if uses_auxiliary_bess(asset):
+        # The issued bus charging is fixed; BESS is a predeclared adaptive
+        # auxiliary controller, not an irrevocable discharge/charge command.
+        flows = auxiliary_bess_flows(asset, demand_kwh=command.bus_demand_kwh,
+            pv_kwh=pv, soc_kwh=soc, duration_hours=duration)
+        overage = max(flows["grid_to_bus_kwh"]-limit_kw*duration, 0.0) if limit_kw > 0 else 0.0
+        if overage > TOLERANCE_KWH and not allow_contract_overage:
+            raise ValueError("Actual PV shortfall exceeds the hard grid import limit")
+        return ExecutedEnergySlot(**flows, contract_over_limit_kwh=overage)
     discharge = command.bess_to_bus_kwh
     grid_charge = command.grid_to_bess_kwh
     pv_command = command.pv_to_bess_kwh
@@ -205,7 +218,10 @@ def execute_pv_prefix(
             profile[slot] = float(actual)
         assets[depot] = replace(asset, pv_generation_kwh_by_slot=tuple(profile),
                                 available_pv_surplus_kwh_by_slot=tuple(profile))
-    audit = {"policy": POLICY, "start_slot": start_slot, "stop_slot": stop_slot,
+    policies = {depot: PV_BUS_FIRST_POLICY if uses_auxiliary_bess(asset) else POLICY
+                for depot, asset in assets.items()}
+    policy = next(iter(set(policies.values()))) if len(set(policies.values())) == 1 else "per_depot_policy"
+    audit = {"policy": policy, "policy_by_depot": policies, "start_slot": start_slot, "stop_slot": stop_slot,
              "bus_charging_commands_unchanged": True, "rows": rows,
              "future_observations_used": False,
              "provenance": "depot_slot_controller_replay_of_historical_estimated_actuals"}
@@ -242,7 +258,7 @@ def execute_pv_prefix(
                             **{f"{name}_kwh_by_depot_slot": values for name, values in maps.items()})
     realized = replace(result, plan=realized_plan,
                        solver_metadata={**dict(result.solver_metadata), **{
-                           "pv_execution_policy": POLICY, "vehicle_source_provenance_exact": False,
+                           "pv_execution_policy": policy, "vehicle_source_provenance_exact": False,
                            "vehicle_source_allocation_policy": "depot_flow_proportional_inference",
                            "cost_breakdown_basis": "original_forecast_solve_not_execution_ledger"}})
     return replace(problem, depot_energy_assets=assets), realized, audit

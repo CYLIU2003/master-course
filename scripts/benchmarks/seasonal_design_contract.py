@@ -52,6 +52,11 @@ def seasonal_bess_controls(design: dict | None = None) -> dict:
         raise ValueError("Unsupported seasonal BESS forecast reserve policy")
     if reserve != "physical_floor_only" and (policy != "return_to_initial" or rolling != "scenario"):
         raise ValueError("BESS forecast reserve requires the retained evaluation return_to_initial target")
+    priority = source.get("bess_priority_mode", "cost_driven")
+    if priority not in ("cost_driven", "pv_self_consumption", "peak_shaving"):
+        raise ValueError("Unsupported seasonal BESS priority mode")
+    if priority == "pv_self_consumption" and (reserve != "physical_floor_only" or policy != "minimum_only"):
+        raise ValueError("Auxiliary BESS requires minimum_only/physical_floor_only")
     return controls
 
 
