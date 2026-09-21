@@ -46,6 +46,18 @@ BESSの実行不可能性、前処理設定の失敗、求解時間不足を表�
 通常処理はスクリプト、全12週の独立監査と図表確認後に承認済み宛先へ1通送信する。
 失敗は元理由を保存して既存タスクへ一度だけ通知する。
 
+実行固定 `818e78d05021e0cdf1a62b637c03b1dbfc9a604a`、19:11 JSTに開始。
+19:12の一度の起動確認で計算PID44076・監視PID35696とも生存、1月PREPARING_WEEK・完了0/12。
+47原本hash/11参照、新旧固定版clean、旧solverの停止を照合した。
+証拠: 今回の `startup_verification.json`、`budget_rerun_launch.json`、`script_observer/state.json`。
+旧 `script_observer/failure_handling.json` に元failure/dispatch hashと新版への移行先を保存。
+旧原本は変更せず、完了メールも送っていない。
+
+起動前に同じ1月保存入力で内部nativeスクリーンを1件だけ実行し、0.483秒でinfeasibleを
+返すことを確認した。これは個別候補の不成立を正常に判定できた証拠であり、その候補・
+初期案全体・新週間計画の物理通過ではない。`saved_seed_screen.json` に別診断として保存し、
+新規12週の結果へ流用しない。
+
 ## 自己レビュー
 
 Codex、2026-09-21。対象のログ設定矛盾P1を修正、修正前失敗/修正後通過を確認。
