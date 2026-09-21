@@ -1,5 +1,10 @@
 # 月別12週のスクリプト実行と完了メール
 
+## 2026-09-22 数値安定性修正版
+
+旧timeline固定c022ece7は1月hour126でStage2不成立、完了0/12で停止。旧failure/queueは保持しメールは送らない。新制御先 `output/monthly_auxiliary_numeric_20260922/` の `preflight_state.json` を先に確認する。[原因と手順](MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。新clean固定版で42時間の連続状態引継ぎと独立物理検証を通過した場合だけ、新規Prepareから全12週を開始する。通常処理はスクリプト、失敗通知は既存タスクへ一度。全12週の監査・最終実図確認・receiptとGmail重複確認が完了した場合だけ既承認宛先へ1通送る。
+
+
 ## 2026-09-22 帰庫タイムライン整合の修正版
 
 固定e5ad8b3bは4月preflight通過後、1月Stage1解なしで停止。旧session failure/queueを保持しメールは送らない。新制御先 `output/monthly_auxiliary_timeline_20260922/` の `preflight_state.json` を先に確認する。[今回の手順](MONTHLY_AUXILIARY_TIMELINE_20260922.md)。1月・4月の物理/Stage2/BESS/seed検査通過後だけ全12週を新規開始。全12週監査・図表・今回のreceipt/Gmail重複確認が完了した場合だけ既承認宛先へ1通送信する。

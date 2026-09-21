@@ -96,6 +96,13 @@ def test_daily_timeline_release_has_separate_artifacts_from_failed_session_run()
     assert new[0] == Path("output/monthly_auxiliary_timeline_20260922")
 
 
+def test_numeric_release_keeps_failed_timeline_artifacts_separate():
+    old = watcher.deployment_paths({"deployment": "auxiliary_timeline"})
+    new = watcher.deployment_paths({"deployment": "auxiliary_numeric"})
+    assert all(a != b for a, b in zip(old, new))
+    assert new[0] == Path("output/monthly_auxiliary_numeric_20260922")
+
+
 def test_cyclic_deployment_does_not_reuse_any_old_delivery_paths():
     cyclic = watcher.deployment_paths({"deployment": "cyclic"})
     for version in ("budget", "search", "phase_search"):

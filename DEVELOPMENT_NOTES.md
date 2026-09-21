@@ -1,5 +1,8 @@
 # Development Notes
 
+2026-09-22 NumericFocusによる1月hour126数値的不成立対策: 失敗nativeとfingerprint一致の全MPSで旧設定はINFEASIBLE、NumericFocus3のみ変更でOPTIMAL/gap0/最大制約違反7.894e-11。phase別宣言・実効metadata・169原本監査を接続し、歴史結果には新規フィールドを強制しない。91 tests通過（native32、設定・監査・observer59）。1kWhの実SOC超過を拒否し、過去4月/3月の回帰も通過。自己レビューP0/P1残件0、独立レビュー未実施。連続42時間と全12週は別ゲートであり、回帰通過を月別完了にしない。[詳細](docs/notes/MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
+
+
 ## 2026-09-22 Stage1の日別帰庫タイムライン整合
 
 帰庫済み時間から回送の合計を再控除するP1と、帰庫消費を次出発まで遅らせてSOC上限で可行案を排除するP1を修正。初回・最終の回送計上、終便後のhome区間、因子分解SOCも整合。Stage1解なしの分類とnative診断時seed原本保存を追加。関連188 tests通過、独立物理通過済みの1月26台の充電量を修正近似へ固定して受入れ確認。独立レビューは未実施。旧計算0/12を保持し、新規1月・4月gateの後だけ全月へ進む。[証拠と数式への影響](docs/notes/MONTHLY_AUXILIARY_TIMELINE_20260922.md)。

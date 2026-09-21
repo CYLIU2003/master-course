@@ -274,6 +274,16 @@ def audit_native_entries(
         for key, value in expected.items():
             if metadata.get(key) != value:
                 reasons.append(key)
+        # Historical frozen outputs have no NumericFocus declaration. New
+        # campaigns must prove the declared value from original metadata,
+        # never infer it from today's defaults or accept a missing record.
+        numeric_controls = {}
+        if "NumericFocus" in presolve_policy or "rolling_NumericFocus" in presolve_policy:
+            focus = presolve_policy.get("NumericFocus", 0)
+            if kind == "hourly":
+                focus = presolve_policy.get("rolling_NumericFocus", focus)
+            require(type(focus) is int and focus in (0, 1, 2, 3), "Invalid declared NumericFocus")
+            numeric_controls = read_search_controls(document, {"stage2_gurobi_numeric_focus": focus})
         if metadata["stage2_has_feasible_incumbent"] is not True:
             reasons.append("stage2_has_feasible_incumbent")
         if document.get("feasible") is not True:
@@ -297,6 +307,7 @@ def audit_native_entries(
             "feasible": document.get("feasible"),
             "quality": quality_data,
             "search_controls": search_controls,
+            "numeric_controls": numeric_controls,
             "search_controls_source": "metadata",
         })
 
@@ -393,6 +404,8 @@ def verify_solver_controls(config: dict, design: dict, declared: dict) -> dict:
     require(all(design.get(key) == declared.get(key) for key in keys), "Frozen design controls drift")
     expected = {key: declared[value] for key, value in mapping.items()}
     expected["stage2_gurobi_presolve"] = declared.get("stage2_search_policy", {}).get("Presolve", 0)
+    if "NumericFocus" in declared.get("stage2_search_policy", {}) or "rolling_NumericFocus" in declared.get("stage2_search_policy", {}):
+        expected["stage2_gurobi_numeric_focus"] = declared["stage2_search_policy"].get("NumericFocus", 0)
     require({key: config.get(key) for key in expected} == expected, "Input solver controls drift")
     require(config.get("stage1_gurobi_search_profile") == declared["stage1_gurobi_search_profile"],
             "Input Stage1 profile drift")

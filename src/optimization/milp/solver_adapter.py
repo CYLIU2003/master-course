@@ -3290,6 +3290,9 @@ def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[s
     presolve = config.stage2_gurobi_presolve
     if isinstance(presolve, bool) or not isinstance(presolve, int) or presolve not in (0, 1, 2):
         raise ValueError("stage2_gurobi_presolve must be an integer in {0, 1, 2}")
+    numeric_focus = config.stage2_gurobi_numeric_focus
+    if type(numeric_focus) is not int or numeric_focus not in (0, 1, 2, 3):
+        raise ValueError("stage2_gurobi_numeric_focus must be an integer in {0, 1, 2, 3}")
     parameters = {
         "FeasibilityTol": _configured_gurobi_feasibility_tol(config, stage=2),
         "IntFeasTol": _configured_gurobi_integrality_tol(config, stage=2),
@@ -3299,6 +3302,10 @@ def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[s
         # campaign explicitly selects it. Never retry or relax physical checks.
         "Aggregate": 0,
         "Presolve": presolve,
+        # January hour126's unchanged native model falsely failed with focus0;
+        # focus3 solved it within the same strict tolerances. Select before
+        # solving, never as a failed-hour retry or a change to SOC bounds.
+        "NumericFocus": numeric_focus,
         # The identical November MPS had no incumbent after 600 s with the
         # automatic method. This uniform search policy passed independent
         # physical replay in 21.32 s without changing the feasible region.
@@ -23382,6 +23389,7 @@ class GurobiMILPAdapter:
                 "stage2_gurobi_integrality_tol": stage2_integrality_tol,
                 "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
                 "stage2_gurobi_presolve": stage2_numerics["Presolve"],
+                "stage2_gurobi_numeric_focus": stage2_numerics["NumericFocus"],
                 "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"],
                 "stage2_gurobi_method": stage2_numerics["Method"],
                 "gurobi_threads": configured_threads,
@@ -23730,6 +23738,7 @@ class GurobiMILPAdapter:
             "stage2_gurobi_integrality_tol": stage2_integrality_tol,
             "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
             "stage2_gurobi_presolve": stage2_numerics["Presolve"],
+            "stage2_gurobi_numeric_focus": stage2_numerics["NumericFocus"],
             "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"],
             "stage2_gurobi_method": stage2_numerics["Method"],
             "gurobi_threads": configured_threads,
