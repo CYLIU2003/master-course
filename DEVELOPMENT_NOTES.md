@@ -2,6 +2,8 @@
 
 ## 2026-09-21 crossover停止対策と進捗発表の証拠整理
 
+- 12:39 JST、clean固定19fe856d4e6e05c57f82d63c12934a088f3f1ebd、codex/barrier-no-crossover-20260921から新規Prepareを開始。固定版2 tests、入力47 SHA・親11参照・case3参照・条件を確認。実runner33168/venv launcher53844、起動時RUNNING・stderr空。制御先output/barrier_no_crossover_20260921/startup_verification.json。通常script、終了時1回のみ通知。実規模の品質・メモリ判定は未完了。
+
 - 固定8cd06d3fのcompletion/summary/5原本SHAとclean、物理/BESS672区間を照合。barrierは36反復で400万円に収束したが、基底生成でmemory_limit。Stage1改善0円・認証gap3.779036%・native gap100%、最大17.663GB。予測総費用4157027.338747円、BESS3000→1238.847113kWh。原本output/endpoint_barrier_20260921/review.json。
 - bounded_presolve_barrier_no_crossoverを追加。Method2/NodeMethod2/Crossover0、実効設定を全Stage1結果経路へ保存。API Literalを追加し、既存profile・目的関数・物理制約は不変。Gurobi公式仕様を確認し、精度/探索速度の限界を明記。
 - 診断summaryで充電目的値と予測総費用、最初のStage1目的値との差と初期固定Stage2費用の欠落、診断終了と品質未達を区別。physical原本/nativeと成功progressの矛盾は停止する。関連71 tests通過。詳細・教員向け回答・未解決P1は[発表前確認](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。

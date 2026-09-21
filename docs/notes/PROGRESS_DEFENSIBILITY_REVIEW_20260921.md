@@ -161,6 +161,17 @@ CIや課金サービスを有効化せず、この変更の全体suiteは未実�
 
 この文書は進捗説明の根拠資料であり、研究採用承認書ではない。
 
+### 新規診断の開始記録
+
+2026-09-21 12:39 JST、clean固定 `19fe856d4e6e05c57f82d63c12934a088f3f1ebd`、
+branch `codex/barrier-no-crossover-20260921` から5月前日計画の新規Prepareを開始。
+入力47原本SHA、親scenario11参照、case source3参照、BESSと全探索条件を照合した。
+固定版で新profileの2 testsも通過。実runner PID33168（venv launcher53844）、
+起動時RUNNING・stderr空。通常処理はscript、終了時だけ既存タスクへ1回通知する。
+制御記録は `output/barrier_no_crossover_20260921/startup_verification.json`。
+出力は新固定worktreeの `output/barrier_no_crossover_diagnosis_20260921`。
+本節の開始確認は、実規模でのメモリ停止解消・gap達成の判定ではない。
+
 
 ### Code Review Summary
 
