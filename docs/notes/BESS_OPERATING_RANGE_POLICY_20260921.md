@@ -153,3 +153,12 @@ branch `codex/bess-norel-20260921` から開始。固定版23 tests通過（4.39
 実runner PID31904、venv launcher5092。制御先 `output/bess_norel_20260921`、
 確認記録 `startup_verification.json`。出力は新worktreeの
 `output/bess_norel_diagnosis_20260921`。起動時RUNNING、通常処理はscript、終了時だけ既存タスクへ通知。
+
+## NoRel終了後の日別路線検査の修正
+
+固定48ffb374は11:23 JST、翌営業日の渋21/渋23変更をDuty全体の混在とする検査不整合で停止。
+保存候補の物理とBESS672区間収支は別の読取り検査で通過した。BESS3,000→1,200 kWh、
+取り崩し1,800 kWh、買電0、PV抑制11,725.568511 kWh。設備20–80%と追加予備・復元なしを維持。
+Stage1初期解との差132.5163円は拒否候補の目的値差で、採用済み費用改善ではない。
+gap3.775968%、根LP未完了、最大24.0967GB。日別route-band検査と元失敗理由の引継ぎを修正し、
+同じ探索条件で新規5月診断を1回行う。[検証と次の条件](ROUTE_BAND_SERVICE_DAY_FIX_20260921.md)。

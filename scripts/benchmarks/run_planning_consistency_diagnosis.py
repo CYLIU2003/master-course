@@ -32,7 +32,13 @@ def run(design_path: Path, output: Path) -> dict:
         cases = campaign.get("summaries", [])
         case_summary = cases[0] if len(cases) == 1 else {}
         diagnostic = case_summary.get("diagnostic_result") or {}
-        reasons = list(diagnostic.get("reasons") or case_summary.get("reasons") or [])
+        phase = case_summary.get("day_ahead") or {}
+        reasons = list(dict.fromkeys(
+            reason for source in (
+                diagnostic.get("reasons"), diagnostic.get("day_ahead_reasons"),
+                case_summary.get("reasons"), phase.get("reasons"),
+            ) for reason in (source or [])
+        ))
         if case_summary.get("error") and not reasons:
             reasons.append(case_summary["error"])
         campaign_outcome = {

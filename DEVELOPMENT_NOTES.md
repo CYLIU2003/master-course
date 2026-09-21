@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-21 NoRel候補の日別路線検査と失敗理由を修正
+
+- 固定48ffb374の元失敗は2DutyのROUTE_BAND。グラフでは営業日をまたぐ路線変更を許すが、canonical検査がDuty全体へ路線固定を要求していた。車両・営業日集計へ揃え、同日混在禁止と全物理検査を維持した。
+- diagnostic.day_ahead_reasons / day_ahead.reasonsの引継ぎ漏れも修正。焦点60件＋周辺74件=134 tests通過。保存候補の独立physical読取りは違反0件。元failureは書き換えず、新規求解の証拠には使わない。
+- Stage1目的値差132.5163円は拒否候補の値。native/認証gap3.775968%、根LP未完了、最大24.0967GB（soft18GB超過）。Stage2の0円は総費用4,156,638.4284円とは別。新clean版・新規Prepare1回で検査修正を確認する。条件・証拠は[詳細](docs/notes/ROUTE_BAND_SERVICE_DAY_FIX_20260921.md)。独立レビューPENDING、研究採用BLOCKED。
+
 ## 2026-09-21 BESSの運転範囲のみの診断結果とNoRel候補
 
 - 11:02 JST、clean固定48ffb3745156ea4c692046f5a17dcdf62669942cで新規5月NoRel診断を開始。実runner31904／venv launcher5092。固定版23 tests、入力47 SHA・移設11参照、case source3参照とBESS/NoRel設定を確認。制御先output/bess_norel_20260921、終了時のみ既存タスクへ1回queue。

@@ -7,9 +7,10 @@ from typing import Any, Dict, List, Mapping
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import ValidationResult, VehicleDuty
 from src.dispatch.route_band import (
-    duty_route_band_ids,
     fragment_transition_diagnostic,
     fragment_transition_is_feasible,
+    trip_route_band_key,
+    trip_service_day_index,
 )
 from src.dispatch.validator import DutyValidator
 
@@ -1328,48 +1329,24 @@ class FeasibilityChecker:
         if not bool((problem.metadata or {}).get("fixed_route_band_mode", False)):
             return []
         errors: List[str] = []
-        duties_by_vehicle = plan.duties_by_vehicle()
         horizon_start_min = self._horizon_start_min(problem)
-        allow_same_day_depot_cycles = bool(
-            getattr(problem.scenario, "allow_same_day_depot_cycles", True)
-            if getattr(problem.scenario, "allow_same_day_depot_cycles", None) is not None
-            else problem.metadata.get("allow_same_day_depot_cycles", True)
-        )
-        for duty in plan.duties:
-            duty_bands = duty_route_band_ids(duty)
-            if len(duty_bands) > 1:
-                errors.append(
-                    f"[ROUTE_BAND] duty={duty.duty_id} spans multiple route bands {list(duty_bands)}"
-                )
-        for vehicle_id, duties in duties_by_vehicle.items():
-            ordered = sorted(
-                duties,
-                key=lambda duty: chronological_duty_key(
-                    duty, horizon_start_min=self._horizon_start_min(problem)
-                ),
-            )
-            for prev_duty, next_duty in zip(ordered, ordered[1:]):
-                prev_band = duty_route_band_ids(prev_duty)
-                next_band = duty_route_band_ids(next_duty)
-                if not prev_band or not next_band or prev_band == next_band:
-                    continue
-                prev_day = day_index_for_minute(
-                    int(prev_duty.legs[0].trip.departure_min),
-                    horizon_start_min,
-                )
-                next_day = day_index_for_minute(
-                    int(next_duty.legs[0].trip.departure_min),
-                    horizon_start_min,
-                )
-                if prev_day != next_day:
-                    continue
-                if allow_same_day_depot_cycles:
+        # Native duties can span dates or be split into fragments. Match the
+        # connection graph's vehicle/service-day rule independently of either
+        # representation; dated trips after 24:00 keep their operating day.
+        for vehicle_id, duties in plan.duties_by_vehicle().items():
+            bands_by_day: Dict[int, set[str]] = {}
+            for duty in duties:
+                for leg in duty.legs:
+                    band = trip_route_band_key(leg.trip)
+                    if band:
+                        day = trip_service_day_index(
+                            leg.trip, horizon_start_min=horizon_start_min
+                        )
+                        bands_by_day.setdefault(day, set()).add(band)
+            for day, bands in sorted(bands_by_day.items()):
+                if len(bands) > 1:
                     errors.append(
-                        f"[ROUTE_BAND] vehicle={vehicle_id} changes route band within day {prev_day} from {list(prev_band)} to {list(next_band)}"
-                    )
-                else:
-                    errors.append(
-                        f"[ROUTE_BAND] vehicle={vehicle_id} changes route band within day {prev_day} from {list(prev_band)} to {list(next_band)} while same-day depot cycles are disabled"
+                        f"[ROUTE_BAND] vehicle={vehicle_id} spans multiple route bands {sorted(bands)} within day {day}"
                     )
         return errors
 

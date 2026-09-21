@@ -208,8 +208,14 @@ def test_recursive_and_cumulative_soc_have_the_same_native_two_day_solution():
     assert results[0].solver_status == results[1].solver_status
 
 
-def test_cross_day_connection_requires_both_return_and_next_startup():
+@pytest.mark.parametrize("change_band", [False, True])
+def test_cross_day_connection_requires_both_return_and_next_startup(change_band):
     problem = daily_problem()
+    if change_band:
+        trips = [replace(trip, route_family_code=band)
+                 for trip, band in zip(problem.dispatch_context.trips, ("渋21", "渋23"))]
+        problem = replace(problem, dispatch_context=replace(
+            problem.dispatch_context, trips=trips, fixed_route_band_mode=True))
     first, second = problem.dispatch_context.trips
     check = FeasibilityEngine().can_connect(first, second, problem.dispatch_context, "BEV")
     assert check.feasible

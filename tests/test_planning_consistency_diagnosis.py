@@ -22,7 +22,7 @@ def test_preflight_failure_keeps_original_reasons_without_reading_missing_progre
                 "solve_attempted": False, "reasons": [reason]}}]})
     with pytest.raises(RuntimeError, match="BLOCKED_CASE_PREFLIGHT"):
         runner.run(config, tmp_path / "run")
-    failure = json.loads((tmp_path / "run/failure.json").read_text())
+    failure = json.loads((tmp_path / "run/failure.json").read_text(encoding="utf-8"))
     assert reason in failure["error"]
     assert "FileNotFoundError" not in failure["error"]
     assert failure["campaign_outcome"]["reasons"] == [reason]
@@ -53,3 +53,23 @@ def test_successful_day_ahead_diagnosis_has_its_own_completion_status(tmp_path, 
     assert summary["status"] == "DIAGNOSIS_COMPLETE" and summary["physical_accepted"]
     assert not summary["monthly_complete"] and not summary["email_sent"]
     assert len(summary["evidence_sha256"]) == 4
+
+
+@pytest.mark.parametrize("diagnostic_reasons,phase_reasons", [
+    (["[ROUTE_BAND] actual solver rejection"], []),
+    ([], ["[ROUTE_BAND] actual solver rejection"]),
+    (["[ROUTE_BAND] actual solver rejection"], ["[ROUTE_BAND] actual solver rejection"]),
+])
+def test_day_ahead_failure_preserves_nested_reasons(tmp_path, monkeypatch,
+                                                  diagnostic_reasons, phase_reasons):
+    config = setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(runner, "run_campaign", lambda *_args, **_kwargs: {
+        "status": "STOPPED_AFTER_FAILED_CASE", "summaries": [{
+            "status": "DAY_AHEAD_FAILED", "diagnostic_result": {
+                "solve_attempted": True, "day_ahead_reasons": diagnostic_reasons},
+            "day_ahead": {"reasons": phase_reasons}}]})
+    with pytest.raises(RuntimeError, match="actual solver rejection"):
+        runner.run(config, tmp_path / "run")
+    failure = json.loads((tmp_path / "run/failure.json").read_text(encoding="utf-8"))
+    assert failure["campaign_outcome"]["reasons"] == ["[ROUTE_BAND] actual solver rejection"]
+    assert failure["campaign_outcome"]["solve_attempted"] is True
