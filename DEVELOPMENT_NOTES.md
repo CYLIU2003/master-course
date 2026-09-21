@@ -71,8 +71,13 @@
 
 ## 2026-09-21 研究目標の再点検と日次帰庫CO₂の計上漏れ修正
 
+<!-- monthly-auxiliary-rolling-launch -->
+固定 `3289f07b` の前日Presolve2/毎時Presolve0による全12週を開始。起動確認UTC 2026-09-21T13:33:23.889786+00:00、計算PID3316、監視PID50460、PREPARING_WEEK・完了0/12。17時間連続と1月/3月の最初の窓の事前検証を通過。旧2週を混ぜず、通常処理はスクリプトのみ。研究採用BLOCKED。記録: `output/monthly_auxiliary_rolling_20260921/startup_verification.json`。
+<!-- /monthly-auxiliary-rolling-launch -->
+
+
 <!-- monthly-auxiliary-logfix-status -->
-最新の月別再実行: 固定 `818e78d0`、独立監査 2/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、Stage2 Presolve2。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_LOGFIX_RESULTS_20260921.md`。
+前回の月別再実行（停止済み）: 固定 `818e78d0`、独立監査 2/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、Stage2 Presolve2。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_LOGFIX_RESULTS_20260921.md`。
 <!-- /monthly-auxiliary-logfix-status -->
 
 
