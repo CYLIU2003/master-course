@@ -2,6 +2,8 @@
 
 ## 2026-09-21 BESS運転範囲の緩和を同条件で比較
 
+- 15:06 JST、clean固定3dcdbffd72826d82470edb21d07862f1ec0320cc、codex/bess-range-sensitivity-20260921でpaired script開始。47入力SHA・親11参照・case3参照を検証、固定版13 tests通過。起動RUNNING、baseline新規Prepare、stderr空。launcher参照のファイル名不一致を事前検査で検出し、求解開始前にcontrol scriptだけ修正済み。制御先output/bess_range_sensitivity_20260921。通常script、終了時1回のみ既存タスク通知。実規模効果未確定。
+
 - 新declared profile expanded_10_90（実機未確認感度分析ラベル必須）を追加。legacy20–80は不変。PrepareのkWh/ratio/percentと実行前検査を揃え、範囲とterminal floorの不一致を拒否。追加予備/復元、効率/出力/収支、運行条件は従来通り。
 - 既存paired runnerへBESSの2条件を追加し、execution_enabled=Falseは副作用前に停止。新設定は両条件4threads/soft18GB/1800-120秒、主wall2400秒、seed120秒/別wall180秒、gap1%。CO₂修正後の共通clean版・新規Prepare・5月のみ逐次診断。旧結果との合成や全月自動開始なし。
 - 関連122 tests通過。native人工2日間の同配車では10kWh追加在庫を使え95円減、物理/gap0%通過。これを実規模削減額と扱わない。直前5月は使用費が99.2814%、固定配車の電力費は約0円なので、緩和による別配車の成立と費用変化を調べる。

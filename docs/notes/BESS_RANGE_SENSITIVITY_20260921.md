@@ -1,5 +1,12 @@
 # BESS運転範囲を緩める比較（2026-09-21）
 
+15:06 JST、clean固定 `3dcdbffd72826d82470edb21d07862f1ec0320cc`、
+branch `codex/bess-range-sensitivity-20260921` からscriptを開始した。
+起動時RUNNING、baseline_20_80の新規Prepare開始を確認。
+入力47 SHA・親11参照・case3参照、実効条件とstderr空を照合し、固定版でも関連13 tests通過。
+制御先 `output/bess_range_sensitivity_20260921/startup_verification.json`。
+比較の費用・精度・物理の実規模結果は未確定。通常処理はscript、終了時のみ既存タスクへ1回通知。
+
 ユーザーの「BESSは多少ゆるくてもよい」に対応し、20–80%に対して10–90%を比較する。
 **10–90%は機器仕様が確認済みの範囲ではなく、明示した感度分析の仮定**。
 追加予備・週末復元なしを保ち、エネルギー保存・効率・出力・充電器・バスSOC・帰庫・全便を守る。

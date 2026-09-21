@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-21 15:06 JST: clean固定3dcdbffdからBESS20–80%対10–90%の5月限定比較をscriptで開始しました。起動時RUNNING・新規Prepare開始、入力hash/参照・共通条件を照合済み。費用改善は結果待ちです。`output/bess_range_sensitivity_20260921/startup_verification.json`。
+
 2026-09-21 BESS緩和: ユーザー指定を受け、20–80%と10–90%を同一条件で比較する5月限定診断を用意しました。追加予備・終端復元なしを保持し、10–90%は実機未確認の感度分析として明記。既存配車の買電費は既に約0円、車両使用費が総額の99.28%なので、配車からの改善を確認します。関連122 tests通過。[比較条件と検証](docs/notes/BESS_RANGE_SENSITIVITY_20260921.md)。
 
 総費用の小規模検査はclean固定dd21fedcでも実行済みです。人工2日間の全4割当を評価し、最小費用の上下界が一致。PVだけを増やす対条件も通過しました。これは検査用の基準値で、週間実規模の最適性証明は引き続き未完了です。証拠は `output/daily_assignment_reference_20260921/audit.json`。
