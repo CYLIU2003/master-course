@@ -1,5 +1,9 @@
 # Development Notes
 
+## 2026-09-21 前処理修正版の起動と監視初期状態
+
+固定 `27253fa8` を18:57 JSTに新規起動。47入力hash・11 metadata参照の再配置を検証し、旧結果を流用しない。新固定版の第一時間はPresolve2/Method0/15秒枠でgap0、実測4区間のBESS式・状態引継ぎが通過。監視preflightは正常なBUILDING_SOURCE_CANDIDATEを拒否したため、制御側のみで許可状態へ追加し、完了週0の条件を追加した。監視35 tests通過。solver PID49988を再起動せず初回binding前のhelper hashを更新。固定計算コードは変更しない。
+
 ## 2026-09-21 月別1月Stage2 no-incumbentを同一MPSで診断
 
 - 旧a4b9c679はPrepare通過後、Stage1 memory_limit/gap3.728%、Stage2 time_limit/候補0で停止。成功0/12、rolling0。監査コマンド実行前なのでcommands.log未作成。原本/失敗queueは保全、メールなし。

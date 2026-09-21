@@ -194,10 +194,12 @@ def validate_progress(progress: dict, config: dict, *, allow_stopped: bool = Fal
     completed = progress["completed_weeks"]
     require(completed == weeks[:len(completed)], "Completed weeks are not a unique declared prefix")
     status = progress["status"]
-    allowed = {"RUNNING_WEEK", "PREPARING_WEEK", "COMPLETED"}
+    allowed = {"BUILDING_SOURCE_CANDIDATE", "RUNNING_WEEK", "PREPARING_WEEK", "COMPLETED"}
     if allow_stopped:
         allowed.add("STOPPED_AFTER_FAILED_CASE")
     require(status in allowed, f"Campaign stopped: {status}")
+    require(status != "BUILDING_SOURCE_CANDIDATE" or not completed,
+            "Source construction cannot contain completed weeks")
     require(status != "COMPLETED" or completed == weeks, "Completion without all twelve weeks")
     return completed
 

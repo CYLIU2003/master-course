@@ -61,8 +61,10 @@ def test_no_model_or_report_calls_for_unchanged_running_case(setup, monkeypatch)
     assert watcher.read_json(observer.output / "state.json")["status"] == "RUNNING"
 
 
-def test_first_week_runs_without_inventing_a_completed_report(setup, monkeypatch):
+@pytest.mark.parametrize('status', ['BUILDING_SOURCE_CANDIDATE', 'PREPARING_WEEK', 'RUNNING_WEEK'])
+def test_first_week_runs_without_inventing_a_completed_report(setup, monkeypatch, status):
     observer, progress = setup
+    progress['status'] = status
     progress["completed_weeks"] = []
     watcher.write_json(observer.campaign / "progress.json", progress)
     watcher.write_json(observer.audit, {"expected_sha": "frozen-sha", "weeks": {}})
@@ -72,6 +74,13 @@ def test_first_week_runs_without_inventing_a_completed_report(setup, monkeypatch
     assert observer.step() is False
     assert not observer.report.with_suffix(".json").exists()
     assert watcher.read_json(observer.output / "state.json")["independently_audited_weeks"] == 0
+
+
+def test_source_construction_rejects_completed_weeks(setup):
+    observer, progress = setup
+    progress['status'] = 'BUILDING_SOURCE_CANDIDATE'
+    with pytest.raises(ValueError, match='Source construction'):
+        watcher.validate_progress(progress, observer.config)
 
 
 def test_release_deployments_have_separate_binding_and_artifacts():
