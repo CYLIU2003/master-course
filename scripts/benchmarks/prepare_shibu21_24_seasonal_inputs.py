@@ -49,7 +49,7 @@ from bff.services.run_preparation import (
 from bff.store import output_paths, scenario_store
 from scripts.audits.audit_shibu24_source import sha256
 from scripts.benchmarks.monthly_week_contract import validate_balanced_week
-from scripts.benchmarks.seasonal_design_contract import seasonal_bess_controls
+from scripts.benchmarks.seasonal_design_contract import seasonal_bess_controls, seasonal_bess_range
 from src.runtime_scope import resolve_scope
 from src.value_normalization import normalize_for_python
 from src.optimization.common.date_series import (
@@ -82,20 +82,22 @@ def apply_seasonal_bess_policy(asset: dict, *, design: dict | None = None) -> di
 
     Capacity, initial SOC, power, efficiency, and price controls come from the
     untouched parent asset. Only the operating bounds and terminal policy are
-    derived here: 20%/80% hard bounds and the declared evaluation-end target.
+    derived here: declared operating bounds and the evaluation-end target.
     Omitted design controls preserve the legacy minimum-only experiment.
     """
     controls = seasonal_bess_controls(design)
+    minimum_percent, maximum_percent = seasonal_bess_range(design)
+    minimum_ratio, maximum_ratio = minimum_percent / 100, maximum_percent / 100
     configured = deepcopy(asset)
     capacity_kwh = float(configured.get("bess_energy_kwh") or 0.0)
     if not math.isfinite(capacity_kwh) or capacity_kwh <= 0.0:
         raise ValueError("Seasonal BESS policy requires a positive bess_energy_kwh")
-    soc_min_kwh = capacity_kwh * BESS_SOC_MIN_RATIO
-    soc_max_kwh = capacity_kwh * BESS_SOC_MAX_RATIO
+    soc_min_kwh = capacity_kwh * minimum_ratio
+    soc_max_kwh = capacity_kwh * maximum_ratio
     initial_soc_kwh = float(configured.get("bess_initial_soc_kwh") or 0.0)
     if not soc_min_kwh <= initial_soc_kwh <= soc_max_kwh:
         raise ValueError(
-            "Parent BESS initial SOC is outside the declared seasonal 20%-80% range"
+            "Parent BESS initial SOC is outside the declared seasonal operating range"
         )
     policy = controls["bess_terminal_soc_policy"]
     target_kwh = initial_soc_kwh if policy == "return_to_initial" else 0.0
@@ -107,13 +109,13 @@ def apply_seasonal_bess_policy(asset: dict, *, design: dict | None = None) -> di
         bess_terminal_soc_policy=policy,
         bess_terminal_soc_target_kwh=target_kwh,
         bess_initial_soc_percent=(initial_soc_kwh / capacity_kwh) * 100.0,
-        bess_soc_min_percent=BESS_SOC_MIN_RATIO * 100.0,
-        bess_soc_max_percent=BESS_SOC_MAX_RATIO * 100.0,
-        bess_terminal_soc_min_percent=BESS_SOC_MIN_RATIO * 100.0,
+        bess_soc_min_percent=minimum_percent,
+        bess_soc_max_percent=maximum_percent,
+        bess_terminal_soc_min_percent=minimum_percent,
         bess_initial_soc_ratio=initial_soc_kwh / capacity_kwh,
-        bess_soc_min_ratio=BESS_SOC_MIN_RATIO,
-        bess_soc_max_ratio=BESS_SOC_MAX_RATIO,
-        bess_terminal_soc_min_ratio=BESS_SOC_MIN_RATIO,
+        bess_soc_min_ratio=minimum_ratio,
+        bess_soc_max_ratio=maximum_ratio,
+        bess_terminal_soc_min_ratio=minimum_ratio,
         bess_terminal_soc_target_ratio=target_kwh / capacity_kwh,
         bess_terminal_soc_target_percent=target_kwh / capacity_kwh * 100.0,
     )

@@ -1,5 +1,9 @@
 # Current research release blockers
 
+2026-09-21追記: ユーザー承認のBESS緩和を20–80%対10–90%の新しい感度分析として実装した。
+10–90%の実機適用範囲は未確認。両条件とも新CO₂式・同じclean版で評価し、条件緩和と探索改善を分ける。
+週間統合最適性と研究採用はBLOCKEDのまま。[比較設計](BESS_RANGE_SENSITIVITY_20260921.md)。
+
 ## 2026-09-21 2threadsでも目標未達、総費用基準解検査へ
 
 固定6aab4424も931.25秒memory_limit、最大18.015GB、gap3.610277%で1%未達。CO₂修正再集計のseed差7278.209797円は予測値で、前回4threads案より2799.989387円高い。2threadsを採用しない。人工2日間の全4割当・固定Stage2上下界・物理・費用照合の検査器を追加したが、週間Phase4対応、修正後実規模求解、実績費用、独立研究承認は未完了。研究BLOCKED。[最新根拠](TWO_THREAD_RESULT_AND_DAILY_REFERENCE_20260921.md)。

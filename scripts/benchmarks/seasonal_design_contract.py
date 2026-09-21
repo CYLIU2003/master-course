@@ -5,14 +5,28 @@ from __future__ import annotations
 import math
 
 
+def seasonal_bess_range(design: dict | None = None) -> tuple[float, float]:
+    """Return a declared operating assumption, never an inferred hardware rating."""
+    source = design or {}
+    profile = source.get('bess_operating_range_profile', 'baseline_20_80')
+    if profile == 'baseline_20_80':
+        return 20.0, 80.0
+    if profile == 'expanded_10_90':
+        if source.get('bess_operating_range_basis') != 'unverified_hardware_sensitivity':
+            raise ValueError('Expanded BESS range requires an explicit unverified hardware sensitivity label')
+        return 10.0, 90.0
+    raise ValueError('Unsupported seasonal BESS operating range profile')
+
+
 def seasonal_bess_controls(design: dict | None = None) -> dict:
     """Resolve supported BESS controls without silently replacing declarations.
 
     Legacy designs keep their 20%-80%, evaluation-period, minimum-only policy.
     An inventory-neutral design must retain the scenario target in rolling.
-    Other operating ranges require a separately reviewed experiment design.
+    Expanded bounds are an explicitly labeled sensitivity assumption.
     """
     source = design or {}
+    minimum, _maximum = seasonal_bess_range(source)
     controls = {
         "bess_balance_period": source.get("bess_balance_period", "evaluation_period"),
         "bess_terminal_soc_policy": source.get("bess_terminal_soc_policy", "minimum_only"),
@@ -23,8 +37,8 @@ def seasonal_bess_controls(design: dict | None = None) -> dict:
     if controls["bess_balance_period"] != "evaluation_period":
         raise ValueError("Seasonal design requires bess_balance_period=evaluation_period")
     floor = controls["bess_terminal_soc_floor_percent"]
-    if not math.isfinite(floor) or floor != 20.0:
-        raise ValueError("Seasonal design supports only the declared 20%-80% BESS range")
+    if not math.isfinite(floor) or floor != minimum:
+        raise ValueError("Seasonal terminal floor must match the declared BESS range minimum")
     policy = controls["bess_terminal_soc_policy"]
     if policy not in ("minimum_only", "return_to_initial"):
         raise ValueError("Seasonal BESS terminal policy must be minimum_only or return_to_initial")

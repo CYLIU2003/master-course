@@ -1,4 +1,4 @@
-"""Sequential fresh diagnostics of two declared Stage 1 root strategies."""
+"""Sequential fresh diagnostics of two explicitly declared conditions."""
 from __future__ import annotations
 
 import argparse
@@ -12,17 +12,32 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from scripts.benchmarks.run_shibu21_24_seasonal_diagnostic import git_state, write_json
+from scripts.benchmarks.seasonal_design_contract import require_execution_enabled
 
 PROFILES = ("bounded_presolve_barrier", "bounded_presolve_norel")
 MEMORY_BOUNDED_PROFILES = ("bounded_presolve_dual", "bounded_presolve_norel")
 SUPPORT_PROFILES = ("dense_slot_support", "sparse_slot_support")
+BESS_RANGE_PROFILES = ("baseline_20_80", "expanded_10_90")
+
+
+def profile_design(design: dict, profiles: tuple, profile: str) -> dict:
+    """Apply one declared treatment without changing the common solve budget."""
+    if profiles == BESS_RANGE_PROFILES:
+        return {**design, 'bess_operating_range_profile':profile,
+            'bess_operating_range_basis':'unverified_hardware_sensitivity',
+            'bess_terminal_soc_floor_percent':10.0 if profile == 'expanded_10_90' else 20.0}
+    if profiles == SUPPORT_PROFILES:
+        return {**design, 'stage1_gurobi_search_profile':'bounded_presolve_dual',
+                'stage1_sparse_charge_window_support':profile == 'sparse_slot_support'}
+    return {**design, 'stage1_gurobi_search_profile':profile}
 
 
 def run(design_path: Path, output: Path) -> dict:
     design = json.loads(design_path.read_text(encoding="utf-8"))
+    require_execution_enabled(design)
     profiles = tuple(design.get("diagnostic_profiles", ()))
-    if profiles not in (PROFILES, MEMORY_BOUNDED_PROFILES, SUPPORT_PROFILES):
-        raise ValueError("Run exactly one supported pair of predeclared root strategies, once each")
+    if profiles not in (PROFILES, MEMORY_BOUNDED_PROFILES, SUPPORT_PROFILES, BESS_RANGE_PROFILES):
+        raise ValueError("Run exactly one supported pair of predeclared conditions, once each")
     before = git_state()
     if not before.get("sha") or before["status_porcelain"]:
         raise RuntimeError("Root-search diagnosis requires a clean frozen commit")
@@ -39,10 +54,7 @@ def run(design_path: Path, output: Path) -> dict:
                 raise RuntimeError("Source state changed between root strategies")
             case = output / profile
             case.mkdir()
-            case_design = {**design, "stage1_gurobi_search_profile": profile}
-            if profiles == SUPPORT_PROFILES:
-                case_design.update(stage1_gurobi_search_profile="bounded_presolve_dual",
-                                   stage1_sparse_charge_window_support=profile == "sparse_slot_support")
+            case_design = profile_design(design, profiles, profile)
             write_json(case / "design.json", case_design)
             state["active_profile"] = profile
             write_json(output / "state.json", state)
@@ -76,6 +88,9 @@ def run(design_path: Path, output: Path) -> dict:
                 "gurobi_threads": summary.get("gurobi_threads"),
                 "charge_window_support": summary.get("charge_window_support"),
                 "stage1_model_size": summary.get("stage1_model_size"),
+                "bess_operating_range_profile": case_design.get("bess_operating_range_profile", "baseline_20_80"),
+                "bess_terminal_soc_floor_percent": case_design.get("bess_terminal_soc_floor_percent", 20.0),
+                "bess_operating_range_basis": case_design.get("bess_operating_range_basis"),
                 "stage1_native_log_path": summary["stage1_native_log_path"]})
             write_json(output / "partial_results.json", results)
         state.update(status="ROOT_SEARCH_DIAGNOSIS_COMPLETE", results=results,

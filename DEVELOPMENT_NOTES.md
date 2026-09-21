@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-21 BESS運転範囲の緩和を同条件で比較
+
+- 新declared profile expanded_10_90（実機未確認感度分析ラベル必須）を追加。legacy20–80は不変。PrepareのkWh/ratio/percentと実行前検査を揃え、範囲とterminal floorの不一致を拒否。追加予備/復元、効率/出力/収支、運行条件は従来通り。
+- 既存paired runnerへBESSの2条件を追加し、execution_enabled=Falseは副作用前に停止。新設定は両条件4threads/soft18GB/1800-120秒、主wall2400秒、seed120秒/別wall180秒、gap1%。CO₂修正後の共通clean版・新規Prepare・5月のみ逐次診断。旧結果との合成や全月自動開始なし。
+- 関連122 tests通過。native人工2日間の同配車では10kWh追加在庫を使え95円減、物理/gap0%通過。これを実規模削減額と扱わない。直前5月は使用費が99.2814%、固定配車の電力費は約0円なので、緩和による別配車の成立と費用変化を調べる。
+- [目的・比較・未達時の判断](docs/notes/BESS_RANGE_SENSITIVITY_20260921.md)。自己レビュー完了、独立承認PENDING。実規模効果は未確認。メール・追加AI監視なし。
+
 ## 2026-09-21 2threads未達の確認と人工2日間の総費用基準解検査
 
 - 新clean固定dd21fedc、codex/daily-assignment-reference-20260921から人工例を逐次実行。PVなし最小総費用U/L≈693.947368円、昼間PV+100kWhのみの例U/L≈200円、全8候補物理/固定Stage2/総費用一致。24証拠SHA・source前後clean・PV以外の入力一致を `output/daily_assignment_reference_20260921/audit.json` で確認。週間実規模の結論には使わない。

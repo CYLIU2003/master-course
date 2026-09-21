@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.benchmarks.run_shibu21_seasonal_diagnostic import solve_week, write_json
 from scripts.benchmarks.monthly_week_contract import validate_balanced_week
-from scripts.benchmarks.seasonal_design_contract import require_execution_enabled, seasonal_bess_controls
+from scripts.benchmarks.seasonal_design_contract import require_execution_enabled, seasonal_bess_controls, seasonal_bess_range
 from src.optimization.common.bess_terminal_policy import resolve_bess_terminal_soc_target_kwh
 from src.optimization.common.date_series import content_hash
 from src.optimization.common.soc_helpers import (
@@ -75,19 +75,20 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
         }
 
     bess_controls = {}
-    expected_floor_ratio = float(design.get("bess_terminal_soc_floor_percent", 20.0)) / 100.0
+    minimum_percent, maximum_percent = seasonal_bess_range(design)
+    expected_floor_ratio = minimum_percent / 100.0
     for depot_id, asset in (problem.depot_energy_assets or {}).items():
         if not asset.bess_enabled:
             continue
         capacity = float(asset.bess_energy_kwh or 0.0)
         expected_min = capacity * expected_floor_ratio
-        expected_max = capacity * (1.0 - expected_floor_ratio)
+        expected_max = capacity * maximum_percent / 100.0
         if abs(float(asset.bess_soc_min_kwh) - expected_min) > 1.0e-6:
-            raise ValueError(f"BESS {depot_id} minimum SOC is not the declared 20% capacity floor")
+            raise ValueError(f"BESS {depot_id} minimum SOC differs from the declared {minimum_percent}% floor")
         if abs(float(asset.bess_soc_max_kwh) - expected_max) > 1.0e-6:
-            raise ValueError(f"BESS {depot_id} maximum SOC is not the declared 80% capacity ceiling")
+            raise ValueError(f"BESS {depot_id} maximum SOC differs from the declared {maximum_percent}% ceiling")
         if abs(float(asset.bess_terminal_soc_min_kwh) - expected_min) > 1.0e-6:
-            raise ValueError(f"BESS {depot_id} terminal floor is not the declared 20% capacity floor")
+            raise ValueError(f"BESS {depot_id} terminal floor differs from the declared {minimum_percent}% floor")
         if str(asset.bess_balance_period) != design["bess_balance_period"]:
             raise ValueError(f"BESS {depot_id} balance period differs from the declared evaluation")
         if str(asset.bess_terminal_soc_policy) != design["bess_terminal_soc_policy"]:
