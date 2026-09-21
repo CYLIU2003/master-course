@@ -52,3 +52,14 @@ PV優先、上下限、効率、エネルギー収支、バス充電量、確定
 物理/会計通過と最適性を分離する。Phase3は週間総費用の統合大域最適の証明ではない。
 各週の初期BESS在庫取り崩しをPV効果や継続週の節約とは扱わない。
 研究採用BLOCKED、DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONSを維持する。
+
+## 起動確認
+
+- 2026-09-21 17:59:26 JST開始。固定SHA `a4b9c679ead3c735a5e759eefb8b9399c0dcb996`。
+- release branch `codex/monthly-auxiliary-20260921`、固定実行先は上記の新worktree。
+- 入力原本47件のSHA一致、親metadata参照11件のみ移設、旧実験出力コピーなし。
+- 固定版で20 tests通過。開始前後のGit cleanを確認。
+- 実campaign PID44384、実observer PID20964。起動時点は1月週 `2025-01-06` の
+  `PREPARING_WEEK`、完了/監査0/12。全12週完了・最適性・メール送信を示すものではない。
+- 配信識別子 `MC2025-a4b9c679`。最新状態と将来の実送信IDは、今回のscript_observerだけを参照する。
+- この記録以降、固定実行コードを変更せず、通常監視はスクリプトへ引き継ぐ。

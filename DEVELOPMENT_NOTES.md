@@ -2,6 +2,8 @@
 
 ## 2026-09-21 修正BESS方針で全12週を新規実行
 
+- 17:59 JSTに固定 `a4b9c679ead3c735a5e759eefb8b9399c0dcb996` を起動。branch `codex/monthly-auxiliary-20260921`、実campaign PID44384・observer PID20964。起動時は1月新規Prepare/0週、開始後も固定版cleanを確認。raw入力47件SHAと親metadata参照11件を照合し、固定版20 tests通過。実行コードは変更しない。原本は `output/monthly_auxiliary_20260921/budget_rerun_launch.json` とstate。
+
 - ユーザーが旧12カ月処理停止・修正版再実行を承認。実プロセス照合では計算/監視ともなし、直近reserveは完了/送信済み。旧成果を保全し、monthly_auxiliaryを新しい固定版で起動する。
 - 5月限定の補助方針を全月共通20–80%で適用。1,800/120/15秒、主wall2,400秒、4threads、1%目標を全月固定。新規Prepare・168時間rolling・確定会計・独立監査を要求する。
 - 旧audit原本は不変。追跡対象のaudit_monthly_executionへ既存検査を保存し、実solver条件を固定設計と照合。補助BESSの独立338原本検査を追加し、reportはそのhashを再検証する。observerに専用allowlist・図・状態/配信IDを追加した。
