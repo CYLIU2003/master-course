@@ -1,5 +1,8 @@
 # Development Notes
 
+2026-09-22 07:13 JST 起動確認: clean固定 `c5c1eff7` で42時間の連続検証を開始。一度きりの制御PID57968、診断実PID56952、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_numeric_20260922/gate_startup_verification.json`。
+
+
 2026-09-22 NumericFocusによる1月hour126数値的不成立対策: 失敗nativeとfingerprint一致の全MPSで旧設定はINFEASIBLE、NumericFocus3のみ変更でOPTIMAL/gap0/最大制約違反7.894e-11。phase別宣言・実効metadata・169原本監査を接続し、歴史結果には新規フィールドを強制しない。91 tests通過（native32、設定・監査・observer59）。1kWhの実SOC超過を拒否し、過去4月/3月の回帰も通過。自己レビューP0/P1残件0、独立レビュー未実施。連続42時間と全12週は別ゲートであり、回帰通過を月別完了にしない。[詳細](docs/notes/MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
 
 

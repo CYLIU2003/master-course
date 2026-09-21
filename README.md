@@ -1,5 +1,8 @@
 # master-course
 
+2026-09-22 07:13 JST 起動確認: clean固定 `c5c1eff7` で42時間の連続検証を開始。一度きりの制御PID57968、診断実PID56952、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_numeric_20260922/gate_startup_verification.json`。
+
+
 2026-09-22 月別失敗の修正: 旧固定c022ece7は1月126時間通過後、127時間目で停止（完了0/12）。同一MPSの旧設定で失敗を再現し、NumericFocus3で解と厳しい数値品質を確認しました。SOC・BESS・運行制約を保持し、毎時の共通設定として実装。関連91 tests通過。clean固定版の42時間連続検証と通過後の新規全12週をスクリプトへ委ねます。全月完了・統合最適性は未確認、研究採用BLOCKED、完了メール未送信。[原因・証拠・実行条件](docs/notes/MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
 
 
