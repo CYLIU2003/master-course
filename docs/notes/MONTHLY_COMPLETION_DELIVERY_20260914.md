@@ -1,5 +1,12 @@
 # 月別12週のスクリプト実行と完了メール
 
+## 2026-09-21 内部seedログ修正版
+
+旧27253fa8は内部seedチェックのログ設定矛盾で本Stage1前に停止。旧failure/queueは保存し、再送しない。
+最新制御先は `output/monthly_auxiliary_logfix_20260921/script_observer/`。
+[今回の修正・実行手順](MONTHLY_AUXILIARY_LOGGING_RECOVERY_20260921.md)と今回のlaunch/config/bundleを照合する。
+研究条件は前版と同じ。今回の全12週の独立監査と図表確認後だけ、今回のreceiptと固有件名のGmail送信済み検索で重複を防ぎ、承認済み宛先へ1通送る。
+
 ## 2026-09-21 Stage2前処理修正版
 
 旧a4b9c679の1月time_limitは原因診断済み。旧failure/queueを保存し、再処理・メールは行わない。

@@ -50,6 +50,18 @@ def test_new_presolve_campaign_is_explicit_and_old_profile_is_rejected():
         verify_solver_controls(stale,d,d)
 
 
+def test_logging_recovery_changes_identity_only_and_keeps_delivery_separate():
+    root=Path(__file__).resolve().parents[1]
+    old=json.loads((root/'config/shibu21_23_monthly_auxiliary_presolve_20260921.json').read_text(encoding='utf-8'))
+    new=json.loads((root/'config/shibu21_23_monthly_auxiliary_logfix_20260921.json').read_text(encoding='utf-8'))
+    assert {key for key in new if old.get(key)!=new[key]} == {
+        'input_manifests_directory','derived_from_design','revision_purpose'}
+    assert verify_solver_controls(config(new),new,new)['stage2_gurobi_presolve']==2
+    paths=deployment_paths({'deployment':'auxiliary_logfix'})
+    for version in ('budget','search','phase_search','cyclic','reserve','auxiliary','auxiliary_presolve'):
+        assert all(left != right for left,right in zip(paths,deployment_paths({'deployment':version})))
+
+
 @pytest.mark.parametrize('field,value', [('stage1_time_limit_sec',120),('threads',12),
     ('mip_gap',.1),('bess_priority_mode','cost_driven'),('diagnostic_stop_after_day_ahead',True)])
 def test_saved_controls_cannot_drift_from_new_frozen_design(field,value):

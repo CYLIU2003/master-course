@@ -1,5 +1,7 @@
 # Current research release blockers
 
+2026-09-21 19:03 JST: 27253fa8はPrepare後、内部seedチェックのログ設定矛盾により本Stage1前に停止。成功0/12、物理/会計の新規成果なし。原因を修正し同条件の新固定版へ移行する。Stage1 gap/メモリ、週間統合最適性、独立承認の既存blockerは継続。[今回の修正](MONTHLY_AUXILIARY_LOGGING_RECOVERY_20260921.md)。
+
 2026-09-21: a4b9c679の全月計算は1月day-aheadで停止、成功0/12。
 同一配車/同一MPSのPresolve2は充電gap0・物理VALIDを通過したが、週間の完走ではない。
 全月共通の新探索設定で再実行する。Stage1メモリ停止/gap3.728%・週間統合最適性・独立承認は未解決。

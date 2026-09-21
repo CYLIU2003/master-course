@@ -1,5 +1,6 @@
 """The finite-fuel seed is a pre-solve candidate, with immutable inputs."""
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -116,19 +117,38 @@ def test_inconclusive_native_screen_retains_unverified_candidate_for_main_milp(m
     assert selected["native_screen_status"] == "global_deadline_exhausted"
 
 
-def test_native_model_validates_the_finite_fuel_seed_with_original_resources():
+@pytest.mark.parametrize('native_logging', [False, True])
+def test_native_model_validates_the_finite_fuel_seed_with_original_resources(tmp_path, monkeypatch, native_logging):
     pytest.importorskip("gurobipy")
     problem = _mixed_problem_with_overdrawn_ice_baseline()
+    problem = replace(problem, metadata={**problem.metadata,
+        'stage2_native_log_enabled': native_logging, 'phase3_diagnostics_dir': str(tmp_path)})
+    calls = []
+    original = GurobiMILPAdapter._solve_thesis_stage2_charging_dispatch
+    def capture(self, local_problem, config, assignment, **kwargs):
+        calls.append((kwargs['stage1_status'], dict(local_problem.metadata)))
+        return original(self, local_problem, config, assignment, **kwargs)
+    monkeypatch.setattr(GurobiMILPAdapter, '_solve_thesis_stage2_charging_dispatch', capture)
     result = OptimizationEngine().solve(problem, OptimizationConfig(
         mode=OptimizationMode.MILP, phase="phase3_two_stage", time_limit_sec=25,
         stage1_time_limit_sec=15, stage2_time_limit_sec=10, mip_gap=0,
-        gurobi_threads=1, warm_start=True, allow_postsolve_repair=False,
+        gurobi_threads=1, warm_start=True, allow_postsolve_repair=False, stage2_gurobi_presolve=2,
     ))
     assert result.feasible, result.infeasibility_reasons
     assert result.solver_metadata["pre_solve_finite_fuel_seed"]["applied"]
     assert result.solver_metadata["stage2_ice_fuel_inventory_audit"]["accepted"]
     assert set(result.plan.served_trip_ids) == {trip.trip_id for trip in problem.trips}
     assert not result.plan.refuel_slots
+    screens = [metadata for status, metadata in calls if status == 'pre_solve_vehicle_local_seed_screen']
+    assert screens, 'The regression must reach the internal native seed screen'
+    assert all(metadata['stage2_native_log_enabled'] is False for metadata in screens)
+    assert all(metadata['phase3_diagnostics_dir'] == '' for metadata in screens)
+    assert problem.metadata['stage2_native_log_enabled'] is native_logging
+    assert problem.metadata['phase3_diagnostics_dir'] == str(tmp_path)
+    if native_logging:
+        assert Path(result.plan.metadata['stage2_native_log_path']).is_file()
+    else:
+        assert result.plan.metadata['stage2_native_log_path'] is None
 
 
 def test_unavailable_ice_does_not_add_a_fuel_budget_or_change_the_active_solve():

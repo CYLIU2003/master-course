@@ -21897,6 +21897,10 @@ class GurobiMILPAdapter:
         # fallback dispatch. The inherited global deadline includes its work.
         local_problem = replace(problem, metadata={
             **dict(problem.metadata), "phase3_diagnostics_dir": "",
+            # This internal MIP-start screen deliberately emits no artifacts.
+            # Keep logging consistent with that local scope; the main solve
+            # and rolling problems retain their declared native log settings.
+            "stage2_native_log_enabled": False,
             "stage2_feedback_max_iterations": 0,
         })
         local_limit = min(float(config.stage2_time_limit_sec or config.time_limit_sec), 5.0)
