@@ -2025,16 +2025,21 @@ def _configured_stage1_gurobi_search_controls(
     if profile == "bounded_presolve":
         return {**default_controls, "profile": profile, "mip_focus": 1,
                 "heuristics": 0.2, "presolve": 1, "pre_passes": 3}
-    if profile in ("bounded_presolve_barrier", "bounded_presolve_dual", "bounded_presolve_norel"):
+    if profile in ("bounded_presolve_barrier", "bounded_presolve_dual", "bounded_presolve_norel",
+                   "bounded_presolve_barrier_no_crossover"):
+        no_crossover = profile == "bounded_presolve_barrier_no_crossover"
         return {**default_controls, "profile": profile, "mip_focus": 1,
                 "heuristics": 0.2, "presolve": 1, "pre_passes": 3,
-                "root_method": 2 if profile == "bounded_presolve_barrier" else 1,
+                "root_method": 2 if profile == "bounded_presolve_barrier" or no_crossover else 1,
+                # MIP crossover can only be disabled with barrier at both root and nodes.
+                **({"node_method": 2, "crossover": 0} if no_crossover else {}),
                 "no_rel_heur_work": 120.0 if profile == "bounded_presolve_norel" else 0.0,
                 "soft_mem_limit_gb": 18.0}
     raise ValueError(
         "stage1_gurobi_search_profile must be 'default', 'bound_focus', "
         "'root_cut_focus', 'incumbent_focus', 'bounded_presolve', "
-        "'bounded_presolve_barrier', 'bounded_presolve_dual', or 'bounded_presolve_norel'"
+        "'bounded_presolve_barrier', 'bounded_presolve_dual', 'bounded_presolve_norel', "
+        "or 'bounded_presolve_barrier_no_crossover'"
     )
 
 
@@ -13687,6 +13692,8 @@ class GurobiMILPAdapter:
         stage1.Params.Cuts = int(stage1_search_controls["cuts"])
         stage1.Params.Method = int(stage1_search_controls["root_method"])
         stage1.Params.NodeMethod = int(stage1_search_controls["node_method"])
+        if "crossover" in stage1_search_controls:
+            stage1.Params.Crossover = int(stage1_search_controls["crossover"])
         stage1.Params.Symmetry = int(stage1_search_controls["symmetry"])
         stage1_scale_flag = _configured_stage1_gurobi_scale_flag(config)
         stage1.Params.ScaleFlag = stage1_scale_flag
@@ -16100,6 +16107,7 @@ class GurobiMILPAdapter:
                         "cuts": int(stage1.Params.Cuts),
                         "root_method": int(stage1.Params.Method),
                         "node_method": int(stage1.Params.NodeMethod),
+                        **({"crossover": int(stage1.Params.Crossover)} if "crossover" in stage1_search_controls else {}),
                         "symmetry": int(stage1.Params.Symmetry),
                         "scale_flag": int(stage1.Params.ScaleFlag),
                         **({"pre_passes": int(stage1.Params.PrePasses)} if "pre_passes" in stage1_search_controls else {}),
@@ -16493,6 +16501,7 @@ class GurobiMILPAdapter:
                     "cuts": int(stage1.Params.Cuts),
                     "root_method": int(stage1.Params.Method),
                     "node_method": int(stage1.Params.NodeMethod),
+                    **({"crossover": int(stage1.Params.Crossover)} if "crossover" in stage1_search_controls else {}),
                     "symmetry": int(stage1.Params.Symmetry),
                     "scale_flag": int(stage1.Params.ScaleFlag),
                     **({"pre_passes": int(stage1.Params.PrePasses)} if "pre_passes" in stage1_search_controls else {}),
@@ -21499,6 +21508,7 @@ class GurobiMILPAdapter:
                 "cuts": int(stage1.Params.Cuts),
                 "root_method": int(stage1.Params.Method),
                 "node_method": int(stage1.Params.NodeMethod),
+                **({"crossover": int(stage1.Params.Crossover)} if "crossover" in stage1_search_controls else {}),
                 "symmetry": int(stage1.Params.Symmetry),
                 "scale_flag": int(stage1.Params.ScaleFlag),
                 **({"pre_passes": int(stage1.Params.PrePasses)} if "pre_passes" in stage1_search_controls else {}),

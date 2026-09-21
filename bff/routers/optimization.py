@@ -934,7 +934,8 @@ class RunOptimizationBody(BaseModel):
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
     stage1_gurobi_search_profile: Literal[
         "default", "bound_focus", "root_cut_focus", "incumbent_focus", "bounded_presolve",
-        "bounded_presolve_barrier", "bounded_presolve_dual", "bounded_presolve_norel"
+        "bounded_presolve_barrier", "bounded_presolve_dual", "bounded_presolve_norel",
+        "bounded_presolve_barrier_no_crossover"
     ] = "default"
     # Non-default scaling is a controlled numerical diagnostic.  The BFF
     # records it and prevents a one-off solver setting from becoming research

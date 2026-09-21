@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-21 発表前確認：物理通過と最適性未達を分離
+
+最新8cd06d3fはbarrier収束後のcrossoverでmemory_limit。Stage1改善0円・認証gap3.779036%、最初の配車の固定Stage2総費用は未保存。物理/BESS672区間通過を最適化完了としない。no-crossover profileと証拠の表示/整合検査を修正し、実規模は次の新規診断で確認する。新条件12週・実績会計・入力仮定の確認・独立研究承認は未完了。[問題点・根拠・先生への説明](PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
+
 ## 2026-09-21 日別路線検査は解消、根LPと1%精度は未達
 
 固定e79476d9の新規求解でphysical/BESS672区間収支通過を確認。Stage1目的値差132.52円、gap3.775968%、根LP未完了・最大23.718GB。初期解の固定Stage2総費用が未保存で、実総費用改善額は未確認。追加予備・復元なしを保ち、端点表現/4threadsのbarrier候補を新規固定版で診断する。全12週・168時間実績会計・独立研究承認は未完了。[根拠](ENDPOINT_BARRIER_DIAGNOSIS_20260921.md)。

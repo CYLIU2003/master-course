@@ -85,7 +85,7 @@ def test_path_cover_matches_exhaustive_four_trip_vehicle_assignments():
         assert vehicle_day_path_cover_lower_bounds(trips, {str(i): 0 for i in range(4)}, rows, full_network=True) == {0: best}
 
 
-@pytest.mark.parametrize("profile,method,work", [("bounded_presolve_barrier", 2, 0), ("bounded_presolve_dual", 1, 0), ("bounded_presolve_norel", 1, 120)])
+@pytest.mark.parametrize("profile,method,work", [("bounded_presolve_barrier", 2, 0), ("bounded_presolve_barrier_no_crossover", 2, 0), ("bounded_presolve_dual", 1, 0), ("bounded_presolve_norel", 1, 120)])
 def test_root_profiles_preserve_bounds_and_have_explicit_memory_limit(profile, method, work):
     from bff.routers.optimization import RunOptimizationBody
     from src.optimization.common.problem import OptimizationConfig
@@ -97,7 +97,7 @@ def test_root_profiles_preserve_bounds_and_have_explicit_memory_limit(profile, m
     assert controls["soft_mem_limit_gb"] == 18
 
 
-@pytest.mark.parametrize("profile", ["bounded_presolve_barrier", "bounded_presolve_dual", "bounded_presolve_norel"])
+@pytest.mark.parametrize("profile", ["bounded_presolve_barrier", "bounded_presolve_barrier_no_crossover", "bounded_presolve_dual", "bounded_presolve_norel"])
 def test_native_daily_bound_and_effective_search_parameters(profile, tmp_path):
     from src.optimization.milp.engine import MILPOptimizer
     from test_milp_soc_validator_roundtrip import _soc_roundtrip_problem
@@ -111,11 +111,20 @@ def test_native_daily_bound_and_effective_search_parameters(profile, tmp_path):
         gurobi_threads=1, stage1_best_obj_stop_enabled=False, stage1_gurobi_search_profile=profile)
     result = MILPOptimizer().solve(problem, config)
     assert result.feasible, result.infeasibility_reasons
+    from src.optimization.common.feasibility import FeasibilityChecker
+    independent = FeasibilityChecker().evaluate(problem, result.plan)
+    assert independent.feasible, independent.errors
     metadata = result.plan.metadata
     assert metadata["stage1_vehicle_day_path_cover_lower_bounds"] == {0: 1}
     effective = metadata["stage1_gurobi_search_controls"]
     assert effective["pre_passes"] == 3
-    assert effective["root_method"] == (2 if profile.endswith("barrier") else 1)
+    if profile.endswith("no_crossover"):
+        assert effective["node_method"] == 2
+        assert effective["crossover"] == 0
+    else:
+        assert effective["node_method"] == -1
+        assert "crossover" not in effective
+    assert effective["root_method"] == (2 if "barrier" in profile else 1)
     assert effective["no_rel_heur_work"] == (120 if profile.endswith("norel") else 0)
     memory = metadata["stage1_search_telemetry"]["native_memory"]
     assert memory["after_optimize"]["peak_gb"] >= memory["after_optimize"]["used_gb"] > 0

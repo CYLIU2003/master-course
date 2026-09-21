@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-21 crossover停止対策と進捗発表の証拠整理
+
+- 固定8cd06d3fのcompletion/summary/5原本SHAとclean、物理/BESS672区間を照合。barrierは36反復で400万円に収束したが、基底生成でmemory_limit。Stage1改善0円・認証gap3.779036%・native gap100%、最大17.663GB。予測総費用4157027.338747円、BESS3000→1238.847113kWh。原本output/endpoint_barrier_20260921/review.json。
+- bounded_presolve_barrier_no_crossoverを追加。Method2/NodeMethod2/Crossover0、実効設定を全Stage1結果経路へ保存。API Literalを追加し、既存profile・目的関数・物理制約は不変。Gurobi公式仕様を確認し、精度/探索速度の限界を明記。
+- 診断summaryで充電目的値と予測総費用、最初のStage1目的値との差と初期固定Stage2費用の欠落、診断終了と品質未達を区別。physical原本/nativeと成功progressの矛盾は停止する。関連71 tests通過。詳細・教員向け回答・未解決P1は[発表前確認](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
+- 次は新clean固定版から5月新規Prepare1回。追加予備/終端復元なし、端点、4threads、soft18GB、600/120秒、gap1%を保持。通常script、終了時既存タスクへ1回。全12週・メールなし。独立承認PENDING、研究採用BLOCKED。
+
 ## 2026-09-21 Solcast学習履歴の日次取得
 
 - 当日の初回確認で月次マニフェストと原本SHAから29/36か月を再検証し、最初の不足月2023年6月だけを取得。現ユーザーDPAPI認証を子プロセス環境へ渡し、親環境と他の認証を保持した。キーは表示・保存していない。

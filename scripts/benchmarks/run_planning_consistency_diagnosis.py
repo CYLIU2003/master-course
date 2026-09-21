@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -12,6 +13,45 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.benchmarks.run_exact_seasonal_campaign import run_campaign
 from scripts.benchmarks.run_shibu21_24_seasonal_diagnostic import git_state, write_json
+
+
+def assess_evidence(native: dict, quality: dict, physical: dict) -> dict:
+    """Separate diagnostic completion, subproblem quality and research claims."""
+    blockers = []
+    physical_passed = physical.get("accepted") is True and not physical.get("violations")
+    if not physical_passed or native.get("feasible") is not True or native.get("infeasibility_reasons"):
+        blockers.append("PHYSICAL_OR_SOLVER_FEASIBILITY_NOT_ACCEPTED")
+    for stage in ("stage1", "stage2"):
+        evidence = quality.get(stage) or {}
+        if evidence.get("target_met") is not True:
+            blockers.append(f"{stage.upper()}_GAP_TARGET_NOT_MET")
+        if evidence.get("solver_status") == "memory_limit":
+            # A refused allocation need not appear as a measured peak above the limit.
+            blockers.append(f"{stage.upper()}_MEMORY_LIMIT")
+    breakdown = native.get("cost_breakdown") or {}
+    total = breakdown.get("total_cost")
+    if isinstance(total, bool) or not isinstance(total, (int, float)) or not math.isfinite(total):
+        total = None
+        blockers.append("FINAL_FORECAST_TOTAL_COST_MISSING")
+    blockers.extend([
+        "INITIAL_INCUMBENT_FIXED_STAGE2_COST_NOT_RECORDED",
+        "FRESH_WEEKLY_EXECUTION_NOT_EVALUATED",
+        "INDEPENDENT_RESEARCH_REVIEW_PENDING",
+    ])
+    return {
+        "diagnosis_completed_is_optimization_accepted": False,
+        "subproblem_gap_targets_met": all(
+            (quality.get(stage) or {}).get("target_met") is True for stage in ("stage1", "stage2")
+        ),
+        "blocking_reasons": blockers,
+        "stage1_objective_improvement_jpy": quality.get("incumbent_improvement_jpy"),
+        "initial_incumbent_fixed_stage2_total_cost_improvement_jpy": None,
+        "final_forecast_total_cost_jpy": total,
+        "final_forecast_cost_breakdown": breakdown,
+        "cost_basis": "day_ahead_forecast_not_executed_rolling_accounting",
+        "stage2_objective_is_total_cost": False,
+        "integrated_global_optimum_proven": False,
+    }
 
 
 def run(design_path: Path, output: Path) -> dict:
@@ -64,6 +104,10 @@ def run(design_path: Path, output: Path) -> dict:
                     "day_ahead_physical_validation.json", "day_ahead_optimization_quality.json",
                     "input_audit.json")]
         native = json.loads((case / "canonical_solver_result.json").read_text(encoding="utf-8"))
+        physical = json.loads((case / "day_ahead_physical_validation.json").read_text(encoding="utf-8"))
+        assessment = assess_evidence(native, quality, physical)
+        if "PHYSICAL_OR_SOLVER_FEASIBILITY_NOT_ACCEPTED" in assessment["blocking_reasons"]:
+            raise RuntimeError("Saved physical/native evidence contradicts successful day-ahead progress")
         metadata = native["metadata"]
         native_log_path = metadata.get("stage1_native_log_path")
         if design.get("stage1_native_log_enabled") is True:
@@ -73,6 +117,7 @@ def run(design_path: Path, output: Path) -> dict:
         summary = {"status": "DIAGNOSIS_COMPLETE", "source_state": after,
             "physical_accepted": progress["day_ahead_physical_accepted"],
             "quality": quality, "elapsed_seconds": progress["day_ahead_seconds"],
+            "evidence_assessment": assessment,
             "stage1_search_controls": metadata.get("stage1_gurobi_search_controls"),
             "gurobi_threads": metadata.get("gurobi_threads"),
             "native_memory": metadata.get("stage1_search_telemetry", {}).get("native_memory"),
