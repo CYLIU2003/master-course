@@ -84,3 +84,9 @@ caseのsource3参照とdual設定を確認した。実coordinator PID32760、ven
 出力は固定worktreeの `output/stage1_support_diagnosis_20260921`。
 開始時点でdenseがRUNNING。通常処理と逐次実行はスクリプトのみ、終了時に1回queueする。
 実行中のコードは変更しない。
+
+## 開始後のユーザー方針変更
+
+BESSは利用可能残量が尽きたら待機、満杯では余剰PVを抑制する方針へ変更する。
+この実行の固定条件は維持し、次回は[新BESS方針](BESS_OPERATING_RANGE_POLICY_20260921.md)と
+制御先の `next_action.json` を読み、初期残量の追加予備と終端復元を再導入しない。

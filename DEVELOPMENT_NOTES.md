@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-21 ユーザー指定のBESS運転範囲のみの方針
+
+- 初期在庫3,000 kWhの追加予備と週末/rolling窓末の復元を外す新設計を追加。既存minimum_only/physical_floor_only経路を利用し、1,200–4,800 kWh、900 kW、効率、系統→BESS禁止、BEV制約を維持。ソルバー本体・原本scenarioは変更なし。
+- 実親scenarioの設定プレビューと前後SHA、関連136 tests（既存131＋新規5）を確認。新規5件は設定伝播、rolling境界2条件、空/満杯の実行、native Stage1の初期在庫利用。全体再回帰は設定だけのため省略。
+- 現在の固定00aed18eは旧条件で継続。次の診断用設定は保留、終了時のnext_actionにこのユーザー方針を保存。初期/最終BESS差分は費用と別表示し、旧条件の費用や監査を新結果へ流用しない。[詳細](docs/notes/BESS_OPERATING_RANGE_POLICY_20260921.md)。全12週・メール・新大規模solveなし。
+
 ## 2026-09-21 配車の停滞を確認し、充電可能時間の行列を疎に表現
 
 - 09:45 JSTにclean固定00aed18e1652645ed5b0a34958bb66dcb339044dからdense/endpoint比較を起動。実coordinator32760／venv launcher34448。固定版83 tests、入力47 SHA・移設11参照、caseのsource3参照とdual設定を確認。制御先output/stage1_support_20260921、終了時だけ既存タスクへ1回queue。
