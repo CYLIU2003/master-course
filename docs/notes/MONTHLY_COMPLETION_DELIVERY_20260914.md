@@ -1,5 +1,14 @@
 # 月別12週のスクリプト実行と完了メール
 
+## 2026-09-21 BESS補助運用の新規全月実行
+
+今回の制御先は `output/monthly_auxiliary_20260921/script_observer/`。
+[専用手順](MONTHLY_AUXILIARY_EXECUTION_20260921.md)と今回のlaunch/config/bundleのSHAを確認する。
+SOC20–80%、PVバス優先・余剰蓄電・下限待機、追加予備/終端復元なしの別条件。
+旧reserve等の完了・receiptを今回の結果や送信済み証拠に流用しない。
+新しい固定SHAの全12週・補助BESS独立監査・実図を確認し、今回のreceiptとGmail検索で
+重複を防いでから承認済み宛先へ1通送る。通常処理はスクリプトのみ。
+
 ## 2026-09-20 予備残量修正版
 
 **配信完了:** 固定 `68f2f4e5` の全12週・最終図表を確認し、2026-09-20 23:57 JSTに `g2681320@tcu.ac.jp` へ1通送信済み。実message ID `1a0bf523c1c61c5c`、SENTと一意件名検索1件を確認。`output/monthly_reserve_20260920/script_observer/email_receipt.json` を照合し、同じイベントで再計算・監視再開・メール再送を行わない。研究採用BLOCKEDは継続する。

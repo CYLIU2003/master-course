@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-21 修正BESS方針で全12週を新規実行
+
+- ユーザーが旧12カ月処理停止・修正版再実行を承認。実プロセス照合では計算/監視ともなし、直近reserveは完了/送信済み。旧成果を保全し、monthly_auxiliaryを新しい固定版で起動する。
+- 5月限定の補助方針を全月共通20–80%で適用。1,800/120/15秒、主wall2,400秒、4threads、1%目標を全月固定。新規Prepare・168時間rolling・確定会計・独立監査を要求する。
+- 旧audit原本は不変。追跡対象のaudit_monthly_executionへ既存検査を保存し、実solver条件を固定設計と照合。補助BESSの独立338原本検査を追加し、reportはそのhashを再検証する。observerに専用allowlist・図・状態/配信IDを追加した。
+- 関連101 tests通過。新規8件を含み、模擬1週・旧設定混入・会計plan改変を検出。UTF-8を本番とテストで統一。自己レビューP0/P1残件なし、独立研究承認PENDING。AI定期監視なし、完了時だけ承認済み宛先へメール、失敗は一度通知。[実行記録](docs/notes/MONTHLY_AUXILIARY_EXECUTION_20260921.md)。
+
 ## 2026-09-21 BESSをPV優先の補助制御へ
 
 - ユーザーがBESSを本題とせず、範囲内で利用・上下限で待機・PVのバス充電後の余剰で再充電する方針を指定。既存pv_self_consumption modeに明示的な制御を実装。他modeは従来通り。

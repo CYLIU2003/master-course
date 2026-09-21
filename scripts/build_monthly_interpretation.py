@@ -87,6 +87,19 @@ def verify_week(week: str, audited: dict, design: dict, source_sha: str) -> dict
             and controls["allow_postsolve_repair"] is False
             and controls["synthetic_pv_fallback_applied"] is False, f"{week}: control drift")
     contract = prepared["simulation_config"]["date_series_contract"]
+    if design.get("bess_priority_mode") == "pv_self_consumption":
+        auxiliary = audited.get("auxiliary_bess_audit", {})
+        require(auxiliary.get("status") == "ALL_FORECASTS_AND_168_PREFIXES_AUXILIARY_VERIFIED",
+                f"{week}: missing auxiliary BESS audit")
+        expected_files = {str(chain / f"hour_{hour:03d}" / filename)
+                          for hour in range(168)
+                          for filename in ("forecast_result.json", "pv_execution_audit.json")}
+        expected_files.add(str(case / "canonical_solver_result.json"))
+        expected_files.add(str(chain / "executed_plan.json"))
+        require(set(auxiliary["hashes"]) == expected_files, f"{week}: auxiliary evidence coverage")
+        for filename, digest in auxiliary["hashes"].items():
+            require(hashlib.sha256(Path(filename).read_bytes()).hexdigest() == digest,
+                    f"{week}: auxiliary source changed")
     if design.get("bess_forecast_reserve_policy") in ("evaluation_target_zero_pv", "evaluation_target_every_prefix"):
         reserve = audited.get("bess_forecast_reserve_audit", {})
         require(reserve.get("status") == "ALL_168_PREFIXES_RESERVE_VERIFIED"
@@ -156,6 +169,10 @@ def verify_bess_terminal(terminal: dict, design: dict) -> None:
 
 
 def bess_condition_text(data: dict) -> str:
+    if data.get("bess_priority_mode") == "pv_self_consumption":
+        return ("PVはバス充電を優先し、余剰でBESSを充電する。SOC20–80%内で不足分を放電し、"
+                "下限で待機、上限で余剰PVを抑制する。追加予備・終端復元なし。"
+                "各週の初期在庫取り崩しを併記し、PV効果や継続週の節約と混同しない。")
     if data.get("bess_forecast_reserve_policy") == "evaluation_target_every_prefix":
         return ("BESSの保護残量をday-ahead・配車の充電費用評価・毎時の将来計画にも適用する。"
                 "各1時間の開始残量から、その時間内の未観測PVを使わず保護残量を保つ。"
@@ -259,6 +276,7 @@ def collect(campaign: Path, audit_path: Path, *, partial: bool) -> dict:
         "completed_count": len(rows), "declared_week_count": 12,
         "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
         "bess_terminal_soc_policy": design.get("bess_terminal_soc_policy", "minimum_only"),
+        "bess_priority_mode": design.get("bess_priority_mode", "cost_driven"),
         "rolling_bess_terminal_policy": design.get("rolling_bess_terminal_policy", "minimum_only"),
         "bess_forecast_reserve_policy": design.get("bess_forecast_reserve_policy", "physical_floor_only"),
         "independent_audit": {"path": str(audit_path), "sha256": audit_hash},
