@@ -75,3 +75,19 @@ BESSは上記minimum_only/physical_floor_onlyのまま、Stage1 600秒/Stage2 12
 4threads、18GB、gap1%の新規5月day-aheadだけを実行する。関連67 tests通過。
 旧previewとpolicy_validationは保留時点の記録として保持し、新実行は別固定SHAと
 新しい入力import/launch記録へ紐付ける。上記の「保留・実行中」は変更当時の経緯。
+
+## 固定診断の開始記録
+
+2026-09-21 10:34 JST、branch `codex/bess-operating-range-20260921`、
+clean固定 `534aba0b0a8f8d906c8ad24014b122471afd965e` から5月day-ahead診断を開始した。
+固定版で67 tests通過（5.61秒）、元入力47 SHAとscenario11参照の移設、caseのsource3参照、
+minimum_only/physical_floor_only、端点表現trueとsolver設定を確認。実runner PID48300、
+venv launcher50600。制御先 `output/bess_operating_range_20260921_launchfix`、
+開始確認は `startup_verification.json`。出力は新worktreeの
+`output/bess_operating_range_diagnosis_20260921`。通常処理はscript、終了時だけ既存タスクへqueue。
+
+10:33の初回起動はローカルwrapperの設定名に余分な `_diagnosis` があり、ファイル読込みで
+停止した。Prepare・求解は未実行、出力ディレクトリも未生成だった。正しい設定参照と
+事前存在確認を加え、実行コードを変更せず再起動した。旧制御先
+`output/bess_operating_range_20260921/failure_resolution.json` は
+`RESOLVED_NEW_LAUNCH_STARTUP_VERIFIED`。旧completionの遅延通知では再診断・メールを行わない。

@@ -2,7 +2,7 @@
 
 ## 2026-09-21 行列・メモリ改善を確認、費用最適化は未達
 
-固定00aed18eの端点表現は非零係数67.6%、最大native memory22.3%減。denseと同じ物理VALID・Stage2 gap0.368%だが、両方ともStage1改善0円・認証gap6.91%、native gap100%、根LP未完了。端点表現を次のBESS追加予備・復元なし条件へ採用する。費用条件が変わるため、在庫取り崩しと求解改善を区別し、新規Prepare・独立物理確認が必要。全12週・実績費用・研究承認は未完了。[詳細](STAGE1_CHARGE_WINDOW_SUPPORT_20260921.md)。
+固定00aed18eの端点表現は非零係数67.6%、最大native memory22.3%減。denseと同じ物理VALID・Stage2 gap0.368%だが、両方ともStage1改善0円・認証gap6.91%、native gap100%、根LP未完了。端点表現をBESS追加予備・復元なし条件へ採用し、10:34 JSTにclean固定534aba0bから5月診断を開始した。費用条件が変わるため、在庫取り崩しと求解改善を区別し、新規Prepare・独立物理確認が必要。全12週・実績費用・研究承認は未完了。[詳細](STAGE1_CHARGE_WINDOW_SUPPORT_20260921.md)。
 
 ## 2026-09-21 BESSの運用方針変更（未実行）
 

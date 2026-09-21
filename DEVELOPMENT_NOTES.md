@@ -2,6 +2,9 @@
 
 ## 2026-09-21 端点表現の結果とBESS方針の次診断
 
+- 10:34 JST、clean固定534aba0b0a8f8d906c8ad24014b122471afd965eでBESS新方針の5月診断を開始。実runner48300／venv launcher50600。固定版67 tests・入力47 SHA・移設11参照・case source3参照とBESS/solver設定を確認。制御先output/bess_operating_range_20260921_launchfix、終了時だけ1回queue。
+- 10:33の初回起動はローカルwrapperの設定ファイル名に余分な_diagnosisがあり、Prepare/求解前に停止。設定参照を直して存在確認を追加し、固定コードを変えず、未生成の出力へ新規起動。旧completion/dispatchを保存し、failure_resolution.jsonで解決記録を紐付けた。旧イベントを再処理しない。
+
 - 固定00aed18eのcompletion、全体/2 summary、各5原本のSHA、native log、cleanを検証。設定差はsupport flagだけで、便数・車両・日付・パラメータ・配車・充電指令が一致。確認原本output/stage1_support_20260921/review.json。
 - 非零係数81,379,204→26,377,614（67.5868%減）、最大native memory16.218→12.599GB（22.3142%減）。両方とも物理VALID・Stage2 gap0.36796%、Stage1初期解改善0円・認証gap6.91227%、native下界0・gap100%、根LP未完了の時間切れ。
 - 次の設定は端点表現true、BESS minimum_only/physical_floor_only、追加予備と復元なし。600/120秒、4threads、18GB、1%は維持し、新clean版から5月のみ新規Prepare。関連67 tests通過。新しいコード経路は追加せず、前回の全体回帰と既存BESS136 testsを再利用。
