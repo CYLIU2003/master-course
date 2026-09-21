@@ -227,7 +227,11 @@ def audit_native_entries(
     for kind, hour, path, document in entries:
         metadata = document.get("solver_metadata")
         require(isinstance(metadata, dict), f"{path}: missing solver_metadata")
-        search_controls = read_search_controls(document, EXPECTED_SEARCH_CONTROLS_BY_KIND.get(kind, EXPECTED_SEARCH_CONTROLS))
+        expected_search = dict(EXPECTED_SEARCH_CONTROLS_BY_KIND.get(kind, EXPECTED_SEARCH_CONTROLS))
+        policy = design.get("stage2_search_policy", {})
+        if "rolling_MIPFocus" in policy:
+            expected_search["stage2_gurobi_mip_focus"] = policy["rolling_MIPFocus"] if kind == "hourly" else policy["MIPFocus"]
+        search_controls = read_search_controls(document, expected_search)
         effective = document.get("effective_limits") or {}
         required_metadata = (
             "stage2_gurobi_aggregate", "stage2_gurobi_presolve",
@@ -274,6 +278,15 @@ def audit_native_entries(
         for key, value in expected.items():
             if metadata.get(key) != value:
                 reasons.append(key)
+        # The new declared gate must be checked from each original result;
+        # an execution summary or a feasible flag is not a gap certificate.
+        stage2_quality = None
+        if design.get("require_stage2_execution_quality") is True:
+            from scripts.benchmarks.optimization_quality import stage2_execution_quality
+            stage2_quality = stage2_execution_quality(document.get("metadata") or {},
+                target_gap=float(design["mip_gap"]))
+            if not stage2_quality["accepted"]:
+                reasons.append("stage2_gap_target_not_verified")
         # Historical frozen outputs have no NumericFocus declaration. New
         # campaigns must prove the declared value from original metadata,
         # never infer it from today's defaults or accept a missing record.
@@ -310,6 +323,7 @@ def audit_native_entries(
             "quality": quality_data,
             "search_controls": search_controls,
             "numeric_controls": numeric_controls,
+            "stage2_execution_quality": stage2_quality,
             "search_controls_source": "metadata",
         })
 
@@ -403,11 +417,14 @@ def verify_solver_controls(config: dict, design: dict, declared: dict) -> dict:
         "bess_forecast_reserve_policy", "bess_terminal_soc_policy", "bess_operating_range_profile",
         "diagnostic_stop_after_day_ahead", "stage1_sparse_charge_window_support"}
     keys.add("stage2_search_policy")
+    keys.add("require_stage2_execution_quality")
     require(all(design.get(key) == declared.get(key) for key in keys), "Frozen design controls drift")
     expected = {key: declared[value] for key, value in mapping.items()}
     expected["stage2_gurobi_presolve"] = declared.get("stage2_search_policy", {}).get("Presolve", 0)
     if "NumericFocus" in declared.get("stage2_search_policy", {}) or "rolling_NumericFocus" in declared.get("stage2_search_policy", {}):
         expected["stage2_gurobi_numeric_focus"] = declared["stage2_search_policy"].get("NumericFocus", 0)
+    if "rolling_MIPFocus" in declared.get("stage2_search_policy", {}):
+        expected["stage2_gurobi_mip_focus"] = declared["stage2_search_policy"]["MIPFocus"]
     require({key: config.get(key) for key in expected} == expected, "Input solver controls drift")
     require(config.get("stage1_gurobi_search_profile") == declared["stage1_gurobi_search_profile"],
             "Input Stage1 profile drift")

@@ -1,5 +1,8 @@
 # Current research release blockers
 
+2026-09-22: 固定b1916e56はhour155でStage2 gap71.0609%となり連続診断停止。旧12週を流用せず、全月未開始0/12。新探索設定は同一モデルでgap0.97394%まで確認したが、局所実行・連続42時間・新規12週は未検証。Stage2品質の実行前検査と原本監査を追加した。Stage1精度・二段階の統合最適性・独立研究承認のblockerも継続。[対応](MONTHLY_AUXILIARY_STAGE2_QUALITY_20260922.md)。
+
+
 2026-09-22 数値修正版c5c1eff7の連続診断はhour126～137通過後、hour138が15秒time_limit/解なし。全月未開始0/12、メール未送信。同一モデルは120秒枠で17.13秒・gap0・実行引継ぎを通過した。次は毎時共通120秒の新clean固定版で連続42時間を検証し、通過後に全12週を新規実行。研究採用BLOCKED。詳細: [毎時求解時間](MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。
 
 

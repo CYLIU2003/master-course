@@ -1,5 +1,8 @@
 # master-course
 
+2026-09-22: 毎時120秒版 `b1916e56` は連続診断29時間を通過後、hour155のStage2 gap71.0609%で停止。全月は未開始0/12、メール未送信。同一MPSでは毎時MIPFocus2のみの変更で110.43秒・gap0.97394%を確認した（目的値はほぼ同額、費用削減ではない）。実行前の1%検査と169原本の独立監査を追加。新clean固定版で局所引継ぎ→42時間連続検証→通過時だけ新規Prepareから全12週をスクリプト実行する。研究採用BLOCKED。[根拠と条件](docs/notes/MONTHLY_AUXILIARY_STAGE2_QUALITY_20260922.md)。
+
+
 2026-09-22 07:30 JST 起動確認: clean固定 `b1916e56` で毎時共通120秒・42時間の連続検証を開始。一度きりの制御PID36772、診断実PID59324、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_budget_20260922/gate_startup_verification.json`。
 
 

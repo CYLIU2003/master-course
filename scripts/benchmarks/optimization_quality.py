@@ -47,3 +47,21 @@ def day_ahead_quality(metadata: dict, *, target_gap: float) -> dict:
         "last_presolve_callback_runtime_sec": telemetry.get("last_presolve_callback_runtime_sec"),
         "integrated_global_optimum_proven": False,
         "executed_week_cost_comparison": "NOT_EVALUATED_BY_THIS_CERTIFICATE"}
+
+
+def stage2_execution_quality(metadata: dict, *, target_gap: float) -> dict:
+    """Require both the native gap and objective/bound evidence before execution."""
+    report = day_ahead_quality(metadata, target_gap=target_gap)["stage2"]
+    native_gap = _finite(metadata.get("stage2_mip_gap_ratio"))
+    reasons = []
+    if metadata.get("stage2_has_feasible_incumbent") is not True:
+        reasons.append("NO_STAGE2_INCUMBENT")
+    if native_gap is None or native_gap < 0:
+        reasons.append("MISSING_OR_INVALID_NATIVE_GAP")
+    elif native_gap > target_gap:
+        reasons.append("NATIVE_GAP_TARGET_MISSED")
+    if not report["target_met"]:
+        reasons.append("OBJECTIVE_BOUND_TARGET_NOT_VERIFIED")
+    return {**report, "native_gap_ratio": native_gap, "target_gap_ratio": target_gap,
+            "accepted": not reasons, "reasons": reasons,
+            "integrated_global_optimum_proven": False}
