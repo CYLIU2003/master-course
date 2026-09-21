@@ -2,6 +2,8 @@
 
 ## 2026-09-21 NoRel候補の日別路線検査と失敗理由を修正
 
+- 11:38 JST、clean固定e79476d93131803a26d4e1a0ed1cb2092b740700から新規Prepareを開始。固定版焦点16 tests、入力47 SHA・移設11参照、case source3参照と全BESS/探索条件を確認。実runner33728／venv launcher7232、RUNNING、stderr空。制御先output/route_band_service_day_20260921、startup_verification.json。通常はscript、終了時のみ既存タスクへ1回通知。
+
 - 固定48ffb374の元失敗は2DutyのROUTE_BAND。グラフでは営業日をまたぐ路線変更を許すが、canonical検査がDuty全体へ路線固定を要求していた。車両・営業日集計へ揃え、同日混在禁止と全物理検査を維持した。
 - diagnostic.day_ahead_reasons / day_ahead.reasonsの引継ぎ漏れも修正。焦点60件＋周辺74件=134 tests通過。保存候補の独立physical読取りは違反0件。元failureは書き換えず、新規求解の証拠には使わない。
 - Stage1目的値差132.5163円は拒否候補の値。native/認証gap3.775968%、根LP未完了、最大24.0967GB（soft18GB超過）。Stage2の0円は総費用4,156,638.4284円とは別。新clean版・新規Prepare1回で検査修正を確認する。条件・証拠は[詳細](docs/notes/ROUTE_BAND_SERVICE_DAY_FIX_20260921.md)。独立レビューPENDING、研究採用BLOCKED。

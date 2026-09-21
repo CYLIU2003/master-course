@@ -71,3 +71,13 @@ BESSは `minimum_only/physical_floor_only`、初期3,000kWh、設備1,200–4,80
 
 自己レビューで上記P1を修正。独立研究レビューPENDING、研究採用BLOCKED。
 CI追加や有料サービスは使わない。全体テストは直近実行済みのため繰り返さず、変更経路を検証した。
+
+## 開始記録
+
+2026-09-21 11:38 JST、clean固定 `e79476d93131803a26d4e1a0ed1cb2092b740700`、
+branch `codex/route-band-service-day-20260921` から新規Prepareを開始した。
+固定版で焦点16 tests通過。元入力47ファイルSHAと親scenario11参照の移設、caseのsource3参照、
+BESSと探索設定を確認。実runner PID33728、venv launcher7232、起動時RUNNING。
+制御先 `output/route_band_service_day_20260921` の `startup_verification.json` に記録した。
+出力は新worktreeの `output/route_band_service_day_diagnosis_20260921`。
+通常処理はscript、終了時だけ既存タスクへqueue。診断の完了・最適性達成はまだ確認していない。
