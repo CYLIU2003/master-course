@@ -97,8 +97,12 @@ def test_root_profiles_preserve_bounds_and_have_explicit_memory_limit(profile, m
     assert controls["soft_mem_limit_gb"] == 18
 
 
-@pytest.mark.parametrize("profile", ["bounded_presolve_barrier", "bounded_presolve_barrier_no_crossover", "bounded_presolve_dual", "bounded_presolve_norel"])
-def test_native_daily_bound_and_effective_search_parameters(profile, tmp_path):
+@pytest.mark.parametrize("profile,threads", [
+    ("bounded_presolve_barrier", 1), ("bounded_presolve_barrier_no_crossover", 1),
+    ("bounded_presolve_dual", 1), ("bounded_presolve_norel", 1),
+    ("bounded_presolve_barrier_no_crossover", 2),
+])
+def test_native_daily_bound_and_effective_search_parameters(profile, threads, tmp_path):
     from src.optimization.milp.engine import MILPOptimizer
     from test_milp_soc_validator_roundtrip import _soc_roundtrip_problem
     from src.optimization.common.problem import OptimizationConfig, OptimizationMode
@@ -108,7 +112,7 @@ def test_native_daily_bound_and_effective_search_parameters(profile, tmp_path):
         "stage1_native_log_enabled": True, "phase3_diagnostics_dir": str(tmp_path)})
     config = OptimizationConfig(mode=OptimizationMode.MILP, phase="phase3_two_stage",
         stage1_time_limit_sec=5, stage2_time_limit_sec=5, time_limit_sec=20,
-        gurobi_threads=1, stage1_best_obj_stop_enabled=False, stage1_gurobi_search_profile=profile)
+        gurobi_threads=threads, stage1_best_obj_stop_enabled=False, stage1_gurobi_search_profile=profile)
     result = MILPOptimizer().solve(problem, config)
     assert result.feasible, result.infeasibility_reasons
     from src.optimization.common.feasibility import FeasibilityChecker
@@ -130,6 +134,7 @@ def test_native_daily_bound_and_effective_search_parameters(profile, tmp_path):
     assert memory["after_optimize"]["peak_gb"] >= memory["after_optimize"]["used_gb"] > 0
     assert memory["before_optimize"]["used_gb"] > 0
     assert memory["soft_limit_gb"] == 18
-    assert memory["threads"] == 1
+    assert metadata["gurobi_threads"] == threads
+    assert memory["threads"] == threads
     from pathlib import Path
     assert Path(metadata["stage1_native_log_path"]).is_file()

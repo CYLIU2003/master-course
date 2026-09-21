@@ -1,5 +1,9 @@
 # master-course
 
+2026-09-21 13:36 JST終了: 固定d6fe5b31で、入力初期配車からの予測総費用が4,157,027円→4,146,949円、10,078円（0.242%）減と確認できました。両案の配車hash・独立物理・BESS672区間・Stage2 gap0%を照合済みです。BESS終端は初期案1,238.85kWh／最終案1,200kWhで、在庫取り崩しも明記。Stage1は702.67秒でメモリ停止、最大18.012GB、gap3.545%で1%未達です。次は同予算・同モデルでthreads4→2の限定診断。週間実績・全12週の結果ではありません。[発表説明と残課題](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
+
+以下は過去時点の経過記録です。
+
 2026-09-21 13:13 JST: clean固定d6fe5b31から、同じ解法のStage1 1800秒・初期配車の固定Stage2費用比較を新規Prepareで開始しました。入力47 SHA・参照11件・case3参照・全条件を照合。通常はscriptだけが処理し、終了時のみ既存タスクへ通知します。制御先 `output/barrier_budget_seed_cost_20260921/startup_verification.json`。まだ費用改善・1%達成は未確認です。
 
 2026-09-21 12:59 JST: 固定19fe856dはcrossover停止を回避し、最大16.124GB、native log上で根LP終了を確認しました。600秒で時間切れ、改善0円・gap3.779%で目標1%未達です。初期配車の固定Stage2費用比較と根LPログの証拠を追加し、関連93 tests通過。次は同じ解法の1800秒診断です。[説明資料・数値・残課題](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。

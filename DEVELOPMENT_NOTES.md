@@ -1,5 +1,14 @@
 # Development Notes
 
+## 2026-09-21 初期配車の予測総費用改善を確認、次は2threads
+
+- 固定d6fe5b31のcompletion/summary/9原本SHA・cleanを確認。入力seedのplan SHAとduties全文/車両/便順を保存後の固定Stage2と照合。両案の独立物理とPrepared設備によるBESS各672区間が通過。原本 `output/barrier_budget_seed_cost_20260921/review.json`。
+- 予測総費用4,157,027.338747→4,146,949.139563円、10,078.199184円（0.242438%）減。206車両日は不変、燃料費9,907.4025円＋CO₂費170.796684円減。両Stage2 optimal/gap0%。Stage1差、入力seed予測差、週間実績を分ける。最初のincumbent固定Stage2総費用は未保存。
+- BESS初期は双方3000、終端seed1238.847113／final1200kWh、取り崩し1761.152887／1800kWh。PV抑制11684.189753／11269.598677、買電双方0。PV効果・在庫減・毎週の節約額へ解釈を拡大しない。
+- Stage1は612秒に改善候補、702.67秒memory_limit、最大18.012102GB。native/認証下界400万円、gap3.545197%。根LP終了184.90秒、barrier累積359.00秒、crossover基底生成なし、OPTIMAL MIPNODE記録null。1800秒完走やroot探索完了とはしない。
+- 次の新設定はthreads4→2だけが実効条件差。主1800/120秒・wall2400、seed Stage2120秒/別wall180、soft18GB、1%、物理領域を維持。古いresource説明の600秒は新設定で1800秒へ訂正。公式Gurobiのthread別モデル保持を根拠とする仮説で、効果未確認。新clean固定版・新規Prepare・5月1回、script終了時のみ既存タスク通知。
+- 関連46 tests通過（2threads実効値/物理、seed比較、未達保持）。新solverコード変更なし。自己レビューP0/P1新規残件0、独立研究承認PENDING。研究BLOCKED、全12週・メールなし。[説明資料](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
+
 ## 2026-09-21 crossover省略の結果と初期配車費用の証拠追加
 
 - 13:13 JST、clean固定d6fe5b3171ce3f2250e9084de6198a1ad41358d9、codex/barrier-budget-seed-cost-20260921で新規Prepare開始。固定版seed13 tests、入力47 SHA・親11参照・case3参照と全条件を照合。実runner31444/venv launcher35836、開始確認RUNNING・stderr空。制御先output/barrier_budget_seed_cost_20260921/startup_verification.json。通常script・終了時1回の既存タスク通知。旧固定版への変更なし。
