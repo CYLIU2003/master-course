@@ -73,3 +73,13 @@ NoRelで得た候補を旧データとして上書きせず、悪化・失敗な
 既存profileのnative小規模求解、日別下界、BESS方針、路線検査、診断wrapperの関連36 tests通過。
 モデルのコード変更はなく、全体回帰は繰り返していない。
 自己確認完了、独立研究承認PENDING、研究採用BLOCKED。
+
+## 開始記録
+
+2026-09-21 12:07 JST、clean固定 `8cd06d3f75979422cc7198aee45460153094149c`、
+branch `codex/endpoint-barrier-20260921` で5月の新規Prepareを開始した。
+固定版のbarrier native/設定2 tests通過。入力47 SHA・親scenario11参照の移設、
+case source3参照、BESS/探索設定を確認した。実runner PID52024、venv launcher43468。
+起動時RUNNING、stderr空、制御先 `output/endpoint_barrier_20260921`。
+`startup_verification.json` に確認記録を保存した。出力は新worktreeの
+`output/endpoint_barrier_diagnosis_20260921`。通常処理はscript、終了時だけ既存タスクへ1回通知。

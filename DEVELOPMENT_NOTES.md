@@ -2,6 +2,8 @@
 
 ## 2026-09-21 日別路線検査の新規通過と端点barrier診断
 
+- 12:07 JST、clean固定8cd06d3f75979422cc7198aee45460153094149cで5月の新規Prepareを開始。固定版barrier2 tests、入力47 SHA・移設11参照、case source3参照と条件を照合。実runner52024／venv launcher43468、RUNNING・stderr空。制御先output/endpoint_barrier_20260921/startup_verification.json。終了時だけ既存タスクへ1回通知。
+
 - e79476d9は11:59 JSTにDIAGNOSIS_COMPLETE。completion/summary/5原本SHAとcleanを照合。physical違反0、Prepared設備値でBESS672区間残差2.595e-10kWh・境界/出力/モード違反0。原本output/route_band_service_day_20260921/review.json。
 - BESS3000→1200kWh、買電0、PV抑制11725.568511kWh。Stage1初期解差132.516318円は目的値差であり、初期解の固定Stage2総費用未保存のため実総費用改善は未確認。最終予測総費用4156638.428392円、native/認証gap3.775968%、根LP476447反復で未完了、最大23.717924GB。
 - 既存bounded_presolve_barrier（Method2/NoRelWork0）を端点表現・4threadsで診断する新設定。数理モデル/solverコード、BESS追加予備・復元なし、完全網、料金、600/120秒、soft18GB、gap1%を維持。設定差分確認と関連36 tests通過。旧dense/12thread版との単独効果比較にはしない。[詳細](docs/notes/ENDPOINT_BARRIER_DIAGNOSIS_20260921.md)。独立承認PENDING、研究採用BLOCKED。
