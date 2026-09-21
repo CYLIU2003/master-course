@@ -1,0 +1,11 @@
+{
+  "source_path": "C:\\master-course\\output\\monthly_auxiliary_logfix_20260921\\march_predecessor_diagnosis\\presolve0\\hour_151\\model.mps",
+  "source_sha": "818e78d05021e0cdf1a62b637c03b1dbfc9a604a",
+  "source_mps_sha256": "4392075d987814b0bb62bd7280c26735fefa190864968936bf37cae9c6a1c46c",
+  "fixture_sha256": "d18d8dd5bd0269d86fb321dd9f89b358fa6a4ace9c5982ab91725f2b8b480f62",
+  "vehicle_id": "35f95479-c68e-40bc-b31a-1f0a5490227c",
+  "next_boundary_slot": 608,
+  "next_initial_min_kwh": 273.412242044,
+  "minimum_basis": "IIS fixed driving loads, exact terminal floor and maximum session-limited charge; diagnostic slack 1.900020265566127e-7 added to 273.4122418539981",
+  "old_presolve2_constraint_violation": 2.850016187494475e-07
+}

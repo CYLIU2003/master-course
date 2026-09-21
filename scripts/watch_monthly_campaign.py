@@ -26,7 +26,10 @@ DEPLOYMENT_RELATIVE = Path("output/monthly_fair_weeks_20260914")
 
 def deployment_paths(config: dict) -> tuple[Path, str, str]:
     version = config.get("deployment", "budget")
-    require(version in {"budget", "search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix"}, "Unknown observer deployment")
+    require(version in {"budget", "search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling"}, "Unknown observer deployment")
+    if version == "auxiliary_rolling":
+        return (Path("output/monthly_auxiliary_rolling_20260921"),
+                "SHIBU21_23_MONTHLY_AUXILIARY_ROLLING_RESULTS_20260921", "shibu21_23_monthly_auxiliary_rolling_20260921")
     if version == "auxiliary_logfix":
         return (Path("output/monthly_auxiliary_logfix_20260921"),
                 "SHIBU21_23_MONTHLY_AUXILIARY_LOGFIX_RESULTS_20260921", "shibu21_23_monthly_auxiliary_logfix_20260921")
@@ -237,7 +240,7 @@ class Observer:
     def publish(self, *, complete: bool) -> None:
         arguments = ["--campaign", str(self.campaign), "--audit", str(self.audit),
                      "--output", str(self.report)]
-        if self.config.get("deployment") in {"search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix"}:
+        if self.config.get("deployment") in {"search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling"}:
             arguments.extend(["--figure-name", Path(self.config["figure_stem"]).name])
         if not complete:
             arguments.append("--partial")
@@ -248,7 +251,7 @@ class Observer:
     def step(self) -> bool:
         self.check_helpers()
         progress = read_json(self.campaign / "progress.json")
-        if self.config.get("deployment") in {"reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix"} and progress["status"] == "STOPPED_AFTER_FAILED_CASE":
+        if self.config.get("deployment") in {"reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling"} and progress["status"] == "STOPPED_AFTER_FAILED_CASE":
             self.publish_stopped(progress)
             raise ValueError("Campaign stopped: STOPPED_AFTER_FAILED_CASE (partial status recorded)")
         completed = validate_progress(progress, self.config)

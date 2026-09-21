@@ -1,5 +1,10 @@
 # 月別再実行の初期配車チェックにおけるログ設定修正
 
+<!-- monthly-auxiliary-logfix-status -->
+最新の月別再実行: 固定 `818e78d0`、独立監査 2/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、Stage2 Presolve2。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_LOGFIX_RESULTS_20260921.md`。
+<!-- /monthly-auxiliary-logfix-status -->
+
+
 ## 確認した停止原因
 
 固定27253fa8の新規Prepareは完了したが、1月day-aheadの本Stage1開始前に停止した。

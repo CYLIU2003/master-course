@@ -39,6 +39,13 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, default=str) + '\n', encoding='utf-8')
 
 
+def rolling_config_for_design(config: OptimizationConfig, design: dict) -> OptimizationConfig:
+    """Apply the declared hourly policy once, before the first execution prefix."""
+    return replace(config, time_limit_sec=design['rolling_hour_time_limit_sec'],
+        stage2_time_limit_sec=design['rolling_hour_time_limit_sec'],
+        stage2_gurobi_presolve=design.get('stage2_search_policy', {}).get('rolling_Presolve', config.stage2_gurobi_presolve))
+
+
 def source_snapshot() -> dict:
     files = [path for folder in ('src', 'bff', 'scripts') for path in (ROOT/folder).rglob('*.py')
              if '__pycache__' not in path.parts]
@@ -172,7 +179,7 @@ def solve_week(
         return summary
     reference = result.plan
     rolling = RollingReoptimizer()
-    rolling_config = replace(config, time_limit_sec=design['rolling_hour_time_limit_sec'],stage2_time_limit_sec=design['rolling_hour_time_limit_sec'])
+    rolling_config = rolling_config_for_design(config, design)
     state = None
     segments = []
     for hour in range(168):

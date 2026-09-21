@@ -1,5 +1,9 @@
 # Development Notes
 
+## 2026-09-21 3月hour152のSOC数値持越し
+
+818e78d0の2/12週監査後、3月hour152 infeasible。前時間の最大制約違反2.85e-7と次初期SOC不足1.90e-7を再現し、同一MPSのPresolve0では前時間の違反が5.10e-11へ縮小した。初期状態修正/許容差緩和は行わない。前日2/毎時0の事前宣言・入口構築・169原本監査を実装し、前時間MPSの回帰fixtureを追加。監査のrequired_presolve固定表示をphase別表示に直す。全月開始前の17時間連続・初日窓の検証をスクリプトへ任せる。[詳細](docs/notes/MONTHLY_AUXILIARY_ROLLING_NUMERICS_20260921.md)。
+
 ## 2026-09-21 内部seedチェックのログ継承バグ
 
 旧27253fa8の19:03 JST停止は、前回追加したnative log設定と内部seed監査の空diagnostic dirが矛盾した回帰。Prepare後、本Stage1開始前にValueError、成功0/12。内部local problemだけログ無効、本求解/rollingログ・研究条件は維持。実エンジン経由の再現テストは修正前に同じ例外、修正後は94 tests通過。新configはmanifest先/派生元/説明だけを変更。新clean固定版で全12週を新規Prepareし、旧failure/queueを保全する。完了メールなし。[修正と検証範囲](docs/notes/MONTHLY_AUXILIARY_LOGGING_RECOVERY_20260921.md)。
@@ -66,6 +70,11 @@
 - [実測・費用訂正・検証範囲](docs/notes/TWO_THREAD_RESULT_AND_DAILY_REFERENCE_20260921.md)。
 
 ## 2026-09-21 研究目標の再点検と日次帰庫CO₂の計上漏れ修正
+
+<!-- monthly-auxiliary-logfix-status -->
+最新の月別再実行: 固定 `818e78d0`、独立監査 2/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、Stage2 Presolve2。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_LOGFIX_RESULTS_20260921.md`。
+<!-- /monthly-auxiliary-logfix-status -->
+
 
 - Phase3と総費用統合の範囲を再点検。既存Phase4はdaily_return条件をengineで拒否しており、現行探索profileの調整だけでは週間総費用最適を証明できない。guardは保持し、同一目的関数・物理領域・U/L・対照比較の条件を[明文化](docs/notes/RESEARCH_OPTIMALITY_CONTRACT_20260921.md)した。
 - CostEvaluatorの燃料費は物理timeline、CO₂はDutyLeg注記を使っていた。daily_returnのCO₂を既存の燃料消費イベントへ統一し車両別係数を適用。非daily経路・燃料L・物理量・料金は不変。

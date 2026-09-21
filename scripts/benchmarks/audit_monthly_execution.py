@@ -263,9 +263,11 @@ def audit_native_entries(
                 design["rolling_hour_time_limit_sec"]
             )
         reasons: list[str] = []
+        presolve_policy = design.get("stage2_search_policy", {})
         expected = {
             "stage2_gurobi_aggregate": 0,
-            "stage2_gurobi_presolve": design.get("stage2_search_policy", {}).get("Presolve", 0),
+            "stage2_gurobi_presolve": presolve_policy.get("rolling_Presolve", presolve_policy.get("Presolve", 0))
+                if kind == "hourly" else presolve_policy.get("Presolve", 0),
             "stage2_gurobi_feasibility_tol": 1.0e-9,
             "stage2_gurobi_integrality_tol": 1.0e-9,
         }
@@ -331,7 +333,13 @@ def audit_native_entries(
         "all_hourly_native_strict": not any(item["kind"] == "hourly" for item in invalid),
         "all_native_strict": not invalid,
         "required_aggregate": 0,
-        "required_presolve": 0,
+        "required_presolve": presolve_policy.get("Presolve", 0)
+            if presolve_policy.get("rolling_Presolve", presolve_policy.get("Presolve", 0)) == presolve_policy.get("Presolve", 0)
+            else None,
+        "required_presolve_by_kind": {
+            "day_ahead": presolve_policy.get("Presolve", 0),
+            "hourly": presolve_policy.get("rolling_Presolve", presolve_policy.get("Presolve", 0)),
+        },
         "required_feasibility_tol": 1.0e-9,
         "required_integrality_tol": 1.0e-9,
         "day_ahead_stage2_time_limit_sec": compact_entries[0]["stage2_time_limit_sec_effective"],

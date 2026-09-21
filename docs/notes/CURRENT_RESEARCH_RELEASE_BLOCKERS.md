@@ -1,5 +1,7 @@
 # Current research release blockers
 
+2026-09-21: 818e78d0は1・2月監査済み、3月152/168時間で停止。前時間のnative制約誤差が次初期SOCへ持ち越された。前日2/毎時0の数値設定を別診断で検証し、ゲート通過後のみ新固定全12週を実行する。SOC補正・許容差緩和・旧成功2週の流用は行わない。[数値再現と修正](MONTHLY_AUXILIARY_ROLLING_NUMERICS_20260921.md)。既存の統合最適性/Stage1/研究承認blockerは継続。
+
 2026-09-21 19:03 JST: 27253fa8はPrepare後、内部seedチェックのログ設定矛盾により本Stage1前に停止。成功0/12、物理/会計の新規成果なし。原因を修正し同条件の新固定版へ移行する。Stage1 gap/メモリ、週間統合最適性、独立承認の既存blockerは継続。[今回の修正](MONTHLY_AUXILIARY_LOGGING_RECOVERY_20260921.md)。
 
 2026-09-21: a4b9c679の全月計算は1月day-aheadで停止、成功0/12。
@@ -28,6 +30,11 @@ Stage1連続recourseでは補助制御規則を緩和しており、Stage1/2の�
 固定6aab4424も931.25秒memory_limit、最大18.015GB、gap3.610277%で1%未達。CO₂修正再集計のseed差7278.209797円は予測値で、前回4threads案より2799.989387円高い。2threadsを採用しない。人工2日間の全4割当・固定Stage2上下界・物理・費用照合の検査器を追加したが、週間Phase4対応、修正後実規模求解、実績費用、独立研究承認は未完了。研究BLOCKED。[最新根拠](TWO_THREAD_RESULT_AND_DAILY_REFERENCE_20260921.md)。
 
 ## 2026-09-21 総費用統合の未対応とCO₂会計の訂正
+
+<!-- monthly-auxiliary-logfix-status -->
+最新の月別再実行: 固定 `818e78d0`、独立監査 2/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、Stage2 Presolve2。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_LOGFIX_RESULTS_20260921.md`。
+<!-- /monthly-auxiliary-logfix-status -->
+
 
 週間・毎日帰庫のPhase4は未対応（engineのDAILY_RETURN_PHASE_UNSUPPORTED）。Stage1/2の精度だけで総費用の大域最適としない。日次帰庫のCO₂回送漏れをmainで修正し、d6fe5b31の両案で70.883272円ずつの不足を確認。再集計後の総費用は4157098.222019／4147020.022836円、差は不変だが新規求解ではない。修正後の実規模評価・全12週・U/Lによる統合最適性・入力仮定の根拠・独立研究レビューは未完了。[根拠と実施順序](RESEARCH_OPTIMALITY_CONTRACT_20260921.md)。
 

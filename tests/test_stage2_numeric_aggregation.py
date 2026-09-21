@@ -103,3 +103,26 @@ def test_march_native_model_preserves_replayed_soc_without_presolve(tmp_path):
                 )
                 soc += source_energy * reference["charge_efficiency"] - load
             assert soc >= reference["terminal_target_kwh"] - 1.0e-9
+
+
+def test_auxiliary_march_predecessor_does_not_poison_next_soc_boundary(tmp_path):
+    """A saved 68-slot model must supply the next hour's strict SOC floor."""
+    gp=pytest.importorskip('gurobipy')
+    fixture=FIXTURE.parent/'stage2_march_auxiliary_predecessor.mps.gz'
+    reference=json.loads(fixture.with_suffix('').with_suffix('.json').read_text(encoding='utf-8'))
+    compressed=fixture.read_bytes()
+    assert hashlib.sha256(compressed).hexdigest()==reference['fixture_sha256']
+    native=gzip.decompress(compressed)
+    assert hashlib.sha256(native).hexdigest()==reference['source_mps_sha256']
+    path=tmp_path/'march_predecessor.mps';path.write_bytes(native)
+    with gp.Env(empty=True) as env:
+        env.setParam('OutputFlag',0);env.start()
+        with gp.read(str(path),env=env) as model:
+            _configure_stage2_numerics(model,OptimizationConfig(
+                rolling_horizon_policy=ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT,stage2_gurobi_presolve=0))
+            model.Params.TimeLimit=15;model.Params.Threads=4;model.Params.Seed=42;model.Params.MIPGap=.01
+            model.optimize()
+            assert model.SolCount>0
+            assert model.ConstrVio<=1e-9 and model.BoundVio<=1e-9
+            next_soc=model.getVarByName(f"soc_{reference['vehicle_id']}_{reference['next_boundary_slot']}").X
+            assert next_soc>=reference['next_initial_min_kwh']-1e-9

@@ -1,5 +1,13 @@
 # 月別12週のスクリプト実行と完了メール
 
+## 2026-09-21 毎時数値設定の修正版
+
+旧818e78d0は1・2月監査済み、3月hour152で数値誤差の持越しにより停止。
+旧failureの処理先は `output/monthly_auxiliary_logfix_20260921/`、新しい検証/実行制御先は
+`output/monthly_auxiliary_rolling_20260921/`。[今回の実行条件](MONTHLY_AUXILIARY_ROLLING_NUMERICS_20260921.md)を参照。
+新制御先のpreflight stateを先に読み、全月開始前の失敗では月別completionやメールに進まない。
+新固定版の全12週の独立監査・図表が揃った後だけ、今回のbundle/receiptと固有件名のGmail検索で照合し、承認済み宛先へ1通送る。
+
 ## 2026-09-21 内部seedログ修正版
 
 旧27253fa8は内部seedチェックのログ設定矛盾で本Stage1前に停止。旧failure/queueは保存し、再送しない。
