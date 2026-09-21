@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-21 crossover停止は回避、費用改善・1%は未達
+
+固定19fe856dは最大16.124GB、native log上は根LP終了。OPTIMAL MIPNODE記録はnullで区別して保持する。600秒time_limit、Stage1改善0円・native/認証gap3.779036%。物理/BESS672区間は通過、総費用は前回と同額。次の1800秒診断に、入力初期配車の保存と固定Stage2予測費用比較を追加した。実規模の比較・修正後12週・実績会計・独立研究承認は未完了。[結果と次の判定](PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
+
 ## 2026-09-21 発表前確認：物理通過と最適性未達を分離
 
 最新8cd06d3fはbarrier収束後のcrossoverでmemory_limit。Stage1改善0円・認証gap3.779036%、最初の配車の固定Stage2総費用は未保存。物理/BESS672区間通過を最適化完了としない。no-crossover profileと証拠の表示/整合検査を修正し、実規模は次の新規診断で確認する。新条件12週・実績会計・入力仮定の確認・独立研究承認は未完了。[問題点・根拠・先生への説明](PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。

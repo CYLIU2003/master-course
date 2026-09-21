@@ -15608,6 +15608,11 @@ class GurobiMILPAdapter:
                 stage1_exact_clone_vehicle_ids
             ),
         )
+        from .seed_snapshot import write_stage1_seed_snapshot
+        write_stage1_seed_snapshot(
+            problem, config, applied=stage1_warm_start_applied,
+            source=stage1_warm_start_source, rejection_reason=stage1_warm_start_rejection_reason,
+        )
         stage1_aggregate_mip_start_audit: Dict[str, Any] = {
             "schema_version": "exact_clone_aggregate_mip_start_audit_v1",
             "requested": bool(

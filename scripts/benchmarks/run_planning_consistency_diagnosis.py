@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.benchmarks.run_exact_seasonal_campaign import run_campaign
 from scripts.benchmarks.run_shibu21_24_seasonal_diagnostic import git_state, write_json
+from scripts.benchmarks.optimization_quality import native_root_log_evidence
 
 
 def assess_evidence(native: dict, quality: dict, physical: dict) -> dict:
@@ -110,14 +111,28 @@ def run(design_path: Path, output: Path) -> dict:
             raise RuntimeError("Saved physical/native evidence contradicts successful day-ahead progress")
         metadata = native["metadata"]
         native_log_path = metadata.get("stage1_native_log_path")
+        root_log = None
         if design.get("stage1_native_log_enabled") is True:
             if not native_log_path or not Path(native_log_path).is_file():
                 raise RuntimeError("Requested native Stage 1 log is missing")
             evidence.append(Path(native_log_path))
+            root_log = native_root_log_evidence(Path(native_log_path).read_text(encoding="utf-8", errors="replace"))
+        seed_comparison = None
+        if design.get("stage1_seed_cost_diagnostic_enabled") is True:
+            seed_path = case / "supplied_seed_cost/comparison.json"
+            seed_comparison = json.loads(seed_path.read_text(encoding="utf-8"))
+            evidence.extend([seed_path, case / "day_ahead_failure_diagnostics/stage1_supplied_seed.json"])
+            if seed_comparison["status"] != "SEED_NOT_APPLIED":
+                evidence.extend([case / "supplied_seed_cost/canonical_solver_result.json",
+                                 case / "supplied_seed_cost/physical_validation.json"])
+            if seed_comparison["status"] != "COMPARABLE_FORECAST_COSTS":
+                assessment["blocking_reasons"].append("SUPPLIED_SEED_COST_COMPARISON_BLOCKED")
         summary = {"status": "DIAGNOSIS_COMPLETE", "source_state": after,
             "physical_accepted": progress["day_ahead_physical_accepted"],
             "quality": quality, "elapsed_seconds": progress["day_ahead_seconds"],
             "evidence_assessment": assessment,
+            "native_root_log_evidence": root_log,
+            "supplied_seed_cost_comparison": seed_comparison,
             "stage1_search_controls": metadata.get("stage1_gurobi_search_controls"),
             "gurobi_threads": metadata.get("gurobi_threads"),
             "native_memory": metadata.get("stage1_search_telemetry", {}).get("native_memory"),

@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-21 12:59 JST: 固定19fe856dはcrossover停止を回避し、最大16.124GB、native log上で根LP終了を確認しました。600秒で時間切れ、改善0円・gap3.779%で目標1%未達です。初期配車の固定Stage2費用比較と根LPログの証拠を追加し、関連93 tests通過。次は同じ解法の1800秒診断です。[説明資料・数値・残課題](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
+
 2026-09-21 12:39 JST: 固定19fe856dからcrossover省略の5月診断をスクリプトで開始。入力47 SHA・参照11件・case source3参照と条件を照合し、起動時RUNNINGを確認しました。実規模の改善判定は結果待ちです。[問題点と説明資料](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
 
 2026-09-21: [発表前の問題点・修正・説明根拠](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。最新8cd06d3fの物理/BESS672区間は通過しましたが、Stage1はbarrier収束後のcrossoverでメモリ停止、改善0円・gap3.779%で目標1%未達です。基底生成を省く新profileと、診断終了/精度達成/総費用の区別を追加し、関連71 tests通過。実規模の修正効果・修正後12週・研究承認は未確認です。

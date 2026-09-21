@@ -113,6 +113,7 @@ def solve_week(
         'stage1_daily_path_cover_bound': bool(design.get('stage1_daily_path_cover_bound', False)),
         'stage1_native_log_enabled': bool(design.get('stage1_native_log_enabled', False)),
         'stage1_sparse_charge_window_support': bool(design.get('stage1_sparse_charge_window_support', False)),
+        'stage1_seed_cost_diagnostic_enabled': bool(design.get('stage1_seed_cost_diagnostic_enabled', False)),
         'phase3_diagnostics_dir':str(output/'day_ahead_failure_diagnostics'),
         'stage1_exact_depot_connection_factors': bool(
             design.get('stage1_exact_depot_connection_factors', False)
@@ -159,6 +160,11 @@ def solve_week(
     write_json(output/'day_ahead_optimization_quality.json', quality)
     summary['day_ahead_optimization_quality'] = quality
     if design.get('diagnostic_stop_after_day_ahead') is True:
+        if design.get('stage1_seed_cost_diagnostic_enabled') is True:
+            from scripts.benchmarks.seed_cost_diagnostic import evaluate_supplied_seed
+            summary['supplied_seed_cost_comparison'] = evaluate_supplied_seed(
+                problem, config, result, output,
+                wall_seconds=int(design['seed_stage2_wall_time_limit_sec']))
         summary['status'] = 'DAY_AHEAD_ONLY_DIAGNOSIS_COMPLETE'
         write_json(output/'progress.json', summary)
         return summary

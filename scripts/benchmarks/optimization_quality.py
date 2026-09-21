@@ -1,5 +1,20 @@
 """Separate subproblem certificates, search progress and real executed cost."""
 import math
+import re
+
+
+def native_root_log_evidence(text: str) -> dict:
+    """Keep native root-LP completion separate from optional MIPNODE callbacks."""
+    matches = re.findall(
+        r"^Root relaxation: objective ([+\-\d.eE]+),.*? ([\d.]+) seconds", text, re.MULTILINE)
+    return {
+        "root_lp_objective_reported": bool(matches),
+        "root_lp_objective_jpy": float(matches[-1][0]) if matches else None,
+        "root_lp_solve_seconds": float(matches[-1][1]) if matches else None,
+        "crossover_basis_build_observed": "Building initial crossover basis" in text,
+        "crossover_memory_limit_observed": "Crossover changed status from Optimal to Memory Limit" in text,
+        "semantics": "native_log_root_relaxation_line;not_root_cut_loop_completion_or_optimal_MIPNODE_callback",
+    }
 
 
 def _finite(value):

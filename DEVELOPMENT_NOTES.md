@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-21 crossover省略の結果と初期配車費用の証拠追加
+
+- 固定19fe856dのcompletion/summary/5原本SHAとclean、独立物理、Prepared設備でBESS672区間を確認。Method2/NodeMethod2/Crossover0、crossover基底生成なし、native根LP終了186.25秒。MIPNODE記録はnullのまま、root探索後に600.48秒time_limit。最大16.124100GB、Stage1改善0円・native/認証gap3.779036%。
+- 予測総費用4157027.338747円、BESS3000→1238.847113kWh・取り崩し1761.152887、買電0、PV抑制11684.189753。前回と同額で費用改善はない。原本output/barrier_no_crossover_20260921/review.json。
+- 根LPのnative終了行をcallbackと別に保存。Stage1へ入力したseedを既存準備後/探索前に保存し、主計画終了後の同条件固定Stage2で予測総費用を比較するopt-in診断を追加。Stage1モデル・既存profile・物理領域は不変。最初のincumbentや実績費用とは区別する。
+- 関連93 tests通過。初期案未適用/改ざん/物理・gap未達の拒否、native Phase3→保存seed→固定Stage2と配車不変、無効時の無副作用を検証。自己レビュー完了、独立承認PENDING。詳細は[発表説明](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。次は同profileでStage1 1800秒・主wall2400秒、seed Stage2 120秒/別wall180秒の限定診断。全12週・メール・自動再試行なし。
+
 ## 2026-09-21 crossover停止対策と進捗発表の証拠整理
 
 - 12:39 JST、clean固定19fe856d4e6e05c57f82d63c12934a088f3f1ebd、codex/barrier-no-crossover-20260921から新規Prepareを開始。固定版2 tests、入力47 SHA・親11参照・case3参照・条件を確認。実runner33168/venv launcher53844、起動時RUNNING・stderr空。制御先output/barrier_no_crossover_20260921/startup_verification.json。通常script、終了時1回のみ通知。実規模の品質・メモリ判定は未完了。
