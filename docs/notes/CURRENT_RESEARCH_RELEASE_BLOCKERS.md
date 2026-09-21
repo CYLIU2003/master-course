@@ -1,5 +1,8 @@
 # Current research release blockers
 
+2026-09-22 数値修正版c5c1eff7の連続診断はhour126～137通過後、hour138が15秒time_limit/解なし。全月未開始0/12、メール未送信。同一モデルは120秒枠で17.13秒・gap0・実行引継ぎを通過した。次は毎時共通120秒の新clean固定版で連続42時間を検証し、通過後に全12週を新規実行。研究採用BLOCKED。詳細: [毎時求解時間](MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。
+
+
 2026-09-22 現行月別計算c022ece7は1月hour126のStage2で停止、成功0/12。数値的な不成立を同一MPSで再現し、制約・許容差を変えずNumericFocus3で可行性を確認した。旧126時間と新条件の週を混ぜない。次は連続42時間の局所検証後に新規全12週を行う。独立週監査・会計照合・全月完了は未達、研究採用BLOCKED。詳細: [数値診断と実行条件](MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
 
 

@@ -284,6 +284,8 @@ def audit_native_entries(
                 focus = presolve_policy.get("rolling_NumericFocus", focus)
             require(type(focus) is int and focus in (0, 1, 2, 3), "Invalid declared NumericFocus")
             numeric_controls = read_search_controls(document, {"stage2_gurobi_numeric_focus": focus})
+            if kind == "hourly" and effective.get("time_limit_sec") != float(design["rolling_hour_time_limit_sec"]):
+                reasons.append("rolling_wall_time_limit_sec")
         if metadata["stage2_has_feasible_incumbent"] is not True:
             reasons.append("stage2_has_feasible_incumbent")
         if document.get("feasible") is not True:
