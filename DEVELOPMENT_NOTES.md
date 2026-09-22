@@ -1,5 +1,8 @@
 # Development Notes
 
+2026-09-22: 4b1cbbb7は新配車の1月49時間を受理後、hour49のStage2 gap1.1743%で停止。同一MPSの120/600秒比較は候補費用23,645.652509円が不変、600秒枠で167.37秒・gap0.95286%。全毎時上限600秒の新設定を作成し、MIPFocus2/NumericFocus3/1%ゲート/物理条件は維持。observerがfailed_stage2_qualityを無視してreasons=[]にしていたため、hour・目的値/下界/gap・native停止理由を引き継ぐよう修正。関連152 tests通過。独立レビューと新条件の全週物理/会計は未完了。[詳細](docs/notes/MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
+
+
 2026-09-22 起動確認: clean固定 `4b1cbbb7` で一度きりの検証スクリプトを起動。制御PID23684、入力47ファイル/hashと実モデル0x006d6a65の一致を確認済み。現時点は局所実経路の検証段階で、全月は未開始0/12。局所引継ぎ・連続42時間・gap/数値品質・独立物理/BESSが通過した場合だけ全12週を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、完了メール未送信。記録: `output/monthly_auxiliary_quality_20260922/gate_startup_verification.json`。
 
 

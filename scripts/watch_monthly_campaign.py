@@ -26,7 +26,10 @@ DEPLOYMENT_RELATIVE = Path("output/monthly_fair_weeks_20260914")
 
 def deployment_paths(config: dict) -> tuple[Path, str, str]:
     version = config.get("deployment", "budget")
-    require(version in {"budget", "search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric", "auxiliary_budget", "auxiliary_quality"}, "Unknown observer deployment")
+    require(version in {"budget", "search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric", "auxiliary_budget", "auxiliary_quality", "auxiliary_proof_budget"}, "Unknown observer deployment")
+    if version == "auxiliary_proof_budget":
+        return (Path("output/monthly_auxiliary_proof_budget_20260922"),
+                "SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922", "shibu21_23_monthly_auxiliary_proof_budget_20260922")
     if version == "auxiliary_quality":
         return (Path("output/monthly_auxiliary_quality_20260922"),
                 "SHIBU21_23_MONTHLY_AUXILIARY_QUALITY_RESULTS_20260922", "shibu21_23_monthly_auxiliary_quality_20260922")
@@ -255,7 +258,7 @@ class Observer:
     def publish(self, *, complete: bool) -> None:
         arguments = ["--campaign", str(self.campaign), "--audit", str(self.audit),
                      "--output", str(self.report)]
-        if self.config.get("deployment") in {"search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric", "auxiliary_budget", "auxiliary_quality"}:
+        if self.config.get("deployment") in {"search", "phase_search", "cyclic", "reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric", "auxiliary_budget", "auxiliary_quality", "auxiliary_proof_budget"}:
             arguments.extend(["--figure-name", Path(self.config["figure_stem"]).name])
         if not complete:
             arguments.append("--partial")
@@ -266,7 +269,7 @@ class Observer:
     def step(self) -> bool:
         self.check_helpers()
         progress = read_json(self.campaign / "progress.json")
-        if self.config.get("deployment") in {"reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric", "auxiliary_budget", "auxiliary_quality"} and progress["status"] == "STOPPED_AFTER_FAILED_CASE":
+        if self.config.get("deployment") in {"reserve", "auxiliary", "auxiliary_presolve", "auxiliary_logfix", "auxiliary_rolling", "auxiliary_session", "auxiliary_timeline", "auxiliary_numeric", "auxiliary_budget", "auxiliary_quality", "auxiliary_proof_budget"} and progress["status"] == "STOPPED_AFTER_FAILED_CASE":
             self.publish_stopped(progress)
             raise ValueError("Campaign stopped: STOPPED_AFTER_FAILED_CASE (partial status recorded)")
         completed = validate_progress(progress, self.config)
@@ -346,10 +349,16 @@ class Observer:
                     self.run_python(self.config["audit_script"], "--week", week, "--audit-output", str(self.audit))
                     audit = read_json(self.audit)
                 continue
-            failed_cases.append({"week": week, "status": summary["status"],
+            failure = {"week": week, "status": summary["status"],
                 "reasons": summary.get("day_ahead_reasons") or summary.get("hourly_reasons")
                     or summary.get("reasons") or [],
-                "source_path": str(summary_path), "source_sha256": sha256(summary_path)})
+                "source_path": str(summary_path), "source_sha256": sha256(summary_path)}
+            quality = summary.get("failed_stage2_quality")
+            if isinstance(quality, dict):
+                failure.update(failed_hour=summary.get("failed_hour"), stage2_quality=quality,
+                    failed_solver_status=summary.get("failed_solver_status"))
+                failure["reasons"] = list(dict.fromkeys(failure["reasons"] + quality.get("reasons", [])))
+            failed_cases.append(failure)
             audit["weeks"][week] = {
                 "status": summary["status"], "audit_status": "FAILED_CASE_DIAGNOSTIC_ONLY",
                 "failure": True, "fully_audited": False,
