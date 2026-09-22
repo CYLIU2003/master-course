@@ -1,5 +1,8 @@
 # master-course
 
+2026-09-22 9:33 JST 起動確認: clean固定 `7cb46894` で保存hour49/50の局所引継ぎ検証を開始。制御PID56540、診断launcher PID59088。入力47ファイル・helper hash・実モデルfingerprint/MPS SHAの一致を確認済み。新しい全12週計算はまだ未開始0/12。局所2時間のgap1%/厳密数値品質/BESS8区間/引継ぎ通過後だけ全月を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、メール未送信。記録: `output/monthly_auxiliary_proof_budget_20260922/gate_startup_verification.json`。
+
+
 2026-09-22: 固定4b1cbbb7の新規全月実行は1月hour49（50時間目）でgap1.1743%/120秒となり停止、完了0/12。実行前の1%検査は正しく拒否した。同一MPSは600秒枠で167.37秒・gap0.95286%（目的値同額、下界改善）。毎時上限だけ全月共通600秒とし、新clean固定版の局所2時間引継ぎ通過後に新規Prepareから全12週を再計算する。研究採用BLOCKED、メール未送信。[原因と次の条件](docs/notes/MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
 
 
