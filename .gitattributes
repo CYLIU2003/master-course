@@ -28,3 +28,7 @@ docs/thesis/authoring_v1/03_mathematical_formulation.md text eol=lf
 docs/thesis/authoring_v1/05_assumptions_parameters_units.md text eol=lf
 outcome/2026-09-05_literature_review/01_critical_review.md text eol=lf
 outcome/2026-09-05_literature_review/02_adoption_protocol.md text eol=lf
+
+# Completion bundle and emailed attachments bind these exact original bytes.
+docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.* -text
+docs/notes/figures/shibu21_23_monthly_auxiliary_proof_budget_20260922.* -text

@@ -1,5 +1,15 @@
 # Development Notes
 
+<!-- monthly-auxiliary-proof-budget-status -->
+最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
+<!-- /monthly-auxiliary-proof-budget-status -->
+
+
+<!-- monthly-proof-budget-final-20260923 -->
+2026-09-23 最終確認: 固定7cb46894のcampaign summary/progressはCOMPLETED、前後clean・同一SHA、全12週168時間/672区間・独立物理・会計・各169件Stage2検査を確認。合計2,028件のStage2記録、4,176原本ファイルのhash、audit/bundle、添付4点の元バイト一致を再照合。6パネルPNGを表示し、月・単位・凡例・注記・重なりを確認して修正不要。設定同一性はobserverと同じ正規化JSON hashで照合した。数式・固定ソース・入力・確定会計は変更なし。Stage1 gap3.264～4.274%、統合最適性・独立研究承認などは未達のまま。検査記録は `output/monthly_auxiliary_proof_budget_20260922/script_observer/final_integrity_review.json` と `final_visual_review.json`。
+<!-- /monthly-proof-budget-final-20260923 -->
+
+
 2026-09-22 9:33 JST 起動確認: clean固定 `7cb46894` で保存hour49/50の局所引継ぎ検証を開始。制御PID56540、診断launcher PID59088。入力47ファイル・helper hash・実モデルfingerprint/MPS SHAの一致を確認済み。新しい全12週計算はまだ未開始0/12。局所2時間のgap1%/厳密数値品質/BESS8区間/引継ぎ通過後だけ全月を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、メール未送信。記録: `output/monthly_auxiliary_proof_budget_20260922/gate_startup_verification.json`。
 
 

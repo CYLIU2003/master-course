@@ -1,5 +1,15 @@
 # master-course
 
+<!-- monthly-auxiliary-proof-budget-status -->
+最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
+<!-- /monthly-auxiliary-proof-budget-status -->
+
+
+<!-- monthly-proof-budget-final-20260923 -->
+2026-09-23 01:20 JST: 固定 `7cb46894` の月別12週が完走し、全12週の独立監査と最終図表を確認しました。合計2,016受理時間・8,064区間、物理検証・確定会計の照合済み。Stage1 gapは3.264～4.274%で目標1%未達、週間総費用の統合最適性・研究採用はBLOCKEDです。[結果と季節別整理](docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md)。配信前の原本4,176ファイル・添付4点のhashと実図の表示を確認しました。
+<!-- /monthly-proof-budget-final-20260923 -->
+
+
 2026-09-22 9:33 JST 起動確認: clean固定 `7cb46894` で保存hour49/50の局所引継ぎ検証を開始。制御PID56540、診断launcher PID59088。入力47ファイル・helper hash・実モデルfingerprint/MPS SHAの一致を確認済み。新しい全12週計算はまだ未開始0/12。局所2時間のgap1%/厳密数値品質/BESS8区間/引継ぎ通過後だけ全月を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、メール未送信。記録: `output/monthly_auxiliary_proof_budget_20260922/gate_startup_verification.json`。
 
 

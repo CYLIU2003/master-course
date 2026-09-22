@@ -1,5 +1,10 @@
 # 渋21〜23：月別に平日5日・土休日2日を揃える7日間比較
 
+<!-- monthly-proof-budget-final-20260923 -->
+2026-09-23 現行完了記録: 同じ選択12週（各平日5・土曜1・日曜1）を新規Prepareから実行した固定7cb46894が全週完走し、独立監査・確定会計・季節別整理・最終図の表示確認を完了しました。BESS補助運用・毎時上限600秒の共通条件です。旧成功週は流用していません。[最新の数値と限界](SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md)。Stage1 gapと統合最適性・研究採用は未達であり、月平均や季節一般の因果効果は主張しません。
+<!-- /monthly-proof-budget-final-20260923 -->
+
+
 <!-- monthly-search-status -->
 最新の月別再実行: 固定 `7c7c2334`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。旧10a40c9fの7週・fa0c22bfの10週は旧版の記録として保存し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.md`。
 <!-- /monthly-search-status -->

@@ -1,5 +1,15 @@
 # Current research release blockers
 
+<!-- monthly-auxiliary-proof-budget-status -->
+最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
+<!-- /monthly-auxiliary-proof-budget-status -->
+
+
+<!-- monthly-proof-budget-final-20260923 -->
+2026-09-23 現行結果: 固定7cb46894の新規全12週・各168時間/672区間・独立物理検証・確定会計照合・Stage2品質検査・最終図表の確認は完了しました。これらの実行/監査未完了条件は解消。Stage1 gap3.264～4.274%（目標1%）、二段階解法の統合最適性、正式fleet contract、入力仮定、独立研究承認などは引き続きBLOCKEDです。以下の旧版・未完了記述は当時の履歴で、現行12週の実行状態は[この結果](SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md)を参照。
+<!-- /monthly-proof-budget-final-20260923 -->
+
+
 2026-09-22: 固定4b1cbbb7の局所hour155と旧状態からの42時間診断は通過したが、新規1月はhour49でgap1.1743%となり停止（49時間受理、0/12完了）。同一MPSは167.37秒で0.95286%を確認。次は全毎時共通600秒、厳密1%ゲート維持。新規全週の独立物理/会計・Stage1精度・統合最適性・独立研究承認は未達。研究採用BLOCKED。[根拠](MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
 
 

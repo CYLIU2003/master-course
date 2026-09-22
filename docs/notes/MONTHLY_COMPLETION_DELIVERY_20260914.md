@@ -1,5 +1,10 @@
 # 月別12週のスクリプト実行と完了メール
 
+<!-- monthly-proof-budget-final-20260923 -->
+2026-09-23 現行完了確認: `monthly_auxiliary_proof_budget_20260922/script_observer/` の固定7cb46894は全12週完了。campaign前後clean/同一SHA、4,176原本ファイル・4添付のhash、6パネル実PNGを確認済み。今回の一意件名は `MC2025-7cb46894`。送信前のGmail SENT検索は一致0件。送信成否は同ディレクトリのemail_receipt.jsonで確認し、実IDがあれば再送しない。研究採用BLOCKEDは維持する。
+<!-- /monthly-proof-budget-final-20260923 -->
+
+
 2026-09-22 現行復旧: 旧quality固定4b1cbbb7は新規1月hour49でStage2 gap1.1743%となり停止（0/12）。旧observer/state/failureは保持。新制御先 `output/monthly_auxiliary_proof_budget_20260922/` のpreflight_stateを最初に確認する。全毎時600秒・gap1%の共通条件で、保存hour49/50の局所引継ぎ後に全12週を新規Prepareから実行する。旧週を混ぜず、通常処理はスクリプト。失敗時は1回だけ通知し、全12週監査/実図確認/送信重複照合前に完了メールを送らない。[原因と手順](MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
 
 
