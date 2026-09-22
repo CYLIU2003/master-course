@@ -69,12 +69,30 @@ def test_quality_release_changes_only_hourly_mip_focus_with_same_physical_contro
         assert {key for key,value in asdict(previous).items() if asdict(hourly)[key]!=value} == {"stage2_gurobi_mip_focus"}
         assert hourly.stage2_gurobi_mip_focus==2 and base.stage2_gurobi_mip_focus==1
 
+
+def test_proof_budget_is_uniform_and_preserves_search_physics_and_acceptance():
+    root=Path(__file__).resolve().parents[1]
+    before=json.loads((root/"config/shibu21_23_monthly_auxiliary_quality_20260922.json").read_text(encoding="utf-8"))
+    after=json.loads((root/"config/shibu21_23_monthly_auxiliary_proof_budget_20260922.json").read_text(encoding="utf-8"))
+    assert {key for key in before.keys() | after.keys() if before.get(key)!=after.get(key)}=={
+        "input_manifests_directory","rolling_hour_time_limit_sec","time_budget_semantics","limitations"}
+    base=OptimizationConfig(time_limit_sec=2400,stage1_time_limit_sec=1800,stage2_time_limit_sec=120,
+        stage2_gurobi_presolve=2,stage2_gurobi_numeric_focus=0,stage2_gurobi_mip_focus=1,mip_gap=.01)
+    previous=rolling_config_for_design(base,before)
+    for week in after["evaluation_weeks"]:
+        hourly=rolling_config_for_design(base,after)
+        assert {key for key,value in asdict(previous).items() if asdict(hourly)[key]!=value}=={
+            "time_limit_sec","stage2_time_limit_sec"}
+        assert hourly.time_limit_sec==hourly.stage2_time_limit_sec==600
+        assert hourly.mip_gap==.01 and after["require_stage2_execution_quality"] is True
+    assert len(after["evaluation_weeks"])==12 and base.stage2_time_limit_sec==120
+
 @pytest.mark.parametrize('hourly_presolve,accepted',[(0,True),(2,False)])
 @pytest.mark.parametrize("numeric_focus", ["legacy", 3, None, 0, "3"])
-@pytest.mark.parametrize("wall_budget", [15, 120, "stale_15"])
+@pytest.mark.parametrize("wall_budget", [15, 120, 600, "stale_15"])
 def test_auditor_checks_every_original_hour_against_its_phase(hourly_presolve,accepted,numeric_focus,wall_budget,monkeypatch,tmp_path):
     d=design()
-    d["rolling_hour_time_limit_sec"] = 15 if wall_budget == 15 else 120
+    d["rolling_hour_time_limit_sec"] = wall_budget if isinstance(wall_budget,int) else 120
     if numeric_focus != "legacy":
         d["stage2_search_policy"].update(NumericFocus=0, rolling_NumericFocus=3)
     monkeypatch.setattr(auditor,'EXPECTED_SEARCH_CONTROLS_BY_KIND',{

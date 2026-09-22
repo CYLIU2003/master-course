@@ -1,5 +1,8 @@
 # 月別12週のスクリプト実行と完了メール
 
+2026-09-22 現行復旧: 旧quality固定4b1cbbb7は新規1月hour49でStage2 gap1.1743%となり停止（0/12）。旧observer/state/failureは保持。新制御先 `output/monthly_auxiliary_proof_budget_20260922/` のpreflight_stateを最初に確認する。全毎時600秒・gap1%の共通条件で、保存hour49/50の局所引継ぎ後に全12週を新規Prepareから実行する。旧週を混ぜず、通常処理はスクリプト。失敗時は1回だけ通知し、全12週監査/実図確認/送信重複照合前に完了メールを送らない。[原因と手順](MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
+
+
 ## 2026-09-22 毎時120秒版
 
 旧numeric固定c5c1eff7は42時間診断の途中、hour138の15秒time_limit/解なしで停止。月別全12週は未開始。新制御先 `output/monthly_auxiliary_budget_20260922/` のpreflight_stateを先に確認する。[原因と手順](MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。全月・全毎時を120秒の共通条件にし、clean固定版の42時間連続・独立物理検証後だけ全12週を新規開始する。旧failure/queueは保持、通常AI監視なし、失敗時は停止して1回通知。全12週監査・実図表示・receipt/Gmail重複確認前に完了メールを送らない。

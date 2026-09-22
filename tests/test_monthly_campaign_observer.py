@@ -117,6 +117,13 @@ def test_quality_release_has_separate_paths_from_failed_budget_gate():
     assert new[0] == Path("output/monthly_auxiliary_quality_20260922")
 
 
+def test_proof_budget_release_has_separate_paths_from_failed_quality_run():
+    old = watcher.deployment_paths({"deployment": "auxiliary_quality"})
+    new = watcher.deployment_paths({"deployment": "auxiliary_proof_budget"})
+    assert all(a != b for a, b in zip(old, new))
+    assert new[0] == Path("output/monthly_auxiliary_proof_budget_20260922")
+
+
 def test_cyclic_deployment_does_not_reuse_any_old_delivery_paths():
     cyclic = watcher.deployment_paths({"deployment": "cyclic"})
     for version in ("budget", "search", "phase_search"):
@@ -350,3 +357,27 @@ def test_first_week_failure_keeps_original_reason_without_audit_command(setup, m
     assert stopped['independently_audited_weeks']==0 and stopped['email_sent'] is False
     assert stopped['failed_cases']==[{'week':week,'status':'DAY_AHEAD_FAILED','reasons':[reason],
         'source_path':str(summary_path),'source_sha256':watcher.sha256(summary_path)}]
+
+
+def test_quality_failure_preserves_hour_native_status_gap_and_bounds_without_audit(setup, monkeypatch):
+    observer, progress = setup
+    week = progress['selected_weeks'][0]
+    progress.update(status='STOPPED_AFTER_FAILED_CASE', completed_weeks=[week])
+    watcher.write_json(observer.campaign/'progress.json', progress)
+    watcher.write_json(observer.audit, {'expected_sha':'frozen-sha','weeks':{}})
+    summary_path=observer.campaign/'cases'/week/'diagnostic'/week/'summary.json'
+    quality={'objective_jpy':23645.6525092175, 'lower_bound_jpy':23367.970266611424,
+        'gap_ratio':.011743479800264755, 'native_gap_ratio':.011743479800264755,
+        'target_gap_ratio':.01, 'accepted':False, 'solver_status':'time_limit',
+        'reasons':['NATIVE_GAP_TARGET_MISSED','OBJECTIVE_BOUND_TARGET_NOT_VERIFIED']}
+    watcher.write_json(summary_path, {'status':'HOURLY_QUALITY_FAILED','day_ahead_reasons':[],
+        'failed_hour':49,'failed_solver_status':'feasible','failed_stage2_quality':quality})
+    monkeypatch.setattr(observer,'run_python',lambda *a: pytest.fail('No completed week to audit'))
+    observer.publish_stopped(progress)
+    stopped=watcher.read_json(observer.output/'stopped_campaign.json')
+    failure=stopped['failed_cases'][0]
+    assert failure['reasons']==quality['reasons']
+    assert failure['stage2_quality']==quality and failure['failed_hour']==49
+    assert failure['failed_solver_status']=='feasible'
+    assert failure['source_sha256']==watcher.sha256(summary_path)
+    assert stopped['independently_audited_weeks']==0 and stopped['email_sent'] is False
