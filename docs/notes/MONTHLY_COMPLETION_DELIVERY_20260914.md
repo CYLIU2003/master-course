@@ -1,5 +1,10 @@
 # 月別12週のスクリプト実行と完了メール
 
+<!-- monthly-proof-budget-email-sent-20260923 -->
+2026-09-23 01:33 JST: 固定 `7cb46894` の月別12週・季節別整理を、承認済み `g2681320@tcu.ac.jp` へ結果4点付きで1通送信しました。Gmail実message ID `1a0c9f78974455ee`、SENT・宛先・件名・添付4点・送信済み一致1件を確認。正本は `output/monthly_auxiliary_proof_budget_20260922/script_observer/email_receipt.json`。重複イベントでも再送しません。受信者の受信トレイへの配達確認は未実施。研究採用BLOCKEDは継続します。
+<!-- /monthly-proof-budget-email-sent-20260923 -->
+
+
 <!-- monthly-proof-budget-final-20260923 -->
 2026-09-23 現行完了確認: `monthly_auxiliary_proof_budget_20260922/script_observer/` の固定7cb46894は全12週完了。campaign前後clean/同一SHA、4,176原本ファイル・4添付のhash、6パネル実PNGを確認済み。今回の一意件名は `MC2025-7cb46894`。送信前のGmail SENT検索は一致0件。送信成否は同ディレクトリのemail_receipt.jsonで確認し、実IDがあれば再送しない。研究採用BLOCKEDは維持する。
 <!-- /monthly-proof-budget-final-20260923 -->

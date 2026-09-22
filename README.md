@@ -1,5 +1,10 @@
 # master-course
 
+<!-- monthly-proof-budget-email-sent-20260923 -->
+2026-09-23 01:33 JST: 固定 `7cb46894` の月別12週・季節別整理を、承認済み `g2681320@tcu.ac.jp` へ結果4点付きで1通送信しました。Gmail実message ID `1a0c9f78974455ee`、SENT・宛先・件名・添付4点・送信済み一致1件を確認。正本は `output/monthly_auxiliary_proof_budget_20260922/script_observer/email_receipt.json`。重複イベントでも再送しません。受信者の受信トレイへの配達確認は未実施。研究採用BLOCKEDは継続します。
+<!-- /monthly-proof-budget-email-sent-20260923 -->
+
+
 <!-- monthly-auxiliary-proof-budget-status -->
 最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
 <!-- /monthly-auxiliary-proof-budget-status -->
