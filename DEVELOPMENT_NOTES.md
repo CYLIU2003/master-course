@@ -10601,3 +10601,12 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 
 - 初回実便版 `cbf23c81` は16台へ配布してコード内容・依存・dataset SHAが一致したが、遠隔15台のGit状態がdirtyとなり配置を不採用にした。原因はWindows cloneのCRLFチェックアウトを格納しながら、配置ZIPの無害化済み `.git/config` に `core.autocrlf=false` を固定していたため。追加PCで `core.autocrlf=true` を指定した読取り専用 `git status` は0変更で、原因を確認した。
 - `tools/cluster/release.py` は配布元の実効 `core.autocrlf`（true/false/inputのみ）を秘密情報を含まないGit設定へ写し、manifestへ記録する。CRLF追跡ファイルを含む一時GitリポジトリのZIPを展開し、通常の `git status --porcelain` が空になる回帰試験を追加した。9件通過。旧配置は研究・計算の実行結果として数えず、新しいclean commit・別SHA・別配置ディレクトリで再実施する。
+
+## 2026-09-23 渋24・月別7日間の翌朝SOCと電力期間
+
+- ユーザー指定: 各月1週の渋24実便で、最終日帰庫後～翌朝最初の出庫前までの充電・PV・受電・料金を**含める**。SOC目標は物理100%ではなく、シナリオの運用上限。旧7日672区間と新しい672+翌朝区間は別実験として扱う。
+- `tools/research/shibu24_monthly.py check` で12週の週選択、祝日、公式取得原本SHA、各週1,478便、8日分のPV・翌朝ダイヤを検査した。月別週は凍結済み選択を再計算し一致させる。`prepare` はclean Git SHAと入力hashを固定し、親シナリオを変更せず渋24だけの新規scenario/厳格Prepared入力を作る。
+- モデルの意思決定期間を、運行7日間と電力672+翌朝区間に分けた。翌朝の最初の便より前に**完了する**15分枠だけを延長し、翌日PV行の内容hashとダイヤ行hashを照合する。料金はシナリオに宣言された固定日次表を翌朝に再適用する明示方針。翌日の便を運行対象へ追加せず、車両の帰庫待機・充電可能枠だけを延ばした。5月の実データで1,478便/電力695枠/最終期限slot694をbuildで確認。
+- 自己検査で、従来の独立SOC検査が7日目24時で停止し、Stage 2が各翌朝のSOC目標を拘束しないことを発見。Stage 2のdaily-return分岐は一般のduty walkを飛ばしていたため日別便を別途抽出した。小規模2日実Gurobiでは修正前、Stage 2がOPTIMALでも初日翌朝SOC76.8286/80 kWhで独立検査不合格、修正後は両翌朝目標と物理検査が通過。最終夜間充電を含む手作業候補では日別台帳が範囲外として停止することも再現し、延長区間の充電と費用を最終営業日に配賦して総額を一致させた。
+- 変更はBEV SOC期限と計画の電力期間・日別費用配賦を変えるため、旧固定SHAの費用・可行性と直接比較しない。物理受電設備値、正式fleet承認、地理代理距離、2026ダイヤ×2025気象、実規模求解、追加夜間のrolling実行、独立レビューは未解決。研究採用はBLOCKED。詳細は[実験契約](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md)。
+- 拡張回帰で既存Prepare入口テストが現在の共有資源・ライセンスguardに必要なjob mockを欠き、テスト用job IDが実SQLite予約と衝突した。対象テストだけ資源/ライセンスを分離し、Prepared経路そのものの検証を維持した。実ジョブの資源制限は変更していない。
