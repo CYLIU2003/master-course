@@ -5,6 +5,7 @@
 - 固定配布先の担当と実行プロファイルが一致しない場合、共有最適化の親ジョブ作成前にHTTP 409で拒否する。既存scheduler側の待機ジョブ・自動割当時の担当検査は維持する。Gurobi用とGurobi不要ALNS用の両方向で、親ジョブ未作成を回帰試験した。求解・数理モデル・研究受理条件は変更しない。
 - 関連Python試験83件通過。clean固定版 `91776624` を18台へ配置して全台 `VERIFIED`、常駐親機を同版へ更新した。再照合後は担当Gurobi 5台・ALNS 13台を保持し、実APIの不一致要求もHTTP 409・親ジョブ未作成を確認。証跡は `output/cluster-deployment/onboard-20260923/activation-worker-preflight-91776624-audit.json`。`LAPTOP-BOLC6VIT` は空きRAM 0.32 GBで実便投入不可。新しい実便・7日間Rollingの求解成功は未確認。
 - 計算画面の配布先候補も担当設定を参照し、Gurobi用・ALNS用それぞれの担当外を選択不可とした。実行プロファイルを変えた後に古い選択が残っても開始ボタンを無効化する。RunPanel 12件で検証し、API側の役割・資源判定を最終根拠とする。
+- 画面変更コミット `b2c7853d` の本番ビルドを別資材として配置し、固定バックエンド `91776624` の常駐設定を画面資材だけ更新した。HTTP配信JavaScriptのSHA-256一致、再起動後の18台監視（READY 5、SSH_READY 13）、実行中0件を確認。証跡は `output/cluster-deployment/onboard-20260923/activation-worker-roles-ui-b2c7853d-audit.json`。
 
 ## 2026-09-23 ALNS専用子機の割当優先
 
