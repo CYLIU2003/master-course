@@ -1,5 +1,11 @@
 # 分散計算の使い方
 
+## 追加2台の現行状態（2026-09-23）
+
+`LAPTOP-BOLC6VIT` と `LAPTOP-8JS4DQCD` は初期SSH設定後、Tailnet ID・SSH公開鍵認証・端末名を親機から確認した。18台構成の固定版 `c54f684e` について、全台のコード・runtime・datasetを照合し、2台のソルバーなし診断ジョブを共有キューから実行・回収した。現在のcontroller設定は `output/cluster-deployment/onboard-20260923/controller-shibu24-eighteen-settings.json`。親機画面 `http://127.0.0.1:8868/` では保存名から路線別に分類でき、各シナリオの短縮IDも表示する。
+
+渋24実便18件の新しいbatchは `output/cluster-deployment/onboard-20260923-add2/real-shibu24-18-c54f684e-batch.json`。新シナリオ `993c2ec1-3333-442e-83ef-508df7aea667` で224便を再Prepareしたうえで `batch.py check` を通した。実便計算は未開始で、旧16台の結果や旧SHAのPrepared IDを流用しない。投入時には各PCの空きRAM・CPU負荷・AC電源を再確認する。特に `LAPTOP-BOLC6VIT` の空きRAMは0.3〜2.1 GBの間で変動しており、足りない時は割当を待つ。検証記録は `output/cluster-deployment/onboard-20260923-add2/activation_audit.json`。
+
 ## 新規子機候補2台への初期設定ZIP（2026-09-23）
 
 `LAPTOP-BOLC6VIT / pslab / 100.65.118.103` と `LAPTOP-8JS4DQCD / pslab / 100.87.44.64` 向けに、2台専用登録表を含む `output/cluster-deployment/onboard-20260923-add2/cluster-worker-access-setup-add2-20260923.zip` をTailscaleで送信した。ZIPのSHA-256は `6ebe69e70a3523294c45efe6fca0fc0784f6e5cce023364cf311558ddd9bcde5`。公開鍵だけを含み、秘密鍵・Gurobi資格情報は含まない。

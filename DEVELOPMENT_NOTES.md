@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-23 追加2台の18台構成とシナリオ分類の実機確認
+
+- Tailscale node ID・端末名・指定IP、既知SSH host key、`pslab` の公開鍵認証を2台とも照合。固定版 `c54f684e2d23e07e7a8b5c0901a9d0874487abec` の全18台配布は `output/cluster-deployment/onboard-20260923/stage-eighteen-ui-evidence/report.json` で18/18 `VERIFIED`。常駐controllerは同SHAの18台設定と既存共有キューを使用し、追加2台のソルバーなし診断ジョブは両方 `COMPLETED`・成果物hashを回収した。
+- 旧16台診断シナリオを複製し、名前を18台用に修正。路線・便・車両・充電器・dispatch scope・simulation設定のhash一致を確認してから、新版で224便のPrepareを実施した。新シナリオ `993c2ec1-3333-442e-83ef-508df7aea667`、Prepared ID `prepared-6f756106fbbca6b3-6d06db9c0d816dba-8acc7b3a`、18件の別batchは `output/cluster-deployment/onboard-20260923-add2/` に保存。旧SHA `0a03675a` 用のbatchを新版へ流用せず、**新18件の実便計算は未開始**。
+- 新版の `/api/desktop/scenarios` で分類ごとの件数を確認し、ブラウザで「渋24」への絞込み、1件表示、短縮IDを確認した。新シナリオ作成後は渋24が2件。証拠は `output/cluster-deployment/onboard-20260923-add2/activation_audit.json` と `output/playwright/shibu24-scenario-group-20260923.png`。分類は保存名による表示補助で、実対象便の判定はPrepared入力を使う。現在の主作業ツリーHEADは固定controllerのSHAより新しく、その未配布版の結果としては扱わない。
+
 ## 2026-09-23 分散配布ZIPの空Git参照ディレクトリ
 
 - 18機へのUI文言修正版配布で、子機17機のGit照合が同時に失敗した。原本ZIPと子機の展開先を比較し、detached commitかつpacked refsのみのstandalone cloneでは `.git/refs` が空になり、ファイルだけをZIP化する配布器がその必須ディレクトリを欠落させたことを特定した。子機は計算を開始していない。直前の固定 `c54f684e` の常駐画面とworker設定は維持した。
