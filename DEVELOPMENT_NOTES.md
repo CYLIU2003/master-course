@@ -10636,3 +10636,8 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 2台の新規子機のうち `LAPTOP-8JS4DQCD` はSSH・環境・固定SHAが一致。`LAPTOP-BOLC6VIT` は21:14 JST時点でTailscaleオフラインのため実投入不能。再接続とジョブ要件を満たす空きRAMを確認してから割り当てる。
 - 21:28 JSTに `0ce4a25f` を全18台へstageし、18/18でSHA・source/runtime・8ファイルのdataset hash照合を通した。親機も同版へ切り替え、5台 `gurobi_only` / 13台 `alns_only` を保存。BOLC6VITは復帰しSSH/環境一致、ただし空きRAM 0.14 GBのため現行ジョブ要件には不足する。タイムアウト報告の機器を含む6台の4回連続観測は24/24 SSH接続済み。Gurobi共有枠は合計2、外部予約1、分散側は最大1枠。新しい実便・7日Rollingの研究計算結果はこの確認には含まれない。
 - タイムアウト報告の `desktop-5b6f6bp`、`desktop-6s6ua9u`、`powersystem-1` へ新版controllerから診断ジョブを固定配布し、3/3 `COMPLETED` と回収ZIPの記録SHA-256一致を確認。これはSSH起動・ジョブ状態遷移・成果物回収の確認であり、最適化モデルの可行性・解品質・研究受入の確認ではない。
+
+# 2026-09-24 分散ジョブ管理版を次の作業基準に設定
+
+- 次の7日間最適化・天候曲線拡張は、18台の担当制御とLOST封止を含む `codex/worker-sort-passmark-20260923` の現在のHEADを基準にする。配置済み実行コード `e301abbd` と文書込みのブランチHEADは区別する。
+- リモートの同ブランチを作成し、`main` と公開中PR #8のhead/base 2本を残した。ほかの7本のリモート参照は削除したが、対応するローカルブランチは保持する。`C:\master-course` 側の未コミット作業は変更せず、次の作業で必要な差分だけ確認して統合する。

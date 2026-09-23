@@ -21,3 +21,9 @@
 - `DESKTOP-3PRU7QP` はWLS資格情報を本人専用アカウントに置いたが、実起動が `10009 License has expired`。登録本人の更新と新しいEnv/Model試験が通るまでALNS担当とする。
 - `LAPTOP-BOLC6VIT` は直近空きRAM約0.4 GB。必要RAMとOS用予約を満たすまでは実便を割り当てない。
 - 固定版での18台実便最適化、168窓Rolling、研究受理、独立レビューは未実施。古いSHAの出力を新固定版の成果と扱わない。
+
+## 次の作業の基準ブランチ
+
+- 次の7日間最適化・天候曲線拡張は `codex/worker-sort-passmark-20260923` の現在のHEADを出発点とする。配置済みの実行コードは上記 `e301abbd` であり、文書更新後のブランチHEADとは区別する。
+- リモートにはこの基準ブランチと `main`、公開中のPR #8のhead `research/thesis-weather-results-bb0c005` とbase `research/weather-dispatch-diagnosis` を残した。ほかの7ブランチのリモート参照は整理済みで、対応するローカルブランチは保持している。
+- `C:\master-course` の `codex/research-gates-20260923` には別作業の未コミット変更がある。基準ブランチへ黙って取り込まず、必要な変更だけ内容を確認して移す。
