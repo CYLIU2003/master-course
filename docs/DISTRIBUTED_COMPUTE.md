@@ -4,17 +4,19 @@
 
 旧渋21〜23の長時間診断は利用者指示で停止し、元の出力を保持した。新しい短時間試験は既存のPrepare→BFF→永続キュー→worker→成果物回収を使う。`synthetic_batch.py --dummy-route 渋24 --one-per-worker` は、12台すべてが有効な時に、各月1日の架空4便を1台へ1件ずつ割り当てる。1台がオフラインの初回は、12件をPrepareした後、稼働中11台へ11件だけを固定割当した別manifestを使った。停留所、10 km距離、車両、時刻はすべて試験値で、公式の渋24ダイヤ、研究用fleet、PV/BESS結果を表さない。BEV終端は既存BFFの`return_to_initial`が実効条件で、期末SOCと独立物理検証の結果を成果物で必ず確認する。
 
-固定版の配置・source/runtime/dataset hash照合が済んだworkerにだけ投入する。現在の登録12台は投入可能12台という意味ではない。1台がオフラインならその端末を投入無効として残し、11台の結果を12台成功と報告しない。回線復帰後は同じ固定SHAで当該端末をstageし、未実行の固有caseを再開する。Gurobiなしprofileを使い、Env起動回数と求解回数が0であることを `audit_batch.py` で確認する。既存の旧12ケース、週間研究結果と混ぜない。
+固定版の配置・source/runtime/dataset hash照合が済んだworkerにだけ投入する。当初1台がオフラインだったため、その端末を投入無効として残し、11台の結果を12台成功と報告しなかった。回線復帰後、同じ固定SHAで当該端末をstageし、未実行の固有caseだけを別batchで実行した。Gurobiなしprofileを使い、Env起動回数と求解回数が0であることを `audit_batch.py` で確認する。既存の旧12ケース、週間研究結果と混ぜない。
 
 初回の11件は配布・回収・ハッシュ確認が全件通ったが、`terminal_soc_balance_failed` で計画受理は0件だった。入力は当初`minimum_only`としたものの、既存BFFは比較のためBEVを`return_to_initial`に強制する。SOCイベント上は初期80%→最終80%で、ALNS計画がMILP専用の終端判定メタデータを出さず、物理再計算の合格を結果へ引き継げていないことが原因だった。BEV条件を緩めて採用する代わりに、独立FeasibilityCheckerが全制約を通した時に限り、ヒューリスティック結果の欠落フラグを補う修正を別固定版にする。初回11件は新条件の成功件数へ混ぜない。
 
-修正版`2e2333b3`を新しい固定配置へ配布し、新規11件すべてで4便充足・独立物理検証・160→160 kWh・Gurobi利用0を確認した。回収hashと原本照合を含む詳細は[渋24ダミー分散試験](notes/SHIBU24_DUMMY_CLUSTER_20260923.md)。登録12台目はオフラインのままで、正式研究採用はBLOCKED。
+修正版`2e2333b3`を新しい固定配置へ配布し、先行11件と復帰した12台目の固有1件すべてで4便充足・独立物理検証・160→160 kWh・Gurobi利用0を確認した。回収hashと原本照合を含む詳細は[渋24ダミー分散試験](notes/SHIBU24_DUMMY_CLUSTER_20260923.md)。正式研究採用はBLOCKED。
+
+追加4台は別枠で監視登録した。既存の`output/cluster-worker-access-setup-v3.zip`と、今回の登録表`output/cluster-deployment/onboard-20260923/workers.add4.json`、置換手順`README-ADD4.txt`をTailscaleで各端末へ送信した。ZIP本体は旧11台用のままなので、**展開したフォルダ内の`workers.json`を別送の登録表で置き換えてから**`SETUP.cmd -ValidateOnly`、次に`SETUP.cmd`を実行する。新しい`POWERSYSTEM`では`tailscale ip -4`が`100.107.38.117`であることを先に確認する。同名の旧登録PCは`100.88.215.76`。現時点で4台とも公開鍵認証拒否のため、監視のみ・投入無効であり、固定版配置や実計算は行っていない。Tailscale転送の成功をSSH準備完了とは扱わない。
 
 親機の監視画面は `tools/cluster/install_resident_monitor.ps1 -Settings <固定版settings.json>` で現在のWindowsユーザーのログオンタスクへ登録し、直ちに起動する。固定版のclean SHAを起動前に検査し、127.0.0.1だけで待ち受ける。ログオン時に `/#cluster` を開き、画面はworkerを4秒ごと、jobを3秒ごとに更新する。閉じたブラウザは同URLから再表示でき、controllerは独立して動く。登録解除は `Unregister-ScheduledTask -TaskName MasterCourseClusterMonitor -Confirm:$false`。この常駐はAI監視や自動メールを行わない。キューに残る旧待機jobを起動前に確認し、意図しない計算を再開させない。
 
 **最新の運用は末尾の「現行運用（2026-09-23）」と
 [T01–T32検証表](notes/CLUSTER_VERIFICATION_20260923.md)を参照してください。**
-途中の日付付き検証記録は当時の状態です。現在は新版で親機＋接続できた従機10台の実行・回収を確認済み。
+途中の日付付き検証記録は当時の状態です。現在は新版で元の親機＋従機11台の実行・回収を確認済み。追加4台は別途監視のみです。
 12診断すべて期末SOCの研究gateは未達であり、正式7日運用の承認ではありません。
 
 親PCのキューから、独立した最適化ケースをローカルまたはSSH接続先へ配布します。
