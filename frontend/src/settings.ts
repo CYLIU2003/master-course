@@ -126,6 +126,10 @@ export const settingGroups: {
         ["mode_alns_only", "ALNS"],
         ["mode_hybrid", "Hybrid"],
       ]),
+      select("executionProfile", "Gurobi利用方針", [
+        ["existing_solver_v1", "既存手法（Gurobiは共有2枠で管理）"],
+        ["alns_no_gurobi_v1", "Gurobi非依存ALNS · 単日診断用"],
+      ]),
       num("timeLimitSeconds", "計算時間上限（秒）", 1),
       num("mipGap", "目標MIP gap（比率）", 0, 1),
       num("randomSeed", "乱数seed"),

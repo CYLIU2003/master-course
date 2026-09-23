@@ -1,0 +1,318 @@
+"""Distributed execution contracts without paid solver sessions or remote hosts."""
+import base64
+import io
+import json
+import time
+import zipfile
+from pathlib import Path
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from bff.services.cluster import scheduler as module
+from bff.services.cluster.contracts import ClusterConfig, Worker, canonical, digest, git_state, runtime_versions, source_digest
+from bff.services.cluster.runner import archive_result, execute_optimization, verify_bundle
+from bff.services.cluster.scheduler import Scheduler, collect_artifacts
+from bff.services.cluster.scheduler import validate_portable_paths
+from bff.services.cluster.store import ControllerLock, JobStore
+from bff.services.cluster.transport import command, invoke
+
+
+@pytest.fixture
+def scheduler(tmp_path):
+    instance = Scheduler(tmp_path / "controller", ClusterConfig(workers=[
+        Worker(id="local", name="Local", workspace=str(tmp_path / "worker")),
+    ]))
+    yield instance
+    instance.stop_event.set()
+    instance.monitor.stop()
+    if instance.thread:
+        instance.thread.join(timeout=4)
+    instance.controller_lock.close()
+
+
+def test_real_subprocess_roundtrip_and_restart_history(scheduler):
+    row = scheduler.enqueue("diagnostic", {}, "local")
+    scheduler.start()
+    deadline = time.monotonic() + 35
+    while time.monotonic() < deadline:
+        result = scheduler.store.get(row["id"])
+        if result["state"] in {"COMPLETED", "FAILED", "BLOCKED", "LOST"}:
+            break
+        time.sleep(0.1)
+    assert result["state"] == "COMPLETED", result
+    assert result["result"]["provenance"]["hostname"]
+    assert result["result"]["research_approval"] == "NOT_GRANTED_BY_CLUSTER"
+    assert (scheduler.store.root / "jobs" / row["id"] / "artifacts.zip").is_file()
+    recovered = JobStore(scheduler.store.root)
+    recovered.recover()
+    assert recovered.get(row["id"])["state"] == "COMPLETED"
+
+
+def test_scheduler_allocates_distinct_workers_and_retains_lost_slots(scheduler, monkeypatch):
+    scheduler.config = ClusterConfig(global_gurobi_slots=1, workers=[
+        Worker(id="a", name="A", gurobi=True, ram_gb=16),
+        Worker(id="b", name="B", gurobi=True, ram_gb=16),
+    ])
+    monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})
+    dispatched = []
+    from bff.services.cluster.worker_registry import WorkerRegistry
+    from bff.services.cluster.store import now
+    scheduler.registry = WorkerRegistry(scheduler.store, scheduler.config.workers)
+    scheduler.monitor.controller = {"git": {"sha": "abc", "dirty": False}, "source_digest": "same", "runtime_versions": {}}
+    for worker in scheduler.config.workers:
+        scheduler.registry.update(worker.id, {"session_verified": True, "last_probe_at": now(), "capability": {
+            **scheduler.monitor.controller, "disk_free_gb": 100, "ram_gb": 16, "ram_free_gb": 16, "cpu_count": 8, "gurobi_version": [13]}})
+    monkeypatch.setattr(scheduler, "execute", lambda job_id, worker: dispatched.append((job_id, worker.id)))
+    first = scheduler.enqueue("optimization", {}, minimum_ram_gb=16)
+    second = scheduler.enqueue("optimization", {}, minimum_ram_gb=16)
+    diagnostic = scheduler.enqueue("diagnostic", {})
+    scheduler.tick()
+    assert scheduler.store.get(first["id"])["state"] == "STAGING"
+    assert scheduler.store.get(second["id"])["state"] == "QUEUED"
+    assert scheduler.store.get(diagnostic["id"])["worker_id"] == "b"
+    scheduler.store.recover()
+    assert scheduler.store.get(first["id"])["state"] == "LOST"
+    scheduler.tick()
+    assert scheduler.store.get(second["id"])["state"] == "QUEUED"
+    with pytest.raises(ValueError, match="confirmed terminal"):
+        scheduler.retry(first["id"])
+
+
+def test_worker_ram_and_solver_matching(scheduler, monkeypatch):
+    monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})
+    row = scheduler.enqueue("optimization", {}, minimum_ram_gb=32)
+    scheduler.tick()
+    assert scheduler.store.get(row["id"])["state"] == "QUEUED"
+
+
+def test_only_one_controller_can_own_a_queue(scheduler):
+    with pytest.raises(RuntimeError, match="Another cluster controller"):
+        ControllerLock(scheduler.store.root)
+
+
+def test_bundle_and_code_tampering_are_rejected(scheduler):
+    manifest = scheduler.enqueue("diagnostic", {})["manifest"]
+    with pytest.raises(ValueError, match="hash mismatch"):
+        verify_bundle(manifest, {"changed": True})
+    with pytest.raises(ValueError, match="code does not match"):
+        verify_bundle({**manifest, "source_digest": "bad"}, {})
+
+
+def test_portable_input_check_accepts_profiles_but_rejects_unstaged_files():
+    validate_portable_paths({"run_profile": "research", "stage1_gurobi_search_profile": "default", "nested": [{"pv_profile": "summer"}]})
+    with pytest.raises(ValueError, match="unstaged file"):
+        validate_portable_paths({"weatherProxyForecastPath": "C:/weather.json"})
+
+
+def test_freezer_binds_snapshot_to_prepared_identity(scheduler, tmp_path, monkeypatch):
+    from bff.store import output_paths, scenario_store
+    from bff.services.run_preparation import _scenario_hash
+    root = tmp_path / "repo"
+    dataset = root / "data/built/test"
+    dataset.mkdir(parents=True)
+    (dataset / "data.json").write_text("{}")
+    output = tmp_path / "prepared-output"
+    directory = output / "prepared_inputs/scenario"
+    directory.mkdir(parents=True)
+    scenario = {"meta": {"id": "scenario"}, "simulation_config": {"initial_soc_percent": 80}, "refs": {}}
+    payload = {"scenario_id": "scenario", "prepared_input_id": "prepared", "scenario_hash": _scenario_hash(scenario),
+               "trips": [{"operator_id": "tokyu", "distance_km": 7.25}]}
+    prepared = canonical(payload)
+    (directory / "prepared.json").write_bytes(prepared)
+    monkeypatch.setattr(module, "ROOT", root)
+    monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})
+    monkeypatch.setattr(output_paths, "outputs_root", lambda: output)
+    monkeypatch.setattr(scenario_store, "get_scenario_document_shallow", lambda _: dict(scenario))
+    def executor(scenario_id, job_id, prepared_input_id, rebuild_dispatch, use_existing_duties):
+        raise AssertionError("Freezing must not execute a solver")
+    submission = {"fn": executor, "args": ("scenario", "frozen-job", "prepared", False, False), "job_id": "frozen-job"}
+    assert scheduler.freeze_optimization(None, {"built_dir": str(dataset)}, 0, **submission)
+    saved = json.loads((scheduler.store.root / "jobs/frozen-job/bundle.json").read_text(encoding="utf-8"))
+    assert base64.b64decode(saved["prepared_base64"]) == prepared
+    scenario["simulation_config"]["initial_soc_percent"] = 90
+    with pytest.raises(ValueError, match="changed after Prepare"):
+        scheduler.freeze_optimization(None, {"built_dir": str(dataset)}, 0, **submission)
+
+
+def test_dataset_mismatch_is_blocked_before_solver(tmp_path, monkeypatch):
+    from bff.services.cluster import runner
+    (tmp_path / "dataset").mkdir()
+    (tmp_path / "dataset" / "trips.json").write_text("changed")
+    monkeypatch.setattr(runner, "ROOT", tmp_path)
+    monkeypatch.setattr(runner, "git_state", lambda: {"sha": "abc", "dirty": False})
+    monkeypatch.setattr(runner, "source_digest", lambda: "source")
+    bundle = {"dataset_path": "dataset", "dataset_hashes": {"trips.json": "wrong"}}
+    manifest = {"schema_version": 1, "id": "test", "kind": "optimization", "requires_gurobi": True, "bundle_sha256": digest(canonical(bundle)),
+                "runtime_versions": runtime_versions(),
+                "git": {"sha": "abc", "dirty": False}, "source_digest": "source"}
+    with pytest.raises(ValueError, match="DATASET_MISMATCH"):
+        verify_bundle(manifest, bundle)
+
+
+def test_crashed_worker_is_reconciled_without_rerunning(tmp_path, monkeypatch):
+    from bff.services.cluster import runner
+    directory = tmp_path / "job"
+    directory.mkdir()
+    state = {"id": "job", "state": "RUNNING", "pid": 12345, "process_identity": "previous"}
+    (directory / "manifest.json").write_bytes(canonical({"id": "job"}))
+    (directory / "state.json").write_bytes(canonical(state))
+    monkeypatch.setattr(runner, "process_identity", lambda pid: "different-birth-token")
+    result = runner.handle({"operation": "collect", "id": "job"}, tmp_path)
+    assert result["state"] == "FAILED"
+    assert "exited" in result["error"]
+
+
+def test_missing_worker_receipts_do_not_release_the_reservation(tmp_path):
+    from bff.services.cluster import runner
+    directory = tmp_path / "job"
+    directory.mkdir()
+    (directory / "state.json").write_bytes(canonical({"id": "job", "state": "FAILED"}))
+    with pytest.raises(ValueError, match="retain the reservation"):
+        runner.handle({"operation": "collect", "id": "job"}, tmp_path)
+
+
+def test_transport_failure_before_dispatch_is_blocked_not_lost(scheduler, monkeypatch):
+    row = scheduler.enqueue("diagnostic", {}, "local")
+    scheduler.store.transition(row["id"], "STAGING", expected={"QUEUED"}, worker_id="local")
+    def disconnected(*args, **kwargs):
+        raise OSError("SSH is unavailable")
+    monkeypatch.setattr(module, "invoke", disconnected)
+    scheduler.execute(row["id"], scheduler.worker("local"))
+    assert scheduler.store.get(row["id"])["state"] == "BLOCKED"
+
+
+def test_ssh_commands_reject_host_options_and_quote_paths():
+    with pytest.raises(ValueError):
+        Worker(id="x", name="X", transport="ssh", host="-oProxyCommand=bad")
+    worker = Worker(id="x", name="X", transport="ssh", host="lab-pc", repo="C:/User's Lab/repo")
+    cmd = command(worker)
+    assert "StrictHostKeyChecking=yes" in cmd
+    script = base64.b64decode(cmd[-1].split()[-1]).decode("utf-16le")
+    assert "C:/User''s Lab/repo" in script
+    assert "bff.services.cluster.runner" in script
+    posix = command(worker.model_copy(update={"shell": "posix", "repo": "/tmp/lab folder"}))
+    assert "cd '/tmp/lab folder'" in posix[-1]
+
+
+@pytest.mark.parametrize("name", ["../escape.txt", "/absolute.txt", "C:/escape.txt", "folder\\escape.txt"])
+def test_collector_rejects_unsafe_archives(tmp_path, name):
+    manifest = {"id": "job"}
+    data = io.BytesIO()
+    with zipfile.ZipFile(data, "w") as archive:
+        archive.writestr(name, b"test")
+    response = {"id": "job", "manifest_sha256": digest(canonical(manifest)), "archive_base64": base64.b64encode(data.getvalue()).decode(),
+                "artifact_hashes": {name: digest(b"test")}}
+    with pytest.raises(ValueError, match="Unsafe artifact|inventory mismatch"):
+        collect_artifacts(response, manifest, tmp_path / "artifacts")
+
+
+def test_recollecting_same_attempt_does_not_leave_large_partial_copies(tmp_path):
+    manifest = {"id": "job"}
+    state = {"id": "job", "state": "COMPLETED", "manifest_sha256": digest(canonical(manifest)),
+             "result": {}, "error": None}
+    files = {"manifest.json": canonical(manifest), "state.json": canonical(state), "result.txt": b"done"}
+    data = io.BytesIO()
+    with zipfile.ZipFile(data, "w") as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+    response = {**state, "archive_base64": base64.b64encode(data.getvalue()).decode(),
+                "artifact_hashes": {name: digest(content) for name, content in files.items()}}
+    target = tmp_path / "artifacts"
+    collect_artifacts(response, manifest, target)
+    collect_artifacts(response, manifest, target)
+    assert (target / "result.txt").read_bytes() == b"done"
+    assert not list(tmp_path.glob("artifacts.partial-*"))
+
+
+def test_retry_preserves_inputs_and_has_a_new_id(scheduler):
+    row = scheduler.enqueue("diagnostic", {"input": "unchanged"})
+    scheduler.store.transition(row["id"], "CANCELLED", expected={"QUEUED"})
+    retry = scheduler.retry(row["id"])
+    assert retry["id"] != row["id"]
+    assert retry["manifest"]["retry_of"] == row["id"]
+    assert retry["manifest"]["bundle_sha256"] == row["manifest"]["bundle_sha256"]
+
+
+def test_result_hash_mismatch_never_writes_artifacts(tmp_path):
+    original = tmp_path / "worker"
+    original.mkdir()
+    manifest = {"id": "job"}
+    (original / "manifest.json").write_bytes(canonical(manifest))
+    response = archive_result(original, {"id": "job", "manifest_sha256": digest(canonical(manifest))})
+    response["artifact_hashes"]["manifest.json"] = "tampered"
+    target = tmp_path / "artifacts"
+    with pytest.raises(ValueError, match="hash mismatch"):
+        collect_artifacts(response, manifest, target)
+    assert not target.exists()
+
+
+def test_worker_adapter_preserves_prepared_bytes_and_solver_controls(tmp_path, monkeypatch):
+    from bff.routers import optimization
+    from bff.store import job_store, scenario_store
+    output = tmp_path / "output"
+    monkeypatch.setattr(scenario_store, "_STORE_DIR", output / "scenarios")
+    monkeypatch.setattr(job_store, "_JOB_DIR", output / "jobs")
+    monkeypatch.setattr(job_store, "_jobs", {})
+    monkeypatch.setenv("MC_OUTPUTS_DIR", str(output))
+    monkeypatch.setenv("SCENARIO_STORE_PATH", str(output / "scenarios"))
+    monkeypatch.setenv("BUILT_ROOT", str(tmp_path))
+    monkeypatch.setenv("DEFAULT_DATASET_ID", "dataset")
+    monkeypatch.setenv("MC_EXECUTION_INPUTS_ROOT", str(tmp_path / "execution_inputs"))
+    # No solver runs: verify the adapter calls the existing entrypoint verbatim.
+    raw_prepared = b'{ "trips": [{"operator_id": "tokyu", "distance_km": 7.25}] }\n'
+    captured = []
+    def fake_run(**kwargs):
+        captured.append(kwargs)
+        assert (output / "prepared_inputs" / "scenario" / "prepared.json").read_bytes() == raw_prepared
+        assert scenario_store.get_field("scenario", "timetable_rows")[0]["distance_km"] == 7.25
+        job_store.update_job(kwargs["job_id"], status="completed", metadata={"teacher_release_status": "BLOCKED"})
+    monkeypatch.setattr(optimization, "_run_optimization", fake_run)
+    bundle = {"kwargs": {"scenario_id": "scenario", "prepared_input_id": "prepared", "job_id": "controller-job",
+                         "random_seed": 1001, "research_run": False, "gurobi_threads": 2},
+              "scenario": {"meta": {"id": "scenario"}, "depots": [], "routes": [], "vehicles": [],
+                           "timetable_rows": [{"trip_id": "trip", "operator_id": "tokyu", "distance_km": 7.25}]},
+              "dataset_path": "data/built/test", "prepared_base64": base64.b64encode(raw_prepared).decode()}
+    before = canonical(bundle)
+    result = execute_optimization({"id": "cluster-job"}, bundle, tmp_path)
+    assert canonical(bundle) == before
+    assert len(captured) == 1
+    assert captured[0]["random_seed"] == 1001
+    assert captured[0]["gurobi_threads"] == 2
+    assert result["metadata"]["teacher_release_status"] == "BLOCKED"
+
+
+def test_reconciliation_retrieves_terminal_result_without_resubmitting(scheduler, monkeypatch, tmp_path):
+    row = scheduler.enqueue("diagnostic", {}, "local")
+    scheduler.store.transition(row["id"], "RUNNING", expected={"QUEUED"}, worker_id="local")
+    scheduler.store.recover()
+    directory = tmp_path / "completed-worker"
+    directory.mkdir()
+    manifest = row["manifest"]
+    state = {"id": row["id"], "state": "COMPLETED", "manifest_sha256": digest(canonical(manifest)), "result": {}}
+    (directory / "manifest.json").write_bytes(canonical(manifest))
+    (directory / "state.json").write_bytes(canonical(state))
+    called = []
+    def fake_invoke(worker, request, directory, **kwargs):
+        called.append(request["operation"])
+        return archive_result(tmp_path / "completed-worker", state)
+    monkeypatch.setattr(module, "invoke", fake_invoke)
+    result = scheduler.reconcile(row["id"])
+    assert result["state"] == "COMPLETED"
+    assert called == ["collect"]
+
+
+def test_api_is_loopback_only_and_queue_cancel_is_atomic(scheduler, monkeypatch):
+    from bff.routers import cluster
+    monkeypatch.setattr(cluster, "get_scheduler", lambda: scheduler)
+    app = FastAPI()
+    app.include_router(cluster.router)
+    with TestClient(app, base_url="http://localhost", client=("127.0.0.1", 50000)) as client:
+        assert client.get("/cluster/workers").status_code == 200
+        assert client.post("/cluster/workers/local/diagnostic", headers={"Origin": "https://evil.example"}).status_code == 403
+        created = client.post("/cluster/workers/local/diagnostic").json()
+        assert client.post(f"/cluster/jobs/{created['id']}/cancel").status_code == 200
+        assert client.post(f"/cluster/jobs/{created['id']}/cancel").status_code == 409
+    with TestClient(app, base_url="http://localhost", client=("192.168.1.5", 50000)) as remote:
+        assert remote.get("/cluster/workers").status_code == 403

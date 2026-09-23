@@ -11,6 +11,8 @@ agent.md §5.3 — ALNS は内側 LP を Gurobi で解く。Gurobi 無し時は 
 """
 from __future__ import annotations
 
+from src.solver_policy import optimize_model
+
 import copy
 import math
 import random
@@ -496,7 +498,7 @@ def _evaluate_with_gurobi(
                     name=f"grid_lim_{site_id}_{t}",
                 )
 
-    model.optimize()
+    optimize_model(model)
 
     if model.SolCount == 0:
         return float("inf"), None

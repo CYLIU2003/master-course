@@ -1,0 +1,299 @@
+{
+  "schema_version": "monthly_result_report_v2",
+  "status": "STOPPED_AFTER_FAILED_CASE",
+  "campaign_status": "STOPPED_AFTER_FAILED_CASE",
+  "source_git_sha": "3289f07b6bd5fbd739a8f2c3cb6092d1e56cbac0",
+  "generated_at_utc": "2026-09-21T17:40:16.469403+00:00",
+  "completed_count": 3,
+  "declared_week_count": 12,
+  "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
+  "bess_terminal_soc_policy": "minimum_only",
+  "bess_priority_mode": "pv_self_consumption",
+  "rolling_bess_terminal_policy": "minimum_only",
+  "bess_forecast_reserve_policy": "physical_floor_only",
+  "independent_audit": {
+    "path": "C:\\master-course\\output\\monthly_auxiliary_rolling_20260921\\monthly_budget_independent_audit.json",
+    "sha256": "746984964f0e58572d20920bf0a5dbb58c20fec8e3b4ee3a5870c9f2fd8fd950"
+  },
+  "weeks": [
+    {
+      "total_cost": 4366035.788873886,
+      "vehicle_usage_cost": 4100000.0,
+      "electricity_cost": 115089.86846404128,
+      "fuel_cost": 36317.878573008806,
+      "co2_cost": 2544.2592784844514,
+      "contract_overage_cost": 112083.78255835094,
+      "used_vehicle_day_count": 205,
+      "grid_import_kwh": 3836.328948801561,
+      "peak_grid_kw": 473.62378109661483,
+      "pv_generated_kwh": 15703.5375,
+      "pv_used_total_kwh": 15703.5375,
+      "pv_curtailed_kwh": 0.0,
+      "pv_to_bus_kwh": 1497.14386381813,
+      "pv_to_bess_kwh": 14206.39363618187,
+      "bess_to_bus_kwh": 14531.270256654134,
+      "grid_to_bess_kwh": 0.0,
+      "contract_over_limit_kwh": 224.1675651167019,
+      "total_co2_kg": 2544.2592784844514,
+      "ice_fuel_consumed_l": 242.11919048672567,
+      "pv_asset_cost": 0.0,
+      "bess_asset_cost": 0.0,
+      "stationary_battery_degradation_cost": 0.0,
+      "bess_discharge_cost": 0.0,
+      "month": 1,
+      "week": "2025-01-06",
+      "status": "DIAGNOSTIC_EXECUTION_PASSED",
+      "trip_count": 1704,
+      "scheduled_trip_distance_km": 13925.428829,
+      "used_vehicle_count": 32,
+      "stage1_gap": 0.03728001235041796,
+      "hourly_steps_accepted": 168,
+      "quarter_hour_slots": 672,
+      "physical_violations": 0,
+      "day_type_counts": {
+        "weekday": 5,
+        "saturday": 1,
+        "sunday_or_holiday": 1
+      },
+      "fleet_types": {
+        "BEV": 35,
+        "ICE": 25
+      },
+      "fleet_parameters_sha256": "ef639b60b7d2e5803f161499287d02ec72e7d4ccebd877b1a704166653f95781",
+      "chargers_sha256": "43b7370e5b354baf10253951557a3c6b6d28d63b03f6972208d0c49bc09869d4",
+      "template_rows_sha256": "8fb318cbeddaea465bdc7bb4e3148c8fa40283165300b8c39444083c2d898784",
+      "forecast_model_sha256": "d7b6b15172e4267e07d5f8846943b08199f102915dd14d77ecff540b4f22b8cd",
+      "non_vehicle_usage_cost_jpy": 266035.78887388576,
+      "pv_curtailment_pct": 0.0,
+      "bess_terminal": {
+        "policy": "minimum_only",
+        "initial_soc_kwh": 3000.0,
+        "target_soc_kwh": null,
+        "terminal_soc_kwh": 1200.0,
+        "terminal_soc_delta_kwh": -1800.0,
+        "terminal_soc_floor_kwh": 1200.0,
+        "terminal_soc_ceiling_kwh": 4800.0,
+        "absolute_deviation_kwh": null,
+        "balanced": true
+      },
+      "bess_inventory_drawdown_kwh": 1800.0,
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-01-06\\diagnostic\\2025-01-06\\summary.json",
+          "sha256": "8dcc481bafb9285571a2a2ccbefc6ff4969869a019ae5ee9d36e972152e94878"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-01-06\\diagnostic\\2025-01-06\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "8f2f61ff20780504c0601c6289b6f9fe6c0dee57c57b69b2d26e44aef1fcae8b"
+        },
+        "executed_plan": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-01-06\\diagnostic\\2025-01-06\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "3e0403b6c1469b8a59f205d389e59e95ee788313adedf0f2bf3d97c97b329bf9"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-01-06\\diagnostic\\2025-01-06\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "88744d5bc10c896399fe9cc5c77b48086e5a703d581a8ea06615c6ab7a3a2e45"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\prepared_inputs\\9dab34ea-7444-4512-a575-5c63f70353f2\\prepared-bea572b18f2bf248-17d2799d67f59922-8acc7b3a.json",
+          "sha256": "b18f5d92ff3e14158e7ea79d1b2ddac050ec79701e6fe1846501b0611c76e9f8"
+        }
+      }
+    },
+    {
+      "total_cost": 4206177.724766782,
+      "vehicle_usage_cost": 4120000.0,
+      "electricity_cost": 47358.696448149865,
+      "fuel_cost": 37385.22165929199,
+      "co2_cost": 1433.8066592203113,
+      "contract_overage_cost": 1.1854339732053631e-07,
+      "used_vehicle_day_count": 206,
+      "grid_import_kwh": 1578.6232149385582,
+      "peak_grid_kw": 200.0000000002932,
+      "pv_generated_kwh": 21340.7375,
+      "pv_used_total_kwh": 19445.219411639162,
+      "pv_curtailed_kwh": 1895.5180883608373,
+      "pv_to_bus_kwh": 1141.7420335325417,
+      "pv_to_bess_kwh": 18303.47737810662,
+      "bess_to_bus_kwh": 17164.238894297574,
+      "grid_to_bess_kwh": 0.0,
+      "contract_over_limit_kwh": 2.3708679464107263e-10,
+      "total_co2_kg": 1433.8066592203113,
+      "ice_fuel_consumed_l": 249.2348110619469,
+      "pv_asset_cost": 0.0,
+      "bess_asset_cost": 0.0,
+      "stationary_battery_degradation_cost": 0.0,
+      "bess_discharge_cost": 0.0,
+      "month": 2,
+      "week": "2025-02-03",
+      "status": "DIAGNOSTIC_EXECUTION_PASSED",
+      "trip_count": 1704,
+      "scheduled_trip_distance_km": 13925.428829,
+      "used_vehicle_count": 32,
+      "stage1_gap": 0.04032843078525657,
+      "hourly_steps_accepted": 168,
+      "quarter_hour_slots": 672,
+      "physical_violations": 0,
+      "day_type_counts": {
+        "weekday": 5,
+        "saturday": 1,
+        "sunday_or_holiday": 1
+      },
+      "fleet_types": {
+        "BEV": 35,
+        "ICE": 25
+      },
+      "fleet_parameters_sha256": "ef639b60b7d2e5803f161499287d02ec72e7d4ccebd877b1a704166653f95781",
+      "chargers_sha256": "43b7370e5b354baf10253951557a3c6b6d28d63b03f6972208d0c49bc09869d4",
+      "template_rows_sha256": "8fb318cbeddaea465bdc7bb4e3148c8fa40283165300b8c39444083c2d898784",
+      "forecast_model_sha256": "d7b6b15172e4267e07d5f8846943b08199f102915dd14d77ecff540b4f22b8cd",
+      "non_vehicle_usage_cost_jpy": 86177.72476678155,
+      "pv_curtailment_pct": 8.882158305732581,
+      "bess_terminal": {
+        "policy": "minimum_only",
+        "initial_soc_kwh": 3000.0,
+        "target_soc_kwh": null,
+        "terminal_soc_kwh": 2320.683620466995,
+        "terminal_soc_delta_kwh": -679.3163795330051,
+        "terminal_soc_floor_kwh": 1200.0,
+        "terminal_soc_ceiling_kwh": 4800.0,
+        "absolute_deviation_kwh": null,
+        "balanced": true
+      },
+      "bess_inventory_drawdown_kwh": 679.3163795330051,
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-02-03\\diagnostic\\2025-02-03\\summary.json",
+          "sha256": "b121553b4493aba70225235ba645f8e915135351321a7012aa426b58d6bd1a53"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-02-03\\diagnostic\\2025-02-03\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "65f050d298af5a2587d266bf936f05182c317eb27c80058b559f39f461948612"
+        },
+        "executed_plan": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-02-03\\diagnostic\\2025-02-03\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "78154553ff8fc83b54e6b1f60df8a726b42ceb26ab12703a7b898c34924dafda"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-02-03\\diagnostic\\2025-02-03\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "9b0eaf373cfdfe174c096c11c074572ee884c97f09ea47c63e2ccde8a38d37c3"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\prepared_inputs\\e66da82f-04f3-4592-b6d8-e396ed6bc911\\prepared-059dac5c01ba1ee4-6d9763c17689f7be-8acc7b3a.json",
+          "sha256": "fafb3451ea6c345184a22f44a651288e7c3879da17674ee3ad5e10725a688b85"
+        }
+      }
+    },
+    {
+      "total_cost": 4823983.769033423,
+      "vehicle_usage_cost": 4120000.0,
+      "electricity_cost": 203164.57099266013,
+      "fuel_cost": 35954.95460176988,
+      "co2_cost": 4005.9144320774076,
+      "contract_overage_cost": 460858.32900691463,
+      "used_vehicle_day_count": 206,
+      "grid_import_kwh": 6772.152366422233,
+      "peak_grid_kw": 476.7182182740884,
+      "pv_generated_kwh": 14855.875,
+      "pv_used_total_kwh": 14027.206768056845,
+      "pv_curtailed_kwh": 828.6682319431548,
+      "pv_to_bus_kwh": 2221.706614759938,
+      "pv_to_bess_kwh": 11805.500153296907,
+      "bess_to_bus_kwh": 10902.656639083863,
+      "grid_to_bess_kwh": 0.0,
+      "contract_over_limit_kwh": 921.7166580138293,
+      "total_co2_kg": 4005.9144320774076,
+      "ice_fuel_consumed_l": 239.69969734513273,
+      "pv_asset_cost": 0.0,
+      "bess_asset_cost": 0.0,
+      "stationary_battery_degradation_cost": 0.0,
+      "bess_discharge_cost": 0.0,
+      "month": 3,
+      "week": "2025-03-03",
+      "status": "DIAGNOSTIC_EXECUTION_PASSED",
+      "trip_count": 1704,
+      "scheduled_trip_distance_km": 13925.428829,
+      "used_vehicle_count": 32,
+      "stage1_gap": 0.03795537209643674,
+      "hourly_steps_accepted": 168,
+      "quarter_hour_slots": 672,
+      "physical_violations": 0,
+      "day_type_counts": {
+        "weekday": 5,
+        "saturday": 1,
+        "sunday_or_holiday": 1
+      },
+      "fleet_types": {
+        "BEV": 35,
+        "ICE": 25
+      },
+      "fleet_parameters_sha256": "ef639b60b7d2e5803f161499287d02ec72e7d4ccebd877b1a704166653f95781",
+      "chargers_sha256": "43b7370e5b354baf10253951557a3c6b6d28d63b03f6972208d0c49bc09869d4",
+      "template_rows_sha256": "8fb318cbeddaea465bdc7bb4e3148c8fa40283165300b8c39444083c2d898784",
+      "forecast_model_sha256": "d7b6b15172e4267e07d5f8846943b08199f102915dd14d77ecff540b4f22b8cd",
+      "non_vehicle_usage_cost_jpy": 703983.7690334227,
+      "pv_curtailment_pct": 5.578050649612727,
+      "bess_terminal": {
+        "policy": "minimum_only",
+        "initial_soc_kwh": 3000.0,
+        "target_soc_kwh": null,
+        "terminal_soc_kwh": 2738.7444729122008,
+        "terminal_soc_delta_kwh": -261.25552708779924,
+        "terminal_soc_floor_kwh": 1200.0,
+        "terminal_soc_ceiling_kwh": 4800.0,
+        "absolute_deviation_kwh": null,
+        "balanced": true
+      },
+      "bess_inventory_drawdown_kwh": 261.25552708779924,
+      "source_evidence": {
+        "case_summary": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-03-03\\diagnostic\\2025-03-03\\summary.json",
+          "sha256": "0aa5a9c93f701c775e8af9b8876b66c23216289bb5e2140acdd738a851864358"
+        },
+        "executed_day_accounting": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-03-03\\diagnostic\\2025-03-03\\rolling_hourly_chain\\executed_day_accounting.json",
+          "sha256": "70148b8626f283ba87ca84cd31820ff8840d3f84ee450aee8b123a7f7cfa1ece"
+        },
+        "executed_plan": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-03-03\\diagnostic\\2025-03-03\\rolling_hourly_chain\\executed_plan.json",
+          "sha256": "cc83ae949b97db4971899f41d55af8c8f916b5f8628e604a6d339bf07fcd9719"
+        },
+        "physical_validation": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-03-03\\diagnostic\\2025-03-03\\rolling_hourly_chain\\physical_validation.json",
+          "sha256": "0eb121f5686eb6b5b55d575c3b87195d453553d111f965acd64db5ab8f6824d4"
+        },
+        "prepared_input": {
+          "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\prepared_inputs\\02c28b4b-5d1a-4f05-a168-5e5291a6f3f3\\prepared-55361aac628e4ab5-18319b02b8bf9b2a-8acc7b3a.json",
+          "sha256": "bfa657254ba87e84071d3a2672e2088fa2225667f5d54c58f53bc544548b9eba"
+        }
+      }
+    }
+  ],
+  "seasons": [],
+  "failed_weeks": [
+    {
+      "week": "2025-04-07",
+      "status": "DAY_AHEAD_FAILED",
+      "hourly_steps_accepted": 0,
+      "failed_hour": null,
+      "reasons": [
+        "[STAGE2_NO_INCUMBENT] Charging optimization returned infeasible; no operating plan is available. Inspect the saved Stage 2 diagnostics; an IIS exists only when infeasibility was established."
+      ],
+      "source_evidence": {
+        "path": "C:\\master-course-worktrees\\monthly-auxiliary-rolling-20260921\\output\\monthly_auxiliary_rolling_campaign_20260921\\cases\\2025-04-07\\diagnostic\\2025-04-07\\summary.json",
+        "sha256": "e33b2b346aa6308c8a3536cd07742578151cacb67bb8a6ba9bf2f2ed97635fc9"
+      }
+    }
+  ],
+  "pending_weeks": [
+    "2025-04-07",
+    "2025-05-12",
+    "2025-06-02",
+    "2025-07-07",
+    "2025-08-04",
+    "2025-09-01",
+    "2025-10-06",
+    "2025-11-10",
+    "2025-12-01"
+  ]
+}

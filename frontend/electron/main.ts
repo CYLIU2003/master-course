@@ -51,13 +51,14 @@ async function workspace(): Promise<string> {
 }
 
 async function startBackend(root: string): Promise<void> {
+  const uvPython = path.join(root, ".venv-cluster", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
   const python =
     process.env.EV_BUS_PYTHON ??
-    path.join(
+    (existsSync(uvPython) ? uvPython : path.join(
       root,
       ".venv",
       process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
-    );
+    ));
   if (
     !existsSync(python) ||
     !existsSync(path.join(root, "bff/desktop_server.py"))

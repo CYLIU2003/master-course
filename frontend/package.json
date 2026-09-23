@@ -7,7 +7,7 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "api:generate": "..\\.venv\\Scripts\\python.exe scripts/export-openapi.py && openapi-typescript openapi.json -o src/generated/api.ts",
+    "api:generate": "node scripts/uv-python.mjs scripts/export-openapi.py && openapi-typescript openapi.json -o src/generated/api.ts && prettier --write src/generated/api.ts",
     "format": "prettier --write src electron vite.config.ts",
     "dev": "npm run build && electron .",
     "start": "electron .",

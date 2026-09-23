@@ -1,0 +1,14 @@
+[project]
+name = "master-course-worker"
+version = "0.1.0"
+requires-python = ">=3.14.7,<3.15"
+dependencies = [
+  "fastapi==0.135.1", "uvicorn==0.42.0", "httpx==0.28.1",
+  "gurobipy==13.0.1", "numpy==2.4.3", "pandas==3.0.1",
+  "scipy==1.17.1", "pydantic==2.12.5", "pyarrow==23.0.1",
+  "ijson==3.5.1", "matplotlib==3.10.8", "plotly==6.6.0",
+  "openpyxl==3.1.5", "pytest==9.0.3",
+]
+
+[tool.uv]
+package = false

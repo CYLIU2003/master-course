@@ -57,6 +57,14 @@ beforeEach(() => {
       let payload: unknown = {};
       if (url.endsWith("/configuration"))
         payload = { ...configuration, revision };
+      else if (url === "/api/cluster/workers")
+        payload = {
+          workers: [],
+          global_gurobi_slots: 1,
+          reserved_gurobi_slots: 0,
+        };
+      else if (url === "/api/cluster/jobs")
+        payload = { job_id: "distributed-job" };
       else if (url === "/api/desktop/scenarios/s1") payload = overview;
       else if (url.endsWith("/simulation/prepare"))
         payload = {
@@ -111,6 +119,31 @@ async function prepare() {
   fireEvent.click(screen.getByRole("button", { name: "1. 入力を準備" }));
   await screen.findByText(/入力準備済み/);
 }
+it("shows 168 planned windows and blocks formal seven-day execution", async () => {
+  mount();
+  await prepare();
+  expect(screen.getByText(/予定168回/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("checkbox", { name: /正式実行/ }));
+  expect(
+    screen
+      .getByRole("button", { name: "2. 計算を開始" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+});
+it("sends the authoritative day-ahead profile when rolling is disabled", async () => {
+  mount();
+  await prepare();
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: /時間ごとのローリング/ }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
+  await waitFor(() =>
+    expect(
+      requests.find((row) => row.url.endsWith("/run-optimization"))?.body
+        .run_profile,
+    ).toBe("day_ahead_exploratory"),
+  );
+});
 it("prepares fresh saved physical controls and sends the configured solver budget", async () => {
   mount();
   await prepare();
@@ -144,6 +177,44 @@ it("rejects a prepared input when another writer changes saved settings", async 
     false,
   );
 });
+it("sends frozen optimization to the distributed queue with the selected worker", async () => {
+  mount();
+  await prepare();
+  fireEvent.change(screen.getByLabelText("計算の配布先"), {
+    target: { value: "auto" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
+  await waitFor(() =>
+    expect(requests.some((row) => row.url === "/api/cluster/jobs")).toBe(true),
+  );
+  expect(
+    requests.find((row) => row.url === "/api/cluster/jobs")?.body,
+  ).toMatchObject({
+    scenario_id: "s1",
+    worker_id: null,
+    minimum_ram_gb: 16,
+    request: {
+      prepared_input_id: "prepared-1",
+      mode: "phase3_two_stage",
+      time_limit_seconds: 465,
+      rebuild_dispatch: false,
+      use_existing_duties: false,
+      random_seed: 17,
+    },
+  });
+  expect(requests.some((row) => row.url.endsWith("/run-optimization"))).toBe(
+    false,
+  );
+});
+it("sends the chosen RAM floor with a distributed optimization", async () => {
+  mount();
+  await prepare();
+  fireEvent.change(screen.getByLabelText("計算の配布先"), { target: { value: "auto" } });
+  fireEvent.change(screen.getByLabelText("必要な空きRAM（GB）"), { target: { value: "24" } });
+  fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
+  await waitFor(() => expect(requests.some((row) => row.url === "/api/cluster/jobs")).toBe(true));
+  expect(requests.find((row) => row.url === "/api/cluster/jobs")?.body.minimum_ram_gb).toBe(24);
+});
 it("routes simulation through the prepared-simulation endpoint", async () => {
   mount();
   await prepare();
@@ -174,4 +245,32 @@ it("retains zero and false controls instead of silently applying defaults", () =
       stage1BevFrontierEnabled: false,
     }),
   ).toEqual({ mip_gap: 0, random_seed: 0, stage1_bev_frontier_enabled: false });
+});
+
+it("reuses a durable submission identity after a lost response and a remount", async () => {
+  const originalFetch = globalThis.fetch;
+  let dropReply = true;
+  vi.stubGlobal("fetch", (url: string, options?: RequestInit) => {
+    const response = originalFetch(url, options);
+    if (url === "/api/cluster/jobs" && dropReply) {
+      dropReply = false;
+      return response.then(() => { throw new TypeError("accepted response lost"); });
+    }
+    return response;
+  });
+  mount();
+  await prepare();
+  fireEvent.change(screen.getByLabelText("計算の配布先"), { target: { value: "auto" } });
+  fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
+  await waitFor(() => expect(requests.some((row) => row.url === "/api/cluster/jobs")).toBe(true));
+  const first = requests.find((row) => row.url === "/api/cluster/jobs")!.body.idempotency_key;
+  expect(typeof first).toBe("string");
+  await screen.findByText(/accepted response lost/);
+  cleanup();
+  mount();
+  await prepare();
+  fireEvent.change(screen.getByLabelText("計算の配布先"), { target: { value: "auto" } });
+  fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
+  await waitFor(() => expect(requests.filter((row) => row.url === "/api/cluster/jobs").length).toBe(2));
+  expect(requests.filter((row) => row.url === "/api/cluster/jobs")[1].body.idempotency_key).toBe(first);
 });

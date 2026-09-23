@@ -1,0 +1,188 @@
+{
+  "review_date": "2026-09-23",
+  "repository": "CYLIU2003/master-course",
+  "reviewed_commit": "5d790ea16329eda22e3ceb9930548f9d33de1bb3",
+  "latest_local_reviewed": false,
+  "repository_modified": false,
+  "scope_warning": "Partial reachable-path review plus isolated reproductions, not exhaustive source or full test review.",
+  "repository_sources": [
+    {
+      "path": "AGENTS.md",
+      "purpose": "研究guardrails",
+      "read_scope": "全文（先行取得、同一SHA）",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/AGENTS.md"
+    },
+    {
+      "path": "README.md",
+      "purpose": "現行結果と過去実行の区別",
+      "read_scope": "冒頭220行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/README.md"
+    },
+    {
+      "path": "bff/store/job_store.py",
+      "purpose": "永続化・復旧・PID",
+      "read_scope": "全文。確認コピー同梱",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/bff/store/job_store.py"
+    },
+    {
+      "path": "bff/services/optimization_run/execute.py",
+      "purpose": "mode/phase正規化",
+      "read_scope": "全文。確認コピー同梱",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/bff/services/optimization_run/execute.py"
+    },
+    {
+      "path": "src/optimization/common/benchmarking.py",
+      "purpose": "repair予算",
+      "read_scope": "全文。確認コピー同梱",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/src/optimization/common/benchmarking.py"
+    },
+    {
+      "path": "src/optimization/alns/engine.py",
+      "purpose": "repair登録と時間監視",
+      "read_scope": "1–250行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/src/optimization/alns/engine.py"
+    },
+    {
+      "path": "src/optimization/alns/operators_repair.py",
+      "purpose": "部分MILP・config変換",
+      "read_scope": "1–300行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/src/optimization/alns/operators_repair.py"
+    },
+    {
+      "path": "src/optimization/milp/engine.py",
+      "purpose": "Gurobi adapter選択",
+      "read_scope": "1–240行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/src/optimization/milp/engine.py"
+    },
+    {
+      "path": "src/optimization/common/problem.py",
+      "purpose": "config既定値",
+      "read_scope": "1–210、480–700行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/src/optimization/common/problem.py"
+    },
+    {
+      "path": "src/gurobi_runtime.py",
+      "purpose": "Envによる可用性確認",
+      "read_scope": "全文",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/src/gurobi_runtime.py"
+    },
+    {
+      "path": "bff/routers/optimization.py",
+      "purpose": "入力・実行制御・単一executor",
+      "read_scope": "1–220、250–550、620–800、800–1030、1080–1330行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/bff/routers/optimization.py"
+    },
+    {
+      "path": "bff/services/run_preparation.py",
+      "purpose": "prepared不変性",
+      "read_scope": "1–260行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/bff/services/run_preparation.py"
+    },
+    {
+      "path": "bff/services/optimization_run/input_provenance.py",
+      "purpose": "Gitと入力証拠",
+      "read_scope": "1–240行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/bff/services/optimization_run/input_provenance.py"
+    },
+    {
+      "path": "bff/services/optimization_run/rolling_chain.py",
+      "purpose": "rolling契約とPV実績分離",
+      "read_scope": "1–220行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/bff/services/optimization_run/rolling_chain.py"
+    },
+    {
+      "path": "src/optimization/common/bess_terminal_policy.py",
+      "purpose": "終端policy",
+      "read_scope": "全文",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/src/optimization/common/bess_terminal_policy.py"
+    },
+    {
+      "path": "bff/store/output_paths.py",
+      "purpose": "出力root",
+      "read_scope": "全文",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/bff/store/output_paths.py"
+    },
+    {
+      "path": "frontend/README.md",
+      "purpose": "ライフサイクルとsecurity境界",
+      "read_scope": "全文",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/frontend/README.md"
+    },
+    {
+      "path": "frontend/src/components/RunPanel.tsx",
+      "purpose": "prepare・revision・実行指定",
+      "read_scope": "1–290行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/frontend/src/components/RunPanel.tsx"
+    },
+    {
+      "path": "frontend/src/components/Workspace.tsx",
+      "purpose": "dirty保護・UI責務",
+      "read_scope": "1–210行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/frontend/src/components/Workspace.tsx"
+    },
+    {
+      "path": "frontend/src/components/Results.tsx",
+      "purpose": "研究gateの表示",
+      "read_scope": "全文",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/frontend/src/components/Results.tsx"
+    },
+    {
+      "path": "docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md",
+      "purpose": "研究採用未達事項",
+      "read_scope": "冒頭210行（応答量制限あり）",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md"
+    },
+    {
+      "path": "docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.md",
+      "purpose": "月別12週報告",
+      "read_scope": "全文",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.md"
+    },
+    {
+      "path": "docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json",
+      "purpose": "月別元値と原本path",
+      "read_scope": "1–175行",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.json"
+    },
+    {
+      "path": "docs/notes/SHIBU21_23_MONTHLY_FAIR_WEEKS_20260914.md",
+      "purpose": "実験設計とデータ限界",
+      "read_scope": "冒頭180行（応答量制限あり）",
+      "url": "https://github.com/CYLIU2003/master-course/blob/5d790ea16329eda22e3ceb9930548f9d33de1bb3/docs/notes/SHIBU21_23_MONTHLY_FAIR_WEEKS_20260914.md"
+    }
+  ],
+  "incomplete_sources": [
+    {
+      "path": "src/optimization/milp/solver_adapter.py",
+      "reason": "Connector returned no usable body for oversized file; not treated as an empty source file."
+    }
+  ],
+  "external_sources": [
+    {
+      "id": "E1",
+      "title": "CPython v3.13.5 Windows os.kill implementation",
+      "url": "https://raw.githubusercontent.com/python/cpython/v3.13.5/Modules/posixmodule.c",
+      "relevant_lines": "8921–8944"
+    },
+    {
+      "id": "E2",
+      "title": "Microsoft GenerateConsoleCtrlEvent",
+      "url": "https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent"
+    },
+    {
+      "id": "E3",
+      "title": "Gurobi Too many sessions",
+      "url": "https://support.gurobi.com/hc/en-us/articles/34567582787345-How-do-I-resolve-the-error-Too-many-sessions"
+    },
+    {
+      "id": "E4",
+      "title": "Gurobi environments in gurobipy",
+      "url": "https://support.gurobi.com/hc/en-us/articles/4424054948881-How-do-I-manage-Gurobi-environments-in-gurobipy"
+    },
+    {
+      "id": "E5",
+      "title": "Academic WLS restrictions",
+      "url": "https://support.gurobi.com/hc/en-us/articles/34672988479633-What-are-the-restrictions-on-using-an-academic-WLS-license"
+    }
+  ]
+}

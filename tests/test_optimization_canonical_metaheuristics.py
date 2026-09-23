@@ -231,7 +231,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
         )
         problem_builder_cls.return_value.build_from_scenario.return_value = canonical_problem
         engine_cls.return_value.solve.return_value = engine_result
-        optimization._run_optimization(
+        optimization._run_optimization.__wrapped__(
             "scenario-1",
             "job-1",
             "prepared-1",
@@ -513,7 +513,7 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
         )
         problem_builder_cls.return_value.build_from_scenario.return_value = canonical_problem
         engine_cls.return_value.solve.return_value = engine_result
-        optimization._run_optimization(
+        optimization._run_optimization.__wrapped__(
             "scenario-1",
             "job-1",
             "prepared-1",
@@ -674,11 +674,12 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     assert submitted_args[26] == 60
     assert submitted_args[28] is False
     assert submitted_args[29] is True
-    assert submitted_args[-5] is False
-    assert submitted_args[-4] == -1
-    assert submitted_args[-3] == 1
-    assert submitted_args[-2] == ["vehicle-1"]
-    assert submitted_args[-1] is False
+    assert submitted_args[-6] is False
+    assert submitted_args[-5] == -1
+    assert submitted_args[-4] == 1
+    assert submitted_args[-3] == ["vehicle-1"]
+    assert submitted_args[-2] is False
+    assert submitted_args[-1] == "existing_solver_v1"
     assert submitted_args[31] == "day_ahead_and_hourly_rolling"
     assert submitted_args[32] is True
     assert submitted_args[33] == 60

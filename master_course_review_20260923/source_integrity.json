@@ -1,0 +1,26 @@
+[
+  {
+    "file": "job_store.py",
+    "repo_path": "bff/store/job_store.py",
+    "git_commit": "5d790ea16329eda22e3ceb9930548f9d33de1bb3",
+    "expected_blob_sha": "7694fdf9bf349c84532a42a427f30e133239ed8b",
+    "actual_blob_sha": "7694fdf9bf349c84532a42a427f30e133239ed8b",
+    "exact_match": true
+  },
+  {
+    "file": "benchmarking.py",
+    "repo_path": "src/optimization/common/benchmarking.py",
+    "git_commit": "5d790ea16329eda22e3ceb9930548f9d33de1bb3",
+    "expected_blob_sha": "37cca8bee71b8dc627f952ca0a22edf05330a903",
+    "actual_blob_sha": "37cca8bee71b8dc627f952ca0a22edf05330a903",
+    "exact_match": true
+  },
+  {
+    "file": "execute.py",
+    "repo_path": "bff/services/optimization_run/execute.py",
+    "git_commit": "5d790ea16329eda22e3ceb9930548f9d33de1bb3",
+    "expected_blob_sha": "eb24abe901d66e34eccfb7caeec279150db49be1",
+    "actual_blob_sha": "eb24abe901d66e34eccfb7caeec279150db49be1",
+    "exact_match": true
+  }
+]

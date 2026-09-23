@@ -10,6 +10,8 @@ Usage:
 
 from __future__ import annotations
 
+from src.solver_policy import optimize_model
+
 import argparse
 import copy
 import csv
@@ -125,7 +127,7 @@ def run_parameter_sweep(
             model.Params.TimeLimit = cfg.get("solver", {}).get("time_limit_sec", 300)
 
             t0 = time.perf_counter()
-            model.optimize()
+            optimize_model(model)
             elapsed = time.perf_counter() - t0
 
             from src.milp_model import extract_result

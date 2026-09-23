@@ -55,4 +55,7 @@ def test_get_job_returns_in_memory_job_when_disk_read_fails(tmp_path: Path, monk
     (tmp_path / "job-3.json").write_text("{}", encoding="utf-8")
 
     with patch.object(job_store.Path, "read_text", side_effect=PermissionError(5, "locked", str(tmp_path / "job-3.json"))):
-        assert job_store.get_job("job-3") is job
+        visible = job_store.get_job("job-3")
+        assert visible.status == "running"
+        assert visible.error == "read_unavailable: PermissionError"
+        assert job.error is None

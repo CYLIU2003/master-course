@@ -27,6 +27,7 @@ import {
 import { api, post, type Page, type Scenario } from "./api";
 import { ErrorBox, Pager } from "./components/common";
 import Workspace from "./components/Workspace";
+import ClusterPanel from "./components/ClusterPanel";
 const pages = [
   ["overview", "概要と検証", Home],
   ["settings", "運行・計算設定", Settings2],
@@ -37,6 +38,7 @@ const pages = [
   ["weather", "気象・PVデータ", CloudSun],
   ["data", "データを確認", Database],
   ["run", "実行", Activity],
+  ["cluster", "分散計算", Layers3],
   ["results", "グラフ・費用明細", Gauge],
   ["compare", "シナリオ比較", ArrowLeftRight],
 ] as const;
@@ -123,6 +125,8 @@ export default function App() {
         </div>
         <button
           className="scenario-switch"
+          aria-label="シナリオを切り替える"
+          title="シナリオを切り替える"
           disabled={dirty}
           onClick={() => setPicker(true)}
         >
@@ -135,9 +139,17 @@ export default function App() {
           {pages.map(([key, label, Icon]) => (
             <button
               key={key}
-              disabled={!selected}
-              className={page === key && selected ? "active" : ""}
-              aria-current={page === key && selected ? "page" : undefined}
+              aria-label={label}
+              title={label}
+              disabled={!selected && key !== "cluster"}
+              className={
+                page === key && (selected || key === "cluster") ? "active" : ""
+              }
+              aria-current={
+                page === key && (selected || key === "cluster")
+                  ? "page"
+                  : undefined
+              }
               onClick={() => setPage(key)}
             >
               <Icon size={18} />
@@ -155,11 +167,17 @@ export default function App() {
         <header>
           <span>
             研究ワークスペース{" "}
-            <span className="crumb">/ {selected ? title : "シナリオ"}</span>
+            <span className="crumb">
+              / {selected || page === "cluster" ? title : "シナリオ"}
+            </span>
           </span>
           <span className="local-tag">LOCAL</span>
         </header>
-        {selected ? (
+        {!selected && page === "cluster" ? (
+          <div className="workspace">
+            <ClusterPanel />
+          </div>
+        ) : selected ? (
           <Workspace
             key={selected}
             id={selected}

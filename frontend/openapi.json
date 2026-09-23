@@ -6397,6 +6397,600 @@
         }
       }
     },
+    "/api/cluster/workers": {
+      "get": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Workers",
+        "operationId": "workers_api_cluster_workers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/workers/import": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Import Workers",
+        "operationId": "import_workers_api_cluster_workers_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeedInventory"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/workers/{worker_id}/probe": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Probe Worker",
+        "operationId": "probe_worker_api_cluster_workers__worker_id__probe_post",
+        "parameters": [
+          {
+            "name": "worker_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Worker Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/workers/{worker_id}": {
+      "get": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Worker Detail",
+        "operationId": "worker_detail_api_cluster_workers__worker_id__get",
+        "parameters": [
+          {
+            "name": "worker_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Worker Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/workers/{worker_id}/enable": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Enable Worker",
+        "operationId": "enable_worker_api_cluster_workers__worker_id__enable_post",
+        "parameters": [
+          {
+            "name": "worker_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Worker Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/workers/{worker_id}/disable": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Disable Worker",
+        "operationId": "disable_worker_api_cluster_workers__worker_id__disable_post",
+        "parameters": [
+          {
+            "name": "worker_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Worker Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/workers/{worker_id}/drain": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Drain Worker",
+        "operationId": "drain_worker_api_cluster_workers__worker_id__drain_post",
+        "parameters": [
+          {
+            "name": "worker_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Worker Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/workers/{worker_id}/diagnostic": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Diagnostic",
+        "operationId": "diagnostic_api_cluster_workers__worker_id__diagnostic_post",
+        "parameters": [
+          {
+            "name": "worker_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Worker Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/jobs": {
+      "get": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Jobs",
+        "operationId": "jobs_api_cluster_jobs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Submit",
+        "operationId": "submit_api_cluster_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/workers/{worker_id}/license-test": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "License Test",
+        "operationId": "license_test_api_cluster_workers__worker_id__license_test_post",
+        "parameters": [
+          {
+            "name": "worker_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Worker Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Job",
+        "operationId": "job_api_cluster_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Cancel",
+        "operationId": "cancel_api_cluster_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/jobs/{job_id}/retry": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Retry",
+        "operationId": "retry_api_cluster_jobs__job_id__retry_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/jobs/{job_id}/reconcile": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Reconcile",
+        "operationId": "reconcile_api_cluster_jobs__job_id__reconcile_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cluster/jobs/{job_id}/artifacts": {
+      "get": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Artifacts",
+        "operationId": "artifacts_api_cluster_jobs__job_id__artifacts_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -9614,6 +10208,15 @@
       },
       "RunOptimizationBody": {
         "properties": {
+          "execution_profile": {
+            "type": "string",
+            "enum": [
+              "existing_solver_v1",
+              "alns_no_gurobi_v1"
+            ],
+            "title": "Execution Profile",
+            "default": "existing_solver_v1"
+          },
           "mode": {
             "type": "string",
             "title": "Mode",
@@ -9684,7 +10287,12 @@
               "default",
               "bound_focus",
               "root_cut_focus",
-              "incumbent_focus"
+              "incumbent_focus",
+              "bounded_presolve",
+              "bounded_presolve_barrier",
+              "bounded_presolve_dual",
+              "bounded_presolve_norel",
+              "bounded_presolve_barrier_no_crossover"
             ],
             "title": "Stage1 Gurobi Search Profile",
             "default": "default"
@@ -10178,6 +10786,182 @@
         ],
         "title": "ScenarioSummary"
       },
+      "SeedInventory": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "implementation_status": {
+            "type": "string",
+            "title": "Implementation Status",
+            "default": ""
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": ""
+          },
+          "privacy": {
+            "type": "string",
+            "title": "Privacy",
+            "default": ""
+          },
+          "license_policy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "License Policy"
+          },
+          "local_worker": {
+            "$ref": "#/components/schemas/SeedWorker"
+          },
+          "workers": {
+            "items": {
+              "$ref": "#/components/schemas/SeedWorker"
+            },
+            "type": "array",
+            "title": "Workers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "local_worker",
+          "workers"
+        ],
+        "title": "SeedInventory"
+      },
+      "SeedWorker": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "transport": {
+            "type": "string",
+            "title": "Transport"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "ssh_user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh User"
+          },
+          "ssh_port": {
+            "type": "integer",
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Ssh Port",
+            "default": 22
+          },
+          "monitoring_enabled": {
+            "type": "boolean",
+            "title": "Monitoring Enabled",
+            "default": true
+          },
+          "accepting_jobs": {
+            "type": "boolean",
+            "title": "Accepting Jobs",
+            "default": false
+          },
+          "max_concurrent_jobs": {
+            "type": "integer",
+            "maximum": 16.0,
+            "minimum": 1.0,
+            "title": "Max Concurrent Jobs",
+            "default": 1
+          },
+          "tailscale_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tailscale Node Id"
+          },
+          "ssh_host_key_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Host Key Fingerprint"
+          },
+          "identity_verification": {
+            "type": "string",
+            "title": "Identity Verification",
+            "default": "unverified"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          },
+          "python_executable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Python Executable"
+          },
+          "capabilities_verification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities Verification"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "transport"
+        ],
+        "title": "SeedWorker"
+      },
       "ServiceCalendarBody": {
         "properties": {
           "service_id": {
@@ -10240,6 +11024,64 @@
           "service_id"
         ],
         "title": "ServiceCalendarBody"
+      },
+      "SubmitBody": {
+        "properties": {
+          "scenario_id": {
+            "type": "string",
+            "title": "Scenario Id"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "expected_git_sha": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Git Sha"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          },
+          "minimum_ram_gb": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Minimum Ram Gb",
+            "default": 16
+          },
+          "request": {
+            "$ref": "#/components/schemas/RunOptimizationBody"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scenario_id",
+          "request"
+        ],
+        "title": "SubmitBody"
       },
       "TimetableRowBody": {
         "properties": {
@@ -10853,6 +11695,21 @@
               }
             ],
             "title": "Solvermode"
+          },
+          "executionProfile": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "existing_solver_v1",
+                  "alns_no_gurobi_v1"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executionprofile"
           },
           "objectiveMode": {
             "anyOf": [

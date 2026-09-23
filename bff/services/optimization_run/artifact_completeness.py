@@ -1066,6 +1066,8 @@ def _validate_thesis_ablation_candidates(
         "assignment_only": {"M0", "M2"},
         "two_stage": {"M0", "M2"},
         "integrated": {"M0", "M2", "M3"},
+        # ALNS artifacts remain diagnostic; they do not manufacture Phase 1/3/4 evidence.
+        "metaheuristic": {"M0"},
     }.get(primary_structure)
     if expected_available is None:
         content_errors.append(

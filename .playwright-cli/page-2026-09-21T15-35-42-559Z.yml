@@ -1,0 +1,59 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e11]:
+      - text: EV BUS
+      - generic [ref=e12]: RESEARCH WORKSPACE
+    - button "シナリオを切り替える" [ref=e13] [cursor=pointer]
+    - generic [ref=e21]: 計画と検証
+    - navigation [ref=e22]:
+      - button "概要と検証" [disabled] [ref=e23]
+      - button "運行・計算設定" [disabled] [ref=e28]
+      - button "車両" [disabled] [ref=e33]
+      - button "営業所・充電設備" [disabled] [ref=e39]
+      - button "路線・運行パターン" [disabled] [ref=e45]
+      - button "PV・BESS設備" [disabled] [ref=e49]
+      - button "気象・PVデータ" [disabled] [ref=e55]
+      - button "データを確認" [disabled] [ref=e62]
+      - button "実行" [disabled] [ref=e68]
+      - button "分散計算" [ref=e72] [cursor=pointer]
+      - button "グラフ・費用明細" [disabled] [ref=e78]
+      - button "シナリオ比較" [disabled] [ref=e83]
+    - generic [ref=e88]:
+      - text: ローカル研究環境
+      - generic [ref=e90]: 入力の準備 → 実行 → 結果の確認
+  - main [ref=e91]:
+    - generic [ref=e92]:
+      - generic [ref=e93]:
+        - text: 研究ワークスペース
+        - generic [ref=e94]: / シナリオ
+      - generic [ref=e95]: LOCAL
+    - generic [ref=e96]:
+      - generic [ref=e97]: DISPATCH · CHARGING · ENERGY
+      - heading "運行とエネルギーを、 ひとつの視点で。" [level=1] [ref=e98]: 運行とエネルギーを、ひとつの視点で。
+      - paragraph [ref=e99]: シナリオを選び、運行計画から結果の比較まで進めましょう。
+      - button "シナリオを作成" [ref=e100] [cursor=pointer]
+      - generic [ref=e102]:
+        - article [ref=e103]:
+          - heading "条件を整える" [level=3] [ref=e106]
+          - paragraph [ref=e107]: 対象路線・日付・車両・電力設備を設定。
+        - article [ref=e108]:
+          - heading "計算の状態が見える" [level=3] [ref=e111]
+          - paragraph [ref=e112]: 入力の検査と計算の進み具合を確認。
+        - article [ref=e113]:
+          - heading "結果を比べる" [level=3] [ref=e117]
+          - paragraph [ref=e118]: 費用・残量・検証結果を出典と一緒に比較。
+  - dialog "シナリオを選ぶ" [ref=e120]:
+    - generic [ref=e121]:
+      - generic [ref=e122]:
+        - generic [ref=e123]: YOUR SCENARIOS
+        - heading "どの計画から始めますか" [level=2] [ref=e124]
+      - button "シナリオ選択を閉じる" [ref=e125] [cursor=pointer]
+    - generic [ref=e129]:
+      - textbox "シナリオ検索" [active] [ref=e134]:
+        - /placeholder: 名前で検索
+      - button "新しく作成" [ref=e135] [cursor=pointer]
+    - paragraph [ref=e138]: 読み込み中…
+    - generic [ref=e139]:
+      - generic [ref=e140]: 0–0 / 0 件
+      - button "前のページ" [disabled] [ref=e141]
+      - button "次のページ" [disabled] [ref=e144]

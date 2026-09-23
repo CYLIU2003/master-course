@@ -4,12 +4,44 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+from src.solver_policy import current_usage, require_gurobi
 
 gp = None
 GRB = None
 _GUROBI_AVAILABLE = False
 _GUROBI_RUNTIME_AVAILABLE: bool | None = None
 _GUROBI_DLL_HANDLES: list[Any] = []
+
+
+class GurobiFacade:
+    """Guard cached gp references as well as runtime availability probes."""
+    def __init__(self, module):
+        self._module = module
+
+    def Model(self, *args, **kwargs):
+        require_gurobi("Model")
+        from src.gurobi_session import current_session, track_model
+        session = current_session()
+        if session is not None:
+            if "env" in kwargs or len(args) > 1:
+                raise RuntimeError("Managed models must use the admitted shared Env")
+            kwargs["env"] = session.environment(self._module)
+        usage = current_usage()
+        if usage is not None:
+            usage.model_creations += 1
+            if session is None:
+                usage.counts_complete = False  # An unmanaged implicit default Env is not measured.
+        return track_model(self._module.Model(*args, **kwargs))
+
+    def Env(self, *args, **kwargs):
+        require_gurobi("Env")
+        from src.gurobi_session import current_session
+        if current_session() is not None:
+            raise RuntimeError("Separate Env creation is forbidden during a managed execution")
+        return self._module.Env(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._module, name)
 
 def candidate_gurobi_homes() -> list[Path]:
     candidates: list[Path] = []
@@ -124,7 +156,7 @@ try:
     import gurobipy as _gp
     from gurobipy import GRB as _GRB
 
-    gp = _gp
+    gp = GurobiFacade(_gp)
     GRB = _GRB
     _GUROBI_AVAILABLE = True
 except Exception:
@@ -145,7 +177,7 @@ def ensure_gurobi():
         import gurobipy as _gp
         from gurobipy import GRB as _GRB
 
-        gp = _gp
+        gp = GurobiFacade(_gp)
         GRB = _GRB
         _GUROBI_AVAILABLE = True
         return gp, GRB
@@ -158,6 +190,13 @@ def ensure_gurobi():
 
 def is_gurobi_available() -> bool:
     global _GUROBI_RUNTIME_AVAILABLE  # noqa: PLW0603
+    require_gurobi("availability_probe")
+    from src.gurobi_session import current_session
+    session = current_session()
+    if session is not None:
+        gurobi, _ = ensure_gurobi()
+        session.environment(gurobi._module)
+        return True
     if _GUROBI_RUNTIME_AVAILABLE is True:
         return True
     try:
@@ -165,6 +204,9 @@ def is_gurobi_available() -> bool:
         env = gurobi.Env(empty=True)
         try:
             env.setParam("OutputFlag", 0)
+            usage = current_usage()
+            if usage is not None:
+                usage.environment_starts += 1
             env.start()
         finally:
             env.dispose()

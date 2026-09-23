@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.solver_policy import optimize_model
+
 import csv
 import contextvars
 import hashlib
@@ -2563,7 +2565,7 @@ def _separate_exact_weighted_assignment_path_incompatibility_cliques(
                 ),
                 grb.MAXIMIZE,
             )
-            clique_model.optimize()
+            optimize_model(clique_model)
             summary["auxiliary_mip_group_count"] += 1
             auxiliary_status = int(getattr(clique_model, "Status", 0) or 0)
             has_solution = int(getattr(clique_model, "SolCount", 0) or 0) > 0
@@ -2710,7 +2712,7 @@ def _stage1_root_lp_diagnostic(
         )
         relaxed_model.Params.Threads = int(diagnostic["solver_controls"]["threads"])
         relaxed_model.Params.TimeLimit = diagnostic["time_limit_sec"]
-        relaxed_model.optimize()
+        optimize_model(relaxed_model)
         status = int(getattr(relaxed_model, "Status", 0) or 0)
         status_names = {
             int(grb.OPTIMAL): "optimal",
@@ -11238,7 +11240,7 @@ class GurobiMILPAdapter:
         def _optimize_integrated_with_exact_fragment_callback() -> None:
             if integrated_fragment_lazy_separator is not None:
                 integrated_fragment_lazy_separator.begin_solve()
-            model.optimize(_capture_first_feasible)
+            optimize_model(model, _capture_first_feasible)
             if (
                 integrated_fragment_lazy_separator is not None
                 and integrated_fragment_lazy_separator.callback_error
@@ -15929,7 +15931,7 @@ class GurobiMILPAdapter:
         )
         stage1.Params.TimeLimit = max(stage_time_limit, 0.001)
         stage1_memory_before_optimize = _gurobi_memory_snapshot(stage1)
-        stage1.optimize(_stage1_search_callback)
+        optimize_model(stage1, _stage1_search_callback)
         stage1_memory_after_optimize = _gurobi_memory_snapshot(stage1)
         if (
             stage1_fragment_lazy_separator is not None
@@ -19261,7 +19263,7 @@ class GurobiMILPAdapter:
                 try:
                     if stage1_fragment_lazy_separator is not None:
                         stage1_fragment_lazy_separator.begin_solve()
-                        stage1.optimize(
+                        optimize_model(stage1,
                             stage1_fragment_lazy_separator.callback
                         )
                         if stage1_fragment_lazy_separator.callback_error:
@@ -19271,7 +19273,7 @@ class GurobiMILPAdapter:
                                 + stage1_fragment_lazy_separator.callback_error
                             )
                     else:
-                        stage1.optimize()
+                        optimize_model(stage1)
                     composition_wall_time_sec = float(
                         time.perf_counter() - composition_started
                     )
@@ -20041,7 +20043,7 @@ class GurobiMILPAdapter:
             enumeration_started = time.perf_counter()
             if stage1_fragment_lazy_separator is not None:
                 stage1_fragment_lazy_separator.begin_solve()
-                stage1.optimize(stage1_fragment_lazy_separator.callback)
+                optimize_model(stage1, stage1_fragment_lazy_separator.callback)
                 if stage1_fragment_lazy_separator.callback_error:
                     raise RuntimeError(
                         "stage1 enumeration fragment transition lazy "
@@ -20049,7 +20051,7 @@ class GurobiMILPAdapter:
                         + stage1_fragment_lazy_separator.callback_error
                     )
             else:
-                stage1.optimize()
+                optimize_model(stage1)
             enumeration_wall_time_sec = float(
                 time.perf_counter() - enumeration_started
             )
@@ -23146,13 +23148,13 @@ class GurobiMILPAdapter:
             objective2 += problem.scenario.demand_charge_on_peak_horizon_yen_per_kw * w_on_var
             objective2 += problem.scenario.demand_charge_off_peak_horizon_yen_per_kw * w_off_var
         stage2.setObjective(objective2, GRB.MINIMIZE)
-        stage2.optimize()
+        optimize_model(stage2)
 
         if stage2.Status == GRB.INF_OR_UNBD:
             # Distinguish a genuine IIS from an inf-or-unbounded presolve
             # ambiguity before publishing a Phase 3 rejection.
             stage2.Params.DualReductions = 0
-            stage2.optimize()
+            optimize_model(stage2)
         stage2_status = self._status_name(GRB, stage2.Status)
         stage2_numeric_diagnostics = _gurobi_numeric_diagnostics(stage2)
         stage2_gap = self._model_gap(stage2)
@@ -25795,7 +25797,7 @@ class GurobiMILPAdapter:
             model.Params.SoftMemLimit = float(
                 preflight_memory_controls["soft_mem_limit_gb"]
             )
-            model.optimize()
+            optimize_model(model)
             audit["dispatch_fixed_recourse_runtime_sec"] = float(
                 getattr(model, "Runtime", 0.0) or 0.0
             )
@@ -28088,7 +28090,7 @@ class GurobiMILPAdapter:
                     + minimum_grid_unit_cost * grid_source_var,
                     grb.MINIMIZE,
                 )
-                path_source_model.optimize()
+                optimize_model(path_source_model)
                 if path_source_model.Status == grb.OPTIMAL:
                     candidate_lower_bound = max(
                         float(path_source_model.ObjVal),
@@ -28167,7 +28169,7 @@ class GurobiMILPAdapter:
                     path_source_mip_audit["time_limit_sec"]
                 )
                 path_source_model.Params.MIPGap = 0.0
-                path_source_model.optimize()
+                optimize_model(path_source_model)
                 path_source_mip_status = int(
                     getattr(path_source_model, "Status", 0) or 0
                 )

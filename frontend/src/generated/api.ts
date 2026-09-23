@@ -1688,6 +1688,262 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/cluster/workers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Workers */
+    get: operations["workers_api_cluster_workers_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/workers/import": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Import Workers */
+    post: operations["import_workers_api_cluster_workers_import_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/workers/{worker_id}/probe": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Probe Worker */
+    post: operations["probe_worker_api_cluster_workers__worker_id__probe_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/workers/{worker_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Worker Detail */
+    get: operations["worker_detail_api_cluster_workers__worker_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/workers/{worker_id}/enable": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Enable Worker */
+    post: operations["enable_worker_api_cluster_workers__worker_id__enable_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/workers/{worker_id}/disable": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Disable Worker */
+    post: operations["disable_worker_api_cluster_workers__worker_id__disable_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/workers/{worker_id}/drain": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Drain Worker */
+    post: operations["drain_worker_api_cluster_workers__worker_id__drain_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/workers/{worker_id}/diagnostic": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Diagnostic */
+    post: operations["diagnostic_api_cluster_workers__worker_id__diagnostic_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/jobs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Jobs */
+    get: operations["jobs_api_cluster_jobs_get"];
+    put?: never;
+    /** Submit */
+    post: operations["submit_api_cluster_jobs_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/workers/{worker_id}/license-test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** License Test */
+    post: operations["license_test_api_cluster_workers__worker_id__license_test_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/jobs/{job_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Job */
+    get: operations["job_api_cluster_jobs__job_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/jobs/{job_id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Cancel */
+    post: operations["cancel_api_cluster_jobs__job_id__cancel_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/jobs/{job_id}/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Retry */
+    post: operations["retry_api_cluster_jobs__job_id__retry_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/jobs/{job_id}/reconcile": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reconcile */
+    post: operations["reconcile_api_cluster_jobs__job_id__reconcile_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/cluster/jobs/{job_id}/artifacts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Artifacts */
+    get: operations["artifacts_api_cluster_jobs__job_id__artifacts_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/health": {
     parameters: {
       query?: never;
@@ -2967,6 +3223,12 @@ export interface components {
     /** RunOptimizationBody */
     RunOptimizationBody: {
       /**
+       * Execution Profile
+       * @default existing_solver_v1
+       * @enum {string}
+       */
+      execution_profile: "existing_solver_v1" | "alns_no_gurobi_v1";
+      /**
        * Mode
        * @default thesis_mode
        */
@@ -3000,7 +3262,15 @@ export interface components {
        * @enum {string}
        */
       stage1_gurobi_search_profile:
-        "default" | "bound_focus" | "root_cut_focus" | "incumbent_focus";
+        | "default"
+        | "bound_focus"
+        | "root_cut_focus"
+        | "incumbent_focus"
+        | "bounded_presolve"
+        | "bounded_presolve_barrier"
+        | "bounded_presolve_dual"
+        | "bounded_presolve_norel"
+        | "bounded_presolve_barrier_no_crossover";
       /**
        * Stage1 Gurobi Scale Flag
        * @default -1
@@ -3246,6 +3516,81 @@ export interface components {
       /** Updatedat */
       updatedAt?: string | null;
     };
+    /** SeedInventory */
+    SeedInventory: {
+      /** Schema Version */
+      schema_version: string;
+      /**
+       * Implementation Status
+       * @default
+       */
+      implementation_status: string;
+      /**
+       * Source
+       * @default
+       */
+      source: string;
+      /**
+       * Privacy
+       * @default
+       */
+      privacy: string;
+      /** License Policy */
+      license_policy?: {
+        [key: string]: unknown;
+      };
+      local_worker: components["schemas"]["SeedWorker"];
+      /** Workers */
+      workers: components["schemas"]["SeedWorker"][];
+    };
+    /** SeedWorker */
+    SeedWorker: {
+      /** Id */
+      id: string;
+      /** Name */
+      name: string;
+      /** Transport */
+      transport: string;
+      /** Host */
+      host?: string | null;
+      /** Ssh User */
+      ssh_user?: string | null;
+      /**
+       * Ssh Port
+       * @default 22
+       */
+      ssh_port: number;
+      /**
+       * Monitoring Enabled
+       * @default true
+       */
+      monitoring_enabled: boolean;
+      /**
+       * Accepting Jobs
+       * @default false
+       */
+      accepting_jobs: boolean;
+      /**
+       * Max Concurrent Jobs
+       * @default 1
+       */
+      max_concurrent_jobs: number;
+      /** Tailscale Node Id */
+      tailscale_node_id?: string | null;
+      /** Ssh Host Key Fingerprint */
+      ssh_host_key_fingerprint?: string | null;
+      /**
+       * Identity Verification
+       * @default unverified
+       */
+      identity_verification: string;
+      /** Workspace */
+      workspace?: string | null;
+      /** Python Executable */
+      python_executable?: string | null;
+      /** Capabilities Verification */
+      capabilities_verification?: string | null;
+    };
     /** ServiceCalendarBody */
     ServiceCalendarBody: {
       /** Service Id */
@@ -3300,6 +3645,23 @@ export interface components {
        * @default 2026-12-31
        */
       end_date: string;
+    };
+    /** SubmitBody */
+    SubmitBody: {
+      /** Scenario Id */
+      scenario_id: string;
+      /** Idempotency Key */
+      idempotency_key?: string | null;
+      /** Expected Git Sha */
+      expected_git_sha?: string | null;
+      /** Worker Id */
+      worker_id?: string | null;
+      /**
+       * Minimum Ram Gb
+       * @default 16
+       */
+      minimum_ram_gb: number;
+      request: components["schemas"]["RunOptimizationBody"];
     };
     /** TimetableRowBody */
     TimetableRowBody: {
@@ -3460,6 +3822,8 @@ export interface components {
       allowInterDepotSwap?: boolean | null;
       /** Solvermode */
       solverMode?: string | null;
+      /** Executionprofile */
+      executionProfile?: ("existing_solver_v1" | "alns_no_gurobi_v1") | null;
       /** Objectivemode */
       objectiveMode?: string | null;
       /** Timestepmin */
@@ -8095,6 +8459,484 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["JobReply"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  workers_api_cluster_workers_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+    };
+  };
+  import_workers_api_cluster_workers_import_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SeedInventory"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  probe_worker_api_cluster_workers__worker_id__probe_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        worker_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  worker_detail_api_cluster_workers__worker_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        worker_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  enable_worker_api_cluster_workers__worker_id__enable_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        worker_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  disable_worker_api_cluster_workers__worker_id__disable_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        worker_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  drain_worker_api_cluster_workers__worker_id__drain_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        worker_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  diagnostic_api_cluster_workers__worker_id__diagnostic_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        worker_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  jobs_api_cluster_jobs_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+    };
+  };
+  submit_api_cluster_jobs_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SubmitBody"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  license_test_api_cluster_workers__worker_id__license_test_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        worker_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  job_api_cluster_jobs__job_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cancel_api_cluster_jobs__job_id__cancel_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  retry_api_cluster_jobs__job_id__retry_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  reconcile_api_cluster_jobs__job_id__reconcile_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  artifacts_api_cluster_jobs__job_id__artifacts_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */

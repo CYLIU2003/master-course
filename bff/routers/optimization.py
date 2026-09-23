@@ -48,6 +48,7 @@ from bff.routers.graph import (
     _build_trips_payload,
 )
 from bff.services.experiment_reports import log_optimization_experiment
+from bff.services.optimization_run.solver_policy import guarded_execution
 from bff.services.optimization_run.artifact_completeness import (
     SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE,
     SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_SCHEMA_VERSION,
@@ -921,6 +922,7 @@ def _apply_interactive_bev_utilization_policy(
 
 
 class RunOptimizationBody(BaseModel):
+    execution_profile: Literal["existing_solver_v1", "alns_no_gurobi_v1"] = "existing_solver_v1"
     mode: str = "thesis_mode"
     research_run: bool = False
     time_step_min: Optional[int] = None
@@ -7779,6 +7781,11 @@ def _canonical_soc_event_rows(
     scenario_id: str,
     base_date: date,
 ) -> List[Dict[str, Any]]:
+    from src.optimization.common.soc_helpers import (
+        vehicle_reserve_soc_kwh, vehicle_maximum_soc_kwh, vehicle_initial_soc_kwh,
+        return_deadhead_min_to_home, return_deadhead_energy_kwh, trip_energy_kwh,
+        deadhead_before_trip_energy_kwh,
+    )
     problem_trip_by_id = problem.trip_by_id()
     vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
     charge_slots_by_vehicle: Dict[str, List[Any]] = defaultdict(list)
@@ -7792,9 +7799,9 @@ def _canonical_soc_event_rows(
         if vehicle is None or str(getattr(vehicle, "vehicle_type", "") or "").upper() not in {"BEV", "PHEV", "FCEV"}:
             continue
         battery_kwh = max(float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0), 0.0)
-        min_soc = max(float(getattr(vehicle, "reserve_soc", 0.0) or 0.0), 0.0)
-        max_soc = battery_kwh if battery_kwh > 0.0 else 0.0
-        current_soc = _canonical_vehicle_initial_soc_kwh(vehicle)
+        min_soc = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=battery_kwh)
+        max_soc = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=battery_kwh)
+        current_soc = vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=battery_kwh)
         events: List[tuple[int, int, Dict[str, Any]]] = []
         for duty in duties:
             prev_trip = None
@@ -7815,12 +7822,9 @@ def _canonical_soc_event_rows(
                                 "trip_id": "",
                                 "route_id": "",
                                 "location_id": str(getattr(prev_trip, "destination", "") or getattr(vehicle, "home_depot_id", "") or ""),
-                                "delta_kwh": -_canonical_estimated_deadhead_energy_kwh(
-                                    problem,
-                                    deadhead_min=deadhead_min,
-                                    trip_energy_kwh=float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0),
-                                    trip_distance_km=float(getattr(problem_trip, "distance_km", 0.0) or 0.0),
-                                ),
+                                "delta_kwh": -deadhead_before_trip_energy_kwh(
+                                    problem, vehicle, problem_trip,
+                                    previous_trip=problem_trip_by_id.get(str(prev_trip.trip_id)) if prev_trip else None),
                             },
                         )
                     )
@@ -7833,27 +7837,33 @@ def _canonical_soc_event_rows(
                             "trip_id": trip_id,
                             "route_id": str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
                             "location_id": str(getattr(dispatch_trip, "origin_stop_id", "") or dispatch_trip.origin or ""),
-                            "delta_kwh": -max(float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0), 0.0),
+                            "delta_kwh": -trip_energy_kwh(problem, vehicle, problem_trip),
                         },
                     )
                 )
                 prev_trip = dispatch_trip
-        for start_slot, end_slot, _charger_id, avg_charge_kw, avg_discharge_kw, location_id in _canonical_charge_segments(
-            problem,
-            charge_slots_by_vehicle.get(vehicle_id, []),
-            fallback_location_id=str(getattr(vehicle, "home_depot_id", "") or ""),
-        ):
-            duration_h = max(end_slot - start_slot, 0) * max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1) / 60.0
+            if prev_trip:
+                final_trip = problem_trip_by_id[str(prev_trip.trip_id)]
+                exists, return_minutes = return_deadhead_min_to_home(problem, vehicle, final_trip)
+                if exists and return_minutes > 0:
+                    events.append((int(prev_trip.arrival_min) + return_minutes, 0, {
+                        "event_type": "terminal_return", "trip_id": "", "route_id": "",
+                        "location_id": str(vehicle.home_depot_id),
+                        "delta_kwh": -return_deadhead_energy_kwh(problem, vehicle, final_trip),
+                    }))
+        for slot in charge_slots_by_vehicle.get(vehicle_id, []):
+            step = max(int(problem.scenario.timestep_min), 1)
+            duration_h = step / 60.0
             events.append(
                 (
-                    _canonical_horizon_start_min(problem) + start_slot * max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1),
+                    _canonical_horizon_start_min(problem) + (int(slot.slot_index) + 1) * step,
                     2,
                     {
-                        "event_type": "charge_segment",
+                        "event_type": "charge_slot_end",
                         "trip_id": "",
                         "route_id": "",
-                        "location_id": location_id,
-                        "delta_kwh": (avg_charge_kw - avg_discharge_kw) * duration_h,
+                        "location_id": str(getattr(slot, "depot_id", "") or vehicle.home_depot_id),
+                        "delta_kwh": (float(slot.charge_kw) * 0.95 - float(slot.discharge_kw) / 0.95) * duration_h,
                     },
                 )
             )
@@ -7883,6 +7893,7 @@ def _canonical_soc_event_rows(
                     "reserve_margin_kwh": after - min_soc,
                     "min_soc_constraint_kwh": min_soc,
                     "max_soc_constraint_kwh": max_soc,
+                    "provenance": "reconstructed_from_dispatch_and_charging",
                 }
             )
     rows.sort(key=lambda row: (str(row.get("vehicle_id", "")), str(row.get("event_time", ""))))
@@ -8730,7 +8741,15 @@ def _research_vehicle_soc_timeseries_rows(
         getattr(engine_result.plan, "vehicle_soc_kwh_by_vehicle_slot", {})
     )
     if not soc_by_vehicle:
-        return []
+        # Heuristics have no solver-native SOC variables. Export their explicit
+        # replay without labeling it native or changing feasibility acceptance.
+        events = _canonical_soc_event_rows(problem=problem, engine_result=engine_result,
+                                          scenario_id=problem.scenario.scenario_id, base_date=base_date)
+        return [{"date": str(row["event_time"])[:10], "time": str(row["event_time"])[11:16],
+                 "vehicle_id": row["vehicle_id"], "soc_kwh": row["soc_kwh_after"],
+                 "soc_percent": row["soc_pct_after"], "state": row["event_type"],
+                 "depot_id": row["location_id"], "provenance": row["provenance"]}
+                for row in events]
     vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
     timeline_by_vehicle: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for item in timeline_rows:
@@ -11369,6 +11388,7 @@ def _configure_assignment_energy_diagnostics(
     )
 
 
+@guarded_execution
 def _run_optimization(
     scenario_id: str,
     job_id: str,
@@ -11421,6 +11441,7 @@ def _run_optimization(
     stage1_root_lp_diagnostic_method: int = 2,
     stage1_activation_start_strengthening_vehicle_ids: Optional[List[str]] = None,
     enforce_interactive_runtime_controls: bool = True,
+    execution_profile: str = "existing_solver_v1",
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -11657,6 +11678,7 @@ def _run_optimization(
             )
             opt_config = OptimizationConfig(
                 mode=opt_mode,
+                execution_profile=execution_profile,
                 time_limit_sec=time_limit_seconds,
                 stage1_time_limit_sec=stage1_time_limit_seconds,
                 stage2_time_limit_sec=stage2_time_limit_seconds,
@@ -13659,6 +13681,7 @@ def _validate_day_ahead_result_contract(
         )
 
 
+@guarded_execution
 def _run_reoptimization(
     scenario_id: str,
     job_id: str,
@@ -13668,6 +13691,8 @@ def _run_reoptimization(
     depot_id: Optional[str],
 ) -> None:
     body = ReoptimizeBody(**body_payload)
+    if (store.get_scenario_document_shallow(scenario_id).get("simulation_config") or {}).get("execution_profile") == "alns_no_gurobi_v1":
+        raise ValueError("NO_GUROBI_PROFILE_UNSUPPORTED: reoptimization requires a separately prepared supported profile")
     mode = body.mode
     timestep_min = _request_timestep_min(body.timestep_min, body.time_step_min)
     try:
@@ -14111,15 +14136,39 @@ def run_optimization(
     body: Optional[RunOptimizationBody] = None,
     _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
+    return enqueue_optimization(scenario_id, body, _app_state)
+
+
+def enqueue_optimization(
+    scenario_id: str,
+    body: Optional[RunOptimizationBody],
+    _app_state: dict,
+    *,
+    submit=None,
+    submission_job_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Shared public preflight; an injected submitter freezes distributed jobs."""
     _require_scenario(scenario_id)
     request = body or RunOptimizationBody()
+    _require_research_git_preflight_before_job_creation(
+        research_run=bool(request.research_run)
+    )
+    from bff.services.optimization_run.solver_policy import validate_execution_request
+    try:
+        validate_execution_request(request, store.get_scenario_document_shallow(scenario_id))
+        _normalize_solver_mode(request.mode)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(422, str(exc)) from exc
     # Preserve the client request before applying the server-authoritative
     # formal candidate-coverage policy. All validation below must inspect the
     # effective request so enabling the frontier cannot revive invalid bounds.
     requested_frontend_payload = request.model_dump()
-    _require_research_git_preflight_before_job_creation(
-        research_run=bool(request.research_run)
-    )
+    if request.research_run:
+        config = store.get_scenario_document_shallow(scenario_id).get("simulation_config") or {}
+        if int(config.get("planning_days") or 1) > 1:
+            raise HTTPException(409, "MULTIDAY_RESEARCH_BLOCKED: 複数日の正式研究実行は未対応です。日跨ぎ状態と週間会計の検証が必要です。")
     if (
         request.stage1_bev_frontier_enabled
         and request.stage1_bev_frontier_min_count
@@ -14310,7 +14359,7 @@ def run_optimization(
         depot_id=scope.get("depotId"),
         persist=True,
     )
-    job = job_store.create_job(execution_model=_executor_mode())
+    job = job_store.create_job(execution_model=_executor_mode(), **({"job_id": submission_job_id} if submission_job_id else {}))
     job_store.update_job(
         job.job_id,
         metadata=_job_metadata(
@@ -14322,7 +14371,7 @@ def run_optimization(
             extra={"persistence": dict(job_store.JOB_PERSISTENCE_INFO)},
         ),
     )
-    submitted = _submit_optimization_job(
+    submitted = (submit or _submit_optimization_job)(
         fn=_run_optimization,
         args=(
             scenario_id,
@@ -14376,6 +14425,7 @@ def run_optimization(
             request.stage1_root_lp_diagnostic_method,
             request.stage1_activation_start_strengthening_vehicle_ids,
             _public_run_enforces_interactive_runtime_controls(request),
+            request.execution_profile,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,
@@ -14414,6 +14464,8 @@ def reoptimize(
     )
     timestep_min = _request_timestep_min(body.timestep_min, body.time_step_min)
     scenario = store.get_scenario_document_shallow(scenario_id)
+    if (scenario.get("simulation_config") or {}).get("execution_profile") == "alns_no_gurobi_v1":
+        raise HTTPException(422, "NO_GUROBI_PROFILE_UNSUPPORTED: reoptimization is not verified for this profile")
     if timestep_min is not None and not body.prepared_input_id:
         _apply_timestep_min_to_scenario(scenario, timestep_min)
         store.set_field(scenario_id, "simulation_config", scenario["simulation_config"])

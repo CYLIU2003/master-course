@@ -3,6 +3,11 @@
 2026-09-22 停止更新: 下記の固定4b1cbbb7は局所実行と42時間診断を通過し、8:43 JSTに新規全月を開始したが、1月hour49でgap1.1743%/120秒となり9:21 JSTまでに停止。49時間受理、完了0/12。以下は履歴であり現在稼働中ではない。[毎時600秒の新条件](MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
 
 
+<!-- monthly-hourly-quality-launch -->
+固定 `4b1cbbb7` のhour126からの42時間連続検証・独立物理・BESS収支・厳密数値品質が通過。新規Prepareから全12週を開始（UTC 2026-09-21T23:43:29.578227+00:00、計算PID57572、監視PID53756）。毎時120秒・NumericFocus3・MIPFocus2・実行前gap1%検査を共通適用。旧週の流用なし、通常処理はスクリプト。研究採用BLOCKED。記録: `output/monthly_auxiliary_quality_20260922/startup_verification.json`。
+<!-- /monthly-hourly-quality-launch -->
+
+
 2026-09-22 起動確認: clean固定 `4b1cbbb7` で一度きりの検証スクリプトを起動。制御PID23684、入力47ファイル/hashと実モデル0x006d6a65の一致を確認済み。現時点は局所実経路の検証段階で、全月は未開始0/12。局所引継ぎ・連続42時間・gap/数値品質・独立物理/BESSが通過した場合だけ全12週を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、完了メール未送信。記録: `output/monthly_auxiliary_quality_20260922/gate_startup_verification.json`。
 
 

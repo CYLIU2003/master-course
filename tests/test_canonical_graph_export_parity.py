@@ -54,6 +54,25 @@ def _dispatch_trip() -> Trip:
     )
 
 
+def test_soc_events_use_battery_side_charge_efficiency_limits_and_terminal_return() -> None:
+    problem, result, _ = _problem_and_result()
+    context = replace(problem.dispatch_context, deadhead_rules={
+        ("Terminal Bay", "dep1"): DeadheadRule(from_stop="Terminal Bay", to_stop="dep1", travel_time_min=10),
+    })
+    vehicle = replace(problem.vehicles[0], maximum_soc_kwh=270)
+    problem = replace(problem, dispatch_context=context, vehicles=(vehicle,))
+    rows = optimization._canonical_soc_event_rows(problem=problem, engine_result=result,
+        scenario_id="scenario-1", base_date=date(2026, 4, 5))
+    charge = next(row for row in rows if row["event_type"] == "charge_slot_end")
+    assert charge["delta_kwh"] == pytest.approx(20 * 0.5 * 0.95)
+    assert charge["event_time"].endswith("09:00:00")
+    assert all(row["max_soc_constraint_kwh"] == 270 for row in rows)
+    returned = next(row for row in rows if row["event_type"] == "terminal_return")
+    assert returned["delta_kwh"] < 0
+    assert rows[-1]["soc_kwh_after"] == pytest.approx(200 - 6 + 9.5 + returned["delta_kwh"])
+    assert all(row["provenance"] == "reconstructed_from_dispatch_and_charging" for row in rows)
+
+
 def _problem_and_result() -> tuple[CanonicalOptimizationProblem, OptimizationEngineResult, dict]:
     dispatch_trip = _dispatch_trip()
     problem = CanonicalOptimizationProblem(

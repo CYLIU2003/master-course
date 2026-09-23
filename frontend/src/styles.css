@@ -5,6 +5,23 @@
   font-synthesis: none;
   font-size: 14px;
 }
+
+.worker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 18px; margin-top: 18px; }
+.worker-card { border: 1px solid #dce6dc; border-radius: 14px; padding: 20px; background: #fbfcf9; min-width: 0; }
+.worker-card h3 { margin: 0; overflow-wrap: anywhere; font-size: 16px; }
+.worker-card .section-title { align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+.node-state { display: inline-block; border-radius: 6px; padding: 5px 8px; background: #edf0eb; color: #4d6255; font-size: 12px; }
+.node-state-ready { background: #def1e3; color: #205432; }
+.node-state-busy { background: #dfeaf8; color: #214771; }
+.node-state-tailscale_online, .node-state-ssh_ready, .node-state-draining { background: #fff1d6; color: #6c4f15; }
+.node-checks { display: flex; gap: 8px 14px; flex-wrap: wrap; font-size: 12px; border-block: 1px solid #e1e8dd; padding: 12px 0; }
+.node-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 16px 0; overflow-wrap: anywhere; }
+.node-metrics dt { color: #6d7c70; font-size: 12px; margin-bottom: 5px; }
+.node-metrics dd { margin: 0; font-weight: 600; font-size: 13px; }
+.node-error { overflow-wrap: anywhere; white-space: pre-wrap; font-size: 12px; color: #97432f; max-height: 110px; overflow-y: auto; }
+.node-filters { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 24px; }
+.node-filters label { display: grid; gap: 6px; font-size: 13px; width: 220px; max-width: 100%; }
+.node-filters input, .node-filters select { width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid #cbd8ce; border-radius: 6px; background: white; }
 * {
   box-sizing: border-box;
 }
@@ -55,6 +72,9 @@ input[type="checkbox"] {
   accent-color: #24654c;
   width: 16px;
   height: 16px;
+}
+input[type="file"] {
+  max-width: 100%;
 }
 h1,
 h2,
@@ -1037,6 +1057,15 @@ textarea:focus {
   }
 }
 @media (max-width: 760px) {
+  .workspace {
+    padding: 12px;
+  }
+  .panel {
+    padding: 16px;
+  }
+  .worker-card {
+    padding: 12px;
+  }
   .main-sidebar {
     width: 70px;
     flex-basis: 70px;

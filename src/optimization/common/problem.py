@@ -366,6 +366,7 @@ class OptimizationScenario:
 @dataclass(frozen=True)
 class OptimizationConfig:
     mode: OptimizationMode = OptimizationMode.HYBRID
+    execution_profile: str = "existing_solver_v1"
     time_limit_sec: int = 300
     # Optional stage-specific limits.  ``None`` preserves the historical
     # Phase 3 split (half of ``time_limit_sec`` per stage).  Explicit values

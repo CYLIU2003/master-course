@@ -59,6 +59,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from bff.routers import (
     app_state,
+    cluster,
     desktop,
     graph,
     jobs,
@@ -81,11 +82,17 @@ if CATALOG_BACKEND == "local_sqlite":
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from bff.services.cluster.scheduler import get_scheduler
+    scheduler = get_scheduler()
     warmup_task = asyncio.create_task(asyncio.to_thread(app_cache.warm_startup_cache))
     app.state.cache_warmup_task = warmup_task
     try:
         yield
     finally:
+        scheduler.stop_event.set()
+        await asyncio.to_thread(scheduler.monitor.stop)
+        if scheduler.thread:
+            await asyncio.to_thread(scheduler.thread.join, 3)
         if not warmup_task.done():
             warmup_task.cancel()
         simulation.shutdown_simulation_executor()
@@ -141,6 +148,7 @@ app.include_router(simulation.router, prefix=PREFIX)
 app.include_router(optimization.router, prefix=PREFIX)
 app.include_router(pv_management.router, prefix=PREFIX)
 app.include_router(jobs.router, prefix=PREFIX)
+app.include_router(cluster.router, prefix=PREFIX)
 if CATALOG_BACKEND == "local_sqlite":
     app.include_router(catalog_local.router, prefix=PREFIX)
 

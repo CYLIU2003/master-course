@@ -111,6 +111,12 @@ dist/
 *.egg-info/
 *.egg
 output/
+config/cluster/workers.local.json
+config/cluster/workers.private.json
+.venv-cluster/
+config/cluster/workers.private.json.*
+config/cluster/workers.local.json.*
+master_course_cluster_agent_20260923/
 .github/*
 !.github/workflows/
 .github/workflows/*

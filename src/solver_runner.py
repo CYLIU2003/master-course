@@ -12,6 +12,8 @@ solver_runner.py — MILP ソルバー実行管理
 """
 from __future__ import annotations
 
+from src.solver_policy import optimize_model
+
 import json
 import time
 from pathlib import Path
@@ -131,7 +133,7 @@ def run_milp_from_data(
     # --- 求解 ---
     t_start = time.perf_counter()
     try:
-        model.optimize()
+        optimize_model(model)
     except gp.GurobiError as e:
         return MILPResult(status="GUROBI_ERROR", infeasibility_info=str(e))
     elapsed = time.perf_counter() - t_start

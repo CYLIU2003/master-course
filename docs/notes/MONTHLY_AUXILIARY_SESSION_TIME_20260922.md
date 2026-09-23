@@ -53,6 +53,11 @@ Stage1 1800秒/Stage2 120秒/主wall2400秒/毎時15秒、4threads、soft18GB、
 `april_iis_inspection.json`、`april_stage1_local_comparison.json`、`april_assignment_diagnosis/`。
 局所診断や事前検証を全月の新規結果へ流用しない。
 
+
+<!-- monthly-session-launch -->
+固定 `e5ad8b3b` の4月前日計画は物理・Stage2目標gap・独立BESS672区間検査を通過。全12週を新規開始（起動確認UTC 2026-09-21T18:39:37.272034+00:00、計算PID51224、監視PID57704）。旧3週を流用せず、通常処理はスクリプトのみ。研究採用BLOCKED。記録: `output/monthly_auxiliary_session_20260922/startup_verification.json`。
+<!-- /monthly-session-launch -->
+
 ## 起動記録
 
 固定 `e5ad8b3b`、制御スクリプトPID8152、4月診断PID57380。

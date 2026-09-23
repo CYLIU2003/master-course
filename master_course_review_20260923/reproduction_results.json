@@ -1,0 +1,86 @@
+{
+  "reviewed_commit": "5d790ea16329eda22e3ceb9930548f9d33de1bb3",
+  "environment": {
+    "python": "3.13.5",
+    "system": "Linux"
+  },
+  "scope": "isolated source functions; dependencies mocked; not full integration tests",
+  "windows_ssh_gurobi_executed": false,
+  "checks": [
+    {
+      "check": "C01_CORRUPT_JOB_FILE_DELETED",
+      "behavior_reproduced": true,
+      "actual": {
+        "file_retained": false,
+        "job_count": 0
+      }
+    },
+    {
+      "check": "C02_VALID_JOB_DELETED_AFTER_READ_ERROR",
+      "behavior_reproduced": true,
+      "actual": {
+        "file_retained": false,
+        "error_type": "simulated PermissionError"
+      }
+    },
+    {
+      "check": "C03_QUEUED_JOB_BECOMES_FAILED_AFTER_RESTART",
+      "behavior_reproduced": true,
+      "actual": {
+        "status": "failed",
+        "error": "job_orphaned_after_restart"
+      }
+    },
+    {
+      "check": "C04_LIVENESS_CHECK_CALLS_OS_KILL_ZERO",
+      "behavior_reproduced": true,
+      "actual": {
+        "calls": [
+          [
+            12345,
+            0
+          ]
+        ],
+        "returned": true,
+        "os_function_is_mock": true
+      }
+    },
+    {
+      "check": "C05_CONSOLE_ERROR_COLLAPSES_TO_PID_ABSENT",
+      "behavior_reproduced": true,
+      "actual": {
+        "returned": false,
+        "mock_injected": "OSError"
+      }
+    },
+    {
+      "check": "C06_SHARED_TEMP_PATH_RACE",
+      "behavior_reproduced": true,
+      "actual": {
+        "writer_errors": [
+          "FileNotFoundError"
+        ],
+        "final_status": "completed",
+        "schedule_controlled": true
+      }
+    },
+    {
+      "check": "C07_UNKNOWN_SOLVER_TOKENS_BECOME_HYBRID",
+      "behavior_reproduced": true,
+      "actual": {
+        "cbc": "hybrid",
+        "mode_alns_onyl": "hybrid",
+        "mode_alns_only": "alns"
+      }
+    },
+    {
+      "check": "C08_DECLARED_EXACT_REPAIR_POLICY",
+      "behavior_reproduced": true,
+      "actual": {
+        "call_limit": 3,
+        "time_budget_sec": 120.0,
+        "note": "Budget declaration only; operator forwarding is reviewed separately."
+      }
+    }
+  ]
+}

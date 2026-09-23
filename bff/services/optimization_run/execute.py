@@ -46,7 +46,9 @@ def parse_optimization_mode(mode: str) -> OptimizationMode:
         return OptimizationMode.GA
     if normalized in {"abc", "mode_abc_only"}:
         return OptimizationMode.ABC
-    return OptimizationMode.HYBRID
+    if normalized in {"hybrid", "mode_hybrid", "mode_alns_milp"}:
+        return OptimizationMode.HYBRID
+    raise ValueError("UNKNOWN_SOLVER_MODE")
 
 
 def normalize_solver_mode(mode: str) -> str:
@@ -107,6 +109,8 @@ def normalize_solver_mode(mode: str) -> str:
             "These use the canonical optimization engine (src/optimization/)."
         )
 
+    if resolved_mode not in _MILP_MODE_TOKENS | {"mode_alns_only", "mode_ga_only", "mode_abc_only", "mode_hybrid"}:
+        raise ValueError("UNKNOWN_SOLVER_MODE")
     return resolved_mode
 
 

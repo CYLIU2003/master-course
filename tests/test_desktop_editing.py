@@ -57,6 +57,18 @@ def test_bess_free_terminal_is_persisted_without_changing_bev(editable):
     assert result["values"]["depotEnergyAssets"][0]["bess_terminal_soc_policy"] == "minimum_only"
 
 
+def test_execution_profile_is_saved_in_prepared_hash_input(editable):
+    from bff.services.run_preparation import _scenario_hash
+    before = config.configuration(editable)
+    original = scenario_store.get_scenario_document_shallow(editable)
+    previous_hash = _scenario_hash(original)
+    result = config.save_configuration(editable, {"executionProfile": "alns_no_gurobi_v1", "solverMode": "mode_alns_only"}, before["revision"])
+    assert result["values"]["executionProfile"] == "alns_no_gurobi_v1"
+    changed = scenario_store.get_scenario_document_shallow(editable)
+    assert changed["simulation_config"]["execution_profile"] == "alns_no_gurobi_v1"
+    assert _scenario_hash(changed) != previous_hash
+
+
 def test_configuration_does_not_hydrate_trip_or_result_collections(editable):
     original = desktop_store.collection
     def bounded(sid, key):

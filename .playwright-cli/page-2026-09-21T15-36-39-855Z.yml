@@ -1,0 +1,98 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e11]:
+      - text: EV BUS
+      - generic [ref=e12]: RESEARCH WORKSPACE
+    - button "シナリオを切り替える" [ref=e13] [cursor=pointer]
+    - generic [ref=e21]: 計画と検証
+    - navigation [ref=e22]:
+      - button "概要と検証" [disabled] [ref=e23]
+      - button "運行・計算設定" [disabled] [ref=e28]
+      - button "車両" [disabled] [ref=e33]
+      - button "営業所・充電設備" [disabled] [ref=e39]
+      - button "路線・運行パターン" [disabled] [ref=e45]
+      - button "PV・BESS設備" [disabled] [ref=e49]
+      - button "気象・PVデータ" [disabled] [ref=e55]
+      - button "データを確認" [disabled] [ref=e62]
+      - button "実行" [disabled] [ref=e68]
+      - button "分散計算" [active] [ref=e72] [cursor=pointer]
+      - button "グラフ・費用明細" [disabled] [ref=e78]
+      - button "シナリオ比較" [disabled] [ref=e83]
+    - generic [ref=e88]:
+      - text: ローカル研究環境
+      - generic [ref=e90]: 入力の準備 → 実行 → 結果の確認
+  - main [ref=e91]:
+    - generic [ref=e92]:
+      - generic [ref=e93]:
+        - text: 研究ワークスペース
+        - generic [ref=e94]: / 分散計算
+      - generic [ref=e95]: LOCAL
+    - generic [ref=e147]:
+      - generic [ref=e148]:
+        - heading "分散計算" [level=2] [ref=e149]
+        - paragraph [ref=e150]: 「実行」画面で入力を準備し、配布先を選んで登録します。独立したケースを各PCへ割り当てます。
+        - paragraph [ref=e151]: 計算完了と研究上の採用判定は別です。結果は元シナリオへ上書きせず、ジョブごとの成果物として保存します。
+        - paragraph [ref=e152]: "Gurobi実行枠: 0 / 1"
+        - paragraph [ref=e153]: 接続先・RAM・ライセンス枠は config/cluster/workers.local.json で設定し、BFFを再起動してください。通常の単独実行や他アプリのライセンス使用も考慮して枠を設定してください。
+        - table [ref=e155]:
+          - rowgroup [ref=e156]:
+            - row [ref=e157]:
+              - columnheader "PC" [ref=e158]
+              - columnheader "接続" [ref=e159]
+              - columnheader "使用枠" [ref=e160]
+              - columnheader "計算設定" [ref=e161]
+              - columnheader "操作" [ref=e162]
+          - rowgroup [ref=e163]:
+            - row [ref=e164]:
+              - cell "このPC local" [ref=e165]: このPClocal
+              - cell "local / 有効" [ref=e166]
+              - cell "0 / 1" [ref=e167]
+              - cell "未設定 GB / Gurobi 未設定" [ref=e168]
+              - cell [ref=e169]:
+                - button "接続確認" [ref=e170] [cursor=pointer]
+                - button "診断タスクを配布" [ref=e171] [cursor=pointer]
+      - generic [ref=e172]:
+        - heading "キューと実行履歴" [level=2] [ref=e173]
+        - generic [ref=e174]:
+          - generic [ref=e175]:
+            - generic [ref=e176]: 待機
+            - strong [ref=e177]: "0"
+          - generic [ref=e178]:
+            - generic [ref=e179]: 実行・回収中
+            - strong [ref=e180]: "0"
+          - generic [ref=e181]:
+            - generic [ref=e182]: 要確認
+            - strong [ref=e183]: "0"
+          - generic [ref=e184]:
+            - generic [ref=e185]: 計算完了
+            - strong [ref=e186]: "2"
+        - paragraph [ref=e187]: QUEUED は利用可能な枠待ち、LOST は状態不明です。LOST は枠を保持します。「結果を照合」で子機の終了を確認してください。
+        - table [ref=e189]:
+          - rowgroup [ref=e190]:
+            - row [ref=e191]:
+              - columnheader "タスク" [ref=e192]
+              - columnheader "配布先" [ref=e193]
+              - columnheader "対象期間・運用" [ref=e194]
+              - columnheader "状態" [ref=e195]
+              - columnheader "操作" [ref=e196]
+          - rowgroup [ref=e197]:
+            - row [ref=e198]:
+              - cell [ref=e199]:
+                - button "c8d0b6cc" [ref=e200] [cursor=pointer]
+                - text: diagnostic2026-09-21T15:14:25.136942+00:00
+              - cell "local" [ref=e201]
+              - cell "接続・成果物転送の診断" [ref=e202]
+              - cell "COMPLETED（研究採用を意味しません）" [ref=e203]
+              - cell [ref=e204]:
+                - link "成果物ZIP" [ref=e205] [cursor=pointer]:
+                  - /url: /api/cluster/jobs/c8d0b6cc-6f52-4a75-9472-45b34f2e4983/artifacts
+            - row [ref=e206]:
+              - cell [ref=e207]:
+                - button "2bbec1ea" [ref=e208] [cursor=pointer]
+                - text: diagnostic2026-09-21T15:06:02.080988+00:00
+              - cell "local" [ref=e209]
+              - cell "接続・成果物転送の診断" [ref=e210]
+              - cell "COMPLETED（研究採用を意味しません）" [ref=e211]
+              - cell [ref=e212]:
+                - link "成果物ZIP" [ref=e213] [cursor=pointer]:
+                  - /url: /api/cluster/jobs/2bbec1ea-9c98-4c47-b641-ce73aacde9e1/artifacts

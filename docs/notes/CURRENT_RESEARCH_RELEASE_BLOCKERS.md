@@ -1,30 +1,5 @@
 # Current research release blockers
 
-<!-- monthly-auxiliary-proof-budget-status -->
-最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
-<!-- /monthly-auxiliary-proof-budget-status -->
-
-
-<!-- monthly-proof-budget-final-20260923 -->
-2026-09-23 現行結果: 固定7cb46894の新規全12週・各168時間/672区間・独立物理検証・確定会計照合・Stage2品質検査・最終図表の確認は完了しました。これらの実行/監査未完了条件は解消。Stage1 gap3.264～4.274%（目標1%）、二段階解法の統合最適性、正式fleet contract、入力仮定、独立研究承認などは引き続きBLOCKEDです。以下の旧版・未完了記述は当時の履歴で、現行12週の実行状態は[この結果](SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md)を参照。
-<!-- /monthly-proof-budget-final-20260923 -->
-
-
-2026-09-22: 固定4b1cbbb7の局所hour155と旧状態からの42時間診断は通過したが、新規1月はhour49でgap1.1743%となり停止（49時間受理、0/12完了）。同一MPSは167.37秒で0.95286%を確認。次は全毎時共通600秒、厳密1%ゲート維持。新規全週の独立物理/会計・Stage1精度・統合最適性・独立研究承認は未達。研究採用BLOCKED。[根拠](MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
-
-
-2026-09-22: 固定b1916e56はhour155でStage2 gap71.0609%となり連続診断停止。旧12週を流用せず、全月未開始0/12。新探索設定は同一モデルでgap0.97394%まで確認したが、局所実行・連続42時間・新規12週は未検証。Stage2品質の実行前検査と原本監査を追加した。Stage1精度・二段階の統合最適性・独立研究承認のblockerも継続。[対応](MONTHLY_AUXILIARY_STAGE2_QUALITY_20260922.md)。
-
-
-2026-09-22 数値修正版c5c1eff7の連続診断はhour126～137通過後、hour138が15秒time_limit/解なし。全月未開始0/12、メール未送信。同一モデルは120秒枠で17.13秒・gap0・実行引継ぎを通過した。次は毎時共通120秒の新clean固定版で連続42時間を検証し、通過後に全12週を新規実行。研究採用BLOCKED。詳細: [毎時求解時間](MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。
-
-
-2026-09-22 現行月別計算c022ece7は1月hour126のStage2で停止、成功0/12。数値的な不成立を同一MPSで再現し、制約・許容差を変えずNumericFocus3で可行性を確認した。旧126時間と新条件の週を混ぜない。次は連続42時間の局所検証後に新規全12週を行う。独立週監査・会計照合・全月完了は未達、研究採用BLOCKED。詳細: [数値診断と実行条件](MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
-
-
-2026-09-22: 固定e5ad8b3bは4月事前検証通過後、1月Stage1のtime_limit・解0件で全月停止（0/12、Stage2未実行）。帰庫時間・電力計上の不整合を修正し、188 testsと既存物理通過充電量の26台受入れを確認。新しい全体求解・週間実行・独立レビュー・統合最適性は未確認。研究採用BLOCKED。[今回の復旧](MONTHLY_AUXILIARY_TIMELINE_20260922.md)。
-
-
 2026-09-21: 818e78d0は1・2月監査済み、3月152/168時間で停止。前時間のnative制約誤差が次初期SOCへ持ち越された。前日2/毎時0の数値設定を別診断で検証し、ゲート通過後のみ新固定全12週を実行する。SOC補正・許容差緩和・旧成功2週の流用は行わない。[数値再現と修正](MONTHLY_AUXILIARY_ROLLING_NUMERICS_20260921.md)。既存の統合最適性/Stage1/研究承認blockerは継続。
 
 2026-09-21 19:03 JST: 27253fa8はPrepare後、内部seedチェックのログ設定矛盾により本Stage1前に停止。成功0/12、物理/会計の新規成果なし。原因を修正し同条件の新固定版へ移行する。Stage1 gap/メモリ、週間統合最適性、独立承認の既存blockerは継続。[今回の修正](MONTHLY_AUXILIARY_LOGGING_RECOVERY_20260921.md)。
@@ -55,6 +30,39 @@ Stage1連続recourseでは補助制御規則を緩和しており、Stage1/2の�
 固定6aab4424も931.25秒memory_limit、最大18.015GB、gap3.610277%で1%未達。CO₂修正再集計のseed差7278.209797円は予測値で、前回4threads案より2799.989387円高い。2threadsを採用しない。人工2日間の全4割当・固定Stage2上下界・物理・費用照合の検査器を追加したが、週間Phase4対応、修正後実規模求解、実績費用、独立研究承認は未完了。研究BLOCKED。[最新根拠](TWO_THREAD_RESULT_AND_DAILY_REFERENCE_20260921.md)。
 
 ## 2026-09-21 総費用統合の未対応とCO₂会計の訂正
+
+<!-- monthly-proof-budget-final-20260923 -->
+2026-09-23 現行結果: 固定7cb46894の新規全12週・各168時間/672区間・独立物理検証・確定会計照合・Stage2品質検査・最終図表の確認は完了しました。これらの実行/監査未完了条件は解消。Stage1 gap3.264～4.274%（目標1%）、二段階解法の統合最適性、正式fleet contract、入力仮定、独立研究承認などは引き続きBLOCKEDです。以下の旧版・未完了記述は当時の履歴で、現行12週の実行状態は[この結果](SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md)を参照。
+<!-- /monthly-proof-budget-final-20260923 -->
+
+
+<!-- monthly-auxiliary-proof-budget-status -->
+最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
+<!-- /monthly-auxiliary-proof-budget-status -->
+
+
+2026-09-22: 固定4b1cbbb7の局所hour155と旧状態からの42時間診断は通過したが、新規1月はhour49でgap1.1743%となり停止（49時間受理、0/12完了）。同一MPSは167.37秒で0.95286%を確認。次は全毎時共通600秒、厳密1%ゲート維持。新規全週の独立物理/会計・Stage1精度・統合最適性・独立研究承認は未達。研究採用BLOCKED。[根拠](MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
+
+
+2026-09-22: 固定b1916e56はhour155でStage2 gap71.0609%となり連続診断停止。旧12週を流用せず、全月未開始0/12。新探索設定は同一モデルでgap0.97394%まで確認したが、局所実行・連続42時間・新規12週は未検証。Stage2品質の実行前検査と原本監査を追加した。Stage1精度・二段階の統合最適性・独立研究承認のblockerも継続。[対応](MONTHLY_AUXILIARY_STAGE2_QUALITY_20260922.md)。
+
+
+2026-09-22 数値修正版c5c1eff7の連続診断はhour126～137通過後、hour138が15秒time_limit/解なし。全月未開始0/12、メール未送信。同一モデルは120秒枠で17.13秒・gap0・実行引継ぎを通過した。次は毎時共通120秒の新clean固定版で連続42時間を検証し、通過後に全12週を新規実行。研究採用BLOCKED。詳細: [毎時求解時間](MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。
+
+
+2026-09-22 現行月別計算c022ece7は1月hour126のStage2で停止、成功0/12。数値的な不成立を同一MPSで再現し、制約・許容差を変えずNumericFocus3で可行性を確認した。旧126時間と新条件の週を混ぜない。次は連続42時間の局所検証後に新規全12週を行う。独立週監査・会計照合・全月完了は未達、研究採用BLOCKED。詳細: [数値診断と実行条件](MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
+
+
+2026-09-22: 固定e5ad8b3bは4月事前検証通過後、1月Stage1のtime_limit・解0件で全月停止（0/12、Stage2未実行）。帰庫時間・電力計上の不整合を修正し、188 testsと既存物理通過充電量の26台受入れを確認。新しい全体求解・週間実行・独立レビュー・統合最適性は未確認。研究採用BLOCKED。[今回の復旧](MONTHLY_AUXILIARY_TIMELINE_20260922.md)。
+
+
+2026-09-22: 3289f07bの独立監査は3/12、4月Stage2 infeasible。Stage1のセッション時間必要条件を強化し局所不成立案を排除したが、新固定版の全月物理・会計・gap・独立研究レビューは未完了。研究採用BLOCKEDを維持。詳細: [修正記録](MONTHLY_AUXILIARY_SESSION_TIME_20260922.md)。
+
+
+<!-- monthly-auxiliary-rolling-status -->
+最新の月別再実行: 固定 `3289f07b`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2・毎時Presolve0。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_ROLLING_RESULTS_20260921.md`。
+<!-- /monthly-auxiliary-rolling-status -->
+
 
 <!-- monthly-auxiliary-logfix-status -->
 最新の月別再実行: 固定 `818e78d0`、独立監査 2/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、Stage2 Presolve2。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_LOGFIX_RESULTS_20260921.md`。

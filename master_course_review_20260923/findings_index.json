@@ -1,0 +1,128 @@
+[
+  {
+    "id": "C01",
+    "priority": "P1",
+    "evidence": "isolated_reproduction",
+    "title": "ジョブ読込例外による原本削除"
+  },
+  {
+    "id": "C02",
+    "priority": "P1",
+    "evidence": "static_and_official_spec",
+    "title": "WindowsでのPID存在確認方式"
+  },
+  {
+    "id": "C03",
+    "priority": "P1",
+    "evidence": "controlled_interleaving_reproduction",
+    "title": "同一tmpへの競合保存"
+  },
+  {
+    "id": "C04",
+    "priority": "P1",
+    "evidence": "isolated_reproduction",
+    "title": "未知modeのHYBRID化"
+  },
+  {
+    "id": "C05",
+    "priority": "P1",
+    "evidence": "static_dependency",
+    "title": "ALNSのGurobi依存"
+  },
+  {
+    "id": "C06",
+    "priority": "P1",
+    "evidence": "static_plus_policy_reproduction",
+    "title": "repair予算の伝達不足"
+  },
+  {
+    "id": "C07",
+    "priority": "P1",
+    "evidence": "static_risk_not_gate_bypass_proof",
+    "title": "下位Configへの制御継承"
+  },
+  {
+    "id": "C08",
+    "priority": "P1",
+    "evidence": "static_and_vendor_spec",
+    "title": "ライセンスを取得するprobe"
+  },
+  {
+    "id": "C09",
+    "priority": "P1",
+    "evidence": "existing_spec_vs_new_requirements",
+    "title": "単一BFFと分散復旧の差"
+  },
+  {
+    "id": "R01",
+    "priority": "P1",
+    "evidence": "reported_evidence",
+    "title": "Stage1 gapと統合最適性の区別"
+  },
+  {
+    "id": "R02",
+    "priority": "P1",
+    "evidence": "reported_evidence",
+    "title": "BESS初期在庫の反復可能性"
+  },
+  {
+    "id": "R03",
+    "priority": "P1",
+    "evidence": "reported_evidence",
+    "title": "契約基準と物理上限の区別"
+  },
+  {
+    "id": "R04",
+    "priority": "P1",
+    "evidence": "reported_evidence",
+    "title": "目的費用の意味・根拠"
+  },
+  {
+    "id": "R05",
+    "priority": "P1",
+    "evidence": "reported_evidence",
+    "title": "代理距離の妥当性"
+  },
+  {
+    "id": "R06",
+    "priority": "P2",
+    "evidence": "reported_evidence",
+    "title": "年次と予測方式"
+  },
+  {
+    "id": "R07",
+    "priority": "P2",
+    "evidence": "reported_evidence",
+    "title": "季節消費の評価範囲"
+  },
+  {
+    "id": "R08",
+    "priority": "P2",
+    "evidence": "reported_evidence",
+    "title": "代表週と一般化"
+  },
+  {
+    "id": "R09",
+    "priority": "P1",
+    "evidence": "experimental_design_inference",
+    "title": "探索差と気象差の分離"
+  },
+  {
+    "id": "R10",
+    "priority": "P1",
+    "evidence": "reported_evidence",
+    "title": "正式fleet宣言"
+  },
+  {
+    "id": "R11",
+    "priority": "P1",
+    "evidence": "evidence_distribution_gap",
+    "title": "検算原本の可搬性"
+  },
+  {
+    "id": "R12",
+    "priority": "P2",
+    "evidence": "static_and_reported_evidence",
+    "title": "検証・配賦・表示の意味"
+  }
+]

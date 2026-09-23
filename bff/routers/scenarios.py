@@ -814,6 +814,7 @@ class UpdateQuickSetupBody(BaseModel):
     allowIntraDepotRouteSwap: Optional[bool] = None
     allowInterDepotSwap: Optional[bool] = None
     solverMode: Optional[str] = None
+    executionProfile: Optional[Literal["existing_solver_v1", "alns_no_gurobi_v1"]] = None
     objectiveMode: Optional[str] = None
     timeStepMin: Optional[Literal[5, 15, 30, 60]] = None
     timestepMin: Optional[Literal[5, 15, 30, 60]] = None
@@ -1910,6 +1911,7 @@ def _builder_defaults(
             or 90
         ),
         "solverMode": overlay_solver.get("mode") or "mode_milp_only",
+        "executionProfile": simulation_config.get("execution_profile", "existing_solver_v1"),
         "stage1Stage2CandidateLimit": int(
             _first_present_value(
                 overlay_solver.get("stage1_stage2_candidate_limit"),
@@ -3320,6 +3322,8 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         simulation_config = store.get_field(scenario_id, "simulation_config") or {}
         if not isinstance(simulation_config, dict):
             simulation_config = {}
+        if body.executionProfile is not None:
+            simulation_config["execution_profile"] = body.executionProfile
         # Quick Setup is an interactive standalone scenario edit.  A formal
         # paired-comparison contract must be supplied again by the dedicated
         # runner after any such edit; retaining it here can combine a new

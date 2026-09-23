@@ -1,0 +1,31 @@
+{
+  "global_gurobi_slots": 2,
+  "external_gurobi_slots": 0,
+  "workers": [
+    {
+      "id": "local",
+      "name": "Main PC",
+      "transport": "local",
+      "repo": "C:/master-course",
+      "python": "C:/master-course/.venv-cluster/Scripts/python.exe",
+      "workspace": "C:/master-course/output/cluster-worker",
+      "slots": 1,
+      "gurobi": false,
+      "ram_gb": 0
+    },
+    {
+      "id": "worker-01",
+      "name": "Lab PC 01",
+      "transport": "ssh",
+      "host": "mc-worker-01",
+      "shell": "powershell",
+      "repo": "C:/mc-worker/repo",
+      "python": "C:/mc-worker/venv/Scripts/python.exe",
+      "workspace": "C:/mc-worker/jobs",
+      "enabled": false,
+      "slots": 1,
+      "gurobi": false,
+      "ram_gb": 0
+    }
+  ]
+}

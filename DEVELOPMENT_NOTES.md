@@ -1,48 +1,88 @@
 # Development Notes
 
-<!-- monthly-proof-budget-email-sent-20260923 -->
-2026-09-23 01:33 JST: 固定 `7cb46894` の月別12週・季節別整理を、承認済み `g2681320@tcu.ac.jp` へ結果4点付きで1通送信しました。Gmail実message ID `1a0c9f78974455ee`、SENT・宛先・件名・添付4点・送信済み一致1件を確認。正本は `output/monthly_auxiliary_proof_budget_20260922/script_observer/email_receipt.json`。重複イベントでも再送しません。受信者の受信トレイへの配達確認は未実施。研究採用BLOCKEDは継続します。
-<!-- /monthly-proof-budget-email-sent-20260923 -->
+## 2026-09-23 旧main厳格レビューの現行版照合とジョブ保存回帰
 
+- `master_course_review_20260923/` の対象は旧GitHub `5d790ea`。現行ローカルHEAD `c98f792b` と既存の分散実装・新しい固定月別 `7cb46894` を分けて照合し、[項目別判定](docs/notes/REVIEW_RECONCILIATION_20260923.md)に記録した。旧月別gap・受電ピークを現行結果へ転記していない。
+- `bff/store/job_store.py` の保存失敗時にメモリ上の `state_version` だけ進み、同じジョブオブジェクトで再試行できなくなる欠陥を修正した。成功した書込後だけversionを更新する。新しい `tests/test_job_store_persist_retry_state.py` で再試行を確認し、既存の `tests/test_job_store_recovery_safety.py` にある原本・一時読取拒否・競合更新・PID照合の回帰も利用した。`python -m pytest -q tests -k 'cluster or job_store or partial_milp'` は162 passed / 17 skipped / 2681 deselected。
+- 研究条件・固定実行コード・旧結果・資格情報は変更していない。GA/ABCからの部分MILP修復には残時間を伝える制御が未実装で、正式運用の前に修正と実求解検査が必要。Electron終了や従機再起動の全故障実機試験、正式研究用clean runと独立レビューも未完了。今回、新しい正式計算・月別再実行・メール送信は行っていない。
 
-<!-- monthly-auxiliary-proof-budget-status -->
-最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
-<!-- /monthly-auxiliary-proof-budget-status -->
+## 2026-09-23 分散計算指示書と現行実装の再照合
 
+- 提供された `master_course_cluster_agent_20260923/AGENT_INSTRUCTIONS.md` と非公開seedを、ローカルmain `c98f792b25ffe90bcd3f4827240f1d06dd87a1ec` および既存のPhase 0監査・T01–T32検証表と照合した。指示書の基準 `5d790ea16329eda22e3ceb9930548f9d33de1bb3` は現HEADの祖先であり、旧版への巻戻しはしていない。private seedとlocal worker設定はGit除外を確認した。
+- 現行の分散実装は既存BFF/React/Electronにあり、永続キュー、worker監視、共有Gurobi予約、明示的な非Gurobi ALNS profile、成果物のhash検査を持つ。検証原本は `docs/notes/CLUSTER_VERIFICATION_20260923.md` と `output/cluster-deployment/`。今回の再実行はcluster Python 134 passed / 17 skipped（配布ZIP未指定）、現行v3 ZIP指定のWinPS5.1セットアップ22 passed、画面の対象15 passed、本番ビルド通過。配布済みv2 ZIPと現行ソースの一致テストはサービス復旧機能追加のため失敗するが、v2は歴史的配布物として保持し、現行v3は全検査を通過した。
+- 原本のv5配置監査は12/12件の回収hash一致、Env起動0回を記録する一方、全12件に期末SOC不整合があり研究採用不可。親機のWLS小規模試験は1 Envで2モデルを直列求解した。今回の再照合では11台への新たな投入・資格情報変更・研究計算・メール送信を行っていない。Electron終了中の新版worker継続、連続168回の正式実行、独立レビューは未完了として維持する。
 
-<!-- monthly-proof-budget-final-20260923 -->
-2026-09-23 最終確認: 固定7cb46894のcampaign summary/progressはCOMPLETED、前後clean・同一SHA、全12週168時間/672区間・独立物理・会計・各169件Stage2検査を確認。合計2,028件のStage2記録、4,176原本ファイルのhash、audit/bundle、添付4点の元バイト一致を再照合。6パネルPNGを表示し、月・単位・凡例・注記・重なりを確認して修正不要。設定同一性はobserverと同じ正規化JSON hashで照合した。数式・固定ソース・入力・確定会計は変更なし。Stage1 gap3.264～4.274%、統合最適性・独立研究承認などは未達のまま。検査記録は `output/monthly_auxiliary_proof_budget_20260922/script_observer/final_integrity_review.json` と `final_visual_review.json`。
-<!-- /monthly-proof-budget-final-20260923 -->
+## 2026-09-23 OpenSSHサービス削除待ち1072の実機復旧
 
+- ユーザーから2台のSet-Service失敗が報告された。全11台の公開鍵認証は通過しており、失敗箇所は鍵登録後のサービス構成だった。
+- LAPTOPINTEL8とDESKTOP-0SRS8PRのみManual。登録パスはWindows標準9.5.5.1、実行中プロセスはMicrosoft署名済みx86版10.0.0.0で、SCMの構成変更が1072になった。レジストリDeleteFlagは0だったため、これだけでは削除待ちを判定できない。削除を要求したプロセスまでは特定していない。
+- 64-bit OS上でSSHのPowerShellが32-bitとなり、System32へのアクセスがリダイレクトされることも実機で確認。Sysnativeから64-bitの検証・復旧処理を実行した。
+- `repair_pending_sshd.ps1` は有効なMicrosoft署名、`sshd -t`、サービスDACLを確認・保存してから、1072のサービスだけ停止。削除完了を待ち、登録済みのWindows標準バイナリでsshdを再作成し、元DACLと公式インストーラーの必要権限を復元した。正常な9台は変更していない。
+- SSH切断に依存しないSYSTEMの一時タスクから実施。LAPTOPINTEL8は1.55秒、DESKTOP-0SRS8PRは1.74秒で復旧処理が完了し、新規SSH接続と構成変更exit 0を確認。全11台がRunning/Auto。復旧用の2つのタスクは確認後に解除し、PC本体・他サービス・Gurobi・既存鍵を変更していない。
+- SSH内のStart-Process -Waitによる検証停止を避けるため、復旧スクリプトは対象プロセスのWaitForExitを15秒で制限する。初回ステージングの失敗はサービス停止前で、再配置後に実機検証した。
+- 新規設定用v3はCIMによるサービス事前確認に変更。自動起動済みなら再構成せず、削除待ちならPC名付きSSHD_PENDING_DELETEで鍵変更前に停止する。v2は過去の配布物として保持し、既存11台へ再配布は不要。
+- WinPS5.1で配布ZIP22件＋サービス初期化/復旧12件の計34 testsが通過。実機の復旧記録は `output/cluster_validation/service_final_verification_20260923.json` と各PCの `*_repair_final.json`。自己レビューのみ。子機への研究実行環境とWLSの配置・実求解は次段階であり、今回のSSH確認から完了を推論しない。
 
-2026-09-22 9:33 JST 起動確認: clean固定 `7cb46894` で保存hour49/50の局所引継ぎ検証を開始。制御PID56540、診断launcher PID59088。入力47ファイル・helper hash・実モデルfingerprint/MPS SHAの一致を確認済み。新しい全12週計算はまだ未開始0/12。局所2時間のgap1%/厳密数値品質/BESS8区間/引継ぎ通過後だけ全月を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、メール未送信。記録: `output/monthly_auxiliary_proof_budget_20260922/gate_startup_verification.json`。
+## 2026-09-22 夜 SSH並列割当の資源予約と単発検査
 
+月別 `7cb46894` の計算PID28896・監視PID56652が生存し、10週監査済み、11月前日計画から毎時再計画への進行とCPU時間増加を確認した。計算固定版・監視helper・月別条件は変更していない。登録11台はSSH認証拒否、ユーザーから子機のSETUP.cmd未実行を確認。既存v2 ZIPのmanifest全ファイルhash、公開鍵、11台の名簿を照合済み。SETUP.cmdだけはローカルLF/ZIP CRLFで、生バイト差・改行正規化後同一を分けて確認した。
 
-2026-09-22: 4b1cbbb7は新配車の1月49時間を受理後、hour49のStage2 gap1.1743%で停止。同一MPSの120/600秒比較は候補費用23,645.652509円が不変、600秒枠で167.37秒・gap0.95286%。全毎時上限600秒の新設定を作成し、MIPFocus2/NumericFocus3/1%ゲート/物理条件は維持。observerがfailed_stage2_qualityを無視してreasons=[]にしていたため、hour・目的値/下界/gap・native停止理由を引き継ぐよう修正。関連152 tests通過。独立レビューと新条件の全週物理/会計は未完了。[詳細](docs/notes/MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
+Schedulerの同一tickで複数ジョブが同じ空きRAMを使えるP1を修正し、PC単位でSTAGING/RUNNING/COLLECTING/LOSTの要求量を合算。最新空きRAMと実容量の小さい方から保守的に差し引く。preflightでは空きRAMと凍結runtimeも再検査する。外部計算用 `external_gurobi_slots` を追加し、キュー予約と合計して全枠制限へ適用。ローカル設定は月別計算用に外部1/全2枠を確保（ライセンス使用の自動検知ではない）。診断はライセンスを消費しない。
 
+`tools/cluster/check_workers.py` は一度だけ全台を最大4並列で検査し、JSONへ記録する。`--diagnostics` では既存キューの排他を取得し、このコマンドが登録した診断IDだけを実行する。無関係な待機最適化は起動せず、期限切れの実行予約をLOSTで残す。実機認証が未通過でもローカル成功で全体PASSにしない。追加常駐監視・AI呼出し・契約変更なし。
 
-2026-09-22 起動確認: clean固定 `4b1cbbb7` で一度きりの検証スクリプトを起動。制御PID23684、入力47ファイル/hashと実モデル0x006d6a65の一致を確認済み。現時点は局所実経路の検証段階で、全月は未開始0/12。局所引継ぎ・連続42時間・gap/数値品質・独立物理/BESSが通過した場合だけ全12週を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、完了メール未送信。記録: `output/monthly_auxiliary_quality_20260922/gate_startup_verification.json`。
+Python45件（並列開始・RAM不足・LOST・ライセンス外部予約・同時tick・runtime変化・対象ID限定）、画面12件と本番ビルドが通過。ローカル2子プロセスPID55488/65248は23:07:16.784〜17.420 JSTの区間で重なり、両方COMPLETED・ZIP SHA照合済み。記録は `output/cluster_parallel_20260922/`。1台内の実並列検証であり、別PC実求解や週間最適性の証明ではない。公開鍵登録後の環境配置・実SSH配布・独立レビューは未完了。既存の分散機能と他の未コミット作業を保持し、今回も研究採用判定を付与しない。
 
+## 2026-09-22 子機セットアップの配布物検証と直接転送
 
-2026-09-22: hour155の可行候補がgap71.0609%のため事前連続検証を停止した。毎時120秒のままMIPFocus1→2で同一MPSの下界が改善し、gap0.97394%を確認。費用削減ではない。OptimizationConfigから実Stage2、前日/毎時の選択、元metadata監査まで接続し、候補のnative gapと目的値/下界による再計算gapの両方を実行前に検査する。未達時はhour・元status・理由を保存し、prefix/次状態/受理数を進めない。関連188 tests通過、自己レビューでP0/P1残件なし。独立レビューと新規全週の物理/会計は未完了。[詳細](docs/notes/MONTHLY_AUXILIARY_STAGE2_QUALITY_20260922.md)。
+v2のコードとZIPは変更せず、実配布ZIPのファイル一覧・SHA・実Ed25519公開鍵・ソース一致を検証した。
+展開したCMDを日本語/空白パス・別作業フォルダから起動し、11台分の登録名/ユーザーをローカル環境変数で与えるValidateOnly検証を追加。
+誤ったPC名/ユーザー、重複登録、不正な鍵、鍵欠損の5条件で変更前に停止することも確認した。
+`MC_WORKER_SETUP_ZIP` に実配布ZIPを指定した `tests/test_cluster_worker_setup.py` は22 passed。
+11台分の識別情報のテストはローカル検証であり、11台の実機検証や管理者としてのACL設定成功を意味しない。
+今回、運用スクリプト自体に新たなP0/P1不具合は確認していない。独立レビューは未取得。
+手動コピーの負担をなくすため、既存TailscaleのTaildropを使用。設定済みIPとTailnetのオンライン端末名を照合し、指定11台へv2 ZIPを送信した。
+全11台でCLIの送信成功を確認。秘密鍵やGurobiキーは同梱せず、アクセス権・ネットワーク設定の追加変更も行っていない。
+送信記録は `output/cluster_validation/taildrop_setup_v2_delivery.json`。受信先での起動・SSH認証・実求解は未検証のため、まず1台の登録から確認する。
 
+## 2026-09-22 端末監視と通信切断への対応
 
-2026-09-22 07:30 JST 起動確認: clean固定 `b1916e56` で毎時共通120秒・42時間の連続検証を開始。一度きりの制御PID36772、診断実PID59324、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_budget_20260922/gate_startup_verification.json`。
+指定11台と親機を設定し、Tailscale観測・SSH認証・runner環境一致を別々に判定する端末管理画面を追加した。
+観測は背景処理（ネットワーク5秒、環境30秒、最大4台並列）で更新し、ネットワーク20秒/環境90秒で期限切れにする。
+無効化/受付停止はSQLiteへ保存し、進行中の計算を中断しない。空きRAM・ディスク不足、古い観測、環境差異では配布しない。
+SSHのホスト鍵確認を維持。計算は独立OSプロセスへ引き渡し、親機停止後も同じIDを再実行しない。
+開始前の子プロセス異常終了も回収可能な失敗記録にする。記録欠損時は予約を保持する。
+Windowsの実行中自動スリープ抑止をtry/finallyで解除する。手動電源断、再起動、蓋閉じ、バッテリー切れからの継続保証はない。
+Academic WLSの既存キーは親機で1変数の実求解に成功。ポータルで期限2026-10-19・同時2セッションを確認し、設定を2枠に制限した。
+既存の親機ライセンスは変更せず、秘密情報を設定JSON・配布ZIP・ログに含めない。子機へのキー設置はSSH認証後に行う。
+今回の分散/監視/週間/WinPS5.1の回帰は41件通過。子機での認証・独立プロセス継続・実求解は未検証。
+既存solverの式・物理/会計判定・研究承認条件は変更していない。自己点検のみで独立レビューは未取得。
 
+## 2026-09-22 Windows子機セットアップの修正
 
-2026-09-22 hour138の時間切れ対応: 旧INFEASIBLEとは別に、NumericFocus3でも15秒では初期解が得られなかった。同一fingerprint0x699742e9でTimeLimitだけ変更し、120秒枠の17.130秒時点で解1/gap0/最大違反6.422e-11を確認。毎時120秒を全月共通に宣言し、独立監査へ実wall上限の原本照合を追加。旧15秒原本の混入を拒否。81 tests通過、自己レビューP0/P1残件0、独立レビュー未実施。ソルバー制約の変更なし。[詳細](docs/notes/MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。
+配布したアクセス設定スクリプトをWindows PowerShell 5.1で実行すると、param既定値のPSScriptRootが空になりJoin-Pathが失敗することを再現。
+スクリプト本文で配置先を解決し、SETUP.cmdも作業ディレクトリに依存せず明示的に渡す方式へ修正した。
+実ファイルを使う検査でPowerShell 7由来のモジュールパス混入と、ACL全体の保存に伴うSeSecurityPrivilege要求も検出し修正。
+鍵の追加・既存鍵保持・バックアップ・ACL制限・同一キーでの再実行、空白/日本語パス、CMD起動をWinPS5.1の5 testsで確認。
+修正版は `output/cluster-worker-access-setup-v2.zip`。子機での最終認証は実機実行後に確認する。Gurobi秘密情報はこのZIPに含まない。
 
+## 2026-09-22 分散計算の7日間対応再点検
 
-2026-09-22 07:13 JST 起動確認: clean固定 `c5c1eff7` で42時間の連続検証を開始。一度きりの制御PID57968、診断実PID56952、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_numeric_20260922/gate_startup_verification.json`。
+別実測PVが未同梱として拒否されるP1不具合を修正。Prepare時SHAで検証して専用領域へ転送し、既存rolling処理から読む。
+予測/実測の分離・数式・会計・物理受理条件は維持。成果物はZip64のディスク転送と全体/個別SHA照合へ変更。
+ローリングOFFがrun_profile既定値で無視されるP1不具合を修正。期間・168時間/予定回数・研究未採用表示・キュー集計を追加。
+正式複数日はコアの既存禁止に合わせAPIと画面で開始前に拒否する。自己レビューで上記を修正、独立レビュー未実施。
+Python117件、フロント17件、本番ビルド通過。週間実規模の別PC実行や研究採用は未検証。[対応範囲](docs/DISTRIBUTED_COMPUTE.md)。
 
+## 2026-09-22 ローカル/SSH分散タスク実行
 
-2026-09-22 NumericFocusによる1月hour126数値的不成立対策: 失敗nativeとfingerprint一致の全MPSで旧設定はINFEASIBLE、NumericFocus3のみ変更でOPTIMAL/gap0/最大制約違反7.894e-11。phase別宣言・実効metadata・169原本監査を接続し、歴史結果には新規フィールドを強制しない。91 tests通過（native32、設定・監査・observer59）。1kWhの実SOC超過を拒否し、過去4月/3月の回帰も通過。自己レビューP0/P1残件0、独立レビュー未実施。連続42時間と全12週は別ゲートであり、回帰通過を月別完了にしない。[詳細](docs/notes/MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
-
-
-## 2026-09-22 Stage1の日別帰庫タイムライン整合
-
-帰庫済み時間から回送の合計を再控除するP1と、帰庫消費を次出発まで遅らせてSOC上限で可行案を排除するP1を修正。初回・最終の回送計上、終便後のhome区間、因子分解SOCも整合。Stage1解なしの分類とnative診断時seed原本保存を追加。関連188 tests通過、独立物理通過済みの1月26台の充電量を修正近似へ固定して受入れ確認。独立レビューは未実施。旧計算0/12を保持し、新規1月・4月gateの後だけ全月へ進む。[証拠と数式への影響](docs/notes/MONTHLY_AUXILIARY_TIMELINE_20260922.md)。
-
+既存 `run_optimization` のpreflightを `enqueue_optimization` に切り出し、注入したsubmitterで入力・確定引数を凍結する経路を追加。
+共通runnerから既存 `_run_optimization` とfinalizerを呼ぶため、目的関数・物理制約・受理条件は変更しない。
+SQLiteキュー、PC/RAM/Gurobi枠、OS排他ロック、通信切断時のLOST予約、PID作成時刻による復旧、成果物のパス・SHA検証を追加した。
+全分散最適化でclean commitを要求し、未同梱の外部ファイルは拒否する。結果は元シナリオへ上書きせず、ジョブ専用領域へ保存する。
+ローカル実子プロセスとブラウザで診断配布→完了→ZIPダウンロードを確認。別PCでのSSH実行、実求解、独立レビューは未完了。
+Python106件（分散20件＋既存経路86件）・フロント14件、本番ビルド、設定schema・対象差分検査が通過。
+CIや有料サービスは有効化していない。[実装・運用上の範囲](docs/DISTRIBUTED_COMPUTE.md)。
 
 ## 2026-09-21 3月hour152のSOC数値持越し
 
@@ -115,6 +155,80 @@
 
 ## 2026-09-21 研究目標の再点検と日次帰庫CO₂の計上漏れ修正
 
+<!-- monthly-proof-budget-email-sent-20260923 -->
+2026-09-23 01:33 JST: 固定 `7cb46894` の月別12週・季節別整理を、承認済み `g2681320@tcu.ac.jp` へ結果4点付きで1通送信しました。Gmail実message ID `1a0c9f78974455ee`、SENT・宛先・件名・添付4点・送信済み一致1件を確認。正本は `output/monthly_auxiliary_proof_budget_20260922/script_observer/email_receipt.json`。重複イベントでも再送しません。受信者の受信トレイへの配達確認は未実施。研究採用BLOCKEDは継続します。
+<!-- /monthly-proof-budget-email-sent-20260923 -->
+
+
+<!-- monthly-proof-budget-final-20260923 -->
+2026-09-23 最終確認: 固定7cb46894のcampaign summary/progressはCOMPLETED、前後clean・同一SHA、全12週168時間/672区間・独立物理・会計・各169件Stage2検査を確認。合計2,028件のStage2記録、4,176原本ファイルのhash、audit/bundle、添付4点の元バイト一致を再照合。6パネルPNGを表示し、月・単位・凡例・注記・重なりを確認して修正不要。設定同一性はobserverと同じ正規化JSON hashで照合した。数式・固定ソース・入力・確定会計は変更なし。Stage1 gap3.264～4.274%、統合最適性・独立研究承認などは未達のまま。検査記録は `output/monthly_auxiliary_proof_budget_20260922/script_observer/final_integrity_review.json` と `final_visual_review.json`。
+<!-- /monthly-proof-budget-final-20260923 -->
+
+
+<!-- monthly-auxiliary-proof-budget-status -->
+最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
+<!-- /monthly-auxiliary-proof-budget-status -->
+
+
+<!-- monthly-hourly-proof-budget-launch -->
+固定 `7cb46894` の保存hour49/50の引継ぎ・BESS8区間・Stage2 gap1%・厳密数値品質が通過（週間物理は新規計算後に監査）。新規Prepareから全12週を開始（UTC 2026-09-22T00:37:28.385387+00:00、計算PID28896、監視PID56652）。毎時600秒・NumericFocus3・MIPFocus2・実行前gap1%検査を共通適用。旧週の流用なし、通常処理はスクリプト。研究採用BLOCKED。記録: `output/monthly_auxiliary_proof_budget_20260922/startup_verification.json`。
+<!-- /monthly-hourly-proof-budget-launch -->
+
+
+2026-09-22 9:33 JST 起動確認: clean固定 `7cb46894` で保存hour49/50の局所引継ぎ検証を開始。制御PID56540、診断launcher PID59088。入力47ファイル・helper hash・実モデルfingerprint/MPS SHAの一致を確認済み。新しい全12週計算はまだ未開始0/12。局所2時間のgap1%/厳密数値品質/BESS8区間/引継ぎ通過後だけ全月を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、メール未送信。記録: `output/monthly_auxiliary_proof_budget_20260922/gate_startup_verification.json`。
+
+
+2026-09-22: 4b1cbbb7は新配車の1月49時間を受理後、hour49のStage2 gap1.1743%で停止。同一MPSの120/600秒比較は候補費用23,645.652509円が不変、600秒枠で167.37秒・gap0.95286%。全毎時上限600秒の新設定を作成し、MIPFocus2/NumericFocus3/1%ゲート/物理条件は維持。observerがfailed_stage2_qualityを無視してreasons=[]にしていたため、hour・目的値/下界/gap・native停止理由を引き継ぐよう修正。関連152 tests通過。独立レビューと新条件の全週物理/会計は未完了。[詳細](docs/notes/MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
+
+
+<!-- monthly-hourly-quality-launch -->
+固定 `4b1cbbb7` のhour126からの42時間連続検証・独立物理・BESS収支・厳密数値品質が通過。新規Prepareから全12週を開始（UTC 2026-09-21T23:43:29.578227+00:00、計算PID57572、監視PID53756）。毎時120秒・NumericFocus3・MIPFocus2・実行前gap1%検査を共通適用。旧週の流用なし、通常処理はスクリプト。研究採用BLOCKED。記録: `output/monthly_auxiliary_quality_20260922/startup_verification.json`。
+<!-- /monthly-hourly-quality-launch -->
+
+
+2026-09-22 起動確認: clean固定 `4b1cbbb7` で一度きりの検証スクリプトを起動。制御PID23684、入力47ファイル/hashと実モデル0x006d6a65の一致を確認済み。現時点は局所実経路の検証段階で、全月は未開始0/12。局所引継ぎ・連続42時間・gap/数値品質・独立物理/BESSが通過した場合だけ全12週を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、完了メール未送信。記録: `output/monthly_auxiliary_quality_20260922/gate_startup_verification.json`。
+
+
+2026-09-22: hour155の可行候補がgap71.0609%のため事前連続検証を停止した。毎時120秒のままMIPFocus1→2で同一MPSの下界が改善し、gap0.97394%を確認。費用削減ではない。OptimizationConfigから実Stage2、前日/毎時の選択、元metadata監査まで接続し、候補のnative gapと目的値/下界による再計算gapの両方を実行前に検査する。未達時はhour・元status・理由を保存し、prefix/次状態/受理数を進めない。関連188 tests通過、自己レビューでP0/P1残件なし。独立レビューと新規全週の物理/会計は未完了。[詳細](docs/notes/MONTHLY_AUXILIARY_STAGE2_QUALITY_20260922.md)。
+
+
+2026-09-22 07:30 JST 起動確認: clean固定 `b1916e56` で毎時共通120秒・42時間の連続検証を開始。一度きりの制御PID36772、診断実PID59324、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_budget_20260922/gate_startup_verification.json`。
+
+
+2026-09-22 hour138の時間切れ対応: 旧INFEASIBLEとは別に、NumericFocus3でも15秒では初期解が得られなかった。同一fingerprint0x699742e9でTimeLimitだけ変更し、120秒枠の17.130秒時点で解1/gap0/最大違反6.422e-11を確認。毎時120秒を全月共通に宣言し、独立監査へ実wall上限の原本照合を追加。旧15秒原本の混入を拒否。81 tests通過、自己レビューP0/P1残件0、独立レビュー未実施。ソルバー制約の変更なし。[詳細](docs/notes/MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。
+
+
+2026-09-22 07:13 JST 起動確認: clean固定 `c5c1eff7` で42時間の連続検証を開始。一度きりの制御PID57968、診断実PID56952、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_numeric_20260922/gate_startup_verification.json`。
+
+
+2026-09-22 NumericFocusによる1月hour126数値的不成立対策: 失敗nativeとfingerprint一致の全MPSで旧設定はINFEASIBLE、NumericFocus3のみ変更でOPTIMAL/gap0/最大制約違反7.894e-11。phase別宣言・実効metadata・169原本監査を接続し、歴史結果には新規フィールドを強制しない。91 tests通過（native32、設定・監査・observer59）。1kWhの実SOC超過を拒否し、過去4月/3月の回帰も通過。自己レビューP0/P1残件0、独立レビュー未実施。連続42時間と全12週は別ゲートであり、回帰通過を月別完了にしない。[詳細](docs/notes/MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
+
+
+<!-- monthly-timeline-launch -->
+固定 `c022ece7` の1月・4月前日計画は物理・Stage2目標gap・独立BESS672区間・seed保存検査を通過。全12週を新規開始（起動確認UTC 2026-09-21T20:55:59.663081+00:00、計算PID40588、監視PID44808）。旧週を流用せず、通常処理はスクリプトのみ。研究採用BLOCKED。記録: `output/monthly_auxiliary_timeline_20260922/startup_verification.json`。
+<!-- /monthly-timeline-launch -->
+
+
+## 2026-09-22 Stage1の日別帰庫タイムライン整合
+
+帰庫済み時間から回送の合計を再控除するP1と、帰庫消費を次出発まで遅らせてSOC上限で可行案を排除するP1を修正。初回・最終の回送計上、終便後のhome区間、因子分解SOCも整合。Stage1解なしの分類とnative診断時seed原本保存を追加。関連188 tests通過、独立物理通過済みの1月26台の充電量を修正近似へ固定して受入れ確認。独立レビューは未実施。旧計算0/12を保持し、新規1月・4月gateの後だけ全月へ進む。[証拠と数式への影響](docs/notes/MONTHLY_AUXILIARY_TIMELINE_20260922.md)。
+
+
+<!-- monthly-session-launch -->
+固定 `e5ad8b3b` の4月前日計画は物理・Stage2目標gap・独立BESS672区間検査を通過。全12週を新規開始（起動確認UTC 2026-09-21T18:39:37.272034+00:00、計算PID51224、監視PID57704）。旧3週を流用せず、通常処理はスクリプトのみ。研究採用BLOCKED。記録: `output/monthly_auxiliary_session_20260922/startup_verification.json`。
+<!-- /monthly-session-launch -->
+
+
+<!-- monthly-session-recovery -->
+2026-09-22: 固定3289f07bは1～3月監査済み、4月前日計画で充電不成立。接続・切離し時間を配車段階の必要条件へ追加し166 tests通過。新固定版の4月事前検証が通った場合だけ全12週を新規開始する。旧結果は混ぜず、最適性・研究採用は未達。[原因と修正](docs/notes/MONTHLY_AUXILIARY_SESSION_TIME_20260922.md)。
+<!-- /monthly-session-recovery -->
+
+
+<!-- monthly-auxiliary-rolling-status -->
+最新の月別再実行: 固定 `3289f07b`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2・毎時Presolve0。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_ROLLING_RESULTS_20260921.md`。
+<!-- /monthly-auxiliary-rolling-status -->
+
+
 <!-- monthly-auxiliary-rolling-launch -->
 固定 `3289f07b` の前日Presolve2/毎時Presolve0による全12週を開始。起動確認UTC 2026-09-21T13:33:23.889786+00:00、計算PID3316、監視PID50460、PREPARING_WEEK・完了0/12。17時間連続と1月/3月の最初の窓の事前検証を通過。旧2週を混ぜず、通常処理はスクリプトのみ。研究採用BLOCKED。記録: `output/monthly_auxiliary_rolling_20260921/startup_verification.json`。
 <!-- /monthly-auxiliary-rolling-launch -->
@@ -159,6 +273,13 @@
 - bounded_presolve_barrier_no_crossoverを追加。Method2/NodeMethod2/Crossover0、実効設定を全Stage1結果経路へ保存。API Literalを追加し、既存profile・目的関数・物理制約は不変。Gurobi公式仕様を確認し、精度/探索速度の限界を明記。
 - 診断summaryで充電目的値と予測総費用、最初のStage1目的値との差と初期固定Stage2費用の欠落、診断終了と品質未達を区別。physical原本/nativeと成功progressの矛盾は停止する。関連71 tests通過。詳細・教員向け回答・未解決P1は[発表前確認](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
 - 次は新clean固定版から5月新規Prepare1回。追加予備/終端復元なし、端点、4threads、soft18GB、600/120秒、gap1%を保持。通常script、終了時既存タスクへ1回。全12週・メールなし。独立承認PENDING、研究採用BLOCKED。
+
+## 2026-09-23 Solcast学習履歴の日次取得
+
+- 当日の初回確認で既存31/36か月の月次マニフェスト・地点・PT15M・7項目・連続性・request/raw SHAを再検証し、最初の不足月2023年8月のみを取得した。
+- 既存の日次検証・取得スクリプトの日付と対象月を更新し、PowerShell構文と事前検証を通過。現ユーザーDPAPI認証は子プロセスのSOLCAST_API_KEY環境変数だけへ渡し、親環境と他の認証を保持した。残量不明のため1リクエストで終了、契約変更なし。
+- 2,976件を追加検証し、32/36か月・93,504件。残りは2023年9〜12月の4か月。以前の原本hashは不変で、last_check・取得済み月・通知記録と `output/seven_day_extension_20260910/solcast_heartbeat_20260923.json` を更新した。
+- 全36か月未完了のため新学習モデルを生成せず、既存2024年学習・凍結済み比較の入力を保持。月別計算・監査・旧失敗の再処理・メール送信・追加監視・エージェント起動は行っていない。
 
 ## 2026-09-22 Solcast学習履歴の日次取得
 
@@ -10310,3 +10431,96 @@ locks this distinction in place.
 固定2ff239e1のhour158は実行不能。IIS・Prepared・前hour実績再生を読み取り、楽観的終端上界2,945.588738 kWh < 3,000 kWhを確認した。直前のPV予測464.828 kWh／履歴再生68.0 kWh、BESS残量の引継ぎは整合。現予備残量は物理下限のみを守り、予測誤差後の週末復元可能性を保証しない。原本をhash保存し、4月を監査成功へ数えず、3/12週通過・停止へ報告を同期した。モデルの供給源条件か事前残量の扱いを選択するため、方針をユーザーに提示。固定コード・制約変更、solver再実行、メール送信はなし。[証拠と修正方針](docs/notes/SHIBU21_23_APRIL_BESS_TERMINAL_FAILURE_20260919.md)。
 
 報告・停止状態・通知の関連テスト50件通過。凍結原本のhashとclean SHA、ユーザー編集中のPowerPointのhash不変、今回の完了bundle・payload・送信receiptが未生成であることを確認した。
+# 2026-09-23 uv worker deployment and monthly smoke
+
+- The first actual remote transport receipts completed on two PCs, but the 100 kWh fixture selected multiple depot cycles and failed the existing SOC_FRAGMENT validation. Those outputs remain invalid diagnostics. The final bounded design uses a 200 kWh BEV, one daily duty, four 10 km BEV trips and explicit ten-minute deadheads; the local pilot has optimal Stage 1/Stage 2, no fallback, no unserved trips and zero SOC violations. It does not validate the multi-fragment research path.
+
+- Real SSH exposed two transport defects missed by solver-free checks: scenario persistence mutated the input bundle before final hash validation, and Windows OpenSSH killed a console-detached child when closing its Job Object. Worker execution now deep-copies mutable scenario/kwargs, and Windows launch requests CREATE_BREAKAWAY_FROM_JOB. Failure to obtain breakaway remains a recorded failure; it is not retried as a duplicate solve. A separate child wrote its receipt after its SSH launch connection had closed on the affected PC.
+
+- `tools/cluster/environment` pins CPython 3.14.7 and dependencies with uv.lock. uv 0.12.17 creates an isolated worker venv; existing Python installations and parent research processes remain intact.
+- A short WLS job does not release a token immediately. The controller freezes `gurobi_token_cooldown_seconds` into each job and counts recently completed/failed/blocked reservations after restart. Remote WLS deployment uses a five-minute token and a conservative 330-second terminal cooldown. Frontend displays this separately.
+- The diagnostic fixture has four explicitly synthetic BEV trips, positive declared deadhead times, one BEV and one spare ICE, 30-minute slots, one day per calendar month. It uses normal Prepare and Phase 3 BFF execution. No solver/formula/physical acceptance contract is weakened.
+- Preflight fixture failures are retained: missing full-day flag, missing dated PV hash, then zero non-service movements rejected by the existing nonempty-artifact check. The final smoke covers service, deadhead and charging; zero-movement/ICE-only artifact policy is not verified by this case.
+- Snapshot deployment is an independently committed runtime subset with the exact BFF/src bytes and a provenance manifest referencing the originating dirty main SHA. It is a diagnostic release, not a research release or an integration of unrelated main edits.
+
+# 2026-09-23 01:34 JST — cluster Phase 0 re-audit
+
+Read the supplied AGENT_INSTRUCTIONS.md and private 11-worker seed against local AGENTS.md. Baseline 5d790ea is an ancestor of current 9ff2285; preserve newer research changes and all dirty work. Recorded reachable canonical/legacy ALNS, extra MILP models, rolling, capability and local API paths, and T01–T32 gaps in [Phase 0](docs/notes/CLUSTER_PHASE0_20260923.md). Existing cluster-only reservations do not cover ordinary local/reoptimization; no-Gurobi ALNS and same-attempt idempotency are not yet implemented. Performance selection must use measured resources/history without changing fixed research controls. Private instruction/seed folder excluded from Git. Existing frozen a23e7592 monthly diagnostic continues unchanged; its SOC event export inconsistency is not a research acceptance. No new administrator/credential/formal-research action was required for this audit.
+
+## 2026-09-23 01:45 JST — deterministic placement and recovery implementation
+
+Added resource_policy.py: fixed requested CPU threads, RAM/disk headroom and operator load/power policy filter candidates; comparable same-profile/source/runtime history ranks worker duration only when all candidates have matching observations. Otherwise current load and memory decide; CPU model/core count is not called a speed benchmark. Added private seed validation/merge preserving verified configuration, unknown-first registration, robust Tailnet parser, model/AC telemetry, and UI allocation reasons. Tests: placement/execution 37 passed; seed/probe 11 passed including 11 Env0/Model0 probes. Added same-attempt submit receipts, explicit logical job/attempt numbering, partial-directory artifact publication, and persisted 30/60/120-second reconciliation backoff. Recovery-specific regression is in progress. These changes are local/mock only; the running a23e7592 fleet diagnostic remains an older frozen deployment.
+
+Production operation is ordinary deterministic code, not recurring AI calls: configuration drives prepare/freeze, placement, reservations, reconnect, collection and batch audit. Unknown remote execution never causes an automatic duplicate solve. A declarative batch CLI with resume/status/audit is part of the remaining work. Shared Gurobi admission and the no-Gurobi ALNS profile remain unfinished.
+
+## 2026-09-23 12:05 JST — 分散制御・明示solver policy・機械的運用
+
+- Phase 0: 指定main 5d790ea の祖先関係と現行 c98f792b / dirty作業を再監査。旧SHAへ戻さず、既存研究変更を保持。監査は docs/notes/CLUSTER_PHASE0_20260923.md。
+- 到達経路: BFFの通常最適化/再最適化を共通guardで包み、canonical/旧ALNS、charging、partial MILP、rolling、補助モデルのoptimize入口を計測。capabilities/monitorはライセンスを起動しない。
+- 新profile alns_no_gurobi_v1: exact repair候補・重みと予算を0にし、cached availabilityも禁止。1日canonical ALNS診断に限定。BESS/daily-return/rolling/formal等は事前拒否。探索手順が変わるため既存ALNSとの品質同等性は主張しない。
+- 通常ローカル/再最適化/cluster/license testを同じSQLiteの2枠へ統合。単一Envをモデル間で再利用、解放順序とWLS残存330秒を保持。通信断・不明PIDでremote枠を空にしない。local PIDはcreation identityを照合。
+- CPU枠も通常実行と共有。Threads=0は全CPU予約として扱う。RAM/disk/load/ACと同条件の実測時間で割当し、研究threads/time budgetを勝手に縮小しない。
+- durable idempotency、logical job/attempt、fencing、同hash再送、親機再起動後の自動照合/backoff、対象attemptの協調停止を追加。CANCELLEDの回収漏れを自己レビューで発見し修正。
+- 結果回収は一時名へ書き、ZIP/全entry hashとmanifestを確認。disk-full時に成果物を正本化しない。照合の同時実行もattempt単位で排他。
+- フロント: profile・試行番号・割当根拠・接続失敗分類・共有枠・停止・seed import・stale警告。再送のidempotency keyを保持し、画面だけ切断しても既存RUNNINGを残す。API生成はuv経由。
+- 運用: tools/cluster/batch.py が投入/再開/回収/失敗分母を記録。release.py + stage_release.ps1 はSHA別の既存コードを保持して配置・照合する。synthetic_batch.py は12個の架空1日を生成。AI APIなし。
+- SOC表示の修正: reconstructedイベントへbattery-side効率0.95、canonical最大SOC、帰庫消費とprovenanceを反映。物理量を金額合わせに変更していない。既存solver-native系列と区別。旧12件の出力は書き換えない。
+- 試験: cluster-final-regression.log 235 passed / 17 skipped（setup ZIP未指定）、frontend-final-checks.log 22 passed + API型/TS/build。追加のZIP指定検査、release検査、実機配置結果は後続欄へ追記。
+- 実機: 旧 a23e7592 固定版で親機+11台の12ケース完了/回収/hash照合。各月4便1日の診断で12カ月連続ではない。新コードで親機のPrepare→ALNS→成果物がEnv/Model/optimize 0、gurobipy利用不能時も完了。実WLSの管理層はEnv1・Model2・optimize2、目的値各1.0。
+- 未解決: 正式168時間のSOC/BESS/位置/locked状態・週会計受入、独立レビュー、実OS再起動/Electron強制終了の障害注入、新profileの品質比較は未。研究採用はBLOCKEDのまま。
+- 詳細/証拠: docs/notes/CLUSTER_VERIFICATION_20260923.md。正式研究計算、GitHub push、有料CI、追加資格情報登録は実施していない。
+
+### 2026-09-23 12:30 JST: 新版の実配布・回収、再開の機械化を検証
+
+- v5診断版 `62112fe2a790ee5f31e33ea153cb4b56de7047b9` を親機＋従機10台へ配置。
+  Git/source/uv.lock/runtime/8datasetの一致を確認。残る `LAPTOP-A709UNA0` はTailscaleオフラインで
+  新版未確認・投入無効。旧版の全11台成功を新版の証拠へ置き換えない。
+- 修正済み `synthetic_batch.py` → `batch.py` → 既存BFF/永続キュー → worker → 成果物回収を実行。
+  12個の独立した架空1日4便を自動割当し、12/12完了・回収した。計算中にコードを変更していない。
+  `no-gurobi-v5-batch-audit.json` は全件のGit/input/source/ZIP/必須104成果物を照合し、
+  Env/Model/optimize/forbidden各0を確認。Prepare段階のnative禁止guard/ライブラリ不在E2E証拠は別に保持。
+- **12件すべて `terminal_soc_balance_failed` / teacher_release_status=BLOCKED**。
+  配置試験の完了と物理可行性/研究承認を混同しない。費用の比較、正式週間計算の証明には使わない。
+  ゲートや入力を緩和せず、raw/未達理由を保存した。
+- 実機で見つけたhelper不具合を修正: scopeの正規化保存前にPrepareすると、別プロセスの読込時に
+  hash不一致となった。既存 `set_dispatch_scope` をPrepare前に実行し、同じ入力契約を通す。
+  拒否された旧batchは再ラベルせず新IDで再Prepare。cwdが固定版へ変わる前に出力pathを絶対化した。
+- 回収監査を `audit_batch.py` に実装。研究gateは独立項目、未回収/破損/失敗も分母に残す。
+  CLIのHTTP拒否はHTTP番号をstateへ永続化し、任意のresponse本文や資格情報を保存しない。
+- 全件終了後にcontrollerを再起動し、同じbatch/stateで12件へ復帰。キュー総48件は増えず重複0。
+  foreground用 `START_CLUSTER_V5.cmd`、再開/監査用 `RESUME_12_MONTH_CHECK.cmd` をignored outputへ作成。
+  隠し常駐起動は自動承認レビューに拒否された（詳細理由なし）。前景起動で検証し、OS常駐登録はしていない。
+- UIを別asset版 `frontend-v5-ui2` に固定し、hashを記録。期末SOCの未達理由・実Gurobi利用回数を
+  履歴へ表示。狭い画面で隠れるnav文字にaccessible nameを設定。IABで実12行の表示を確認。
+  既存v5 backend/workerのモデル・成果物には手を加えていない。運用helperはmainの最新版を使う。
+- 狭幅でfile/search入力が横にはみ出す不具合を修正。319px幅でページ幅304px・はみ出す入力0を実画面確認。
+- 最新回帰: `cluster-final-267.log` **267 passed / skipなし / 既存非推奨警告2**。
+  `frontend-final-ui-tests.log` **23 passed**、TypeScript/build通過。配布ZIPありWinPS5.1検査を含む。
+  回帰後はmainのsolver_adapter行末空白1個だけ除去し、AST不変を確認。凍結版のバイト列は未変更。
+- 未解決: 1台の新版配置、OS再起動/実求解途中の断線/Electron強制終了の実機障害注入、
+  新profileの期末SOC受理・解品質、連続168時間の正式研究受入、独立レビュー。
+  ユーザーの研究結果・既存dirty変更を保持。研究BLOCKEDの根拠/範囲を緩和していない。
+- 公開候補92ファイルの実アドレス/WLS秘密値の混入0、private設定のGit除外、CRLFを尊重した
+  `git diff --check`の通過を確認。今回の変更をmainへ一括commit/pushしていない。
+
+### 2026-09-23 13:05 JST 分散投入の品質再監査
+
+- 理由: 研究モデル投入前の再監査で、batch監査が別scenarioの正常ZIPへの入替を見抜けないことを再現した。scenario/prepared IDと指定された求解制御を凍結bundleに照合し、偽の回収成功を拒否する。既存v5の12件も新監査で12/12回収検証、研究承認は引き続き未付与。
+- 画面からの投入は必要RAMを0 GBとして送っていた。16 GBを初期値とする編集可能な入力欄を追加し、APIは旧画面からの省略を16 GBへ補完、明示0/非有限値は拒否する。batch CLIは正の有限値を必須にした。これは実測モデルの必要量の代用ではない。既存の予約・性能順序は維持する。
+- 再配布時、既に `releases/<SHA>` のrepoからさらに `releases` を重ねる不具合を修正。成果物回収で失敗または同一試行の再取得時に残る自分の一時ファイルだけを消す。既存の公開済み成果物と旧一時ファイルには触れない。
+- batch CLIの大きな既存ZIPの再ハッシュを逐次計算に変更し、応答/照合失敗時の固有ダウンロード一時ファイルを削除する。週間成果物の再取得で親機RAMをZIP全量だけ消費しない。
+- 試験: 分散系136件通過/環境依存17件skip、画面24件通過、TypeScript/build通過。RAM編集、同一試行の再回収、大容量ZIP再取得の回帰を含む。以前の凍結v5本体・正式7日研究計算は今回再実行していない。
+- 未解決: 投入する利用者モデル/branchの特定、モデル固有のRAM見積り、準備済み入力の現行性、clean commit化、新SHAの全端末配置と実機投入。これらが済むまで「今回のモデル投入済み」とは扱わない。
+- 13:08 JST の旧v5 controller観測: 親機と従機10台がREADY、1台はDISABLED。空きRAMは約2.38～20.89 GBで変動し、16 GB初期要求では一部の端末だけが候補。これは新コード配置や研究モデルのメモリ実測を意味しない。保存済み7日候補は複数あり、最新の渋21–24候補にprepared inputはないため対象IDの特定待ち。
+- 13:15 JST の読取専用照合: `output/scenarios` の7日候補で `output/prepared_inputs` にあるものを、実際の `freeze_optimization` と同じ shallow scenario hash 規則で照合したが一致する準備済み入力は0件。渋21–24候補はそもそも準備済み入力0件。古いprepared IDを今回の入力として再利用せず、対象シナリオ確定後に新規Prepare・hash照合が必要。
+
+### 2026-09-23 14:51 JST 旧厳格レビューの現行コード再監査
+
+- ユーザー提示のレビューはGitHub main `5d790ea` を対象とする旧版資料として扱い、現在の未コミットmainへ各指摘を再適用した。現行コードにもC01–C03とC06–C07が残り、C04は既に拒否方式、C05は明示no-Gurobi profileで改善、C08監視はEnvを起動しないことを確認した。詳細は `docs/notes/LOCAL_REVIEW_REAUDIT_20260923.md`。
+- 画面用 `job_store` の読込例外で原本を消す処理を廃止。形式不正、読込不能、復旧保存失敗を`/jobs`のerrorへ出す。PID照会はWindowsでも生成時刻の読取専用APIを再利用し、同一PIDの再利用、権限不明、遠隔PIDを区別する。保存はジョブ単位のOSロック、固有一時ファイル、単調増加state_versionでread-modify-writeを直列化する。分散キューの正本は既存SQLiteのまま。
+- 追加の自己監査で、壊れた画面用JSONが `Scheduler.mirror()` を通じてSQLiteキューの再起動まで止め得ると判明。mirrorは表示記録の異常を秘密情報なしで記録してスキップし、正本のキュー処理を継続する。破損JSONは保持し、画面GETで原因を表示する回帰を追加。
+- 復旧読込と書込の間に別processがジョブを完了した場合は、古いorphan判定を表示し続けず、新しい`state_version`の記録を再読込する回帰も追加。異常versionは形式不正として表示し、原本を上書きしない。
+- ALNSの部分MILP修復に全体残り・修復累積残り・1回上限の最小値を渡す。子Configは親から派生し、研究実行・fallback・threadsを保持、子問題に不要なphase/固定割当/stage個別時間のみ消す。これは求解TimeLimitの上限であり、モデル構築・ライセンス待ち込みの厳密な壁時計上限までは証明していない。no-Gurobi profileの直接部分MILP呼出しは拒否する。
+- 数理制約・目的関数・可行領域は変更しない。ただし既存ALNSでは部分MILPの1回上限が短くなり得るため、探索軌跡・解品質・計算時間の比較可能性は変わる。旧SHAの成果物を今回の解法の証拠に流用せず、同一凍結入力・seed・controlsの新規実行で比較する。
+- 故障注入で壊れたJSON、一時読取失敗、disk-full相当の置換失敗、復旧保存失敗、PID再利用/不明、遠隔PID除外を検証。Windows実プロセスの生成時刻取得も確認。threadと別processの同時更新で双方のmetadata保持を検証。部分MILP子Configと予算境界を含む分散・ALNS系172件通過/環境依存17件skip、BFF等54件通過。mirror追加後の復旧系56件も通過。正式研究計算・新コードの11台配置・実WLS高負荷試験は未実施。
+- 未解決: ユーザー研究モデルのscenario/prepared IDと同期対象branch、clean commit、新SHA再配置、実RAM見積り、7日実行と研究ゲート、長い修復中の中断・壁時計上限。旧レビューのR01–R12は研究上の主張制限として維持し、今回のコード修正で研究採用としない。

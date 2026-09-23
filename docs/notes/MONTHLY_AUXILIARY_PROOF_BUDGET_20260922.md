@@ -1,13 +1,18 @@
 # 毎時の精度証明時間と監視理由の引継ぎ
 
+<!-- monthly-proof-budget-final-20260923 -->
+2026-09-23 01:20 JST 全12週完了。campaign/独立監査/最終報告の固定SHAと12週が一致し、4,176原本ファイル・4添付のhash、実PNGを配信前に確認しました。研究採用はBLOCKED、Stage1 gap3.264～4.274%で1%未達です。[最終結果](SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md)。完了メールの成否は今回のscript_observer/email_receipt.jsonに保存する実Gmail IDを正本とし、古いemail_sent=falseや旧版receiptを今回の送信判定に使いません。
+<!-- /monthly-proof-budget-final-20260923 -->
+
+
 <!-- monthly-auxiliary-proof-budget-status -->
 最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
 <!-- /monthly-auxiliary-proof-budget-status -->
 
 
-<!-- monthly-proof-budget-final-20260923 -->
-2026-09-23 01:20 JST 全12週完了。campaign/独立監査/最終報告の固定SHAと12週が一致し、4,176原本ファイル・4添付のhash、実PNGを配信前に確認しました。研究採用はBLOCKED、Stage1 gap3.264～4.274%で1%未達です。[最終結果](SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md)。完了メールの成否は今回のscript_observer/email_receipt.jsonに保存する実Gmail IDを正本とし、古いemail_sent=falseや旧版receiptを今回の送信判定に使いません。
-<!-- /monthly-proof-budget-final-20260923 -->
+<!-- monthly-hourly-proof-budget-launch -->
+固定 `7cb46894` の保存hour49/50の引継ぎ・BESS8区間・Stage2 gap1%・厳密数値品質が通過（週間物理は新規計算後に監査）。新規Prepareから全12週を開始（UTC 2026-09-22T00:37:28.385387+00:00、計算PID28896、監視PID56652）。毎時600秒・NumericFocus3・MIPFocus2・実行前gap1%検査を共通適用。旧週の流用なし、通常処理はスクリプト。研究採用BLOCKED。記録: `output/monthly_auxiliary_proof_budget_20260922/startup_verification.json`。
+<!-- /monthly-hourly-proof-budget-launch -->
 
 
 2026-09-22 9:33 JST 起動確認: clean固定 `7cb46894` で保存hour49/50の局所引継ぎ検証を開始。制御PID56540、診断launcher PID59088。入力47ファイル・helper hash・実モデルfingerprint/MPS SHAの一致を確認済み。新しい全12週計算はまだ未開始0/12。局所2時間のgap1%/厳密数値品質/BESS8区間/引継ぎ通過後だけ全月を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、メール未送信。記録: `output/monthly_auxiliary_proof_budget_20260922/gate_startup_verification.json`。

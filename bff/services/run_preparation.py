@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
+from src.solver_policy import guarded_prepare
 from bff.services.route_catalog_audit import audit_route_catalog_consistency
 from src.optimization.common.fleet_contract import canonical_powertrain
 from src.optimization.common.pv_area import (
@@ -2913,6 +2914,7 @@ def materialize_scenario_from_prepared_input(
     return hydrated
 
 
+@guarded_prepare
 def get_or_build_run_preparation(
     scenario: dict,
     built_dir: Path,

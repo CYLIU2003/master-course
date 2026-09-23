@@ -9,6 +9,8 @@ Usage:
 
 from __future__ import annotations
 
+from src.solver_policy import optimize_model
+
 import argparse
 import json
 from pathlib import Path
@@ -52,7 +54,7 @@ def generate_report(config_path: str = "config/experiment_config.json") -> str:
     model.Params.OutputFlag = 0
     model.Params.TimeLimit = cfg.get("time_limit_sec", 120.0)
     t0 = _time.perf_counter()
-    model.optimize()
+    optimize_model(model)
     elapsed = _time.perf_counter() - t0
     result = extract_result(model, data, ms, dp, _vars, elapsed)
     sim = simulate(data, ms, dp, result)

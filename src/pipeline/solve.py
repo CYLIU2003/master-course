@@ -16,6 +16,8 @@ Usage:
 
 from __future__ import annotations
 
+from src.solver_policy import optimize_model
+
 import argparse
 import json
 import random
@@ -187,10 +189,10 @@ def _solve_milp_core(
     t0 = _time.perf_counter()
     cb = _make_gurobi_callback(t0, time_limit, log_path=gurobi_log_path)
     try:
-        model.optimize(cb)
+        optimize_model(model, cb)
     except TypeError:
         # 古い gurobipy バージョンはコールバック引数不可
-        model.optimize()
+        optimize_model(model)
     elapsed = _time.perf_counter() - t0
 
     result = extract_result(model, data, ms, dp, _vars, elapsed)
@@ -290,7 +292,7 @@ def _solve_alns_milp(cfg, data, ms, dp, flag_overrides=None):
             model.Params.Seed = int(seed)
 
         t1 = _time.perf_counter()
-        model.optimize()
+        optimize_model(model)
         milp_time = _time.perf_counter() - t1
 
         milp_result = extract_result(model, data, ms, dp, _vars, milp_time)

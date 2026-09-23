@@ -938,6 +938,21 @@ class OptimizationEngine:
         problem: CanonicalOptimizationProblem,
         config: OptimizationConfig,
     ) -> OptimizationEngineResult:
+        from src.solver_policy import solver_policy_scope, validate_no_gurobi_inputs, usage_record
+        validate_no_gurobi_inputs(
+            config.execution_profile, mode=config.mode.value,
+            research_run=bool(getattr(config, "research_run", False)),
+            planning_days=problem.scenario.planning_days,
+            bess_enabled=any(asset.bess_enabled for asset in problem.depot_energy_assets.values()),
+            daily_return=bool(getattr(problem.dispatch_context, "daily_return_depot_id", "")),
+        )
+        with solver_policy_scope(config.execution_profile):
+            result = self._solve_with_validated_policy(problem, config)
+            return replace(result, solver_metadata={**result.solver_metadata, "solver_usage": usage_record()})
+
+    def _solve_with_validated_policy(
+        self, problem: CanonicalOptimizationProblem, config: OptimizationConfig,
+    ) -> OptimizationEngineResult:
         if bool(getattr(config,'research_run',False)) and problem.scenario.planning_days > 1:
             raise ValueError(
                 'MULTIDAY_RESEARCH_BLOCKED: dated input is available, but overnight '

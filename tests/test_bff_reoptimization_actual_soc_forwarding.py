@@ -85,7 +85,7 @@ def test_run_reoptimization_forwards_actual_soc_to_reoptimizer(monkeypatch) -> N
         "updated_pv_profile": [],
     }
 
-    opt._run_reoptimization(
+    opt._run_reoptimization.__wrapped__(
         scenario_id="scenario-x",
         job_id="job-x",
         body_payload=payload,
@@ -255,7 +255,7 @@ def test_day_ahead_hourly_result_preserves_assignment_for_next_update(
     }
 
     for index in range(2):
-        opt._run_reoptimization(
+        opt._run_reoptimization.__wrapped__(
             scenario_id="scenario-x",
             job_id=f"job-{index}",
             body_payload=body_payload,

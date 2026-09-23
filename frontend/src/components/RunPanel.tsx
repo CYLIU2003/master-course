@@ -13,10 +13,12 @@ import {
 import { ErrorBox } from "./common";
 import { FieldGrid } from "./Fields";
 import type { Configuration } from "./SettingsPanel";
+import type { ClusterWorkers } from "./ClusterPanel";
 
 export function executionControls(value: Row): Row {
   const names: Record<string, string> = {
     solverMode: "mode",
+    executionProfile: "execution_profile",
     timeLimitSeconds: "time_limit_seconds",
     timeStepMin: "time_step_min",
     mipGap: "mip_gap",
@@ -62,6 +64,12 @@ export default function RunPanel({
   });
   const [formal, setFormal] = useState(false);
   const [method, setMethod] = useState("optimize");
+  const [destination, setDestination] = useState("standalone");
+  const [minimumRamGb, setMinimumRamGb] = useState(16);
+  const workers = useQuery({
+    queryKey: ["cluster-workers"],
+    queryFn: () => api<ClusterWorkers>("/cluster/workers"),
+  });
   const [rolling, setRolling] = useState(true);
   const [prepared, setPrepared] = useState<Prepared | null>(null);
   const [preparedRevision, setPreparedRevision] = useState("");
@@ -89,7 +97,7 @@ export default function RunPanel({
   });
   const preflight = useQuery({
     queryKey: ["preflight"],
-    enabled: formal,
+    enabled: formal || destination !== "standalone",
     queryFn: () => api<Row>("/research/git-preflight"),
     staleTime: 0,
   });
@@ -108,6 +116,17 @@ export default function RunPanel({
       void client.invalidateQueries({ queryKey: ["overview", id] });
   }, [job.data?.status, client, id]);
   const value = settings.data?.values ?? {};
+  const noGurobi = value.executionProfile === "alns_no_gurobi_v1";
+  useEffect(() => {
+    if (noGurobi) {
+      setFormal(false);
+      setRolling(false);
+      setMethod("optimize");
+    }
+  }, [noGurobi]);
+  const planningDays = Number(
+    prepared?.planningDays ?? value.planningDays ?? 1,
+  );
   const depots = strings(value.selectedDepotIds);
   const routes = strings(value.selectedRouteIds);
   const prepare = useMutation({
@@ -154,6 +173,35 @@ export default function RunPanel({
           prepared_input_id: prepared?.preparedInputId,
           source: "duties",
         });
+      if (method === "optimize" && destination !== "standalone") {
+        const submission = {
+          scenario_id: id,
+          worker_id: destination === "auto" ? null : destination,
+          minimum_ram_gb: minimumRamGb,
+          request: {
+            ...executionControls(current.values),
+            research_run: formal,
+            prepared_input_id: prepared?.preparedInputId,
+            run_hourly_rolling: rolling,
+            run_profile: rolling
+              ? "day_ahead_and_hourly_rolling"
+              : "day_ahead_exploratory",
+            rebuild_dispatch: false,
+            use_existing_duties: false,
+          },
+        };
+        const storageKey = `ev-cluster-submission-${id}`;
+        const signature = JSON.stringify(submission);
+        let previous: { signature?: string; key?: string } = {};
+        try {
+          const cached: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
+          if (cached && typeof cached === "object" && "signature" in cached && "key" in cached &&
+              typeof cached.signature === "string" && typeof cached.key === "string") previous = { signature: cached.signature, key: cached.key };
+        } catch { /* Invalid local cache is not an accepted job. */ }
+        const key = previous.signature === signature && previous.key ? previous.key : crypto.randomUUID();
+        localStorage.setItem(storageKey, JSON.stringify({ signature, key }));
+        return post<{ job_id: string }>("/cluster/jobs", { ...submission, idempotency_key: key });
+      }
       return post<{ job_id: string }>(
         `/scenarios/${id}/${method === "reoptimize" ? "reoptimize" : "run-optimization"}`,
         {
@@ -162,7 +210,12 @@ export default function RunPanel({
           prepared_input_id: prepared?.preparedInputId,
           ...(method === "reoptimize"
             ? observed
-            : { run_hourly_rolling: rolling }),
+            : {
+                run_hourly_rolling: rolling,
+                run_profile: rolling
+                  ? "day_ahead_and_hourly_rolling"
+                  : "day_ahead_exploratory",
+              }),
         },
       );
     },
@@ -171,7 +224,10 @@ export default function RunPanel({
       localStorage.setItem("ev-job-" + id, result.job_id);
     },
   });
-  const busy = running || prepare.isPending || run.isPending;
+  const busy =
+    (running && (destination === "standalone" || method !== "optimize")) ||
+    prepare.isPending ||
+    run.isPending;
   return (
     <>
       <section className="panel">
@@ -218,6 +274,7 @@ export default function RunPanel({
       </section>
       <section className="panel">
         <h2>入力の準備と計算</h2>
+        {noGurobi && <p className="warning">Gurobi非依存ALNS：単日・BESSなしの診断専用です。正式研究・時間別rolling・再最適化には使えません。手法をALNSに設定し、保存してから入力を準備してください。</p>}
         <p className="subtle">
           入力準備では、このシナリオの派生データを更新します。実行中はアプリを開いたままにしてください。
         </p>
@@ -239,26 +296,64 @@ export default function RunPanel({
                   <option value="simulate">
                     シミュレーション（保存された仕業）
                   </option>
-                  <option value="reoptimize">観測状態から再最適化</option>
+                  <option value="reoptimize" disabled={noGurobi}>観測状態から再最適化</option>
                 </select>
               </label>
               <label className="check">
                 <input
                   type="checkbox"
                   checked={formal}
-                  disabled={method === "simulate"}
+                  disabled={method === "simulate" || noGurobi}
                   onChange={(e) => setFormal(e.target.checked)}
                 />
                 正式実行（clean commit 必須）
               </label>
               {method === "optimize" && (
+                <label>
+                  計算の配布先
+                  <select
+                    value={destination}
+                    onChange={(event) => setDestination(event.target.value)}
+                  >
+                    <option value="standalone">このPCで通常実行</option>
+                    <option value="auto">
+                      分散キューで自動割当（clean commit 必須）
+                    </option>
+                    {workers.data?.workers
+                      .filter((worker) => worker.enabled)
+                      .map((worker) => (
+                        <option
+                          key={worker.id}
+                          value={worker.id}
+                          disabled={!(noGurobi ? worker.can_run_no_gurobi : worker.can_run_optimization)}
+                        >
+                          {worker.name}（
+                          {(noGurobi ? worker.can_run_no_gurobi : worker.can_run_optimization)
+                            ? "計算可能"
+                            : "準備待ち"}
+                          ）
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
+              {method === "optimize" && (
                 <label className="check">
                   <input
                     type="checkbox"
                     checked={rolling}
+                    disabled={noGurobi}
                     onChange={(e) => setRolling(e.target.checked)}
                   />
                   時間ごとのローリング運用も実行する
+                </label>
+              )}
+              {method === "optimize" && destination !== "standalone" && (
+                <label>
+                  必要な空きRAM（GB）
+                  <input type="number" min="1" step="1" required
+                    value={minimumRamGb}
+                    onChange={(event) => setMinimumRamGb(Number(event.target.value))} />
                 </label>
               )}
             </div>
@@ -311,16 +406,44 @@ export default function RunPanel({
                 <Check size={16} />
                 {prepare.isPending ? "準備中…" : "1. 入力を準備"}
               </button>
-              <button className="primary" disabled={!prepared?.ready}>
+              <button
+                className="primary"
+                disabled={
+                  !prepared?.ready ||
+                  (formal && planningDays > 1 && method !== "simulate")
+                }
+              >
                 <Play size={16} />
                 {run.isPending ? "開始中…" : "2. 計算を開始"}
               </button>
             </div>
           </fieldset>
         </form>
+        {method === "optimize" && (
+          <div className={planningDays > 1 ? "warning" : "notice"}>
+            <strong>
+              {planningDays}日間 / {planningDays * 24}時間
+            </strong>
+            <p>
+              {rolling
+                ? `1時間ずつ運用するローリングを予定${planningDays * 24}回実行します。これは予定数で、完了数ではありません。`
+                : "前日計画のみ実行します。ローリング運用は行いません。"}
+            </p>
+            {planningDays > 1 && (
+              <p>
+                複数日は診断実行です（MULTIDAY_RESEARCH_BLOCKED）。正式研究実行は開始できません。現在の週間キャンペーン専用設定の再現を保証するものではありません。
+              </p>
+            )}
+          </div>
+        )}
         <ErrorBox
           error={prepare.error ?? run.error ?? job.error ?? preflight.error}
         />
+        {destination !== "standalone" && method === "optimize" && (
+          <p className="notice">
+            登録後は「分散計算」で進捗と成果物を確認できます。GurobiとRAMの設定を満たすPCがない場合は待機します。通信が切れた場合は状態を照合するまで実行枠を保持します。
+          </p>
+        )}
         {prepared && (
           <div className={prepared.ready ? "notice" : "warning"}>
             {prepared.ready ? "入力準備済み" : "入力が未成立"} ·{" "}
@@ -332,7 +455,7 @@ export default function RunPanel({
             ))}
           </div>
         )}
-        {formal && preflight.data && (
+        {(formal || destination !== "standalone") && preflight.data && (
           <details>
             <summary>正式実行の事前確認</summary>
             <pre>{JSON.stringify(preflight.data, null, 2)}</pre>

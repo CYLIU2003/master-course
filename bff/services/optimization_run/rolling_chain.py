@@ -15,6 +15,7 @@ import csv
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -49,7 +50,7 @@ def _prepare_actual_pv_execution_file(problem: Any, run_dir: Path, *, repo_root:
     if contract.get('pv_information_mode') != 'training_only_forecast_proxy':
         return None
     reference = contract.get('pv_execution_input') or {}
-    root = (repo_root or Path(__file__).resolve().parents[3]).resolve()
+    root = (repo_root or Path(os.environ.get("MC_EXECUTION_INPUTS_ROOT") or Path(__file__).resolve().parents[3])).resolve()
     path = (root / str(reference.get('path') or '')).resolve()
     if not path.is_relative_to(root) or not path.is_file():
         raise ValueError('Actual-PV execution source must be a file within the repository')

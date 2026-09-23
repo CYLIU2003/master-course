@@ -13,6 +13,8 @@ class ExactRepairPolicy:
 
 
 def exact_repair_policy(config: OptimizationConfig) -> ExactRepairPolicy:
+    if config.execution_profile == "alns_no_gurobi_v1":
+        return ExactRepairPolicy(call_limit=0, time_budget_sec=0.0)
     return ExactRepairPolicy(
         call_limit=max(1, min(5, int(config.alns_iterations // 250) + 1)),
         time_budget_sec=max(10.0, min(float(config.time_limit_sec) * 0.2, 120.0)),

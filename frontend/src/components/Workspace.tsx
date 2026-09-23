@@ -20,6 +20,7 @@ import WeatherPanel from "./WeatherPanel";
 import DataWorkspace from "./DataWorkspace";
 import ResultDetails from "./ResultDetails";
 import ComparePanel from "./ComparePanel";
+import ClusterPanel from "./ClusterPanel";
 
 export default function Workspace({
   id,
@@ -282,6 +283,7 @@ export default function Workspace({
           )}
           {page === "results" && <ResultDetails id={id} data={data} />}
           {page === "compare" && <ComparePanel data={data} />}
+          {page === "cluster" && <ClusterPanel />}
         </>
       )}
     </div>

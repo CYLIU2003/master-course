@@ -31,7 +31,7 @@ from .operators_repair import (
 )
 from .selection import AdaptiveRouletteSelector, OperatorSelector, UniformRandomSelector
 from .stopping import CompositeStop
-from src.optimization.common.benchmarking import exact_repair_policy, solver_benchmark_eligibility
+from src.optimization.common.benchmarking import ExactRepairPolicy, exact_repair_policy, solver_benchmark_eligibility
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
@@ -45,6 +45,20 @@ from src.optimization.common.problem import (
 )
 from src.optimization.common.metaheuristic_utils import solution_state_rank_key
 from src.optimization.common.search_profile import SearchProfile
+
+
+def remaining_exact_repair_seconds(
+    *, total_limit_sec: int, elapsed_sec: float, policy: ExactRepairPolicy,
+    calls_used: int, time_used_sec: float,
+) -> int:
+    """Whole seconds available to one exact repair inside all declared limits."""
+    if policy.call_limit <= 0 or calls_used >= policy.call_limit:
+        return 0
+    return max(0, int(min(
+        float(total_limit_sec) - elapsed_sec,
+        policy.time_budget_sec - time_used_sec,
+        policy.time_budget_sec / policy.call_limit,
+    )))
 
 
 class ALNSOptimizer:
@@ -99,6 +113,10 @@ class ALNSOptimizer:
             "soc_repair": soc_repair,
             "partial_milp_repair": lambda problem, plan: partial_milp_repair(problem, plan, config=config),
         }
+        if config.execution_profile == "alns_no_gurobi_v1":
+            repair_ops.pop("partial_milp_repair")
+            if isinstance(selector, AdaptiveRouletteSelector):
+                selector.weights.pop("partial_milp_repair", None)
         acceptance = self._make_acceptance(config)
         stopper = CompositeStop(
             max_iterations=config.alns_iterations,
@@ -139,11 +157,16 @@ class ALNSOptimizer:
         exact_repair_call_limit = exact_repair_limits.call_limit
 
         while not stopper.should_stop(iteration, no_improve, started_at):
+            from src.execution_control import check_cancelled
+            check_cancelled()
             destroy_name = selector.choose(destroy_ops.keys(), rng)
             available_repairs = list(repair_ops.keys())
-            if (
-                profile.exact_repair_calls >= exact_repair_call_limit
-                or profile.exact_repair_time_sec >= exact_repair_time_budget_sec
+            if not remaining_exact_repair_seconds(
+                total_limit_sec=config.time_limit_sec,
+                elapsed_sec=time.perf_counter() - started_at,
+                policy=exact_repair_limits,
+                calls_used=profile.exact_repair_calls,
+                time_used_sec=profile.exact_repair_time_sec,
             ):
                 available_repairs = [name for name in available_repairs if name != "partial_milp_repair"]
             repair_name = selector.choose(available_repairs, rng)
@@ -151,13 +174,29 @@ class ALNSOptimizer:
                 operator_stats[destroy_name],
                 selected=operator_stats[destroy_name].selected + 1,
             )
+            destroyed_plan = destroy_ops[destroy_name](incumbent.plan)
+            repair_limit_sec = 0
+            if repair_name == "partial_milp_repair":
+                repair_limit_sec = remaining_exact_repair_seconds(
+                    total_limit_sec=config.time_limit_sec,
+                    elapsed_sec=time.perf_counter() - started_at,
+                    policy=exact_repair_limits,
+                    calls_used=profile.exact_repair_calls,
+                    time_used_sec=profile.exact_repair_time_sec,
+                )
+                if not repair_limit_sec:
+                    repair_name = "greedy_trip_insertion"
             operator_stats[repair_name] = replace(
                 operator_stats[repair_name],
                 selected=operator_stats[repair_name].selected + 1,
             )
-            destroyed_plan = destroy_ops[destroy_name](incumbent.plan)
             repair_started = time.perf_counter()
-            repaired_plan = repair_ops[repair_name](problem, destroyed_plan)
+            if repair_name == "partial_milp_repair":
+                repaired_plan = partial_milp_repair(
+                    problem, destroyed_plan, config=config, time_limit_sec=repair_limit_sec,
+                )
+            else:
+                repaired_plan = repair_ops[repair_name](problem, destroyed_plan)
             repair_elapsed = time.perf_counter() - repair_started
             profile.record_repair(
                 repair_elapsed,
@@ -258,12 +297,13 @@ class ALNSOptimizer:
             mode=OptimizationMode.ALNS,
             solver_status=result_category,
             objective_value=best.objective(),
-            plan=best.plan,
+            plan=replace(best.plan, metadata={**best.plan.metadata, "optimization_structure": "metaheuristic"}),
             feasible=best.is_feasible(),
             warnings=(),
             infeasibility_reasons=best.infeasibility_reasons,
             cost_breakdown=best.cost_breakdown,
             solver_metadata={
+                "optimization_structure": "metaheuristic",
                 "final_plan_metadata": dict(best.plan.metadata or {}),
                 "last_repair_operator": str((best.plan.metadata or {}).get("repair_operator") or ""),
                 "partial_milp_repair_settings": (best.plan.metadata or {}).get("partial_milp_repair_settings"),

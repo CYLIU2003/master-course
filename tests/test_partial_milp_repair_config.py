@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import SimpleNamespace
+import pytest
 
 from src.dispatch.models import DispatchContext, Trip, VehicleProfile
 from src.optimization.alns import operators_repair as repair_module
@@ -170,3 +171,42 @@ def test_partial_milp_repair_uses_config_and_records_metadata(monkeypatch) -> No
     }
     assert repaired.metadata["partial_milp_repair_solver_status"] == "optimal"
     assert repaired.metadata["partial_milp_repair_has_feasible_incumbent"] is True
+
+
+def test_partial_repair_inherits_safety_controls_and_respects_call_budget(monkeypatch) -> None:
+    problem = _make_problem()
+    plan = AssignmentPlan(unserved_trip_ids=("t1",))
+    config = OptimizationConfig(
+        mode=OptimizationMode.ALNS,
+        time_limit_sec=1500,
+        stage1_time_limit_sec=1200,
+        stage2_time_limit_sec=1000,
+        gurobi_threads=2,
+        research_run=True,
+        allow_postsolve_repair=False,
+        phase="phase3_two_stage",
+    )
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(repair_module, "MILPOptimizer", lambda: _FakeMILPOptimizer(captured))
+    monkeypatch.setattr(repair_module, "_append_generated_duties", lambda problem, plan, duties, operator_name: plan)
+    monkeypatch.setattr(repair_module, "_with_recomputed_charging", lambda problem, plan: plan)
+
+    partial_milp_repair(problem, plan, config=config, time_limit_sec=24)
+
+    sub_config = captured["sub_config"]
+    assert sub_config.time_limit_sec == 24
+    assert sub_config.gurobi_threads == 2
+    assert sub_config.research_run is True
+    assert sub_config.allow_postsolve_repair is False
+    assert sub_config.phase == ""
+    assert sub_config.stage1_time_limit_sec is None
+    assert sub_config.stage2_time_limit_sec is None
+
+
+def test_no_gurobi_profile_rejects_direct_partial_repair() -> None:
+    with pytest.raises(ValueError, match="forbidden"):
+        partial_milp_repair(
+            _make_problem(),
+            AssignmentPlan(unserved_trip_ids=("t1",)),
+            config=OptimizationConfig(mode=OptimizationMode.ALNS, execution_profile="alns_no_gurobi_v1"),
+        )

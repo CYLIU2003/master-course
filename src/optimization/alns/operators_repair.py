@@ -138,17 +138,27 @@ def partial_milp_repair(
     problem: CanonicalOptimizationProblem,
     plan: AssignmentPlan,
     config: OptimizationConfig | None = None,
+    *,
+    time_limit_sec: int | None = None,
 ) -> AssignmentPlan:
     if not plan.unserved_trip_ids:
         return plan
 
     repair_config = config or OptimizationConfig()
+    if repair_config.execution_profile == "alns_no_gurobi_v1":
+        raise ValueError("Partial MILP repair is forbidden by alns_no_gurobi_v1")
+    if time_limit_sec is not None and time_limit_sec < 1:
+        raise ValueError("Partial MILP repair requires a positive time budget")
+    effective_time_limit_sec = min(
+        max(int(repair_config.time_limit_sec), 1),
+        int(time_limit_sec) if time_limit_sec is not None else max(int(repair_config.time_limit_sec), 1),
+    )
     trip_limit = max(1, min(int(repair_config.partial_milp_trip_limit or 1), len(plan.unserved_trip_ids)))
     target_trip_ids = tuple(plan.unserved_trip_ids[:trip_limit])
     target_ids = set(target_trip_ids)
     repair_settings = {
         "trip_limit": trip_limit,
-        "time_limit_sec": max(int(repair_config.time_limit_sec), 1),
+        "time_limit_sec": effective_time_limit_sec,
         "mip_gap": max(float(repair_config.mip_gap), 0.0),
         "random_seed": int(repair_config.random_seed),
     }
@@ -192,13 +202,21 @@ def partial_milp_repair(
             "partial_milp_repair_target_trip_ids": target_trip_ids,
         },
     )
-    sub_config = OptimizationConfig(
+    sub_config = replace(
+        repair_config,
         mode=OptimizationMode.MILP,
         time_limit_sec=repair_settings["time_limit_sec"],
-        mip_gap=repair_settings["mip_gap"],
-        random_seed=repair_settings["random_seed"],
-        warm_start=repair_config.warm_start,
         partial_milp_trip_limit=trip_limit,
+        # The reduced assignment problem is not the parent's phase or fixed
+        # assignment, while safety and resource controls remain inherited.
+        phase="",
+        requested_phase_token="",
+        requested_phase="",
+        resolved_phase="",
+        executed_phase="",
+        fixed_assignment=None,
+        stage1_time_limit_sec=None,
+        stage2_time_limit_sec=None,
     )
     sub_result = MILPOptimizer().solve(
         sub_problem,
