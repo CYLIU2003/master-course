@@ -10,6 +10,8 @@ SSH疎通確認で応答が10秒以内に返らない場合は、同じ固定ホ
 
 追加で、タイムアウト報告のあった `DESKTOP-5B6F6BP`、`DESKTOP-6S6UA9U`、`POWERSYSTEM (second node)` へ親機の永続キューから軽い診断ジョブを1件ずつ配布した。3件とも `COMPLETED` となり、回収ZIPのSHA-256が記録値と一致した。これは通信・管理・回収の確認であり、実便ALNS求解や7日間Rollingの成功を意味しない。
 
+21:53 JSTの更新: 配布先指定の担当不一致を親ジョブ作成前に拒否する固定版 `91776624` を18台へ照合配置し、常駐親機も同版へ切り替えた。18/18 `VERIFIED`、役割はGurobi 5台・ALNS 13台、共有ライセンスは総枠2のうち外部予約1、実行中0件。親機APIで不一致をHTTP 409で拒否し、ジョブ件数が増えないことを確認した。子機の直近監視はGurobi可用5台、SSH・環境一致のALNS担当13台。`LAPTOP-BOLC6VIT` の空きRAMは0.32 GBで、実便投入は資源不足として待機する。記録は `output/cluster-deployment/onboard-20260923/activation-worker-preflight-91776624-audit.json`。この照合は研究実行の成功や研究採用を示さない。
+
 Gurobi不要のALNS診断を自動割当するときは、空きRAM・CPU・ストレージ等の既存条件に通ったGurobi不要の子機を優先する。対象がなければGurobi対応機も使える。Gurobiを使うジョブはGurobi対応として登録・検証された子機だけに割り当てる。現行の `alns_no_gurobi_v1` は単日・BESSなし・時間別Rollingなしの診断専用で、7日間や時間別Rollingに対するソルバー不要の求解・検証経路はまだない。Rollingは現行の固定仕業MILP再最適化とGurobi利用の受理条件を持つため、設定だけで切り替えない。
 
 機器管理の「並べ替え」は物理コア数、論理スレッド数、メモリ容量、利用可能メモリ、ストレージ空き、CPU性能（PassMark CPU Mark）の順に選べ、大小順も切り替えられる。取得できない値は常に末尾。物理コア数はworker実機のWindows CPUトポロジー値、論理スレッド数はPythonの `os.cpu_count()`、メモリ・ストレージは直近probeの値。PassMarkは[公式CPU List](https://www.cpubenchmark.net/cpu-list/all)の2026-09-23時点の型番平均で、各カードから型番別の公式ページへ移動できる。PC個体の実測・複数CPUの合計性能ではなく、未照合型番に推定値を付けない。画面の順序は計算先の自動割当には影響しない。

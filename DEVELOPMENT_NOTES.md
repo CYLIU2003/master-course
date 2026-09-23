@@ -3,6 +3,7 @@
 ## 2026-09-23 親機の配布先指定を投入前に検査
 
 - 固定配布先の担当と実行プロファイルが一致しない場合、共有最適化の親ジョブ作成前にHTTP 409で拒否する。既存scheduler側の待機ジョブ・自動割当時の担当検査は維持する。Gurobi用とGurobi不要ALNS用の両方向で、親ジョブ未作成を回帰試験した。求解・数理モデル・研究受理条件は変更しない。
+- 関連Python試験83件通過。clean固定版 `91776624` を18台へ配置して全台 `VERIFIED`、常駐親機を同版へ更新した。再照合後は担当Gurobi 5台・ALNS 13台を保持し、実APIの不一致要求もHTTP 409・親ジョブ未作成を確認。証跡は `output/cluster-deployment/onboard-20260923/activation-worker-preflight-91776624-audit.json`。`LAPTOP-BOLC6VIT` は空きRAM 0.32 GBで実便投入不可。新しい実便・7日間Rollingの求解成功は未確認。
 
 ## 2026-09-23 ALNS専用子機の割当優先
 
