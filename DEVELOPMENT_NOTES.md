@@ -4,7 +4,7 @@
 
 - 月別の非隣接12週を連続運用と誤認しないため、`run_exact_seasonal_campaign.py --carry-bess`を追加。少なくとも2つの隣接する月曜開始週、全168時間のaccepted rolling、保存済み物理・会計の通過、672区間の有限BESS traceを要求し、実行計画の終端kWhとSHAを次週の新規Prepare初期値へ渡す。未検証値・日付の飛び・途中失敗は次週求解前に停止する。旧月別比較の既定動作は変えない。
 - `tools/research/run_bess_continuous_diagnostic.py`は2025-01-20/01-27の2週を事前宣言し、既定はpreview、`--run`だけで新規診断を開始する。現行台帳はユーザー指定どおり正式候補であり承認者未指定。受電設備の数値は仮値で本番研究では別値予定のため、この2週を解いても設備適合や研究採用は証明しない。BEVは週末初期復元の既存条件、ICE燃料は週をまたぐ引継ぎではないため、BESS以外の全状態の継続運用も主張しない。
-- 連続週の引継ぎ・旧12週の拒否・不完全な実行計画・SOC範囲外・2週キャンペーンの設計伝達を含む関連60件が通過。既存キャンペーン試験のWindows既定cp932読込をUTF-8明示に修正した。
+- 診断CLIの実行時は既存のSQLite永続Gurobi brokerとローカル資源枠を取得し、待機中・実行中・WLS token解放待ちを含む共有枠が取れなければ新規求解を開始しない。枠は2週全体で保持し、1つのmanaged Envを再利用、各求解後にModelをdisposeする。終了後330秒の解放待ちとする。予約競合・解放待ち・Env再利用を含む関連70件が通過。既存キャンペーン試験のWindows既定cp932読込をUTF-8明示に修正した。
 - GA/ABCの部分MILPに子求解の残時間上限を伝え、0秒なら起動しない。子Configは親の研究・資源・fallback方針を継承する既存変換を使用。直接呼出しはfail-closedにした。モデル構築時間の強制中断は未実装。
 - `physical_grid_import_limit_kw`を任意の独立した設備hard capとしてPrepare API/overlay→canonical→Stage1/Stage2/rolling予備・実行→物理検証へ渡す。契約200 kWと設備値を混同しない。OpenAPIとTypeScript型を再生成した。実設備値は未確認なので新しい正式結果は出していない。
 - 旧固定`7cb46894`の12週×5原本とsource tarをSHA検証してportable ZIPに保管。候補fleet契約hashは全12週一致。検算器はhash・費用と一部流量を再計算し、全物理制約や最適性は主張しない。

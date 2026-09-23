@@ -170,6 +170,10 @@ def solve_week(
     print(f'{week}: native Phase 3 day-ahead solve begins',flush=True)
     started = time.perf_counter()
     result = OptimizationEngine().solve(problem,config)
+    from src.gurobi_session import current_session
+    session = current_session()
+    if session is not None:
+        session.dispose_models()
     write_json(output/'canonical_solver_result.json',ResultSerializer.serialize_result(result))
     summary.update(day_ahead_feasible=result.feasible,day_ahead_status=result.solver_status,
                    day_ahead_seconds=time.perf_counter()-started,day_ahead_cost=dict(result.cost_breakdown),
@@ -230,6 +234,8 @@ def solve_week(
             bess_terminal_policy=design.get('rolling_bess_terminal_policy', 'scenario'),
             **kwargs,
         )
+        if session is not None:
+            session.dispose_models()
         write_json(folder/'forecast_result.json',ResultSerializer.serialize_result(result))
         if not result.feasible:
             summary.update(status='HOURLY_SOLVE_FAILED',failed_hour=hour,hourly_reasons=list(result.infeasibility_reasons),

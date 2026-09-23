@@ -8,10 +8,13 @@ It is not a monthly-result rerun or evidence of a real depot import rating.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from copy import deepcopy
 import json
+import os
 from pathlib import Path
 import sys
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -20,9 +23,47 @@ from scripts.benchmarks.run_exact_seasonal_campaign import (
     run_campaign,
     validate_carryover_weeks,
 )
+from bff.services.cluster.contracts import read_config, Worker
+from bff.services.cluster.license_broker import LicenseBroker
+from bff.services.cluster.local_resources import LocalResources
+from bff.services.cluster.runner import process_identity
+from bff.services.cluster.store import JobStore
+from bff.store import output_paths
+from src.gurobi_session import managed_gurobi_session
+from src.solver_policy import solver_policy_scope, DEFAULT_PROFILE
 
 SOURCE_DESIGN = ROOT / "config/shibu21_23_monthly_auxiliary_proof_budget_20260922.json"
 WEEKS = ("2025-01-20", "2025-01-27")
+
+
+@contextmanager
+def shared_solver_capacity(*, threads: int):
+    """Use the same durable local and WLS reservations as BFF execution."""
+    config = read_config()
+    root = Path(os.environ.get("MC_CLUSTER_DIR", output_paths.outputs_root() / "cluster"))
+    store = JobStore(root)
+    resources = LocalResources(store)
+    broker = LicenseBroker(
+        store, total=config.global_gurobi_slots, external=config.external_gurobi_slots
+    )
+    broker.reconcile_local_owners()
+    resources.reconcile()
+    worker = next((row for row in config.workers if row.transport == "local"),
+                  Worker(id="local", name="local"))
+    reservation = "local-bess-continuous-" + uuid4().hex
+    if not resources.acquire(reservation, worker, threads):
+        raise RuntimeError("Local solver capacity is occupied; diagnostic not started")
+    admitted = False
+    try:
+        identity = f"{os.getpid()}:{process_identity(os.getpid())}"
+        admitted = broker.acquire(reservation, owner_kind="local", owner_identity=identity)
+        if not admitted:
+            raise RuntimeError("Shared Gurobi capacity is occupied; diagnostic not started")
+        yield reservation
+    finally:
+        if admitted:
+            broker.finish(reservation, cooldown_seconds=330)
+        resources.release(reservation)
 
 
 def diagnostic_design(source: dict) -> dict:
@@ -58,7 +99,12 @@ def main() -> int:
             "physical_import_limit_status": design["physical_import_limit_status"],
         }, ensure_ascii=False))
         return 0
-    result = run_campaign(design, args.output, carry_bess=True)
+    with shared_solver_capacity(threads=int(design["threads"])):
+        with solver_policy_scope(DEFAULT_PROFILE):
+            # One Env remains admitted across both weeks; each completed model
+            # is disposed by solve_week before the next hourly model is built.
+            with managed_gurobi_session(lambda: None, lambda _started: None):
+                result = run_campaign(design, args.output, carry_bess=True)
     print(json.dumps({"status": result["status"], "output": str(args.output.resolve())}, ensure_ascii=False))
     return 0 if result["status"] == "COMPLETED" else 2
 

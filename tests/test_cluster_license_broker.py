@@ -71,6 +71,27 @@ def test_managed_models_and_probe_reuse_one_env_and_dispose_before_release():
     assert usage.environment_starts == 1 and usage.optimize_calls == 2
 
 
+def test_long_campaign_disposes_completed_models_without_restarting_env():
+    calls = []
+    class Env:
+        def __init__(self, **kwargs): calls.append("env")
+        def setParam(self, *args): pass
+        def start(self): calls.append("start")
+        def dispose(self): calls.append("dispose_env")
+    class Model:
+        def __init__(self, name, env): calls.append(name)
+        def dispose(self): calls.append("dispose_model")
+    facade = GurobiFacade(SimpleNamespace(Env=Env, Model=Model))
+    with managed_gurobi_session(lambda: calls.append("admit"), lambda started: calls.append("release")) as session:
+        facade.Model("week1")
+        session.dispose_models()
+        assert session.models == []
+        facade.Model("week2")
+        session.dispose_models()
+    assert calls == ["admit", "env", "start", "week1", "dispose_model",
+                     "week2", "dispose_model", "dispose_env", "release"]
+
+
 def test_license_failure_is_not_infeasibility_or_repeat_start():
     calls = []
     class Env:

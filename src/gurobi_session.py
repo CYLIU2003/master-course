@@ -46,14 +46,18 @@ class GurobiSession:
         return self.env
 
     def close(self):
-        # Model references retain Env/license resources even after Env.dispose.
-        for model in reversed(self.models):
-            model.dispose()
-        self.models.clear()
+        self.dispose_models()
         if self.env is not None:
             self.env.dispose()
         if self.admitted:
             self.release(self.started)
+
+    def dispose_models(self):
+        """Release completed models while retaining one admitted Env for a campaign."""
+        # Model references retain Env/license resources even after Env.dispose.
+        for model in reversed(self.models):
+            model.dispose()
+        self.models.clear()
 
 
 _session: ContextVar[GurobiSession | None] = ContextVar("gurobi_session", default=None)

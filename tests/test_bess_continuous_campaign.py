@@ -132,3 +132,22 @@ def test_two_week_design_is_separate_from_monthly_selection():
     assert design["evaluation_weeks"] == ["2025-01-20", "2025-01-27"]
     assert design["require_balanced_monthly_weeks"] is False
     assert "UNVERIFIED" in design["physical_import_limit_status"]
+
+
+def test_continuous_diagnostic_reserves_shared_solver_capacity(tmp_path, monkeypatch):
+    from tools.research import run_bess_continuous_diagnostic as entry
+    from bff.services.cluster.contracts import ClusterConfig, Worker
+
+    monkeypatch.delenv("MC_CLUSTER_DIR", raising=False)
+    monkeypatch.setattr(entry.output_paths, "outputs_root", lambda: tmp_path)
+    monkeypatch.setattr(entry, "read_config", lambda: ClusterConfig(
+        global_gurobi_slots=2, external_gurobi_slots=1,
+        workers=[Worker(id="local", name="local", slots=1)],
+    ))
+    with entry.shared_solver_capacity(threads=1):
+        with pytest.raises(RuntimeError, match="Local solver capacity"):
+            with entry.shared_solver_capacity(threads=1):
+                pytest.fail("The second local solver must not start")
+    with pytest.raises(RuntimeError, match="Shared Gurobi capacity"):
+        with entry.shared_solver_capacity(threads=1):
+            pytest.fail("The token tail must prevent immediate reuse")
