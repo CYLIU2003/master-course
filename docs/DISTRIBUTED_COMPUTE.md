@@ -1,5 +1,7 @@
 # 分散計算の使い方
 
+監視画面の「Gurobi計算可能」と「Gurobi不要の計算に対応」は別の能力表示です。後者にはソルバーを使わないALNS診断を選べる子機も含まれます。画面の表示は投入時の空きRAM・CPU負荷・AC電源判定を保証しません。`LAPTOP-BOLC6VIT` はWindows Update完了後、空きRAMがジョブ要件1 GBとOS予約1 GBを満たしてから渋24実便ジョブを割り当てます。
+
 ## 追加2台の現行状態（2026-09-23）
 
 `LAPTOP-BOLC6VIT` と `LAPTOP-8JS4DQCD` は初期SSH設定後、Tailnet ID・SSH公開鍵認証・端末名を親機から確認した。18台構成の固定版 `0d056430` について、全台のコード・runtime・datasetを照合した。2台のソルバーなし診断ジョブを共有キューから実行・回収した記録は旧固定版 `c54f684e` に属する。現在のcontroller設定は `output/cluster-deployment/onboard-20260923/controller-shibu24-final-settings.json`。親機画面 `http://127.0.0.1:8868/` では保存名から路線別に分類でき、各シナリオの短縮IDも表示する。SOC設定の最終夜間「含める／含めない」は保存できるが、翌朝分の求解は未実装のため投入前に拒否される。

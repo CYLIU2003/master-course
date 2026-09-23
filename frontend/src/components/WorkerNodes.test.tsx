@@ -102,3 +102,37 @@ it("filters a twelve-node pool without hiding an error behind online counts", ()
   expect(screen.getAllByRole("article")).toHaveLength(1);
   expect(screen.getByRole("article", { name: "WORKER-11" })).toBeTruthy();
 });
+
+it("shows a verified no-Gurobi worker as usable for its supported calculation", () => {
+  mount([
+    {
+      ...node,
+      id: "laptop-bolc6vit",
+      name: "LAPTOP-BOLC6VIT",
+      status: "SSH_READY",
+      ssh_ready: true,
+      environment_ready: true,
+      can_run_no_gurobi: true,
+      readiness_reasons: ["Gurobiのインストールと利用枠の設定が必要です"],
+      last_error: null,
+      metrics_stale: false,
+    },
+  ]);
+  const card = within(screen.getByRole("article", { name: "LAPTOP-BOLC6VIT" }));
+  expect(card.getByText("Gurobi不要の計算に対応")).toBeTruthy();
+  expect(card.getByText(/Gurobi計算への確認事項/)).toBeTruthy();
+  expect(
+    screen
+      .getAllByText("Gurobi不要の計算に対応")
+      .find((element) => element.tagName === "SMALL")?.nextElementSibling
+      ?.textContent,
+  ).toBe("1 台");
+  fireEvent.change(screen.getByLabelText("表示"), {
+    target: { value: "ready" },
+  });
+  expect(screen.getByRole("article", { name: "LAPTOP-BOLC6VIT" })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("表示"), {
+    target: { value: "attention" },
+  });
+  expect(screen.queryByRole("article", { name: "LAPTOP-BOLC6VIT" })).toBeNull();
+});

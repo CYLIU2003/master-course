@@ -61,7 +61,11 @@ export type ClusterWorkers = {
   external_gurobi_slots?: number;
   reserved_gurobi_slots: number;
   cooling_gurobi_slots?: number;
-  license_reservations?: { id: string; state: string; release_after: number | null }[];
+  license_reservations?: {
+    id: string;
+    state: string;
+    release_after: number | null;
+  }[];
 };
 
 const stateLabels: Record<string, string> = {
@@ -101,10 +105,12 @@ export default function WorkerNodes({
         .includes(search.toLowerCase()) &&
       (filter === "all" ||
         (filter === "ready"
-          ? node.can_run_optimization
+          ? node.can_run_optimization || node.can_run_no_gurobi
           : filter === "busy"
             ? node.reserved > 0
-            : !node.can_run_optimization && node.reserved === 0)),
+            : !node.can_run_optimization &&
+              !node.can_run_no_gurobi &&
+              node.reserved === 0)),
   );
   return (
     <>
@@ -121,12 +127,23 @@ export default function WorkerNodes({
           </strong>
         </div>
         <div>
-          <small>計算可能</small>
+          <small>Gurobi計算可能</small>
           <strong>
             {
               nodes.filter(
                 (node) =>
                   node.can_run_optimization && node.reserved < node.slots,
+              ).length
+            }{" "}
+            台
+          </strong>
+        </div>
+        <div>
+          <small>Gurobi不要の計算に対応</small>
+          <strong>
+            {
+              nodes.filter(
+                (node) => node.can_run_no_gurobi && node.reserved < node.slots,
               ).length
             }{" "}
             台
@@ -160,7 +177,7 @@ export default function WorkerNodes({
         </label>
       </div>
       <p className="subtle">
-        Tailscaleは約5秒、SSH・計算環境は約30秒間隔で確認します。失敗時は間隔を延ばします。期限切れの確認結果では割り当てません。端末の割当停止では、実行中の計算は継続します。
+        Tailscaleは約5秒、SSH・計算環境は約30秒間隔で確認します。失敗時は間隔を延ばします。実際の割当では空きRAM・CPU負荷・電源も確認します。期限切れの確認結果では割り当てません。端末の割当停止では、実行中の計算は継続します。
       </p>
       <div className="worker-grid">
         {visible.map((node) => (
@@ -170,7 +187,11 @@ export default function WorkerNodes({
               <span
                 className={`node-state node-state-${node.status.toLowerCase()}`}
               >
-                {stateLabels[node.status] ?? node.status}
+                {node.can_run_no_gurobi &&
+                !node.can_run_optimization &&
+                node.status === "SSH_READY"
+                  ? "Gurobi不要の計算に対応"
+                  : (stateLabels[node.status] ?? node.status)}
               </span>
             </div>
             <p className="subtle">
@@ -205,7 +226,12 @@ export default function WorkerNodes({
               <div>
                 <dt>CPU使用率</dt>
                 <dd>
-                  {node.capability.cpu_model && <small>{node.capability.cpu_model}<br /></small>}
+                  {node.capability.cpu_model && (
+                    <small>
+                      {node.capability.cpu_model}
+                      <br />
+                    </small>
+                  )}
                   {metric(node.capability.cpu_percent, "%")} /{" "}
                   {node.capability.cpu_count ?? "—"}論理コア
                 </dd>
@@ -230,16 +256,28 @@ export default function WorkerNodes({
               </div>
             </dl>
             {node.capability.ac_power !== undefined && (
-              <p className="subtle">電源: {node.capability.ac_power === null ? "未確認" : node.capability.ac_power ? "AC接続" : "バッテリー駆動"}</p>
+              <p className="subtle">
+                電源:{" "}
+                {node.capability.ac_power === null
+                  ? "未確認"
+                  : node.capability.ac_power
+                    ? "AC接続"
+                    : "バッテリー駆動"}
+              </p>
             )}
             {node.last_allocation && (
               <details>
                 <summary>直近の割当根拠</summary>
-                <p>必要RAM {metric(node.last_allocation.required_ram_gb, "GB")} / 割当時の余裕 {metric(node.last_allocation.available_ram_gb, "GB")}。
-                  {node.last_allocation.ranking_basis === "comparable_worker_runtime"
+                <p>
+                  必要RAM {metric(node.last_allocation.required_ram_gb, "GB")} /
+                  割当時の余裕{" "}
+                  {metric(node.last_allocation.available_ram_gb, "GB")}。
+                  {node.last_allocation.ranking_basis ===
+                  "comparable_worker_runtime"
                     ? ` 同条件の実測${node.last_allocation.matching_history_count}件、中央値${metric(node.last_allocation.median_worker_seconds, "秒")}で選択。`
                     : " 現在の負荷とメモリ余裕で選択。同条件の速度比較は未確認です。"}
-                  研究のthreads・時間上限は変更しません。</p>
+                  研究のthreads・時間上限は変更しません。
+                </p>
               </details>
             )}
             {node.metrics_stale && (
@@ -258,7 +296,10 @@ export default function WorkerNodes({
             {!!node.readiness_reasons.length && (
               <details>
                 <summary>
-                  計算開始までの確認事項（{node.readiness_reasons.length}）
+                  {node.can_run_no_gurobi
+                    ? "Gurobi計算への確認事項"
+                    : "計算開始までの確認事項"}
+                  （{node.readiness_reasons.length}）
                 </summary>
                 <ul>
                   {node.readiness_reasons.map((reason) => (
@@ -269,7 +310,9 @@ export default function WorkerNodes({
             )}
             {node.last_error && (
               <p className="node-error">
-                {node.probe_error_code && <strong>{node.probe_error_code}: </strong>}
+                {node.probe_error_code && (
+                  <strong>{node.probe_error_code}: </strong>
+                )}
                 {node.last_error.includes("Permission denied")
                   ? "SSH認証に失敗しました。公開鍵とログインユーザーを確認してください。"
                   : node.last_error}
