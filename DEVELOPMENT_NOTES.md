@@ -10621,3 +10621,4 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - `DESKTOP-3PRU7QP` はSSH・環境・固定SHAが一致し、WLSファイルの転送元/先SHAも一致した。しかし管理下Env/Modelテストは失敗し、隔離した診断で `GurobiError 10009 License has expired` を確認。Gurobi担当から外し、ALNS担当の構成へ戻した。資格情報はZIPやGitへ入れていない。登録本人による更新後、同じ管理下テストの成功を要する。
 - 2台の新規子機のうち `LAPTOP-8JS4DQCD` はSSH・環境・固定SHAが一致。`LAPTOP-BOLC6VIT` は21:14 JST時点でTailscaleオフラインのため実投入不能。再接続とジョブ要件を満たす空きRAMを確認してから割り当てる。
 - 21:28 JSTに `0ce4a25f` を全18台へstageし、18/18でSHA・source/runtime・8ファイルのdataset hash照合を通した。親機も同版へ切り替え、5台 `gurobi_only` / 13台 `alns_only` を保存。BOLC6VITは復帰しSSH/環境一致、ただし空きRAM 0.14 GBのため現行ジョブ要件には不足する。タイムアウト報告の機器を含む6台の4回連続観測は24/24 SSH接続済み。Gurobi共有枠は合計2、外部予約1、分散側は最大1枠。新しい実便・7日Rollingの研究計算結果はこの確認には含まれない。
+- タイムアウト報告の `desktop-5b6f6bp`、`desktop-6s6ua9u`、`powersystem-1` へ新版controllerから診断ジョブを固定配布し、3/3 `COMPLETED` と回収ZIPの記録SHA-256一致を確認。これはSSH起動・ジョブ状態遷移・成果物回収の確認であり、最適化モデルの可行性・解品質・研究受入の確認ではない。
