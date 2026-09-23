@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 import sys
 import time
@@ -56,6 +57,65 @@ def _declared_weeks(design: dict) -> tuple[str, ...]:
     if not weeks or len(set(weeks)) != len(weeks):
         raise ValueError("design.evaluation_weeks must be a non-empty unique list")
     return weeks
+
+
+def validate_carryover_weeks(weeks: tuple[str, ...], design: dict) -> None:
+    """A stored monthly sample cannot establish consecutive-week operation."""
+    if len(weeks) < 2 or design.get("diagnostic_stop_after_day_ahead") is True:
+        raise ValueError("BESS carryover requires at least two fully executed weeks")
+    if "bess_initial_soc_override_kwh" in design:
+        raise ValueError("BESS carryover initial SOC must come from the previous executed plan")
+    if any(date.fromisoformat(week).weekday() != 0 for week in weeks):
+        raise ValueError("BESS carryover weeks must begin on Monday")
+    for earlier, later in zip(weeks, weeks[1:]):
+        if date.fromisoformat(later) != date.fromisoformat(earlier) + timedelta(days=7):
+            raise ValueError("BESS carryover requires consecutive Monday-Sunday weeks")
+
+
+def verified_bess_carryover(diagnostic: Path, result: dict, *, depot_id: str = "tsurumaki") -> dict:
+    """Read the accepted rolling boundary, never a forecast or day-ahead state."""
+    if (result.get("status") != "DIAGNOSTIC_EXECUTION_PASSED"
+            or result.get("physical_accepted") is not True
+            or result.get("accounting_eligible") is not True
+            or int(result.get("hourly_steps_accepted") or 0) != 168):
+        raise ValueError("Prior week lacks accepted 168-hour rolling execution")
+    chain = diagnostic / "rolling_hourly_chain"
+    plan_path = chain / "executed_plan.json"
+    plan_bytes = plan_path.read_bytes()
+    plan = json.loads(plan_bytes)
+    physical_path = chain / "physical_validation.json"
+    accounting_path = chain / "executed_day_accounting.json"
+    physical_bytes = physical_path.read_bytes()
+    accounting_bytes = accounting_path.read_bytes()
+    physical = json.loads(physical_bytes)
+    accounting = json.loads(accounting_bytes)
+    if physical.get("accepted") is not True or accounting.get("eligible") is not True:
+        raise ValueError("Prior week saved physical or accounting evidence is not accepted")
+    trace = (plan.get("bess_soc_kwh_by_depot_slot") or {}).get(depot_id)
+    if not isinstance(trace, dict) or set(trace) != {str(slot) for slot in range(672)}:
+        raise ValueError("Prior week has no complete 672-slot BESS inventory trace")
+    values = [float(trace[str(slot)]) for slot in range(672)]
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError("Prior week BESS inventory contains a non-finite value")
+    if (accounting.get("executed_slot_count") != 672
+            or accounting.get("missing_slots")
+            or accounting.get("duplicate_slots")):
+        raise ValueError("Prior week accounting does not cover exactly 672 executed slots")
+    boundary = (accounting.get("bess_terminal_soc_by_depot") or {}).get(depot_id)
+    if not isinstance(boundary, dict) or not math.isclose(
+        values[-1], float(boundary["terminal_soc_kwh"]), rel_tol=0.0, abs_tol=1.0e-6
+    ):
+        raise ValueError("Prior week plan and accounting BESS terminal inventory disagree")
+    return {
+        "depot_id": depot_id,
+        "terminal_soc_kwh": values[-1],
+        "executed_plan_sha256": hashlib.sha256(plan_bytes).hexdigest(),
+        "physical_validation_sha256": hashlib.sha256(physical_bytes).hexdigest(),
+        "executed_day_accounting_sha256": hashlib.sha256(accounting_bytes).hexdigest(),
+        "physical_validation_accepted": True,
+        "accounting_eligible": True,
+        "hourly_steps_accepted": 168,
+    }
 
 
 def campaign_source_design(design: dict, source_directory: Path) -> dict:
@@ -182,6 +242,7 @@ def run_campaign(
     output: Path,
     *,
     selected_week: str | None = None,
+    carry_bess: bool = False,
 ) -> dict:
     """Execute the sequential campaign without reusing prior week artifacts."""
 
@@ -210,6 +271,8 @@ def run_campaign(
     if selected_week is not None and selected_week not in declared_weeks:
         raise ValueError(f"--week is not declared in evaluation_weeks: {selected_week}")
     weeks = (selected_week,) if selected_week is not None else declared_weeks
+    if carry_bess:
+        validate_carryover_weeks(weeks, design)
     source_design_sha256 = canonical_design_hash(design)
     campaign_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
 
@@ -269,6 +332,7 @@ def run_campaign(
     summaries: list[dict] = []
     stopped = False
     stop_reason = ""
+    prior_bess_boundary: dict | None = None
     for week in weeks:
         week_before = git_state()
         case_root = cases_root / week
@@ -281,6 +345,9 @@ def run_campaign(
             input_manifests_directory=input_manifests_directory,
             source_design_sha256=source_design_sha256,
         )
+        if carry_bess and prior_bess_boundary is not None:
+            case_design["bess_initial_soc_override_kwh"] = prior_bess_boundary["terminal_soc_kwh"]
+            case_design["bess_initial_soc_override_source"] = prior_bess_boundary
         write_json(case_root / "design.json", case_design)
 
         if stopped:
@@ -313,7 +380,7 @@ def run_campaign(
                 source,
                 existing=None,
                 validation_mode=True,
-                **({"design": case_design} if design.get("require_balanced_monthly_weeks") else {}),
+                **({"design": case_design} if design.get("require_balanced_monthly_weeks") or carry_bess else {}),
             )
             after_prepare = git_state()
             if after_prepare != source_state or week_before != source_state:
@@ -350,6 +417,12 @@ def run_campaign(
                 else "DIAGNOSTIC_EXECUTION_PASSED"
             )
             failed = summary["status"] != expected_status
+            if carry_bess and not failed:
+                prior_bess_boundary = {
+                    "week": week,
+                    **verified_bess_carryover(diagnostic_output, diagnostic_result),
+                }
+                summary["bess_carryover_boundary"] = prior_bess_boundary
             if failed:
                 stopped = True
                 stop_reason = f"{week}: case failed with status {summary['status']}"
@@ -394,6 +467,7 @@ def run_campaign(
         "source_design_sha256": source_design_sha256,
         "campaign_declared_weeks": list(declared_weeks),
         "selected_weeks": list(weeks),
+        "bess_carryover_enabled": carry_bess,
         "base_git_sha": source_state["sha"],
         "source_state_before": source_state,
         "source_state_after": final_state,
@@ -419,10 +493,11 @@ def main() -> None:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--week", type=str, default=None)
+    parser.add_argument("--carry-bess", action="store_true", help="Carry accepted rolling BESS inventory into each adjacent week")
     args = parser.parse_args()
     config_path = args.config if args.config.is_absolute() else ROOT / args.config
     design = json.loads(config_path.read_text(encoding="utf-8"))
-    run_campaign(design, args.output, selected_week=args.week)
+    run_campaign(design, args.output, selected_week=args.week, carry_bess=args.carry_bess)
 
 
 if __name__ == "__main__":

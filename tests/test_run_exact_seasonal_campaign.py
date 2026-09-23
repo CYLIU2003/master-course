@@ -139,11 +139,11 @@ def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, m
     for profile in ("dual", "norel"):
         result = campaign.run_campaign(design, tmp_path / profile)
         assert result["status"] == ("DAY_AHEAD_ONLY_CAMPAIGN_COMPLETE" if day_ahead_only else "COMPLETED")
-        audit = json.loads((tmp_path / profile / "cases/2025-05-12/diagnostic/scope_audit.json").read_text())
+        audit = json.loads((tmp_path / profile / "cases/2025-05-12/diagnostic/scope_audit.json").read_text(encoding="utf-8"))
         assert audit["route_scope_complete"]
         assert all(row["trip_count"] == 1 for row in audit["timetable_evidence"].values())
         for filename in ("design.json", "cases/2025-05-12/design.json", "cases/2025-05-12/diagnostic/design.json"):
-            effective = json.loads((tmp_path / profile / filename).read_text())
+            effective = json.loads((tmp_path / profile / filename).read_text(encoding="utf-8"))
             assert effective["route_timetable_audit_source"] == f"{profile}/source_candidate/timetable_rows.json"
     assert solver_calls == ["2025-05-12", "2025-05-12"]
     assert design == original_design
@@ -152,7 +152,7 @@ def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, m
     assert sources[0]["artifacts"] == sources[1]["artifacts"]
     for source in sources:
         copied = tmp_path / source["source_directory"] / "timetable_rows.json"
-        assert json.loads(copied.read_text()) == json.loads((raw / "timetable_rows.json").read_text())
+        assert json.loads(copied.read_text(encoding="utf-8")) == json.loads((raw / "timetable_rows.json").read_text(encoding="utf-8"))
     assert {p.name: p.read_bytes() for p in legacy.iterdir()} == snapshot
 
 

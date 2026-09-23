@@ -98,6 +98,10 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
             raise ValueError(f"BESS {depot_id} balance period differs from the declared evaluation")
         if str(asset.bess_terminal_soc_policy) != design["bess_terminal_soc_policy"]:
             raise ValueError(f"BESS {depot_id} terminal policy differs from the declared evaluation")
+        if "bess_initial_soc_override_kwh" in design and abs(
+            float(asset.bess_initial_soc_kwh) - float(design["bess_initial_soc_override_kwh"])
+        ) > 1.0e-6:
+            raise ValueError(f"BESS {depot_id} initial SOC differs from the verified prior-week terminal")
         target = resolve_bess_terminal_soc_target_kwh(
             policy=asset.bess_terminal_soc_policy,
             initial_soc_kwh=asset.bess_initial_soc_kwh,

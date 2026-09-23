@@ -1,5 +1,7 @@
 # 2026-09-23 残件の実装と研究採用境界
 
+追記: `run_exact_seasonal_campaign.py --carry-bess`と専用の`tools/research/run_bess_continuous_diagnostic.py`で、隣接する2025-01-20/01-27の2週を新規Prepareし、前週の保存済み実行計画の終端BESS残量を次週へ渡す経路を実装した。物理・会計・168時間の全通過と672区間traceが欠ければ次週求解前に停止する。関連回帰60件通過。現時点で2週求解の結果はなく、旧12週を連続運用証拠へ読み替えない。これはBESS在庫だけの引継ぎであり、ICE燃料など全車両状態の長期連続運用証明ではない。受電設備は仮値、fleetは承認前の候補である。
+
 対象は現行 `main` からの開発変更である。既存12週の出典は固定 `7cb468942d9ec2526d8afc92dc3fa8b7c51b56eb` であり、今回の変更を適用して再計算した結果ではない。旧結果は引き続き `DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS` とする。
 
 | 論点 | 今回確認・実施したこと | 残る採用条件 |

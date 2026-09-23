@@ -94,14 +94,21 @@ def apply_seasonal_bess_policy(asset: dict, *, design: dict | None = None) -> di
         raise ValueError("Seasonal BESS policy requires a positive bess_energy_kwh")
     soc_min_kwh = capacity_kwh * minimum_ratio
     soc_max_kwh = capacity_kwh * maximum_ratio
-    initial_soc_kwh = float(configured.get("bess_initial_soc_kwh") or 0.0)
+    initial_soc_kwh = float(
+        design["bess_initial_soc_override_kwh"]
+        if design and "bess_initial_soc_override_kwh" in design
+        else configured.get("bess_initial_soc_kwh") or 0.0
+    )
+    if not math.isfinite(initial_soc_kwh):
+        raise ValueError("Seasonal BESS initial SOC must be finite")
     if not soc_min_kwh <= initial_soc_kwh <= soc_max_kwh:
         raise ValueError(
-            "Parent BESS initial SOC is outside the declared seasonal operating range"
+            "BESS initial SOC is outside the declared seasonal operating range"
         )
     policy = controls["bess_terminal_soc_policy"]
     target_kwh = initial_soc_kwh if policy == "return_to_initial" else 0.0
     configured.update(
+        bess_initial_soc_kwh=initial_soc_kwh,
         bess_balance_period=controls["bess_balance_period"],
         bess_soc_min_kwh=soc_min_kwh,
         bess_soc_max_kwh=soc_max_kwh,

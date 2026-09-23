@@ -2,6 +2,8 @@
 
 2026-09-23: 残る研究・分散実行の課題を現行コードと原本で再点検しました。GA/ABCの部分MILPに残時間を伝達し、受電設備の任意の物理上限を契約超過料金から分離しました。12週の原本・固定ソース・検算器をローカルbundleへ固定し、現行fleetは正式**候補**として照合済みです。BESS連続週、実設備値、fleet承認、分散キューの実機復旧と最適性は未証明です。[実装と採用境界](docs/notes/RESEARCH_REMAINING_GATES_20260923.md)。
 
+BESS在庫の連続週診断は `python tools/research/run_bess_continuous_diagnostic.py --output output/bess_continuous_two_week_20260923` で実行条件だけを表示し、同じコマンドに `--run` を付けた場合だけ新規Prepare・2週の求解を開始します。2025-01-20と01-27の連続した2週を使い、1週目の物理・会計が通過した実行計画の終端BESS残量だけを2週目へ渡します。これは別版の診断であり、実設備上限、ICE補給を含む全車両の連続運用、研究採用を証明しません。
+
 2026-09-23 旧GitHub mainへの厳格レビューを現行ローカル版と照合しました。ジョブ原本保持・復旧・並行保存の回帰を追加し、修正済み事項と研究採用の残件を分離しています。[照合結果と残件](docs/notes/REVIEW_RECONCILIATION_20260923.md)。現行の月別12週は完了済みですが、研究採用はBLOCKEDです。
 
 2026-09-23 分散環境をuvへ統一: `tools/cluster/environment/uv.lock` と Python 3.14.7を固定し、
