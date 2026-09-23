@@ -1,5 +1,11 @@
 # 分散計算の使い方
 
+## 新規子機候補2台への初期設定ZIP（2026-09-23）
+
+`LAPTOP-BOLC6VIT / pslab / 100.65.118.103` と `LAPTOP-8JS4DQCD / pslab / 100.87.44.64` 向けに、2台専用登録表を含む `output/cluster-deployment/onboard-20260923-add2/cluster-worker-access-setup-add2-20260923.zip` をTailscaleで送信した。ZIPのSHA-256は `6ebe69e70a3523294c45efe6fca0fc0784f6e5cce023364cf311558ddd9bcde5`。公開鍵だけを含み、秘密鍵・Gurobi資格情報は含まない。
+
+各子機で `tailscale ip -4` と指定IPを照合し、Windowsの `pslab` でZIP全体を新しいフォルダへ展開する。そこで `SETUP.cmd -ValidateOnly` を実行し、登録名とユーザーの確認が通ってから `SETUP.cmd` を実行する。`pslab` が管理者アカウントの場合は「管理者として実行」を使う。親機からのSSH認証確認とworker登録は、その結果を受けて別途行う。Tailscale送信CLIは2台とも成功を報告したが、受信側での実行と計算環境の準備は未確認。
+
 ## 渋24の架空4便による12台疎通試験（2026-09-23）
 
 旧渋21〜23の長時間診断は利用者指示で停止し、元の出力を保持した。新しい短時間試験は既存のPrepare→BFF→永続キュー→worker→成果物回収を使う。`synthetic_batch.py --dummy-route 渋24 --one-per-worker` は、12台すべてが有効な時に、各月1日の架空4便を1台へ1件ずつ割り当てる。1台がオフラインの初回は、12件をPrepareした後、稼働中11台へ11件だけを固定割当した別manifestを使った。停留所、10 km距離、車両、時刻はすべて試験値で、公式の渋24ダイヤ、研究用fleet、PV/BESS結果を表さない。BEV終端は既存BFFの`return_to_initial`が実効条件で、期末SOCと独立物理検証の結果を成果物で必ず確認する。

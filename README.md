@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-23 新規子機候補 `LAPTOP-BOLC6VIT` と `LAPTOP-8JS4DQCD` 向けの初期SSH設定ZIPを作成し、指定されたTailscale IPv4へ送信しました。ZIP内の登録表はこの2台専用です。各PCでの受信・`SETUP.cmd`実行と親機からのSSH認証は未確認で、計算workerとしては未登録です。[設定手順と送信記録](docs/DISTRIBUTED_COMPUTE.md)。
+
 2026-09-23 渋24の短時間分散試験: `tools/cluster/synthetic_batch.py --dummy-route 渋24 --one-per-worker` は、路線IDだけ渋24とした架空4便・各1日の12ケースを作ります。実時刻表・研究結果ではありません。初回は接続中の11台で配布・回収に成功しましたが、ALNSの終端SOC判定metadata欠落で計画は全件不受理でした。独立可行性判定から欠落値を引き継ぐ修正後、新しい固定版の11件と復帰した12台目の固有1件を再確認しました。正式な渋21〜23計算は再開しません。操作は [分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md) を参照してください。
 
 修正版 `2e2333b3` の新規12件は全件、配布・回収hash、架空4便充足、独立物理検査、BEV初期/終端160 kWh一致、Gurobi利用0回を通過しました。これは元の親機＋従機11台の疎通確認で、研究採用はBLOCKEDです。追加の4台は監視登録済みですが、SSH公開鍵認証が拒否され計算未実行です。既存の初期設定ZIPと4台用登録表をTailscaleで各端末へ送信しました。[試験記録](docs/notes/SHIBU24_DUMMY_CLUSTER_20260923.md)。親機の監視画面は `http://127.0.0.1:8868/#cluster` で表示できます。

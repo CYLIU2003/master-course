@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-23 新規子機候補2台への初期設定ZIP送信
+
+- 指定された `LAPTOP-BOLC6VIT / pslab / 100.65.118.103` と `LAPTOP-8JS4DQCD / pslab / 100.87.44.64` は、Tailscale statusのnode ID・Windows端末名・オンライン状態を照合し、両IPへのTailscale ping応答を確認した。
+- 現行 `enable_worker_access.ps1` と `SETUP.cmd`、既存v3 ZIPのcontroller公開鍵、2台専用 `workers.json`、手順書から `output/cluster-deployment/onboard-20260923-add2/cluster-worker-access-setup-add2-20260923.zip` を作成した。SHA-256は `6ebe69e70a3523294c45efe6fca0fc0784f6e5cce023364cf311558ddd9bcde5`。manifestの全ファイルhash、許可ファイル一覧、現行ソース一致、公開鍵形式と不正入力拒否（pytest 6 passed）、両登録名の `SETUP.cmd -ValidateOnly` をローカルで確認した。
+- `tailscale file cp` は両IPの指定node IDへの送信をexit 0で報告した。転送記録は `output/cluster-deployment/onboard-20260923-add2/delivery.json`。これは転送CLIの成功であり、受信側での保存・実行、SSH認証、固定版runtime配置、worker登録、計算可否は未確認。今回の段階では既存worker設定を変更せず、投入対象を増やしていない。
+
 ## 2026-09-23 渋24ダミーの短時間分散試験と親機常駐監視
 
 - 12台目`laptop-a709una0`のTailscale復帰後、固定`2e2333b3`のコード・runtime・datasetを新規配置で照合し、未実行`month-12`だけを固有batch `shibu24-dummy-fixed-2e2333b3-a709`で投入した。COMPLETED/ZIP hash、架空4便充足、独立物理検査、BEV160→160 kWh、Gurobi Env/Model/optimize 0を確認。旧11件と同じSHA/source digestの12件を、原本ZIPから`output/cluster-deployment/shibu24-dummy-fixed-2e2333b3-physical-audit12.json`へ横断検査した。12/12は架空1日疎通の判定で、正式週・統合最適性・研究採用はBLOCKED。
