@@ -343,6 +343,7 @@ class FeasibilityChecker:
             "ev_soc_violation_count": "EV SOC bound/readiness violations remain",
             "bess_soc_violation_count": "BESS SOC bound violations remain",
             "contract_power_violation_count": "contract power violations remain",
+            "physical_grid_import_violation_count": "physical grid import limit violations remain",
             "contract_overage_accounting_violation_count": "contract overage accounting inconsistencies remain",
             "charger_concurrency_violation_count": "charger concurrency violations remain",
         }
@@ -569,16 +570,25 @@ class FeasibilityChecker:
             for depot in list(getattr(problem, "depots", ()) or ())
             if str(getattr(depot, "depot_id", "") or "")
         }
+        physical_limit_by_id = {
+            str(getattr(depot, "depot_id", "") or ""): getattr(
+                depot, "physical_import_limit_kw", None
+            )
+            for depot in list(getattr(problem, "depots", ()) or ())
+            if str(getattr(depot, "depot_id", "") or "")
+        }
         grid_to_bus = plan.grid_to_bus_kwh_by_depot_slot or {}
         grid_to_bess = plan.grid_to_bess_kwh_by_depot_slot or {}
         reported_overage = plan.contract_over_limit_kwh_by_depot_slot or {}
         depot_ids = set(depot_limit_by_id) | set(grid_to_bus) | set(grid_to_bess) | set(reported_overage)
         exceedance_count = 0
+        physical_violation_count = 0
         accounting_violations = 0
         excess_total_kwh = 0.0
         reported_total_kwh = 0.0
         for depot_id in depot_ids:
             limit_kw = max(float(depot_limit_by_id.get(depot_id, 0.0) or 0.0), 0.0)
+            physical_limit_kw = physical_limit_by_id.get(depot_id)
             bus_slots = grid_to_bus.get(depot_id, {})
             bess_slots = grid_to_bess.get(depot_id, {})
             overage_slots = reported_overage.get(depot_id, {})
@@ -592,7 +602,16 @@ class FeasibilityChecker:
                     for value in (bus_kwh, bess_kwh, reported_kwh)
                 ):
                     accounting_violations += 1
+                    physical_violation_count += 1
                     continue
+                if physical_limit_kw is not None:
+                    if (
+                        not math.isfinite(float(physical_limit_kw))
+                        or float(physical_limit_kw) <= 0.0
+                        or bus_kwh + bess_kwh
+                        > float(physical_limit_kw) * timestep_h + tolerance_kwh
+                    ):
+                        physical_violation_count += 1
                 # As before, a nonpositive import limit denotes no finite cap.
                 excess_kwh = (
                     max(bus_kwh + bess_kwh - limit_kw * timestep_h, 0.0)
@@ -607,6 +626,7 @@ class FeasibilityChecker:
                     accounting_violations += 1
         return {
             "contract_power_violation_count": 0 if allow_overage else exceedance_count,
+            "physical_grid_import_violation_count": physical_violation_count,
             "contract_overage_accounting_violation_count": accounting_violations,
             "contract_power_exceedance_count": exceedance_count,
             "contract_power_excess_kwh": excess_total_kwh,

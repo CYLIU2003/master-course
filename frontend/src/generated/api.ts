@@ -2926,6 +2926,8 @@ export interface components {
       pv_scale: number;
       /** Depot Power Limit Kw */
       depot_power_limit_kw?: number | null;
+      /** Physical Grid Import Limit Kw */
+      physical_grid_import_limit_kw?: number | null;
       /** Tou Pricing */
       tou_pricing?: components["schemas"]["PrepareTimeOfUseBandBody"][];
       /** Service Date */

@@ -581,6 +581,16 @@ class ProblemBuilder:
                 1.0,
             )
         )
+        physical_grid_import_limit_raw = charging_cfg.get("physical_grid_import_limit_kw")
+        physical_grid_import_limit_kw = None
+        if physical_grid_import_limit_raw is not None:
+            physical_grid_import_limit_kw = self._safe_float(physical_grid_import_limit_raw)
+            if (
+                physical_grid_import_limit_kw is None
+                or not math.isfinite(physical_grid_import_limit_kw)
+                or physical_grid_import_limit_kw <= 0.0
+            ):
+                raise ValueError("physical_grid_import_limit_kw must be finite and positive")
         if trip_energy_sensitivity_scale < 0.0:
             raise ValueError("trip_energy_sensitivity_scale must be non-negative")
         bev_trip_energy_sensitivity_scale = float(
@@ -617,6 +627,7 @@ class ProblemBuilder:
             objective_weights=weights,
             baseline_plan=baseline,
             depot_import_limit_kw=depot_import_limit_kw,
+            physical_grid_import_limit_kw=physical_grid_import_limit_kw,
             objective_mode=objective_mode,
             diesel_price_yen_per_l=diesel_price,
             demand_charge_on_peak_yen_per_kw=demand_charge,
@@ -732,6 +743,7 @@ class ProblemBuilder:
         objective_weights: Optional[OptimizationObjectiveWeights] = None,
         baseline_plan: Optional[AssignmentPlan] = None,
         depot_import_limit_kw: Optional[float] = None,
+        physical_grid_import_limit_kw: Optional[float] = None,
         objective_mode: str = "total_cost",
         diesel_price_yen_per_l: float = 0.0,
         demand_charge_on_peak_yen_per_kw: float = 0.0,
@@ -1207,6 +1219,11 @@ class ProblemBuilder:
                 + ", ".join(inventory_errors)
             )
         inferred_import_limit = depot_import_limit_kw
+        if physical_grid_import_limit_kw is not None and (
+            not math.isfinite(physical_grid_import_limit_kw)
+            or physical_grid_import_limit_kw <= 0.0
+        ):
+            raise ValueError("physical_grid_import_limit_kw must be finite and positive")
         if inferred_import_limit is None:
             charger_capacity = sum(charger.power_kw * max(charger.simultaneous_ports, 1) for charger in chargers)
             inferred_import_limit = charger_capacity if charger_capacity > 0 else 1000.0
@@ -1217,6 +1234,7 @@ class ProblemBuilder:
                 name=str((selected_depot_record or {}).get("name") or "Default Depot"),
                 charger_ids=tuple(charger.charger_id for charger in chargers),
                 import_limit_kw=float(inferred_import_limit),
+                physical_import_limit_kw=physical_grid_import_limit_kw,
                 latitude=self._safe_float((selected_depot_record or {}).get("lat")),
                 longitude=self._safe_float((selected_depot_record or {}).get("lon")),
             ),

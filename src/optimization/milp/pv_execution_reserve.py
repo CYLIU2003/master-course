@@ -68,6 +68,7 @@ def add_pv_execution_reserve_constraints(
         "future_observations_used": False,
         "bess_floor_constraint_count": 0,
         "hard_import_constraint_count": 0,
+        "physical_import_constraint_count": 0,
         "initial_bess_soc_kwh_by_depot": {},
         "physical_floor_kwh_by_depot": {},
         "bess_reserve_policy": bess_reserve_policy(problem),
@@ -95,6 +96,16 @@ def add_pv_execution_reserve_constraints(
     duration = problem.scenario.timestep_min / 60.0
     hard_import = problem.metadata.get("enable_contract_overage_penalty") is not True
     for depot_id, asset in problem.depot_energy_assets.items():
+        physical_limit_kw = getattr(depots[depot_id], "physical_import_limit_kw", None)
+        if physical_limit_kw is not None:
+            for slot in slots:
+                key = (depot_id, slot)
+                model.addConstr(
+                    grid_to_bus_var[key] + grid_to_bess_var[key]
+                    <= float(physical_limit_kw) * duration,
+                    name=f"pv_execution_physical_import__{depot_id}__{slot}",
+                )
+                audit["physical_import_constraint_count"] += 1
         adaptive = uses_auxiliary_bess(asset)
         if adaptive:
             audit["adaptive_bess_depot_ids"].append(depot_id)

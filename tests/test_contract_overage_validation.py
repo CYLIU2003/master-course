@@ -13,6 +13,8 @@ from src.optimization.common.problem import (
     OptimizationScenario,
     ProblemDepot,
 )
+from bff.mappers.scenario_to_problemdata import _build_sites
+from src.scenario_overlay import ChargingConfig
 
 
 TIMESTEP_MINUTES = 15
@@ -108,6 +110,52 @@ def test_soft_overage_sums_grid_to_bus_and_grid_to_bess_per_depot() -> None:
     assert report.metrics["contract_power_exceedance_count"] == 2
     assert report.metrics["contract_power_excess_kwh"] == pytest.approx(10.0)
     assert report.metrics["contract_overage_reported_kwh"] == pytest.approx(10.0)
+
+
+def test_physical_import_limit_is_independent_of_paid_contract_overage() -> None:
+    problem = _problem(
+        depots=(
+            ProblemDepot(
+                depot_id="depot-a",
+                name="Depot A",
+                import_limit_kw=200.0,
+                physical_import_limit_kw=500.0,
+            ),
+        ),
+    )
+    within = _plan(
+        grid_to_bus={"depot-a": {0: 100.0}},
+        reported_overage={"depot-a": {0: 50.0}},
+    )
+    above = _plan(
+        grid_to_bus={"depot-a": {0: 126.0}},
+        reported_overage={"depot-a": {0: 76.0}},
+    )
+
+    within_report = _report(problem, within)
+    above_report = _report(problem, above)
+
+    assert within_report.feasible is True
+    assert within_report.metrics["physical_grid_import_violation_count"] == 0
+    assert above_report.feasible is False
+    assert above_report.metrics["contract_power_violation_count"] == 0
+    assert above_report.metrics["contract_overage_accounting_violation_count"] == 0
+    assert above_report.metrics["physical_grid_import_violation_count"] == 1
+
+
+def test_scenario_schema_and_legacy_site_keep_physical_and_contract_limits_separate() -> None:
+    controls = ChargingConfig(
+        depot_power_limit_kw=200.0, physical_grid_import_limit_kw=500.0
+    )
+    scenario = {
+        "scenario_overlay": {"charging_constraints": controls.model_dump()},
+        "depots": [{"id": "depot-a"}],
+    }
+    site = _build_sites(scenario, "depot-a")[0]
+    assert site.grid_import_limit_kw == 500.0
+    assert site.contract_demand_limit_kw == 200.0
+    with pytest.raises(ValueError):
+        ChargingConfig(physical_grid_import_limit_kw=0.0)
 
 
 def test_at_or_below_import_limit_has_no_contract_overage() -> None:

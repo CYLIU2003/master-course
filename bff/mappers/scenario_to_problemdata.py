@@ -1479,6 +1479,7 @@ def _build_sites(scenario: Dict[str, Any], depot_id: str) -> List[Site]:
     sites: Dict[str, Site] = {}
     charging_cfg = ((scenario.get("scenario_overlay") or {}).get("charging_constraints") or {})
     depot_power_limit_kw = charging_cfg.get("depot_power_limit_kw")
+    physical_grid_import_limit_kw = charging_cfg.get("physical_grid_import_limit_kw")
     for depot in _as_list(scenario.get("depots")):
         site_id = str(depot.get("id"))
         sites[site_id] = Site(
@@ -1487,7 +1488,7 @@ def _build_sites(scenario: Dict[str, Any], depot_id: str) -> List[Site]:
             grid_import_limit_kw=_safe_float(
                 depot.get(
                     "gridImportLimitKw",
-                    depot.get("grid_import_limit_kw", depot_power_limit_kw),
+                    depot.get("grid_import_limit_kw", physical_grid_import_limit_kw or depot_power_limit_kw),
                 ),
                 9999.0,
             ),
@@ -1526,15 +1527,17 @@ def _build_sites(scenario: Dict[str, Any], depot_id: str) -> List[Site]:
         sites[depot_id] = Site(
             site_id=depot_id,
             site_type="depot",
-            grid_import_limit_kw=_safe_float(depot_power_limit_kw, 9999.0),
+            grid_import_limit_kw=_safe_float(physical_grid_import_limit_kw or depot_power_limit_kw, 9999.0),
             contract_demand_limit_kw=_safe_float(depot_power_limit_kw, 9999.0),
         )
-    elif depot_power_limit_kw is not None:
+    elif depot_power_limit_kw is not None or physical_grid_import_limit_kw is not None:
         site = sites[depot_id]
         sites[depot_id] = Site(
             site_id=site.site_id,
             site_type=site.site_type,
-            grid_import_limit_kw=_safe_float(depot_power_limit_kw, site.grid_import_limit_kw),
+            grid_import_limit_kw=_safe_float(
+                physical_grid_import_limit_kw or depot_power_limit_kw, site.grid_import_limit_kw
+            ),
             contract_demand_limit_kw=_safe_float(
                 depot_power_limit_kw,
                 site.contract_demand_limit_kw,

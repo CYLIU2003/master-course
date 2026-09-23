@@ -235,6 +235,26 @@ def test_hard_import_uses_worst_case_zero_pv_but_soft_overage_remains_unchanged(
     assert _solve(soft_model, soft_grb) == soft_grb.OPTIMAL
 
 
+def test_physical_import_is_hard_when_contract_overage_is_allowed():
+    problem = _problem(bess_enabled=False, import_limit_kw=5.0, hard_import=False)
+    problem = replace(
+        problem,
+        depots=(replace(problem.depots[0], physical_import_limit_kw=10.0),),
+    )
+    slots = (5,)
+    model, maps, grb = _flow_model(problem, slots)
+    _fix(model, maps["grid_to_bus"], "DEPOT", {5: 11.0})
+    _fix(model, maps["grid_to_bess"], "DEPOT", {5: 0.0})
+    audit = add_pv_execution_reserve_constraints(
+        model, problem, _config(execution_minutes=60), slots,
+        is_remaining_day_reoptimization=True,
+        grid_to_bus_var=maps["grid_to_bus"], pv_to_bus_var=maps["pv_to_bus"],
+        grid_to_bess_var=maps["grid_to_bess"], bess_to_bus_var=maps["bess_to_bus"],
+    )
+    assert audit["physical_import_constraint_count"] == 1
+    assert _solve(model, grb) == grb.INFEASIBLE
+
+
 def test_depots_are_independent_and_period_floor_is_not_used_in_committed_prefix():
     problem = _problem(
         depot_ids=("DEPOT", "DEPOT2"),

@@ -160,6 +160,29 @@ def test_problem_builder_preserves_explicit_zero_cost_and_limit_controls() -> No
     assert all(slot.demand_charge_weight == 0.0 for slot in problem.price_slots)
 
 
+def test_physical_grid_limit_is_separate_from_contract_limit() -> None:
+    scenario = _scenario()
+    scenario["scenario_overlay"]["charging_constraints"].update(
+        depot_power_limit_kw=200.0,
+        physical_grid_import_limit_kw=500.0,
+    )
+    problem = ProblemBuilder().build_from_scenario(
+        scenario, depot_id="dep-1", service_id="WEEKDAY"
+    )
+    assert problem.depots[0].import_limit_kw == 200.0
+    assert problem.depots[0].physical_import_limit_kw == 500.0
+
+
+@pytest.mark.parametrize("invalid", [0.0, -1.0, float("nan"), float("inf")])
+def test_physical_grid_limit_rejects_invalid_value(invalid: float) -> None:
+    scenario = _scenario()
+    scenario["scenario_overlay"]["charging_constraints"]["physical_grid_import_limit_kw"] = invalid
+    with pytest.raises(ValueError, match="physical_grid_import_limit_kw"):
+        ProblemBuilder().build_from_scenario(
+            scenario, depot_id="dep-1", service_id="WEEKDAY"
+        )
+
+
 def test_problem_builder_prefers_overlay_depot_energy_asset_dict() -> None:
     scenario = _scenario()
     scenario["simulation_config"]["depot_energy_assets"][0]["bess_initial_soc_kwh"] = 20.0

@@ -60,6 +60,21 @@ def _execute(command, **kwargs):
     return execute_energy_slot(_asset(), command, **parameters)
 
 
+def test_execution_rejects_physical_import_even_when_contract_overage_is_paid():
+    with pytest.raises(ValueError, match="physical equipment limit"):
+        _execute(
+            IssuedEnergyCommand(15),
+            allow_contract_overage=True,
+            physical_import_limit_kw=50,
+        )
+    accepted = _execute(
+        IssuedEnergyCommand(10),
+        allow_contract_overage=True,
+        physical_import_limit_kw=50,
+    )
+    assert accepted.grid_to_bus_kwh == 10
+
+
 def test_pv_shortfall_preserves_charging_demand_and_updates_storage_from_actual_pv():
     flow = _execute(IssuedEnergyCommand(10, pv_to_bess_kwh=10), actual_pv_kwh=14)
     assert flow.pv_to_bus_kwh == 10

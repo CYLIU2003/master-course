@@ -71,6 +71,7 @@ def execute_energy_slot(
     allow_contract_overage: bool,
     slot_index: int,
     grid_price_yen_per_kwh: float,
+    physical_import_limit_kw: float | None = None,
 ) -> ExecutedEnergySlot:
     """Apply one predeclared causal control policy or fail without a repair."""
     for label, value in asdict(command).items():
@@ -83,6 +84,11 @@ def execute_energy_slot(
     if timestep_minutes <= 0:
         raise ValueError("Execution timestep must be positive")
     duration = timestep_minutes / 60.0
+    physical_limit_kw = None if physical_import_limit_kw is None else _nonnegative(
+        physical_import_limit_kw, "physical import limit"
+    )
+    if physical_limit_kw is not None and physical_limit_kw <= 0.0:
+        raise ValueError("Physical import limit must be positive")
     if uses_auxiliary_bess(asset):
         # The issued bus charging is fixed; BESS is a predeclared adaptive
         # auxiliary controller, not an irrevocable discharge/charge command.
@@ -91,6 +97,10 @@ def execute_energy_slot(
         overage = max(flows["grid_to_bus_kwh"]-limit_kw*duration, 0.0) if limit_kw > 0 else 0.0
         if overage > TOLERANCE_KWH and not allow_contract_overage:
             raise ValueError("Actual PV shortfall exceeds the hard grid import limit")
+        if (physical_limit_kw is not None
+                and flows["grid_to_bus_kwh"] + flows["grid_to_bess_kwh"]
+                > physical_limit_kw * duration + TOLERANCE_KWH):
+            raise ValueError("Executed grid import exceeds physical equipment limit")
         return ExecutedEnergySlot(**flows, contract_over_limit_kwh=overage)
     discharge = command.bess_to_bus_kwh
     grid_charge = command.grid_to_bess_kwh
@@ -132,6 +142,9 @@ def execute_energy_slot(
     overage = max(grid_bus + grid_charge - limit_kw * duration, 0.0) if limit_kw > 0 else 0.0
     if overage > TOLERANCE_KWH and not allow_contract_overage:
         raise ValueError("Actual PV shortfall exceeds the hard grid import limit")
+    if (physical_limit_kw is not None
+            and grid_bus + grid_charge > physical_limit_kw * duration + TOLERANCE_KWH):
+        raise ValueError("Executed grid import exceeds physical equipment limit")
     return ExecutedEnergySlot(
         grid_bus, pv_bus, discharge, pv_charge, grid_charge,
         pv - pv_bus - pv_charge, soc, overage,
@@ -207,6 +220,7 @@ def execute_pv_prefix(
                 actual_pv_kwh=actual, initial_bess_soc_kwh=soc,
                 timestep_minutes=step_minutes, import_limit_kw=depots[depot].import_limit_kw,
                 allow_contract_overage=(problem.metadata.get("enable_contract_overage_penalty") is True),
+                physical_import_limit_kw=depots[depot].physical_import_limit_kw,
                 slot_index=slot, grid_price_yen_per_kwh=prices[slot],
             )
             for name in FLOW_FIELDS:

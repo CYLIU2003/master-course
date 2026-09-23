@@ -9719,6 +9719,14 @@ class GurobiMILPAdapter:
                     model.addConstr(pv2bus_var[key] + pv2bess_var[key] + pv_curt_var[key] == pv_gen_kwh)
 
                     model.addConstr(grid_import_var[key] == g2bus_var[key] + g2bess_var[key])
+                    physical_limit_kw = getattr(
+                        depot_by_id.get(depot_id), "physical_import_limit_kw", None
+                    )
+                    if physical_limit_kw is not None:
+                        model.addConstr(
+                            grid_import_var[key] <= float(physical_limit_kw) * timestep_h,
+                            name=f"physical_grid_limit__{depot_id}__slot_{slot_idx}",
+                        )
                     if enable_contract_overage_penalty:
                         contract_over_limit_var[key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
                         model.addConstr(
@@ -22986,6 +22994,14 @@ class GurobiMILPAdapter:
                 pv_gen_kwh = _pv_generation_kwh_at_slot(asset, slot_idx)
                 stage2.addConstr(pv2bus_var[key] + pv2bess_var[key] + pv_curt_var[key] == pv_gen_kwh)
                 stage2.addConstr(grid_import_var[key] == g2bus_var[key] + g2bess_var[key])
+                physical_limit_kw = getattr(
+                    depot_by_id.get(depot_id), "physical_import_limit_kw", None
+                )
+                if physical_limit_kw is not None:
+                    stage2.addConstr(
+                        grid_import_var[key] <= float(physical_limit_kw) * timestep_h,
+                        name=f"physical_grid_limit__{depot_id}__slot_{slot_idx}",
+                    )
                 if enable_contract_overage_penalty:
                     contract_over_limit_var[key] = stage2.addVar(
                         lb=0.0,
@@ -26617,6 +26633,16 @@ class GurobiMILPAdapter:
                     ),
                 )
                 constraint_count += 2
+
+                physical_limit_kw = getattr(
+                    depot_by_id.get(depot_id), "physical_import_limit_kw", None
+                )
+                if physical_limit_kw is not None:
+                    model.addConstr(
+                        grid_import[key] <= float(physical_limit_kw) * timestep_h,
+                        name=f"stage1_recourse_physical_grid_limit__{depot_id}__{slot_idx}",
+                    )
+                    constraint_count += 1
 
                 if finite_import_limit is not None:
                     if contract_overage_allowed:

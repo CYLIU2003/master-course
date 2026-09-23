@@ -40,6 +40,7 @@ class ChargingConfig(BaseModel):
     overnight_window_start: Optional[str] = None
     overnight_window_end: Optional[str] = None
     depot_power_limit_kw: Optional[float] = Field(default=None, ge=0.0)
+    physical_grid_import_limit_kw: Optional[float] = Field(default=None, gt=0.0)
     charger_power_limit_kw: Optional[float] = Field(default=None, ge=0.0)
     initial_soc_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     final_soc_floor_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)

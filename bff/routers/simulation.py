@@ -161,6 +161,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     pv_curtail_penalty_yen_per_kwh: Optional[float] = Field(default=None, ge=0.0)
     pv_scale: float = Field(default=1.0, ge=0.0)
     depot_power_limit_kw: Optional[float] = Field(default=None, ge=0.0)
+    physical_grid_import_limit_kw: Optional[float] = Field(default=None, gt=0.0)
     tou_pricing: list[PrepareTimeOfUseBandBody] = Field(default_factory=list)
     service_date: Optional[str] = None
     service_dates: list[str] = Field(default_factory=list)

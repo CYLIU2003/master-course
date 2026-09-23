@@ -513,6 +513,10 @@ def apply_builder_configuration(
         overlay.charging_constraints.depot_power_limit_kw = (
             body.simulation_settings.depot_power_limit_kw
         )
+    if body.simulation_settings.physical_grid_import_limit_kw is not None:
+        overlay.charging_constraints.physical_grid_import_limit_kw = (
+            body.simulation_settings.physical_grid_import_limit_kw
+        )
     overlay.solver_config.mode = body.simulation_settings.solver_mode
     overlay.solver_config.objective_mode = normalize_objective_mode(  # type: ignore[assignment]
         body.simulation_settings.objective_mode or "total_cost"
@@ -1085,12 +1089,17 @@ def apply_builder_configuration(
         ]
     doc["vehicles"] = runtime_vehicles
     doc["chargers"] = runtime_chargers
-    if overlay.charging_constraints.depot_power_limit_kw is not None:
+    if (overlay.charging_constraints.depot_power_limit_kw is not None
+            or overlay.charging_constraints.physical_grid_import_limit_kw is not None):
         doc["charger_sites"] = [
             {
                 "id": primary_depot_id,
                 "site_type": "depot",
-                "grid_import_limit_kw": overlay.charging_constraints.depot_power_limit_kw,
+                "grid_import_limit_kw": (
+                    overlay.charging_constraints.physical_grid_import_limit_kw
+                    if overlay.charging_constraints.physical_grid_import_limit_kw is not None
+                    else overlay.charging_constraints.depot_power_limit_kw
+                ),
                 "contract_demand_limit_kw": overlay.charging_constraints.depot_power_limit_kw,
             }
         ]

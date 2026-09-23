@@ -81,6 +81,8 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             pv_marginal_charge_cost_yen_per_kwh=4.25,
             pv_curtail_penalty_yen_per_kwh=7.5,
             pv_scale=0.25,
+            depot_power_limit_kw=200.0,
+            physical_grid_import_limit_kw=500.0,
             depot_energy_assets=[
                 {
                     "depot_id": "dep1",
@@ -151,6 +153,10 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["scenario_overlay"]["cost_coefficients"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert updated["simulation_config"]["pv_scale"] == 0.25
     assert updated["scenario_overlay"]["cost_coefficients"]["pv_scale"] == 0.25
+    assert updated["scenario_overlay"]["charging_constraints"]["depot_power_limit_kw"] == 200.0
+    assert updated["scenario_overlay"]["charging_constraints"]["physical_grid_import_limit_kw"] == 500.0
+    assert updated["charger_sites"][0]["grid_import_limit_kw"] == 500.0
+    assert updated["charger_sites"][0]["contract_demand_limit_kw"] == 200.0
     assert updated["scenario_overlay"]["depot_energy_assets"] == {
         "dep1": {
             "depot_id": "dep1",

@@ -9375,6 +9375,18 @@
             ],
             "title": "Depot Power Limit Kw"
           },
+          "physical_grid_import_limit_kw": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Grid Import Limit Kw"
+          },
           "tou_pricing": {
             "items": {
               "$ref": "#/components/schemas/PrepareTimeOfUseBandBody"

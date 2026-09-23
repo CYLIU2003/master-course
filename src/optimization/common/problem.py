@@ -140,6 +140,7 @@ class ProblemDepot:
     export_limit_kw: float = 0.0
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    physical_import_limit_kw: Optional[float] = None
 
 
 @dataclass(frozen=True)

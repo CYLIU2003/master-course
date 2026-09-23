@@ -35,6 +35,17 @@ def execute(storage, demand, pv, soc, **kwargs):
         slot_index=0, grid_price_yen_per_kwh=20)
 
 
+def test_auxiliary_execution_respects_separate_physical_import_limit():
+    storage = asset(bess_enabled=False)
+    with pytest.raises(ValueError, match="physical equipment limit"):
+        execute_energy_slot(
+            storage, IssuedEnergyCommand(12), actual_pv_kwh=0,
+            initial_bess_soc_kwh=0, timestep_minutes=60, import_limit_kw=5,
+            allow_contract_overage=True, slot_index=0,
+            grid_price_yen_per_kwh=20, physical_import_limit_kw=10,
+        )
+
+
 @pytest.mark.parametrize('lower,upper', [(20,80),(10,90)])
 def test_lower_boundary_idles_then_surplus_recharges_and_discharge_resumes(lower, upper):
     storage = asset(bess_soc_min_kwh=lower, bess_soc_max_kwh=upper, bess_terminal_soc_min_kwh=lower)
