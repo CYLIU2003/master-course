@@ -3,12 +3,45 @@ import contextlib
 import ctypes
 import os
 import shutil
+import struct
 import time
 from pathlib import Path
 
 
+def _count_core_records(data: bytes) -> int | None:
+    """Count physical-core records in a Windows processor-topology response."""
+    offset = 0
+    count = 0
+    while offset + 8 <= len(data):
+        relationship, size = struct.unpack_from("<II", data, offset)
+        if size < 8 or offset + size > len(data):
+            return None
+        count += relationship == 0  # RelationProcessorCore
+        offset += size
+    return count if offset == len(data) and count else None
+
+
+def physical_core_count() -> int | None:
+    """Read all physical cores using the Windows processor topology API."""
+    if os.name != "nt":
+        return None
+    from ctypes import wintypes
+
+    query = ctypes.windll.kernel32.GetLogicalProcessorInformationEx
+    query.argtypes = (wintypes.DWORD, ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD))
+    query.restype = wintypes.BOOL
+    length = wintypes.DWORD(0)
+    query(0, None, ctypes.byref(length))
+    if length.value < 8:
+        return None
+    buffer = ctypes.create_string_buffer(length.value)
+    if not query(0, buffer, ctypes.byref(length)):
+        return None
+    return _count_core_records(buffer.raw[:length.value])
+
+
 def hardware_identity() -> dict:
-    """Read model and power source without WMI subprocesses or solver imports."""
+    """Read CPU topology, model and power without WMI or solver imports."""
     model, ac_power, battery_percent = None, None, None
     if os.name == "nt":
         import winreg
@@ -24,7 +57,8 @@ def hardware_identity() -> dict:
         if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
             ac_power = bool(status.ac) if status.ac in (0, 1) else None
             battery_percent = status.percent if status.percent <= 100 else None
-    return {"cpu_model": model, "ac_power": ac_power, "battery_percent": battery_percent}
+    return {"cpu_model": model, "cpu_physical_cores": physical_core_count(),
+            "ac_power": ac_power, "battery_percent": battery_percent}
 
 
 def memory_metrics() -> dict:

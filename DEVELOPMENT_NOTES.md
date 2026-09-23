@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-23 機器管理のハードウェア順序
+
+- 子機probeにWindows `GetLogicalProcessorInformationEx(RelationProcessorCore)` から得る物理コア数を追加。既存の `os.cpu_count()` は論理スレッド数として維持する。親機でAPI値12コアとWin32_Processorの12コアが一致、論理数20。値が取れないOSやエラー時は `null` として扱い、推定しない。
+- フロントの機器管理は6項目を指定順の選択肢として並べ、降順・昇順を選べる。非数値・欠損値は方向に関係なく末尾、同値はPC名とIDで確定順にする。検索・状態フィルタを先に適用する。
+- CPU性能はPassMark公式のCPU Listを2026-09-23に確認した、クラスタ内13型番分だけの手動スナップショット。各値から公式モデルページへリンクする。端末別の実測値、複数CPUの合計値、将来の自動更新値ではない。型番の部分一致で別モデルの値を混同しないよう末尾境界を要求する。表示順のみを変え、schedulerの `resource_fit` とsolver条件は変えない。
+
 ## 2026-09-23 Gurobi不要の子機の表示
 
 - `LAPTOP-BOLC6VIT` と `LAPTOP-8JS4DQCD` は、固定 `0d056430` の環境照合と診断回収を確認済み。両機は `gurobi: false` で、APIの `can_run_no_gurobi=true` / `can_run_optimization=false` が正しい。旧WorkerNodes画面は後者だけを見て「準備待ち」と表示していたため、計算種別ごとの対応を表示し、フィルタにも前者を含めた。これはRAM等の投入時資源検査を免除しない。

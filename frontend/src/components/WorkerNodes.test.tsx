@@ -136,3 +136,61 @@ it("shows a verified no-Gurobi worker as usable for its supported calculation", 
   });
   expect(screen.queryByRole("article", { name: "LAPTOP-BOLC6VIT" })).toBeNull();
 });
+
+it("sorts each requested hardware metric and keeps unknown values last", () => {
+  mount([
+    {
+      ...node,
+      id: "a",
+      name: "A",
+      capability: {
+        cpu_model: "Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz",
+        cpu_physical_cores: 4,
+        cpu_count: 20,
+        ram_gb: 16,
+        ram_free_gb: 2,
+        disk_free_gb: 50,
+      },
+    },
+    {
+      ...node,
+      id: "b",
+      name: "B",
+      capability: {
+        cpu_model: "Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz",
+        cpu_physical_cores: 8,
+        cpu_count: 8,
+        ram_gb: 8,
+        ram_free_gb: 6,
+        disk_free_gb: 100,
+      },
+    },
+    { ...node, id: "c", name: "C", capability: { cpu_model: "unmapped CPU" } },
+  ]);
+  const order = () =>
+    screen
+      .getAllByRole("article")
+      .map((card) => card.getAttribute("aria-label"));
+  const sort = (field: string) =>
+    fireEvent.change(screen.getByLabelText("並べ替え"), {
+      target: { value: field },
+    });
+  expect(order()).toEqual(["B", "A", "C"]);
+  sort("logical_threads");
+  expect(order()).toEqual(["A", "B", "C"]);
+  sort("ram_total");
+  expect(order()).toEqual(["A", "B", "C"]);
+  sort("ram_available");
+  expect(order()).toEqual(["B", "A", "C"]);
+  sort("disk_available");
+  expect(order()).toEqual(["B", "A", "C"]);
+  sort("passmark_cpu_mark");
+  expect(order()).toEqual(["A", "B", "C"]);
+  expect(
+    within(screen.getByRole("article", { name: "A" }))
+      .getByRole("link", { name: "8,032" })
+      .getAttribute("href"),
+  ).toContain("id=2598");
+  fireEvent.change(screen.getByLabelText("順序"), { target: { value: "asc" } });
+  expect(order()).toEqual(["B", "A", "C"]);
+});

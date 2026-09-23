@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { passmarkCpuMark } from "../data/passmarkCpuMarks";
 
 export type WorkerNode = {
   id: string;
@@ -45,6 +46,7 @@ export type WorkerNode = {
     ac_power?: boolean | null;
     battery_percent?: number | null;
     cpu_count?: number;
+    cpu_physical_cores?: number | null;
     cpu_percent?: number | null;
     ram_gb?: number | null;
     ram_free_gb?: number | null;
@@ -86,6 +88,68 @@ function metric(value: number | null | undefined, suffix: string) {
   return value == null ? "未確認" : `${value.toFixed(1)} ${suffix}`;
 }
 
+type SortField =
+  | "physical_cores"
+  | "logical_threads"
+  | "ram_total"
+  | "ram_available"
+  | "disk_available"
+  | "passmark_cpu_mark";
+
+function sortValue(node: WorkerNode, field: SortField): number | null {
+  const { capability } = node;
+  let value: number | null | undefined;
+  switch (field) {
+    case "physical_cores":
+      value = capability.cpu_physical_cores;
+      break;
+    case "logical_threads":
+      value = capability.cpu_count;
+      break;
+    case "ram_total":
+      value = capability.ram_gb;
+      break;
+    case "ram_available":
+      value = capability.ram_free_gb;
+      break;
+    case "disk_available":
+      value = capability.disk_free_gb;
+      break;
+    case "passmark_cpu_mark":
+      value = passmarkCpuMark(capability.cpu_model)?.score;
+      break;
+  }
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
+}
+
+function compareWorkers(
+  a: WorkerNode,
+  b: WorkerNode,
+  field: SortField,
+  direction: "desc" | "asc",
+) {
+  const left = sortValue(a, field);
+  const right = sortValue(b, field);
+  if (left === null || right === null) {
+    if (left !== right) return left === null ? 1 : -1;
+  } else if (left !== right) {
+    return direction === "desc" ? right - left : left - right;
+  }
+  return a.name.localeCompare(b.name, "ja") || a.id.localeCompare(b.id);
+}
+
+function PassMarkScore({ model }: { model: string | null | undefined }) {
+  const result = passmarkCpuMark(model);
+  if (!result) return "未確認";
+  return (
+    <a href={result.sourceUrl} target="_blank" rel="noreferrer">
+      {result.score.toLocaleString("ja-JP")}
+    </a>
+  );
+}
+
 export default function WorkerNodes({
   data,
   pending,
@@ -97,21 +161,25 @@ export default function WorkerNodes({
 }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortField>("physical_cores");
+  const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const nodes = data?.workers ?? [];
-  const visible = nodes.filter(
-    (node) =>
-      `${node.name} ${node.tailscale_ip ?? ""}`
-        .toLowerCase()
-        .includes(search.toLowerCase()) &&
-      (filter === "all" ||
-        (filter === "ready"
-          ? node.can_run_optimization || node.can_run_no_gurobi
-          : filter === "busy"
-            ? node.reserved > 0
-            : !node.can_run_optimization &&
-              !node.can_run_no_gurobi &&
-              node.reserved === 0)),
-  );
+  const visible = nodes
+    .filter(
+      (node) =>
+        `${node.name} ${node.tailscale_ip ?? ""}`
+          .toLowerCase()
+          .includes(search.toLowerCase()) &&
+        (filter === "all" ||
+          (filter === "ready"
+            ? node.can_run_optimization || node.can_run_no_gurobi
+            : filter === "busy"
+              ? node.reserved > 0
+              : !node.can_run_optimization &&
+                !node.can_run_no_gurobi &&
+                node.reserved === 0)),
+    )
+    .sort((a, b) => compareWorkers(a, b, sortBy, sortDirection));
   return (
     <>
       <div className="run-summary">
@@ -175,9 +243,41 @@ export default function WorkerNodes({
             <option value="attention">準備・確認が必要</option>
           </select>
         </label>
+        <label>
+          並べ替え
+          <select
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value as SortField)}
+          >
+            <option value="physical_cores">物理コア数</option>
+            <option value="logical_threads">論理スレッド数</option>
+            <option value="ram_total">メモリ容量</option>
+            <option value="ram_available">利用可能メモリ</option>
+            <option value="disk_available">ストレージ空き</option>
+            <option value="passmark_cpu_mark">
+              CPU性能（PassMark CPU Mark）
+            </option>
+          </select>
+        </label>
+        <label>
+          順序
+          <select
+            value={sortDirection}
+            onChange={(event) =>
+              setSortDirection(event.target.value as "desc" | "asc")
+            }
+          >
+            <option value="desc">大きい順</option>
+            <option value="asc">小さい順</option>
+          </select>
+        </label>
       </div>
       <p className="subtle">
         Tailscaleは約5秒、SSH・計算環境は約30秒間隔で確認します。失敗時は間隔を延ばします。実際の割当では空きRAM・CPU負荷・電源も確認します。期限切れの確認結果では割り当てません。端末の割当停止では、実行中の計算は継続します。
+      </p>
+      <p className="subtle">
+        値が未確認の端末は並べ替えの最後に表示します。PassMark CPU
+        Markは2026-09-23の公開モデル平均値（単一CPU）で、この端末自体の実測値や複数CPUの合計性能ではありません。
       </p>
       <div className="worker-grid">
         {visible.map((node) => (
@@ -232,20 +332,34 @@ export default function WorkerNodes({
                       <br />
                     </small>
                   )}
-                  {metric(node.capability.cpu_percent, "%")} /{" "}
-                  {node.capability.cpu_count ?? "—"}論理コア
+                  {metric(node.capability.cpu_percent, "%")}
                 </dd>
               </div>
               <div>
-                <dt>RAM空き / 総量</dt>
-                <dd>
-                  {metric(node.capability.ram_free_gb, "GB")} /{" "}
-                  {metric(node.capability.ram_gb, "GB")}
-                </dd>
+                <dt>物理コア数</dt>
+                <dd>{node.capability.cpu_physical_cores ?? "未確認"}</dd>
               </div>
               <div>
-                <dt>ディスク空き</dt>
+                <dt>論理スレッド数</dt>
+                <dd>{node.capability.cpu_count ?? "未確認"}</dd>
+              </div>
+              <div>
+                <dt>メモリ容量</dt>
+                <dd>{metric(node.capability.ram_gb, "GB")}</dd>
+              </div>
+              <div>
+                <dt>利用可能メモリ</dt>
+                <dd>{metric(node.capability.ram_free_gb, "GB")}</dd>
+              </div>
+              <div>
+                <dt>ストレージ空き</dt>
                 <dd>{metric(node.capability.disk_free_gb, "GB")}</dd>
+              </div>
+              <div>
+                <dt>CPU性能（PassMark CPU Mark）</dt>
+                <dd>
+                  <PassMarkScore model={node.capability.cpu_model} />
+                </dd>
               </div>
               <div>
                 <dt>実行枠</dt>
