@@ -433,3 +433,8 @@ UIを閉じても受理済みworkerは独立プロセスで継続し、親機再
 BFFの画面用ジョブJSONは同一IDへの更新をOSロックと単調増加する`state_version`で直列化し、固有名の一時ファイルから置換する。読込不能・形式不正・復旧保存失敗でも元JSONを削除せず、`/jobs/{job_id}`の`error`に原因種別を示す。分散キューの正本は従来どおりcluster SQLiteであり、画面用JSONを遠隔attemptの正本やローカルPID照会対象にしない。権限不足などで生成時刻を確認できないローカルPIDは「不明」のまま照合を要する。
 
 ---
+## 実便版渋24の16台診断
+
+新しいフロントで従来シナリオを表示するには、固定controllerの設定ファイルに既存のシナリオ保管先 `"scenarios": "C:/master-course/output/scenarios"` を指定します。これは管理者が管理するローカル設定であり、子機へシナリオ原本を直接共有しません。既存の画面でシナリオを選び、Prepareと実行を行えます。研究採用条件は従来どおり別に判定します。
+
+実便版渋24の固定16件診断は、clean commitを全16台へ配置してから `tools/cluster/real_shibu24_batch.py --settings <controller-settings.json> --output <new-batch.json> --batch-id <new-id> --service-date 2025-05-12` で入力とbatchを作り、`tools/cluster/batch.py check <new-batch.json> --state-dir <new-state-dir>`、続いて同じ引数の `run` で実行します。作成コマンドは求解を始めません。IDと出力先を変えずに実行を再開すれば重複投入を避けられます。原本・パラメータ・研究上の限界は [実便版渋24の記録](notes/SHIBU24_REAL_CLUSTER_20260923.md) を参照してください。

@@ -323,8 +323,13 @@ def build_source_candidate(
     return manifest
 
 
-def configure_doc(doc: dict, start_date: str, source: dict, *, design: dict | None = None) -> dict:
-    """Materialize one seven-day case from the immutable candidate source."""
+def configure_doc(
+    doc: dict, start_date: str, source: dict, *, design: dict | None = None,
+    planning_days: int = 7,
+) -> dict:
+    """Materialize a declared dated case from the immutable candidate source."""
+    if isinstance(planning_days, bool) or not isinstance(planning_days, int) or not 1 <= planning_days <= 7:
+        raise ValueError("planning_days must be an integer in [1, 7]")
     bess_controls = seasonal_bess_controls(design)
     source_directory = ROOT / str(
         source.get("source_directory") or SOURCE_CANDIDATE_DIR.relative_to(ROOT)
@@ -333,7 +338,7 @@ def configure_doc(doc: dict, start_date: str, source: dict, *, design: dict | No
     source_route_codes = list(source.get("route_codes") or DEFAULT_ROUTE_CODES)
     cfg = doc["simulation_config"]
     cfg.update(multi_day_input_mode=DATE_SERIES_INPUT_MODE, service_date=start_date,
-               service_dates=[], planning_days=7, planning_horizon_hours=168,
+               service_dates=[], planning_days=planning_days, planning_horizon_hours=24 * planning_days,
                time_step_min=15, timestep_min=15, start_time="00:00", end_time="23:59",
                operation_time_window_enabled=False, rolling_lookahead_hours=24,
                pv_information_mode="training_only_forecast_proxy",
@@ -349,7 +354,7 @@ def configure_doc(doc: dict, start_date: str, source: dict, *, design: dict | No
     selected_ids = [row["id"] for row in selected_routes]
     doc["dispatch_scope"]["routeSelection"].update(includeRouteIds=selected_ids, excludeRouteIds=[])
     doc["dispatch_scope"]["serviceSelection"] = {"serviceIds": ["WEEKDAY", "SAT", "SUN_HOL"]}
-    dates = consecutive_service_dates(start_date, 7, [])
+    dates = consecutive_service_dates(start_date, planning_days, [])
     holiday_manifest = _verified_holiday_manifest(ROOT, dates, cfg.get("holiday_source_id"))
     templates = [row for row in read_json(source_directory / "timetable_rows.json")
                  if row["route_id"] in set(selected_ids)]
@@ -435,7 +440,7 @@ def configure_doc(doc: dict, start_date: str, source: dict, *, design: dict | No
                pv_input_semantics="gross_generation_before_depot_load", weather_observation_date=dates[0],
                weather_profile_source=source_id, comparison_type="fixed_timetable_with_date_specific_historical_pv",
                comparison_role=None, counterfactual_pv_source_date=None, pv_profile_id=None,
-               planning_horizon_hours=168, start_time="00:00", end_time="23:59")
+               planning_horizon_hours=24 * planning_days, start_time="00:00", end_time="23:59")
     cfg["pv_information_mode"] = "training_only_forecast_proxy"
     doc["dispatch_scope"]["serviceSelection"] = {"serviceIds": sorted({row["service_id"] for row in rows}),
                                                     "serviceDates": dates}

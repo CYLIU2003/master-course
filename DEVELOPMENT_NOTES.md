@@ -10551,3 +10551,10 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 数理制約・目的関数・可行領域は変更しない。ただし既存ALNSでは部分MILPの1回上限が短くなり得るため、探索軌跡・解品質・計算時間の比較可能性は変わる。旧SHAの成果物を今回の解法の証拠に流用せず、同一凍結入力・seed・controlsの新規実行で比較する。
 - 故障注入で壊れたJSON、一時読取失敗、disk-full相当の置換失敗、復旧保存失敗、PID再利用/不明、遠隔PID除外を検証。Windows実プロセスの生成時刻取得も確認。threadと別processの同時更新で双方のmetadata保持を検証。部分MILP子Configと予算境界を含む分散・ALNS系172件通過/環境依存17件skip、BFF等54件通過。mirror追加後の復旧系56件も通過。正式研究計算・新コードの11台配置・実WLS高負荷試験は未実施。
 - 未解決: ユーザー研究モデルのscenario/prepared IDと同期対象branch、clean commit、新SHA再配置、実RAM見積り、7日実行と研究ゲート、長い修復中の中断・壁時計上限。旧レビューのR01–R12は研究上の主張制限として維持し、今回のコード修正で研究採用としない。
+# 2026-09-23 実便版渋24・16台診断の入力とフロント接続
+
+- 追加4台のSSH/Tailscale/host keyを独立照合し、既存の初期設定ZIPを転送。4台すべてに固定Python 3.14.7、uv環境、Gitを入れ、旧固定版 `2e2333b3` のコード・runtime・datasetハッシュ照合を通した。これは配置完了であり、実便計算完了ではない。
+- seed import が新しいSSH workerへ親機のローカルrepoを既定値として渡していたため、無効状態の遠隔配置アンカー `C:/mc-worker/cluster` を既定に変更。immutable release配置・検証後にSHA付きパスへ更新する。既存worker設定は上書きしない。
+- `serve_controller.py` の任意 `settings.scenarios` に既存シナリオ保管先を指定可能にした。計算出力は分離し、Reactの既存一覧・Prepare・実行APIを再利用する。実シナリオの表示と研究採用は別判定。
+- 渋24公式ODPT候補は6パターン・582テンプレート便（平日224、土曜188、日祝170）で、operator欠落0・非正距離0を原本で確認した。従来渋21〜23親シナリオの車両/充電/PV/BESS/料金を継承し、平日1日の24時間へ明示的に変えるPrepare/batch入口を追加。2026公開ダイヤ×2025気象、地理代理距離、ALNS非Gurobiという比較条件を記録する。旧7日・旧solver結果を流用しない。
+- 変更テスト: seed経路、controller既存scenarioパス、1日/7日のBESS・日付契約、既存渋21〜24 source scopeの計46件を実行し通過。実便16件の結果・独立物理監査はこれから別記録する。

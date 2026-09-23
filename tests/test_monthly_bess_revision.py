@@ -176,7 +176,8 @@ def test_zero_initial_target_survives_rolling_freeze():
 
 
 @pytest.mark.parametrize("policy,rolling", [("minimum_only", "minimum_only"), ("return_to_initial", "scenario")])
-def test_configure_doc_preserves_controls_in_config_overlay_and_date_contract(monkeypatch, policy, rolling):
+@pytest.mark.parametrize("planning_days", [1, 7])
+def test_configure_doc_preserves_controls_in_config_overlay_and_date_contract(monkeypatch, policy, rolling, planning_days):
     """Stub source IO; exercise the real scenario mutation and policy propagation."""
     design = {"bess_terminal_soc_policy": policy, "rolling_bess_terminal_policy": rolling}
     asset = _parent_asset()
@@ -199,8 +200,12 @@ def test_configure_doc_preserves_controls_in_config_overlay_and_date_contract(mo
     monkeypatch.setattr(preparation, "_date_forecast_rows", lambda *a, **kw: ([], {}))
     monkeypatch.setattr(preparation, "dated_capacity_factors", lambda *a: None)
     monkeypatch.setattr(preparation, "validate_dated_timetable", lambda *a: None)
-    configured = preparation.configure_doc(doc, "2025-01-06", {"distance_semantics": "fixture"}, design=design)
+    configured = preparation.configure_doc(doc, "2025-01-06", {"distance_semantics": "fixture"},
+                                           design=design, planning_days=planning_days)
     cfg = configured["simulation_config"]
+    assert cfg["planning_days"] == planning_days
+    assert cfg["planning_horizon_hours"] == 24 * planning_days
+    assert len(cfg["service_dates"]) == planning_days
     controls = seasonal_bess_controls(design)
     for key, value in controls.items():
         assert cfg[key] == value
