@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-23 SOC夜間選択画面の固定版18台配置
+
+- 配布ZIPの空 `.git/refs/` 修正を含むclean固定版 `0d056430cfef12b02fef0dae93d678a638504804` を18台へ配布し、`output/cluster-deployment/onboard-20260923/stage-eighteen-final-retry-evidence/report.json` で18/18 `VERIFIED`、Gurobi Env起動0回を確認した。旧 `32c8e8d2` の配布失敗先は変更・再利用していない。
+- 新しいcontroller設定 `output/cluster-deployment/onboard-20260923/controller-shibu24-final-settings.json` の事前検査は通過。共有キューに実行中ジョブがないことを確認して旧controllerを停止し、`MasterCourseClusterMonitor` を新設定へ更新した。loopback HTTP 200、新プロセスのSHA・設定パス、シナリオ35件（渋24 2件）を確認した。
+- ブラウザ実画面でSOC期限と最終夜間の2選択を確認し、`output/cluster-deployment/onboard-20260923/soc-final-overnight-selection.png` を保存。選択の保存は実装済みだが、翌朝を含む求解は `NEXT_MORNING_SOC_NOT_READY` で投入前拒否する。渋24実便の18台求解成功や新SOC条件の研究採用は主張しない。
+
 ## 2026-09-23 追加2台の18台構成とシナリオ分類の実機確認
 
 - Tailscale node ID・端末名・指定IP、既知SSH host key、`pslab` の公開鍵認証を2台とも照合。固定版 `c54f684e2d23e07e7a8b5c0901a9d0874487abec` の全18台配布は `output/cluster-deployment/onboard-20260923/stage-eighteen-ui-evidence/report.json` で18/18 `VERIFIED`。常駐controllerは同SHAの18台設定と既存共有キューを使用し、追加2台のソルバーなし診断ジョブは両方 `COMPLETED`・成果物hashを回収した。
