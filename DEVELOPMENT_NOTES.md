@@ -10558,3 +10558,7 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - `serve_controller.py` の任意 `settings.scenarios` に既存シナリオ保管先を指定可能にした。計算出力は分離し、Reactの既存一覧・Prepare・実行APIを再利用する。実シナリオの表示と研究採用は別判定。
 - 渋24公式ODPT候補は6パターン・582テンプレート便（平日224、土曜188、日祝170）で、operator欠落0・非正距離0を原本で確認した。従来渋21〜23親シナリオの車両/充電/PV/BESS/料金を継承し、平日1日の24時間へ明示的に変えるPrepare/batch入口を追加。2026公開ダイヤ×2025気象、地理代理距離、ALNS非Gurobiという比較条件を記録する。旧7日・旧solver結果を流用しない。
 - 変更テスト: seed経路、controller既存scenarioパス、1日/7日のBESS・日付契約、既存渋21〜24 source scopeの計46件を実行し通過。実便16件の結果・独立物理監査はこれから別記録する。
+# 2026-09-23 Windows分散配置の改行契約修正
+
+- 初回実便版 `cbf23c81` は16台へ配布してコード内容・依存・dataset SHAが一致したが、遠隔15台のGit状態がdirtyとなり配置を不採用にした。原因はWindows cloneのCRLFチェックアウトを格納しながら、配置ZIPの無害化済み `.git/config` に `core.autocrlf=false` を固定していたため。追加PCで `core.autocrlf=true` を指定した読取り専用 `git status` は0変更で、原因を確認した。
+- `tools/cluster/release.py` は配布元の実効 `core.autocrlf`（true/false/inputのみ）を秘密情報を含まないGit設定へ写し、manifestへ記録する。CRLF追跡ファイルを含む一時GitリポジトリのZIPを展開し、通常の `git status --porcelain` が空になる回帰試験を追加した。9件通過。旧配置は研究・計算の実行結果として数えず、新しいclean commit・別SHA・別配置ディレクトリで再実施する。

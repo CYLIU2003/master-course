@@ -51,10 +51,36 @@ def test_clean_release_packages_git_and_dataset_without_ignored_private_material
         unpacked = tmp_path / "unpacked"
         contents.extractall(unpacked)
     assert not git(unpacked, "status", "--porcelain").strip()
+    assert not subprocess.check_output(["git", "-C", str(unpacked), "status", "--porcelain"]).strip()
     assert manifest["git"]["sha"] == git(unpacked, "rev-parse", "HEAD").decode().strip()
     (root / "src/example.py").write_text("changed\n")
     with pytest.raises(ValueError, match="clean frozen"):
         package(root, tmp_path / "bad", "data/built/test")
+
+
+def test_crlf_release_keeps_effective_git_checkout_policy(tmp_path):
+    root = tmp_path / "crlf"
+    root.mkdir()
+    git(root, "init")
+    subprocess.check_call(["git", "-C", str(root), "config", "core.autocrlf", "true"])
+    (root / "src").mkdir()
+    (root / "src/example.py").write_bytes(b"print(1)\r\n")
+    lock = root / "tools/cluster/environment/uv.lock"
+    lock.parent.mkdir(parents=True)
+    lock.write_bytes(b"locked\r\n")
+    dataset = root / "data/built/test"
+    dataset.mkdir(parents=True)
+    (dataset / "trips.json").write_text("[]", encoding="utf-8")
+    (root / ".gitignore").write_text("data/\n", encoding="utf-8")
+    subprocess.check_call(["git", "-C", str(root), "add", "."])
+    subprocess.check_call(["git", "-C", str(root), "-c", "user.name=Test",
+                           "-c", "user.email=test@example.invalid", "commit", "-m", "crlf"])
+    manifest = package(root, tmp_path / "bundle", "data/built/test")
+    assert manifest["git_core_autocrlf"] == "true"
+    with zipfile.ZipFile(tmp_path / "bundle" / manifest["archive"]) as archive:
+        unpacked = tmp_path / "remote"
+        archive.extractall(unpacked)
+    assert not subprocess.check_output(["git", "-C", str(unpacked), "status", "--porcelain"]).strip()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows staging")

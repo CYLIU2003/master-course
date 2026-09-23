@@ -40,6 +40,17 @@ def package(release: Path, output: Path, dataset: str) -> dict:
     git_dir = release / ".git"
     if not git_dir.is_dir():
         raise ValueError("Package needs a standalone Git release, not a worktree link")
+    # The archive sanitizes .git/config. Preserve this one non-secret checkout
+    # setting so Windows CRLF files remain clean against the transported index.
+    try:
+        autocrlf = subprocess.check_output(
+            ["git", "-C", str(release), "config", "--get", "core.autocrlf"],
+            text=True, timeout=30,
+        ).strip().lower()
+    except subprocess.CalledProcessError:
+        autocrlf = "false"
+    if autocrlf not in {"true", "false", "input"}:
+        raise ValueError("Unsupported core.autocrlf setting")
     paths.update(path for path in git_dir.rglob("*") if path.is_file())
     paths.update(dataset_path / name for name in file_hashes(dataset_path))
     for path in paths:
@@ -59,13 +70,14 @@ def package(release: Path, output: Path, dataset: str) -> dict:
         for path in sorted(paths):
             name = path.relative_to(release).as_posix()
             if name == ".git/config":
-                archive.writestr(name, "[core]\nrepositoryformatversion = 0\nbare = false\nfilemode = false\nautocrlf = false\n")
+                archive.writestr(name, "[core]\nrepositoryformatversion = 0\nbare = false\nfilemode = false\nautocrlf = " + autocrlf + "\n")
             elif not name.startswith((".git/hooks/", ".git/logs/")):
                 archive.write(path, name)
     temporary.replace(archive_path)
     if git_state(release) != git:
         raise ValueError("Release changed while packaging")
     manifest = {"schema_version": 1, "git": git, "source_digest": source_digest(release),
+                "git_core_autocrlf": autocrlf,
                 "archive": archive_path.name, "archive_sha256": file_digest(archive_path),
                 "dataset": dataset, "dataset_hashes": file_hashes(dataset_path),
                 "uv_lock_sha256": file_digest(release / "tools/cluster/environment/uv.lock")}
