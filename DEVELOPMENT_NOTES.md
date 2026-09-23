@@ -1,5 +1,15 @@
 # Development Notes
 
+## 2026-09-23 残件の実装と証拠化
+
+- GA/ABCの部分MILPに子求解の残時間上限を伝え、0秒なら起動しない。子Configは親の研究・資源・fallback方針を継承する既存変換を使用。直接呼出しはfail-closedにした。モデル構築時間の強制中断は未実装。
+- `physical_grid_import_limit_kw`を任意の独立した設備hard capとしてPrepare API/overlay→canonical→Stage1/Stage2/rolling予備・実行→物理検証へ渡す。契約200 kWと設備値を混同しない。OpenAPIとTypeScript型を再生成した。実設備値は未確認なので新しい正式結果は出していない。
+- 旧固定`7cb46894`の12週×5原本とsource tarをSHA検証してportable ZIPに保管。候補fleet契約hashは全12週一致。検算器はhash・費用と一部流量を再計算し、全物理制約や最適性は主張しない。
+- 既存12週は連続する週を含まず、BESS在庫を次週へ引き継いだ実験ではない。連続週検査は`CONTINUITY_NOT_ESTABLISHED`。
+- 1従機のSSH切断実機試験は初回Python引用符エラーを修正して2回目に子プロセス存続を確認。研究ジョブのキュー復旧・PC再起動は未実施。従機のコード/依存不一致で正式ジョブ投入を保留。
+- 対象回帰138件、Phase3/最適化拡張99件、分散復旧系56件、Prepare API追加確認2件が通過。rolling予備の物理上限テストはローカルGurobiで実行済み。OpenAPI生成とfrontend typecheckも通過。既存12週を再実行した試験ではない。
+- 詳細・出力SHA・研究採用境界: [RESEARCH_REMAINING_GATES_20260923.md](docs/notes/RESEARCH_REMAINING_GATES_20260923.md)。
+
 ## 2026-09-23 旧main厳格レビューの現行版照合とジョブ保存回帰
 
 - `master_course_review_20260923/` の対象は旧GitHub `5d790ea`。現行ローカルHEAD `c98f792b` と既存の分散実装・新しい固定月別 `7cb46894` を分けて照合し、[項目別判定](docs/notes/REVIEW_RECONCILIATION_20260923.md)に記録した。旧月別gap・受電ピークを現行結果へ転記していない。

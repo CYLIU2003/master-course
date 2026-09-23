@@ -1,5 +1,7 @@
 # Current research release blockers
 
+2026-09-23更新: GA/ABCの子MILP残時間、任意の設備受電hard cap、12週原本bundle、正式fleet**候補**の照合を実装・検証した。実受電設備上限は仮値、fleet承認者未指定、BESS連続週0組、分散キュー復旧の実機試験未了、既存12週のStage1目標gap未達のため研究採用は引き続きBLOCKED。旧固定`7cb46894`を新コードの結果へ読み替えない。詳細は[残件の実装と採用境界](RESEARCH_REMAINING_GATES_20260923.md)。
+
 2026-09-21: 818e78d0は1・2月監査済み、3月152/168時間で停止。前時間のnative制約誤差が次初期SOCへ持ち越された。前日2/毎時0の数値設定を別診断で検証し、ゲート通過後のみ新固定全12週を実行する。SOC補正・許容差緩和・旧成功2週の流用は行わない。[数値再現と修正](MONTHLY_AUXILIARY_ROLLING_NUMERICS_20260921.md)。既存の統合最適性/Stage1/研究承認blockerは継続。
 
 2026-09-21 19:03 JST: 27253fa8はPrepare後、内部seedチェックのログ設定矛盾により本Stage1前に停止。成功0/12、物理/会計の新規成果なし。原因を修正し同条件の新固定版へ移行する。Stage1 gap/メモリ、週間統合最適性、独立承認の既存blockerは継続。[今回の修正](MONTHLY_AUXILIARY_LOGGING_RECOVERY_20260921.md)。
