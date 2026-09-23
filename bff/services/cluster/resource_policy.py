@@ -70,7 +70,7 @@ def resource_fit(worker: Worker, capability: dict, manifest: dict, jobs: list[di
             "median_worker_seconds": median(durations[-20:]) if durations else None}
 
 
-def rank_workers(candidates: list[tuple[Worker, dict]]) -> list[tuple[Worker, dict]]:
+def rank_workers(candidates: list[tuple[Worker, dict]], *, prefer_no_gurobi: bool = False) -> list[tuple[Worker, dict]]:
     """Use measured duration only when all candidates have comparable history.
 
     With incomplete history, rank current load and RAM headroom; never infer
@@ -79,10 +79,12 @@ def rank_workers(candidates: list[tuple[Worker, dict]]) -> list[tuple[Worker, di
     eligible = [(worker, fit) for worker, fit in candidates if fit["eligible"]]
     use_history = bool(eligible) and all(fit["matching_history_count"] for _, fit in eligible)
     for _, fit in eligible:
-        fit["ranking_basis"] = "comparable_worker_runtime" if use_history else "current_load_and_memory_headroom"
+        basis = "comparable_worker_runtime" if use_history else "current_load_and_memory_headroom"
+        fit["ranking_basis"] = "no_gurobi_capacity_then_" + basis if prefer_no_gurobi else basis
     def key(item):
         worker, fit = item
-        return (fit["median_worker_seconds"] if use_history else 0,
+        return (worker.gurobi if prefer_no_gurobi else False,
+                fit["median_worker_seconds"] if use_history else 0,
                 fit["cpu_load_percent"] if fit["cpu_load_percent"] is not None else 100,
                 -(fit["available_ram_gb"] or 0), worker.transport == "local", worker.id)
     return sorted(eligible, key=key)

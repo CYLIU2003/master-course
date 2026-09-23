@@ -37,6 +37,16 @@ def test_current_headroom_beats_registration_order_without_speed_claim():
     assert ranked[0][1]["ranking_basis"] == "current_load_and_memory_headroom"
 
 
+def test_no_gurobi_jobs_preserve_solver_capacity_with_fallback():
+    fast_solver = fit("solver", gurobi=True, capacity={"cpu_percent": 1, "ram_free_gb": 14})
+    heuristic = fit("heuristic", gurobi=False, capacity={"cpu_percent": 30})
+    ranked = rank_workers([fast_solver, heuristic], prefer_no_gurobi=True)
+    assert [worker.id for worker, _ in ranked] == ["heuristic", "solver"]
+    assert ranked[0][1]["ranking_basis"] == "no_gurobi_capacity_then_current_load_and_memory_headroom"
+    assert [worker.id for worker, _ in rank_workers([fast_solver], prefer_no_gurobi=True)] == ["solver"]
+    assert [worker.id for worker, _ in rank_workers([fast_solver, heuristic])] == ["solver", "heuristic"]
+
+
 def test_matching_measured_history_beats_core_count():
     def history(worker_id, seconds, profile="legacy"):
         return {"worker_id": worker_id, "state": "COMPLETED", "manifest": {

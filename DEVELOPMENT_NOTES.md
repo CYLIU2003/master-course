@@ -1,5 +1,10 @@
 # Development Notes
 
+## 2026-09-23 ALNS専用子機の割当優先
+
+- `alns_no_gurobi_v1` の最適化ジョブでは、既存の資源・準備判定に通過した候補のうち `gurobi: false` の子機を先に選ぶ。候補がなければGurobi対応機にもフォールバックし、既存の同種ジョブ実測時間、負荷、空きRAMによる順序は各群内で維持する。ジョブのsolver profile・入力・費用・制約は変更しない。
+- 現行の7日間・時間別Rollingは `RollingReoptimizer` が各窓で `OptimizationMode.MILP` の固定仕業充電最適化を呼び、受理判定も `gurobi_available` を要件にする。`alns_no_gurobi_v1` の単日・BESSなし・rollingなしの契約を緩めるだけでは正しいALNS Rollingにならない。別プロファイルと求解・物理検証・会計・受理契約を設計するまで、7日間・RollingのGurobi不要実行は拒否する。
+
 ## 2026-09-23 機器管理のハードウェア順序
 
 - 子機probeにWindows `GetLogicalProcessorInformationEx(RelationProcessorCore)` から得る物理コア数を追加。既存の `os.cpu_count()` は論理スレッド数として維持する。親機でAPI値12コアとWin32_Processorの12コアが一致、論理数20。値が取れないOSやエラー時は `null` として扱い、推定しない。

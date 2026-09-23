@@ -349,7 +349,10 @@ class Scheduler:
                         continue
                     fit = resource_fit(worker, availability["capability"], manifest, reserved + [j for j in rows if j["state"] not in RESERVED])
                     candidates.append((worker, fit))
-                for worker, fit in rank_workers(candidates):
+                for worker, fit in rank_workers(
+                    candidates,
+                    prefer_no_gurobi=manifest["kind"] == "optimization" and not manifest["requires_gurobi"],
+                ):
                     if manifest["requires_gurobi"]:
                         admitted = self.licenses.acquire(row["id"], owner_kind="remote", worker_id=worker.id, worker_slots=worker.slots,
                                                          cpu_threads=fit["required_cpu_threads"], cpu_count=fit["cpu_count"])
