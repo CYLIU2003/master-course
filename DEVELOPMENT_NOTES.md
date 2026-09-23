@@ -10612,3 +10612,11 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 
 - 初回実便版 `cbf23c81` は16台へ配布してコード内容・依存・dataset SHAが一致したが、遠隔15台のGit状態がdirtyとなり配置を不採用にした。原因はWindows cloneのCRLFチェックアウトを格納しながら、配置ZIPの無害化済み `.git/config` に `core.autocrlf=false` を固定していたため。追加PCで `core.autocrlf=true` を指定した読取り専用 `git status` は0変更で、原因を確認した。
 - `tools/cluster/release.py` は配布元の実効 `core.autocrlf`（true/false/inputのみ）を秘密情報を含まないGit設定へ写し、manifestへ記録する。CRLF追跡ファイルを含む一時GitリポジトリのZIPを展開し、通常の `git status --porcelain` が空になる回帰試験を追加した。9件通過。旧配置は研究・計算の実行結果として数えず、新しいclean commit・別SHA・別配置ディレクトリで再実施する。
+
+# 2026-09-23 SSH監視の一時タイムアウトとWLS実機確認
+
+- 親機のworker管理に永続 `job_role` を追加。既存SQLiteの `workers` に列を追加する小規模migrationで、config更新時も担当を保持する。Gurobi能力のない端末へGurobi含有担当を設定できず、既存の管理者設定や資格情報をUIから変更しない。`enqueue` は明示配布先を投入前に、`tick` は自動候補を割当前に検査する。診断とライセンステストは担当から独立し、実行中ジョブの所有権と凍結manifestは変更しない。指定済み待機ジョブと矛盾する変更は拒否する。研究モデル・費用・受理条件は変更しない。
+
+- `LAPTOPINTEL8` はTailscaleオンライン、前後のSSH probeは成功していたが、単発の `subprocess.TimeoutExpired` で `SSH_TIMEOUT` が生じた。SSH認証・固定ホスト鍵検証を維持して10秒後に20秒の1回再試行を加え、2回失敗時は従来どおり割当を拒否する。`Connection timed out` をポート一般エラーに分類していた順序も修正した。UIは生のコマンド配列を隠し、再確認と電源・ネットワーク点検を案内する。数学モデル・費用・研究受入条件は変更しない。
+- `DESKTOP-3PRU7QP` はSSH・環境・固定SHAが一致し、WLSファイルの転送元/先SHAも一致した。しかし管理下Env/Modelテストは失敗し、隔離した診断で `GurobiError 10009 License has expired` を確認。Gurobi担当から外し、ALNS担当の構成へ戻した。資格情報はZIPやGitへ入れていない。登録本人による更新後、同じ管理下テストの成功を要する。
+- 2台の新規子機のうち `LAPTOP-8JS4DQCD` はSSH・環境・固定SHAが一致。`LAPTOP-BOLC6VIT` は現時点でTailscaleオフラインのため実投入不能。再接続とジョブ要件を満たす空きRAMを確認してから割り当てる。

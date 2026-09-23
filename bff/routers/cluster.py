@@ -120,6 +120,16 @@ def drain_worker(worker_id: str):
     return worker_control(worker_id, "draining")
 
 
+@router.post("/workers/{worker_id}/role/{role}")
+def set_worker_job_role(worker_id: str, role: str):
+    try:
+        return get_scheduler().set_worker_job_role(worker_id, role)
+    except StopIteration as exc:
+        raise HTTPException(404, "Unknown worker") from exc
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
 @router.post("/workers/{worker_id}/diagnostic")
 def diagnostic(worker_id: str):
     try:

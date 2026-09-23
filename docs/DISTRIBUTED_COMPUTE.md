@@ -1,5 +1,11 @@
 # 分散計算の使い方
 
+機器管理の各PCには「このPCに割り当てる計算」がある。`Gurobi計算`、`Gurobi不要のALNS`、`GurobiとALNS`、`診断のみ`から親機で選び、親機のSQLiteに再起動後も保持する。Gurobi能力を管理者設定で有効にしていないPCではGurobiを含む選択肢を選べない。自動割当・配布先指定の両方に適用し、変更時点で実行中のジョブは続行する。配布先が固定された待機ジョブと矛盾する変更は拒否する。診断タスクはどの担当でも利用できる。Gurobi能力の登録、WLS資格情報の配置、有効なEnv/Model試験はこの画面の担当選択とは別の確認である。現行のGurobi対応PCの既定担当は「GurobiとALNS」、非対応PCは「Gurobi不要のALNS」。
+
+SSH疎通確認で応答が10秒以内に返らない場合は、同じ固定ホスト・ユーザー・厳格なホスト鍵検証のまま20秒の再試行を1回行う。2回とも失敗した端末は計算へ割り当てず、自動監視で再確認する。機器管理画面の `SSH_TIMEOUT` は短い日本語の案内を表示する。Tailscale自体がオフラインの端末はSSH再試行の対象ではない。
+
+2026-09-23 21:14 JSTの実機確認では18台を登録し、Gurobi担当5台・ソルバー不要ALNS優先13台とした。`LAPTOP-8JS4DQCD` は新固定版のSSH・環境・ソース一致を確認済み。`LAPTOP-BOLC6VIT` は20:00 UTCからTailscaleオフラインで、復帰と空きRAMの再確認待ち。`DESKTOP-3PRU7QP` のSSH・環境・ソース一致は確認したが、登録本人用Academic WLSの実起動が `10009 License has expired` で失敗したためALNS担当に戻した。資格情報の配置だけをGurobi可用性の証明としない。[Gurobi公式の期限更新手順](https://support.gurobi.com/hc/en-us/articles/20183190511889--ERROR-10009-License-has-expired-for-an-Academic-WLS-license)に従って登録本人が更新し、新しい管理下Env/Model試験が通るまでGurobi担当にはしない。現行の親機設定は `output/cluster-deployment/onboard-20260923/controller-alns-roles-dd14d874-wls-expired-settings.json`。
+
 Gurobi不要のALNS診断を自動割当するときは、空きRAM・CPU・ストレージ等の既存条件に通ったGurobi不要の子機を優先する。対象がなければGurobi対応機も使える。Gurobiを使うジョブはGurobi対応として登録・検証された子機だけに割り当てる。現行の `alns_no_gurobi_v1` は単日・BESSなし・時間別Rollingなしの診断専用で、7日間や時間別Rollingに対するソルバー不要の求解・検証経路はまだない。Rollingは現行の固定仕業MILP再最適化とGurobi利用の受理条件を持つため、設定だけで切り替えない。
 
 機器管理の「並べ替え」は物理コア数、論理スレッド数、メモリ容量、利用可能メモリ、ストレージ空き、CPU性能（PassMark CPU Mark）の順に選べ、大小順も切り替えられる。取得できない値は常に末尾。物理コア数はworker実機のWindows CPUトポロジー値、論理スレッド数はPythonの `os.cpu_count()`、メモリ・ストレージは直近probeの値。PassMarkは[公式CPU List](https://www.cpubenchmark.net/cpu-list/all)の2026-09-23時点の型番平均で、各カードから型番別の公式ページへ移動できる。PC個体の実測・複数CPUの合計性能ではなく、未照合型番に推定値を付けない。画面の順序は計算先の自動割当には影響しない。

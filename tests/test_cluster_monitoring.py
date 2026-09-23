@@ -1,5 +1,6 @@
 """Network, readiness and operator controls must not weaken job ownership."""
 from datetime import datetime, timedelta, timezone
+import subprocess
 
 import pytest
 from fastapi import FastAPI
@@ -47,6 +48,19 @@ def test_drain_disable_survive_restart_without_cancelling_active_job(pool):
     restarted.set_mode(worker.id, "active")
     assert not restarted.view(worker, store.rows(), monitor.controller)["can_run_optimization"]  # requires a fresh probe
 
+
+def test_job_role_survives_restart_and_config_refresh(pool):
+    worker, store, registry, monitor = pool
+    registry.set_job_role(worker.id, "gurobi_only")
+    restarted = WorkerRegistry(store, [worker])
+    restarted.ensure(Worker(id="pc", name="Renamed PC", transport="ssh", host="100.64.1.2",
+                            tailscale_ip="100.64.1.2", ssh_user="user", gurobi=True))
+    assert restarted.job_role(worker) == "gurobi_only"
+    assert restarted.view(worker, [], monitor.controller)["job_role"] == "gurobi_only"
+    restarted.ensure(Worker(id="pc", name="No license", transport="ssh", host="100.64.1.2",
+                            tailscale_ip="100.64.1.2", ssh_user="user", gurobi=False))
+    assert restarted.job_role(worker) == "alns_only"
+
 def test_tailscale_failure_is_unknown_not_offline(pool, monkeypatch):
     from bff.services.cluster import worker_monitor
     worker, _, registry, monitor = pool
@@ -74,6 +88,44 @@ def test_ssh_success_is_reported_even_when_runner_is_missing(pool, monkeypatch):
     assert view["ssh_ready"] and not view["environment_ready"]
     assert view["status"] == "SSH_READY"
 
+
+def test_ssh_probe_retries_one_timeout_without_relaxing_host_verification(pool, monkeypatch):
+    from bff.services.cluster import transport
+
+    worker, _, _, _ = pool
+    calls = []
+
+    def run(command, *, capture_output, timeout):
+        calls.append((command, timeout))
+        if len(calls) == 1:
+            raise subprocess.TimeoutExpired(command, timeout)
+        return subprocess.CompletedProcess(command, 0, b"MC_WORKER_OK\n", b"")
+
+    monkeypatch.setattr(transport.subprocess, "run", run)
+    transport.probe_ssh(worker)
+    assert [timeout for _, timeout in calls] == [10, 20]
+    assert calls[0][0] == calls[1][0]
+    assert "StrictHostKeyChecking=yes" in calls[0][0]
+
+
+def test_ssh_probe_stops_after_two_timeouts_and_keeps_worker_unavailable(pool, monkeypatch):
+    from bff.services.cluster import transport
+
+    worker, _, registry, monitor = pool
+    calls = []
+
+    def timeout(command, *, capture_output, timeout):
+        calls.append(timeout)
+        raise subprocess.TimeoutExpired(command, timeout)
+
+    monkeypatch.setattr(transport.subprocess, "run", timeout)
+    monitor.probe(worker)
+    view = registry.view(worker, [], monitor.controller)
+    assert calls == [10, 20]
+    assert view["probe_error_code"] == "SSH_TIMEOUT"
+    assert not view["can_run_no_gurobi"]
+    assert not view["can_run_optimization"]
+
 def test_modes_are_local_only_and_diagnostic_route_still_works(tmp_path, monkeypatch):
     from bff.routers import cluster
     scheduler = Scheduler(tmp_path, ClusterConfig(workers=[Worker(id="local", name="local")]))
@@ -86,6 +138,9 @@ def test_modes_are_local_only_and_diagnostic_route_still_works(tmp_path, monkeyp
             assert client.post("/cluster/workers/local/diagnostic").status_code == 409
             assert client.post("/cluster/workers/local/enable").status_code == 200
             assert client.post("/cluster/workers/local/diagnostic").status_code == 200
+            assert client.post("/cluster/workers/local/role/gurobi_only").status_code == 409
+            response = client.post("/cluster/workers/local/role/diagnostic_only")
+            assert response.status_code == 200 and response.json()["job_role"] == "diagnostic_only"
             assert client.post("/cluster/workers/local/disable", headers={"Origin": "https://evil.example"}).status_code == 403
     finally:
         scheduler.controller_lock.close()

@@ -18,6 +18,7 @@ const node: WorkerNode = {
   transport: "ssh",
   enabled: true,
   mode: "active",
+  job_role: "both",
   status: "TAILSCALE_ONLINE",
   slots: 1,
   reserved: 0,
@@ -61,6 +62,19 @@ it("does not present Tailnet online as SSH or compute readiness", () => {
       .hasAttribute("disabled"),
   ).toBe(true);
   expect(card.getByText(/公開鍵とログインユーザー/)).toBeTruthy();
+});
+it("explains SSH timeouts without exposing a raw subprocess command", () => {
+  mount([{ ...node, probe_error_code: "SSH_TIMEOUT", last_error: "Command '['ssh', '100.72.59.121']' timed out after 10 seconds" }]);
+  expect(screen.getByText(/SSHの応答がありません。自動で再確認します/)).toBeTruthy();
+  expect(screen.queryByText(/Command \[/)).toBeNull();
+});
+it("sets each worker's job role and does not offer Gurobi on an unconfigured worker", () => {
+  const action = mount([{ ...node, gurobi: false, job_role: "alns_only" }]);
+  const select = screen.getByRole("combobox", { name: "PSLABの計算担当" });
+  const options = within(select).getAllByRole("option") as HTMLOptionElement[];
+  expect(options.find((option) => option.value === "gurobi_only")?.disabled).toBe(true);
+  fireEvent.change(select, { target: { value: "diagnostic_only" } });
+  expect(action).toHaveBeenCalledWith("/cluster/workers/pc/role/diagnostic_only");
 });
 it("drains without a cancel request and offers enable for a drained node", () => {
   const action = mount([

@@ -10,6 +10,7 @@ export type WorkerNode = {
   transport: string;
   enabled: boolean;
   mode: string;
+  job_role: "both" | "gurobi_only" | "alns_only" | "diagnostic_only";
   status: string;
   slots: number;
   reserved: number;
@@ -427,11 +428,30 @@ export default function WorkerNodes({
                 {node.probe_error_code && (
                   <strong>{node.probe_error_code}: </strong>
                 )}
-                {node.last_error.includes("Permission denied")
+                {node.probe_error_code === "SSH_TIMEOUT"
+                  ? "SSHの応答がありません。自動で再確認します。続く場合は端末の電源とネットワークを確認してください。"
+                  : node.last_error.includes("Permission denied")
                   ? "SSH認証に失敗しました。公開鍵とログインユーザーを確認してください。"
                   : node.last_error}
               </p>
             )}
+            <label>
+              このPCに割り当てる計算
+              <select
+                aria-label={`${node.name}の計算担当`}
+                value={node.job_role}
+                disabled={pending}
+                onChange={(event) =>
+                  onAction(`/cluster/workers/${node.id}/role/${event.target.value}`)
+                }
+              >
+                <option value="both" disabled={!node.gurobi}>GurobiとALNS</option>
+                <option value="gurobi_only" disabled={!node.gurobi}>Gurobi計算</option>
+                <option value="alns_only">Gurobi不要のALNS</option>
+                <option value="diagnostic_only">診断のみ</option>
+              </select>
+            </label>
+            <p className="subtle">診断タスクはどの担当でも実行できます。変更は新規割当から適用します。</p>
             <div className="actions">
               <button
                 disabled={pending || node.probing}

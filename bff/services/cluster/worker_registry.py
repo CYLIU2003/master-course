@@ -9,6 +9,19 @@ from .store import JobStore, now
 
 PROBE_TTL_SECONDS = 90
 NETWORK_TTL_SECONDS = 20
+JOB_ROLES = frozenset({"both", "gurobi_only", "alns_only", "diagnostic_only"})
+
+
+def job_role_allows(role: str, manifest: dict) -> bool:
+    """The operator's role limits optimization placement, including pinned jobs."""
+    kind = manifest.get("kind")
+    if kind in {"diagnostic", "license_test"}:
+        return True
+    if kind != "optimization":
+        return False
+    if manifest.get("requires_gurobi"):
+        return role in {"both", "gurobi_only"}
+    return role in {"both", "alns_only"}
 
 
 def fresh(timestamp: str | None, maximum_age: float) -> bool:
@@ -27,7 +40,10 @@ class WorkerRegistry:
         with store.connect() as db:
             db.execute("""CREATE TABLE IF NOT EXISTS workers (
                 id TEXT PRIMARY KEY, config_hash TEXT NOT NULL, mode TEXT,
-                observation TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+                observation TEXT NOT NULL, updated_at TEXT NOT NULL,
+                job_role TEXT)""")
+            if "job_role" not in {column[1] for column in db.execute("PRAGMA table_info(workers)")}:
+                db.execute("ALTER TABLE workers ADD COLUMN job_role TEXT")
         for worker in workers:
             self.ensure(worker)
             # Persist history, but never reuse readiness across a controller restart.
@@ -36,10 +52,14 @@ class WorkerRegistry:
     def ensure(self, worker: Worker):
         fingerprint = digest(canonical(worker.model_dump()))
         with self.store.connect() as db:
-            db.execute("""INSERT INTO workers VALUES (?, ?, NULL, '{}', ?)
+            db.execute("""INSERT INTO workers (id, config_hash, mode, observation, updated_at)
+                VALUES (?, ?, NULL, '{}', ?)
                 ON CONFLICT(id) DO UPDATE SET config_hash=excluded.config_hash,
                 observation=CASE WHEN workers.config_hash=excluded.config_hash
                     THEN workers.observation ELSE '{}' END""", (worker.id, fingerprint, now()))
+            if not worker.gurobi:
+                db.execute("UPDATE workers SET job_role='alns_only' WHERE id=? AND job_role IN ('both', 'gurobi_only')",
+                           (worker.id,))
 
     def get(self, worker_id: str) -> dict:
         with self.store.connect() as db:
@@ -63,10 +83,20 @@ class WorkerRegistry:
         with self.store.connect() as db:
             db.execute("UPDATE workers SET mode=?, updated_at=? WHERE id=?", (mode, now(), worker_id))
 
+    def job_role(self, worker: Worker) -> str:
+        return self.get(worker.id)["job_role"] or ("both" if worker.gurobi else "alns_only")
+
+    def set_job_role(self, worker_id: str, role: str):
+        if role not in JOB_ROLES:
+            raise ValueError("Invalid worker job role")
+        with self.store.connect() as db:
+            db.execute("UPDATE workers SET job_role=?, updated_at=? WHERE id=?", (role, now(), worker_id))
+
     def view(self, worker: Worker, jobs: list[dict], controller: dict) -> dict:
         row = self.get(worker.id)
         observation = row["observation"]
         mode = row["mode"] or ("active" if worker.enabled else "disabled")
+        job_role = row["job_role"] or ("both" if worker.gurobi else "alns_only")
         capability = observation.get("capability") or {}
         recent = observation.get("session_verified", False) and fresh(observation.get("last_probe_at"), PROBE_TTL_SECONDS)
         online = observation.get("tailscale_online") if fresh(observation.get("network_checked_at"), NETWORK_TTL_SECONDS) else None
@@ -109,7 +139,8 @@ class WorkerRegistry:
             state = "DISABLED" if mode == "disabled" else "DRAINING"
         return {"id": worker.id, "name": worker.name, "host": worker.host, "ssh_user": worker.ssh_user,
                 "tailscale_ip": worker.tailscale_ip, "transport": worker.transport,
-                "enabled": mode != "disabled", "mode": mode, "status": state, "slots": worker.slots,
+                "enabled": mode != "disabled", "mode": mode, "job_role": job_role,
+                "status": state, "slots": worker.slots,
                 "reserved": len(active), "active_jobs": [{"id": job["id"], "state": job["state"]} for job in active],
                 "gurobi": worker.gurobi, "ram_gb": worker.ram_gb,
                 "tailscale_online": online, "ssh_ready": bool(ssh_ready and recent),

@@ -19,9 +19,19 @@ def ssh_command(worker: Worker, remote: str) -> list[str]:
 
 
 def probe_ssh(worker: Worker):
-    result = subprocess.run(ssh_command(worker, "echo MC_WORKER_OK"), capture_output=True, timeout=10)
-    if result.returncode or result.stdout.strip() != b"MC_WORKER_OK":
+    command = ssh_command(worker, "echo MC_WORKER_OK")
+    for attempt, timeout in enumerate((10, 20)):
+        try:
+            result = subprocess.run(command, capture_output=True, timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            if attempt == 0:
+                continue
+            raise TimeoutError("SSH timed out after two connection attempts") from exc
+        if result.returncode == 0 and result.stdout.strip() == b"MC_WORKER_OK":
+            return
         error = result.stderr.decode("utf-8", errors="replace")[-1200:]
+        if attempt == 0 and "timed out" in error.lower():
+            continue
         raise RuntimeError(error or "SSH did not return the worker marker")
 
 

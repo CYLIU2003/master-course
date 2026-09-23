@@ -87,6 +87,46 @@ def test_worker_ram_and_solver_matching(scheduler, monkeypatch):
     assert scheduler.store.get(row["id"])["state"] == "QUEUED"
 
 
+def test_worker_job_role_rejects_incompatible_pinned_jobs(scheduler, monkeypatch):
+    worker = scheduler.config.workers[0]
+    monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})
+    assert scheduler.registry.job_role(worker) == "alns_only"
+    row = scheduler.enqueue("optimization", {"kwargs": {"execution_profile": "alns_no_gurobi_v1"}}, worker.id)
+    with pytest.raises(ValueError, match="Pinned queued jobs"):
+        scheduler.set_worker_job_role(worker.id, "diagnostic_only")
+    assert scheduler.registry.job_role(worker) == "alns_only"
+    with pytest.raises(ValueError, match="Gurobi jobs require"):
+        scheduler.set_worker_job_role(worker.id, "gurobi_only")
+    with pytest.raises(ValueError, match="job role"):
+        scheduler.enqueue("optimization", {}, worker.id)
+    assert scheduler.store.get(row["id"])["state"] == "QUEUED"
+
+
+def test_automatic_placement_obeys_parent_job_role(scheduler, monkeypatch):
+    from bff.services.cluster.worker_registry import WorkerRegistry
+    from bff.services.cluster.store import now
+
+    workers = [Worker(id="solver", name="Solver", gurobi=True), Worker(id="alns", name="ALNS")]
+    scheduler.config = ClusterConfig(workers=workers)
+    scheduler.registry = WorkerRegistry(scheduler.store, workers)
+    scheduler.monitor.controller = {"git": {"sha": "abc", "dirty": False},
+                                    "source_digest": "same", "runtime_versions": {}}
+    for worker in workers:
+        scheduler.registry.update(worker.id, {"session_verified": True, "last_probe_at": now(),
+            "capability": {**scheduler.monitor.controller, "disk_free_gb": 100,
+                           "ram_gb": 16, "ram_free_gb": 16, "cpu_count": 8,
+                           "cpu_percent": 10, "gurobi_version": [13]}})
+    scheduler.set_worker_job_role("solver", "gurobi_only")
+    monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})
+    launched = []
+    monkeypatch.setattr(scheduler, "execute", lambda job_id, worker: launched.append((job_id, worker.id)))
+    alns = scheduler.enqueue("optimization", {"kwargs": {"execution_profile": "alns_no_gurobi_v1"}})
+    solver = scheduler.enqueue("optimization", {})
+    scheduler.tick()
+    assert scheduler.store.get(alns["id"])["worker_id"] == "alns"
+    assert scheduler.store.get(solver["id"])["worker_id"] == "solver"
+
+
 def test_only_one_controller_can_own_a_queue(scheduler):
     with pytest.raises(RuntimeError, match="Another cluster controller"):
         ControllerLock(scheduler.store.root)

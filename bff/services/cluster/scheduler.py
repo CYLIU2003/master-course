@@ -23,7 +23,7 @@ from .store import ControllerLock, JobStore
 from .transport import invoke
 from .weekly_inputs import stage_execution_inputs, horizon_summary
 from .artifacts import file_digest, copy_verified_member
-from .worker_registry import WorkerRegistry
+from .worker_registry import WorkerRegistry, JOB_ROLES, job_role_allows
 from .worker_monitor import WorkerMonitor
 
 log = logging.getLogger(__name__)
@@ -226,6 +226,21 @@ class Scheduler:
                 self.monitor.request_probe(worker)
             return self.registry.view(worker, self.store.rows(), self.monitor.controller)
 
+    def set_worker_job_role(self, worker_id: str, role: str) -> dict:
+        with self.lock:
+            worker = self.worker(worker_id)
+            if role not in JOB_ROLES:
+                raise ValueError("Invalid worker job role")
+            if role in {"both", "gurobi_only"} and not worker.gurobi:
+                raise ValueError("Gurobi jobs require administrator-verified Gurobi capability")
+            pinned = [job["id"] for job in self.store.rows()
+                      if job["state"] == "QUEUED" and job["manifest"].get("worker_id") == worker_id
+                      and not job_role_allows(role, job["manifest"])]
+            if pinned:
+                raise ValueError("Pinned queued jobs conflict with this role: " + ", ".join(pinned[:3]))
+            self.registry.set_job_role(worker_id, role)
+            return self.registry.view(worker, self.store.rows(), self.monitor.controller)
+
     def enqueue(self, kind: str, bundle: dict, worker_id: str | None = None, *, job_id: str | None = None,
                 minimum_ram_gb: float = 0, retry_of: str | None = None) -> dict:
         if kind not in {"optimization", "diagnostic", "license_test"}:
@@ -262,6 +277,8 @@ class Scheduler:
             "minimum_disk_free_gb": 2,
             "cpu_threads": int((bundle.get("kwargs") or {}).get("gurobi_threads") or 0),
         }
+        if worker_id is not None and not job_role_allows(self.registry.job_role(worker), manifest):
+            raise ValueError("Worker job role does not admit this task")
         directory = self.store.root / "jobs" / segment(manifest["id"])
         directory.mkdir(parents=True, exist_ok=True)
         for name, payload in (("bundle.json", bundle), ("manifest.json", manifest)):
@@ -340,6 +357,8 @@ class Scheduler:
                 candidates = []
                 for worker in self.config.workers:
                     if manifest["worker_id"] not in (None, worker.id):
+                        continue
+                    if not job_role_allows(self.registry.job_role(worker), manifest):
                         continue
                     availability = self.registry.view(worker, rows, self.monitor.controller)
                     readiness = "can_run_optimization" if manifest["requires_gurobi"] else "can_run_no_gurobi" if manifest["kind"] == "optimization" else "can_run_diagnostic"
@@ -467,15 +486,16 @@ class Scheduler:
         return self.store.get(job_id)
 
     def retry(self, job_id: str) -> dict:
-        row = self.store.get(job_id)
-        if row["state"] not in {"FAILED", "BLOCKED", "CANCELLED"}:
-            raise ValueError("Retry requires a confirmed terminal failure/cancellation")
-        bundle = json.loads((self.store.root / "jobs" / job_id / "bundle.json").read_text(encoding="utf-8"))
-        original = row["manifest"]
-        if git_state() != original["git"] or source_digest() != original["source_digest"] or digest(canonical(bundle)) != original["bundle_sha256"]:
-            raise ValueError("Frozen code/input changed; submit a new job explicitly")
-        return self.enqueue(original["kind"], bundle, original["worker_id"],
-                            minimum_ram_gb=original["minimum_ram_gb"], retry_of=job_id)
+        with self.lock:
+            row = self.store.get(job_id)
+            if row["state"] not in {"FAILED", "BLOCKED", "CANCELLED"}:
+                raise ValueError("Retry requires a confirmed terminal failure/cancellation")
+            bundle = json.loads((self.store.root / "jobs" / job_id / "bundle.json").read_text(encoding="utf-8"))
+            original = row["manifest"]
+            if git_state() != original["git"] or source_digest() != original["source_digest"] or digest(canonical(bundle)) != original["bundle_sha256"]:
+                raise ValueError("Frozen code/input changed; submit a new job explicitly")
+            return self.enqueue(original["kind"], bundle, original["worker_id"],
+                                minimum_ram_gb=original["minimum_ram_gb"], retry_of=job_id)
 
 
 _instance: Scheduler | None = None

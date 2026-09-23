@@ -23,10 +23,10 @@ def classify_probe_error(error: BaseException) -> str:
         return "SSH_HOST_KEY_MISMATCH"
     if "permission denied" in message or "authentication" in message or "publickey" in message:
         return "SSH_AUTHENTICATION_FAILED"
-    if "connection refused" in message or "no route to host" in message or "port 22" in message:
-        return "SSH_PORT_UNREACHABLE"
     if isinstance(error, subprocess.TimeoutExpired) or "timed out" in message:
         return "SSH_TIMEOUT"
+    if "connection refused" in message or "no route to host" in message:
+        return "SSH_PORT_UNREACHABLE"
     return "WORKER_PROBE_FAILED"
 
 
