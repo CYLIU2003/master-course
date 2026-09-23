@@ -73,6 +73,8 @@ def build_vehicle_timeline(problem: Any, plan: Any) -> dict[str, tuple[VehicleEv
     dispatch_trips = context.trips_by_id()
     start = horizon_start_min(problem)
     stop = start + int(problem.scenario.planning_days) * 1440
+    if (problem.metadata or {}).get("bev_soc_deadline_mode") == "next_morning_operational_max":
+        stop = start + len(problem.price_slots) * int(problem.scenario.timestep_min)
     result = {}
     checker = FeasibilityEngine()
     for vehicle_id, duties in plan.duties_by_vehicle().items():

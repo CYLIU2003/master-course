@@ -496,6 +496,11 @@ def post_return_target_slot_index(
     problem: CanonicalOptimizationProblem,
     day_idx: int,
 ) -> int:
+    deadlines = (problem.metadata or {}).get("post_return_target_slots")
+    if deadlines is not None:
+        if not isinstance(deadlines, (tuple, list)) or not 0 <= day_idx < len(deadlines):
+            raise ValueError("NEXT_MORNING_TARGET_SLOT_MISSING")
+        return int(deadlines[day_idx])
     target_min = day_start_min(problem, day_idx + 1) - 1
     return slot_index(problem, target_min)
 

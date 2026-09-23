@@ -22669,6 +22669,20 @@ class GurobiMILPAdapter:
             deadhead_active_slot_by_vehicle = timeline_loads.movement_active
             allowed_charge_slots_by_vehicle = timeline_loads.home_slots
             deadhead_energy_before_trip = timeline_loads.energy_before_departure
+            # The generic duty walk above is intentionally skipped for daily
+            # returns.  Recover serviced days from the fixed paths so the
+            # Stage-2 SOC deadlines are still enforced for this real route.
+            for vehicle_id, trip_ids in assigned_paths.items():
+                if vehicle_id not in assigned_bev_ids:
+                    continue
+                for trip_id in trip_ids:
+                    trip = trip_by_id.get(trip_id)
+                    if trip is None:
+                        continue
+                    key = (vehicle_id, self._trip_day_index(problem, trip.departure_min))
+                    previous = final_trip_by_vehicle_day.get(key)
+                    if previous is None or self._trip_service_sort_key(problem, trip) > self._trip_service_sort_key(problem, previous):
+                        final_trip_by_vehicle_day[key] = trip
 
         rolling_active_charge_session_vehicle_ids = frozenset(
             str(vehicle_id)
@@ -22799,6 +22813,30 @@ class GurobiMILPAdapter:
                     terminal_soc_expr >= target_kwh,
                     name=f"terminal_soc__{vehicle_id}__target",
                 )
+                # Stage 1 guards each serviced day's next-morning SOC.  The
+                # fixed-assignment charging solve must preserve those same
+                # deadlines; a final-horizon target alone is insufficient.
+                if (problem.metadata or {}).get("bev_soc_deadline_mode") == "next_morning_operational_max":
+                    for day_idx in range(int(problem.scenario.planning_days)):
+                        if (vehicle_id, day_idx) not in final_trip_by_vehicle_day:
+                            continue
+                        target_slot = post_return_target_slot_index(problem, day_idx)
+                        if target_slot not in slot_indices:
+                            continue
+                        target_soc_expr = _vehicle_soc_transition_kwh(
+                            s_var[(vehicle_id, target_slot)],
+                            charge_power_kw=c_var[(vehicle_id, target_slot)],
+                            timestep_h=timestep_h,
+                            charge_efficiency=0.95,
+                            drive_energy_kwh=max(
+                                float(trip_load_by_vehicle_slot.get((vehicle_id, target_slot), 0.0) or 0.0),
+                                0.0,
+                            ),
+                        )
+                        stage2.addConstr(
+                            target_soc_expr >= target_kwh,
+                            name=f"soc_next_morning__{vehicle_id}__day_{day_idx}",
+                        )
                 terminal_policy = normalize_bev_terminal_soc_policy(
                     problem.metadata.get("bev_terminal_soc_policy"),
                     has_explicit_target=(

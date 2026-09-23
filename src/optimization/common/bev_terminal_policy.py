@@ -16,13 +16,7 @@ class BevTerminalSocPolicy(StrEnum):
 
 
 def validate_bev_soc_timing_config(config: Mapping[str, Any]) -> tuple[str, str]:
-    """Reject an overnight choice until solver, inputs and accounting agree.
-
-    Saving the proposed settings is useful for scenario design, but applying
-    them with the current 24-hour price/PV horizon would silently omit the
-    final overnight import and cost. Keep old scenarios executable while the
-    complete extended-horizon contract is implemented.
-    """
+    """Reject overnight choices unless the extra input contract is complete."""
 
     deadline = str(config.get("bev_soc_deadline_mode") or "legacy_day_end")
     overnight = str(config.get("final_overnight_mode") or "exclude")
@@ -30,13 +24,20 @@ def validate_bev_soc_timing_config(config: Mapping[str, Any]) -> tuple[str, str]
         raise ValueError(f"Unsupported bev_soc_deadline_mode: {deadline}")
     if overnight not in {"exclude", "include"}:
         raise ValueError(f"Unsupported final_overnight_mode: {overnight}")
-    if deadline == "next_morning_operational_max" or overnight == "include":
+    if deadline == "next_morning_operational_max" and overnight == "include":
+        from .next_morning import resolve_next_morning_contract
+
+        try:
+            resolve_next_morning_contract(
+                config,
+                timestep_min=int(config.get("timestep_min") or config.get("time_step_min") or 15),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"NEXT_MORNING_SOC_NOT_READY: {exc}") from exc
+    elif deadline == "next_morning_operational_max" or overnight == "include":
         raise ValueError(
-            "NEXT_MORNING_SOC_NOT_READY: the selected final overnight mode "
-            "requires the next-day timetable deadline, PV/tariff slots, "
-            "charging constraints, physical replay and cost accounting. "
-            "Prepare and execution are blocked until those inputs and "
-            "solver checks are implemented."
+            "NEXT_MORNING_SOC_NOT_READY: the next-morning SOC target requires "
+            "final_overnight_mode=include and a verified extension contract"
         )
     return deadline, overnight
 
