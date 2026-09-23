@@ -20,7 +20,11 @@ from src.optimization.alns.operators_repair import (
     regret_k_insertion,
     soc_repair,
 )
-from src.optimization.common.benchmarking import exact_repair_policy, solver_benchmark_eligibility
+from src.optimization.common.benchmarking import (
+    exact_repair_call_time_limit_sec,
+    exact_repair_policy,
+    solver_benchmark_eligibility,
+)
 from src.optimization.common.metaheuristic_utils import build_solution_state, solution_state_rank_key
 from src.optimization.common.problem import (
     AssignmentPlan,
@@ -111,11 +115,13 @@ class ABCOptimizer:
                     break
                 neighbor_plan = self._mutate(
                     problem,
+                    config,
                     food_sources[idx].plan,
                     rng,
                     destroy_ops,
                     repair_ops,
                     profile,
+                    started_at,
                     exact_repair_call_limit,
                     exact_repair_time_budget_sec,
                 )
@@ -161,11 +167,13 @@ class ABCOptimizer:
                 idx = self._roulette_select(selection_weights, rng)
                 neighbor_plan = self._mutate(
                     problem,
+                    config,
                     food_sources[idx].plan,
                     rng,
                     destroy_ops,
                     repair_ops,
                     profile,
+                    started_at,
                     exact_repair_call_limit,
                     exact_repair_time_budget_sec,
                 )
@@ -395,10 +403,8 @@ class ABCOptimizer:
                 repair_name = "baseline_dispatch_repair"
                 profile.record_fallback()
             destroyed_plan = destroy_ops[destroy_name](base_plan)
-            repaired_plan, repair_elapsed = self._apply_repair(
-                problem,
-                destroyed_plan,
-                repair_ops[repair_name],
+            repaired_plan, repair_elapsed, repair_name = self._apply_selected_repair(
+                problem, destroyed_plan, repair_name, repair_ops, config, profile, started_at,
             )
             profile.record_repair(repair_elapsed, exact=(repair_name == "partial_milp_repair"))
             food_sources.append(
@@ -416,11 +422,13 @@ class ABCOptimizer:
     def _mutate(
         self,
         problem: CanonicalOptimizationProblem,
+        config: OptimizationConfig,
         plan: AssignmentPlan,
         rng: random.Random,
         destroy_ops: Dict[str, Callable[[AssignmentPlan], AssignmentPlan]],
         repair_ops: Dict[str, Callable[[CanonicalOptimizationProblem, AssignmentPlan], AssignmentPlan]],
         profile: SearchProfile,
+        started_at: float,
         exact_repair_call_limit: int,
         exact_repair_time_budget_sec: float,
     ) -> AssignmentPlan:
@@ -437,9 +445,40 @@ class ABCOptimizer:
             repair_name = "baseline_dispatch_repair"
             profile.record_fallback()
         destroyed_plan = destroy_ops[destroy_name](plan)
-        repaired_plan, repair_elapsed = self._apply_repair(problem, destroyed_plan, repair_ops[repair_name])
+        repaired_plan, repair_elapsed, repair_name = self._apply_selected_repair(
+            problem, destroyed_plan, repair_name, repair_ops, config, profile, started_at,
+        )
         profile.record_repair(repair_elapsed, exact=(repair_name == "partial_milp_repair"))
         return repaired_plan
+
+    def _apply_selected_repair(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        repair_name: str,
+        repair_ops: Dict[str, Callable[[CanonicalOptimizationProblem, AssignmentPlan], AssignmentPlan]],
+        config: OptimizationConfig,
+        profile: SearchProfile,
+        started_at: float,
+    ) -> tuple[AssignmentPlan, float, str]:
+        if repair_name == "partial_milp_repair":
+            limit = exact_repair_call_time_limit_sec(
+                config,
+                exact_calls=profile.exact_repair_calls,
+                exact_elapsed_sec=profile.exact_repair_time_sec,
+                started_at=started_at,
+            )
+            if limit < 1:
+                profile.record_fallback()
+                repair_name = "baseline_dispatch_repair"
+            else:
+                repair = lambda sub_problem, sub_plan: partial_milp_repair(
+                    sub_problem, sub_plan, config=config, time_limit_sec=limit,
+                )
+                repaired, elapsed = self._apply_repair(problem, plan, repair)
+                return repaired, elapsed, repair_name
+        repaired, elapsed = self._apply_repair(problem, plan, repair_ops[repair_name])
+        return repaired, elapsed, repair_name
 
     def _scout_reset(
         self,
@@ -541,6 +580,9 @@ class ABCOptimizer:
         problem: CanonicalOptimizationProblem,
         config: OptimizationConfig,
     ) -> Dict[str, Callable[[CanonicalOptimizationProblem, AssignmentPlan], AssignmentPlan]]:
+        def budget_required(_problem: CanonicalOptimizationProblem, _plan: AssignmentPlan) -> AssignmentPlan:
+            raise RuntimeError("Partial MILP repair requires _apply_selected_repair budget")
+
         return {
             "greedy_trip_insertion": lambda prob, plan: greedy_trip_insertion(prob, plan),
             "regret_k_insertion": lambda prob, plan: regret_k_insertion(prob, plan),
@@ -548,5 +590,5 @@ class ABCOptimizer:
             "baseline_dispatch_repair": lambda prob, plan: baseline_dispatch_repair(prob, plan),
             "charger_reassignment_repair": lambda prob, plan: charger_reassignment_repair(prob, plan),
             "soc_repair": lambda prob, plan: soc_repair(prob, plan),
-            "partial_milp_repair": lambda prob, plan: partial_milp_repair(prob, plan, config=config),
+            "partial_milp_repair": budget_required,
         }

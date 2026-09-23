@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+import time
 from typing import Any, Dict
 
 from .problem import OptimizationConfig, OptimizationMode
@@ -19,6 +21,27 @@ def exact_repair_policy(config: OptimizationConfig) -> ExactRepairPolicy:
         call_limit=max(1, min(5, int(config.alns_iterations // 250) + 1)),
         time_budget_sec=max(10.0, min(float(config.time_limit_sec) * 0.2, 120.0)),
     )
+
+
+def exact_repair_call_time_limit_sec(
+    config: OptimizationConfig,
+    *,
+    exact_calls: int,
+    exact_elapsed_sec: float,
+    started_at: float,
+    now: float | None = None,
+) -> int:
+    """Return a whole-second solver limit within all declared repair budgets."""
+    policy = exact_repair_policy(config)
+    if policy.call_limit <= 0 or exact_calls >= policy.call_limit:
+        return 0
+    elapsed = (time.perf_counter() if now is None else now) - started_at
+    remaining = min(
+        float(config.time_limit_sec) - elapsed,
+        policy.time_budget_sec - exact_elapsed_sec,
+        policy.time_budget_sec / policy.call_limit,
+    )
+    return max(0, math.floor(remaining))
 
 
 def solver_benchmark_eligibility(
