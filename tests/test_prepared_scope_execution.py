@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -458,6 +459,10 @@ def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback(
         mock.patch.object(optimization.store, "update_scenario"),
         mock.patch.object(optimization.store, "get_field", return_value=None),
         mock.patch.object(optimization.job_store, "update_job"),
+        mock.patch.object(optimization.job_store, "get_job", return_value=SimpleNamespace(metadata={})),
+        mock.patch("bff.services.optimization_run.solver_policy.local_resource_scope", return_value=nullcontext()),
+        mock.patch("bff.services.optimization_run.solver_policy.local_license_callbacks",
+                   return_value=(lambda: None, lambda _started: None)),
         mock.patch.object(optimization, "_git_sha", return_value="deadbeef"),
     ):
         problem_builder_cls.return_value.build_from_scenario.return_value = canonical_problem
