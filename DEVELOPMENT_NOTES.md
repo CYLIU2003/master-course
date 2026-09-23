@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-23 渋24ダミーの短時間分散試験と親機常駐監視
+
+- 利用者指示で旧渋21〜23の2週連続計算を親・子PIDを照合して停止し、`output/bess_continuous_two_week_20260923/`を保持した。共有Gurobi予約は即時解放せず既定のWLS解放待ちへ遷移した。旧結果は中断であり完了扱いしない。
+- `monthly_smoke.scenario_for_month` の路線IDを選べるようにし、`synthetic_batch.py --dummy-route 渋24` を追加した。架空4便の出典と`research_eligible=false`は保持し、渋24版に限りBEV終端を`minimum_only`にする。Prepareで渋244便、宣言済み正値距離、運行日、車両を確認した。実渋24ダイヤ・研究車両・週間BESSの検証ではない。
+- 最初の全台probeは親機と子機10台がSSH応答、`laptop-a709una0`がオフライン。全応答機も旧固定SHA `a23e7592` で、現開発版とは不一致のため計算可能とはしない。新固定版の配置・再probe・実ジョブ・回収監査で別々に判定する。
+- 親機向けに固定版の事前検査、127.0.0.1上のcontroller二重起動防止、隠しウィンドウ起動、ログオンタスクと`/#cluster`表示を追加した。画面の表示継続はブラウザを開いている間で、controllerは独立プロセス。新しいAI監視やメールは使わない。
+
 ## 2026-09-23 残件の実装と証拠化
 
 - 月別の非隣接12週を連続運用と誤認しないため、`run_exact_seasonal_campaign.py --carry-bess`を追加。少なくとも2つの隣接する月曜開始週、全168時間のaccepted rolling、保存済み物理・会計の通過、672区間の有限BESS traceを要求し、実行計画の終端kWhとSHAを次週の新規Prepare初期値へ渡す。未検証値・日付の飛び・途中失敗は次週求解前に停止する。旧月別比較の既定動作は変えない。

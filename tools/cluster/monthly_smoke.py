@@ -12,12 +12,12 @@ from pathlib import Path
 from src.optimization.common.date_series import content_hash, materialize_dated_timetable
 
 
-def scenario_for_month(year: int, month: int) -> dict:
+def scenario_for_month(year: int, month: int, *, route_id: str = "smoke-route") -> dict:
     day = date(year, month, 15)
     day += timedelta(days=(1 - day.weekday()) % 7)
     service_date = day.isoformat()
     templates = [{
-        "trip_id": f"smoke-trip-{i+1}", "route_id": "smoke-route",
+        "trip_id": f"smoke-trip-{i+1}", "route_id": route_id,
         "operator_id": "synthetic_cluster", "service_id": "WEEKDAY",
         "origin": "SMOKE_A", "destination": "SMOKE_B",
         "origin_stop_id": "SMOKE_A", "destination_stop_id": "SMOKE_B",
@@ -32,13 +32,13 @@ def scenario_for_month(year: int, month: int) -> dict:
     contract["pv_capacity_factor_rows_sha256"] = content_hash(profiles)
     return {
         "meta": {"id": f"cluster-smoke-{year}-{month:02d}",
-                 "name": f"DIAGNOSTIC {year}-{month:02d} cluster smoke"},
+                 "name": f"DIAGNOSTIC {year}-{month:02d} {route_id} synthetic cluster smoke"},
         "scenario_overlay": {"dataset_id": "cluster_smoke", "dataset_version": "synthetic-v1",
-                             "depot_ids": ["SMOKE_DEPOT"], "route_ids": ["smoke-route"],
+                             "depot_ids": ["SMOKE_DEPOT"], "route_ids": [route_id],
                              "solver_config": {"mode": "phase3_two_stage", "objective_mode": "total_cost"}},
         "dispatch_scope": {"depotId": "SMOKE_DEPOT", "serviceId": "WEEKDAY",
-                           "effectiveRouteIds": ["smoke-route"],
-                           "routeSelection": {"includeRouteIds": ["smoke-route"]}},
+                           "effectiveRouteIds": [route_id],
+                           "routeSelection": {"includeRouteIds": [route_id]}},
         "simulation_config": {
             "solver_mode": "phase3_two_stage", "service_date": service_date,
             "service_dates": [service_date], "planning_days": 1, "day_type": "WEEKDAY",
@@ -58,7 +58,7 @@ def scenario_for_month(year: int, month: int) -> dict:
                                      "pv_capacity_factor_by_date": profiles}],
         },
         "depots": [{"id": "SMOKE_DEPOT", "name": "Synthetic depot", "depotAreaM2": 1000}],
-        "routes": [{"id": "smoke-route", "name": "Synthetic loop", "depotId": "SMOKE_DEPOT",
+        "routes": [{"id": route_id, "name": f"Synthetic {route_id} loop", "depotId": "SMOKE_DEPOT",
                     "distanceKm": 10.0, "distance_km": 10.0, "operator_id": "synthetic_cluster"}],
         "stops": [{"id": stop, "stop_id": stop, "name": stop}
                   for stop in ("SMOKE_DEPOT", "SMOKE_A", "SMOKE_B")],

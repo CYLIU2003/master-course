@@ -28,6 +28,16 @@ def test_timetable_tampering_is_rejected():
         validate_dated_timetable(scenario["timetable_rows"], scenario["simulation_config"]["date_series_contract"])
 
 
+def test_shibu24_dummy_has_explicit_synthetic_provenance():
+    scenario = scenario_for_month(2025, 1, route_id="渋24")
+    assert scenario["scenario_overlay"]["route_ids"] == ["渋24"]
+    assert scenario["dispatch_scope"]["effectiveRouteIds"] == ["渋24"]
+    assert {row["route_id"] for row in scenario["timetable_rows"]} == {"渋24"}
+    assert {row["distance_source"] for row in scenario["timetable_rows"]} == {"declared_synthetic_fixture"}
+    assert scenario["simulation_config"]["date_series_contract"]["source_provenance"]["research_eligible"] is False
+    validate_dated_timetable(scenario["timetable_rows"], scenario["simulation_config"]["date_series_contract"])
+
+
 def test_batch_generator_persists_scope_before_prepare_and_preserves_output_directory(tmp_path, monkeypatch):
     import json
     from types import SimpleNamespace
@@ -62,8 +72,10 @@ def test_batch_generator_persists_scope_before_prepare_and_preserves_output_dire
     monkeypatch.setattr(run_preparation, "get_or_build_run_preparation", prepare)
     monkeypatch.setattr(output_paths, "outputs_root", lambda: tmp_path / "outputs")
     monkeypatch.setattr(synthetic_batch.sys, "argv", ["synthetic_batch.py", "--settings", "settings.json",
-        "--output", "requested/batch.json", "--batch-id", "scope-check"])
+        "--output", "requested/batch.json", "--batch-id", "scope-check", "--dummy-route", "渋24"])
     synthetic_batch.main()
     manifest = json.loads((tmp_path / "requested/batch.json").read_bytes())
     assert len(manifest["tasks"]) == len(normalized) == 12
+    assert all(document["scenario_overlay"]["route_ids"] == ["渋24"] for document in documents.values())
+    assert all(document["simulation_config"]["bev_terminal_soc_policy"] == "minimum_only" for document in documents.values())
     assert not (release / "requested/batch.json").exists()

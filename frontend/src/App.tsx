@@ -50,7 +50,9 @@ export default function App() {
   const [selected, setSelected] = useState(
     localStorage.getItem("ev-scenario") ?? "",
   );
-  const [page, setPage] = useState("overview");
+  const [page, setPage] = useState(() =>
+    window.location.hash === "#cluster" ? "cluster" : "overview",
+  );
   const [picker, setPicker] = useState(!selected);
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
@@ -150,7 +152,13 @@ export default function App() {
                   ? "page"
                   : undefined
               }
-              onClick={() => setPage(key)}
+              onClick={() => {
+                setPage(key);
+                if (key === "cluster") window.location.hash = "cluster";
+                else if (window.location.hash === "#cluster") {
+                  window.history.replaceState(null, "", window.location.pathname);
+                }
+              }}
             >
               <Icon size={18} />
               <span>{label}</span>

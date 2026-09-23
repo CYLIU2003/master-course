@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-23 渋24の短時間分散試験: `tools/cluster/synthetic_batch.py --dummy-route 渋24 --one-per-worker` は、路線IDだけ渋24とした架空4便・各1日の12ケースを作ります。実時刻表・研究結果ではありません。固定版の配置、実機の準備確認、配布・成果物監査が済むまで正式な渋21〜23計算を再開しません。操作は [分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md) を参照してください。
+
 2026-09-23: 残る研究・分散実行の課題を現行コードと原本で再点検しました。GA/ABCの部分MILPに残時間を伝達し、受電設備の任意の物理上限を契約超過料金から分離しました。12週の原本・固定ソース・検算器をローカルbundleへ固定し、現行fleetは正式**候補**として照合済みです。BESS連続週、実設備値、fleet承認、分散キューの実機復旧と最適性は未証明です。[実装と採用境界](docs/notes/RESEARCH_REMAINING_GATES_20260923.md)。
 
 BESS在庫の連続週診断は `python tools/research/run_bess_continuous_diagnostic.py --output output/bess_continuous_two_week_20260923` で実行条件だけを表示し、同じコマンドに `--run` を付けた場合だけ新規Prepare・2週の求解を開始します。2025-01-20と01-27の連続した2週を使い、1週目の物理・会計が通過した実行計画の終端BESS残量だけを2週目へ渡します。これは別版の診断であり、実設備上限、ICE補給を含む全車両の連続運用、研究採用を証明しません。

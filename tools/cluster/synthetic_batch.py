@@ -19,6 +19,8 @@ def main():
     parser.add_argument("--year", type=int, default=2025)
     parser.add_argument("--profile", choices=["alns_no_gurobi_v1", "existing_solver_v1"], default="alns_no_gurobi_v1")
     parser.add_argument("--one-per-worker", action="store_true", help="Pin for fleet deployment verification; default is performance-aware auto assignment")
+    parser.add_argument("--dummy-route", choices=["smoke-route", "渋24"], default="smoke-route",
+                        help="Synthetic route label only; 渋24 is not the real timetable")
     args = parser.parse_args()
     # configure switches cwd to the frozen release. User-supplied paths must
     # retain their meaning in the directory where the command was invoked.
@@ -38,7 +40,12 @@ def main():
         raise ValueError("This fleet check expects the parent plus eleven registered workers")
     tasks = []
     for month in range(1, 13):
-        scenario = scenario_for_month(args.year, month)
+        scenario = scenario_for_month(args.year, month, route_id=args.dummy_route)
+        if args.dummy_route == "渋24":
+            # This tests the route-specific dispatch path without claiming the
+            # four fictional trips represent the published timetable.
+            scenario["scenario_overlay"]["dataset_version"] = "synthetic-shibu24-v1"
+            scenario["simulation_config"]["bev_terminal_soc_policy"] = "minimum_only"
         scenario_id = segment(f"{args.batch_id}-{month:02d}")
         try:
             scenario_store.get_scenario_document_shallow(scenario_id)
@@ -76,7 +83,8 @@ def main():
     with args.output.open("xb") as output:
         output.write(canonical(manifest))
     print(json.dumps({"tasks": len(tasks), "manifest": str(args.output), "profile": args.profile,
-                      "scope": "12 independent synthetic days; no research acceptance"}))
+                      "dummy_route": args.dummy_route,
+                      "scope": "12 independent synthetic days; no research acceptance"}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
