@@ -720,7 +720,9 @@ class FeasibilityChecker:
         errors: List[str] = []
         step = int(problem.scenario.timestep_min)
         start_slot = int(plan.metadata.get("rolling_start_slot_index") or 0)
-        stop_slot = int(plan.metadata.get("rolling_stop_slot_index") or (problem.scenario.planning_days * 1440 // step))
+        # A paid final overnight extension is part of the energy horizon even
+        # though the eighth day's service trips are outside the experiment.
+        stop_slot = int(plan.metadata.get("rolling_stop_slot_index") or len(problem.price_slots))
         slots = list(range(start_slot, stop_slot))
         try:
             timelines = build_vehicle_timeline(problem, plan)
@@ -749,9 +751,18 @@ class FeasibilityChecker:
                     errors.append(f"[SOC] vehicle={vid}: {exc}")
                     continue
                 departures = {}
+                served_days = set()
                 for event in events:
                     if event.event_type == "service_trip":
                         departures.setdefault((event.start_min-start_min)//step, []).append(trips[event.trip_id])
+                        served_days.add((event.start_min - start_min) // 1440)
+                target = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
+                target_slots = (problem.metadata or {}).get("post_return_target_slots")
+                daily_target_slots = {
+                    int(target_slots[day_idx]): day_idx
+                    for day_idx in served_days
+                    if isinstance(target_slots, (tuple, list)) and 0 <= day_idx < len(target_slots)
+                }
                 for slot in slots:
                     for trip in departures.get(slot, ()):
                         required = required_departure_soc_kwh(problem, vehicle, trip, cap_kwh=capacity,
@@ -765,7 +776,11 @@ class FeasibilityChecker:
                     soc += kw * step / 60.0 * 0.95 - loads.energy_kwh.get((vid, slot), 0.0)
                     if not minimum - 1e-6 <= soc <= maximum + 1e-6:
                         errors.append(f"[SOC] vehicle={vid} slot={slot} SOC={soc} bounds={minimum}..{maximum}")
-                target = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
+                    if target is not None and slot in daily_target_slots and soc < target - 1e-6:
+                        errors.append(
+                            f"[SOC_TARGET] vehicle={vid} service_day={daily_target_slots[slot]} "
+                            f"slot={slot} SOC={soc} target={target}"
+                        )
                 if target is not None and soc < target - 1e-6:
                     errors.append(f"[SOC_TARGET] vehicle={vid} terminal={soc} target={target}")
             else:

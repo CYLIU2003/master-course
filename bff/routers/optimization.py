@@ -384,6 +384,30 @@ def _apply_interactive_research_contract(
     if not isinstance(simulation_config, dict):
         simulation_config = {}
         scenario["simulation_config"] = simulation_config
+
+    if simulation_config.get("bev_soc_deadline_mode") == "next_morning_operational_max":
+        from src.optimization.common.bev_terminal_policy import validate_bev_soc_timing_config
+
+        validate_bev_soc_timing_config(simulation_config)
+        operational_max = float(simulation_config.get("soc_max") or 0)
+        target = float(simulation_config.get("final_soc_target_percent") or 0)
+        if operational_max > 1:
+            operational_max /= 100
+        if (
+            simulation_config.get("bev_terminal_soc_policy") != "fixed_target"
+            or not 0 < operational_max <= 1
+            or abs(target / 100 - operational_max) > 1.0e-9
+        ):
+            raise ValueError("NEXT_MORNING_TARGET_MISMATCH")
+        return {
+            "policy_version": "next_morning_operational_max_v1",
+            "scope": "interactive_bff_run_optimization",
+            "enforced": True,
+            "requested": {"bev_terminal_soc_policy": "fixed_target", "final_soc_target_percent": target},
+            "effective": {"bev_terminal_soc_policy": "fixed_target", "final_soc_target_percent": target},
+            "override_applied": False,
+            "reason": "The verified overnight extension enforces the operational ceiling before the next service start.",
+        }
     scenario_overlay = scenario.get("scenario_overlay")
     if not isinstance(scenario_overlay, dict):
         scenario_overlay = {}

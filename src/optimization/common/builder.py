@@ -492,6 +492,15 @@ class ProblemBuilder:
                 ),
             )
         )
+        if simulation_cfg.get("bev_soc_deadline_mode") == "next_morning_operational_max":
+            if (
+                bev_terminal_soc_policy is not BevTerminalSocPolicy.FIXED_TARGET
+                or final_soc_target_percent is None
+                or abs(final_soc_target_percent / 100.0 - charge_upper_buffer_ratio) > 1.0e-9
+            ):
+                raise ValueError(
+                    "NEXT_MORNING_TARGET_MISMATCH: fixed_target must equal the declared operational SOC ceiling"
+                )
         if battery_degradation_price_jpy_per_kwh is None:
             battery_degradation_price_jpy_per_kwh = 0.0
         vehicle_usage_cost_jpy_per_used_bus = self._safe_float(
@@ -842,6 +851,17 @@ class ProblemBuilder:
                 raise ValueError('Dated operation must start at local midnight over complete days')
             if {trip.trip_id for trip in context.trips} != {row['trip_id'] for row in source_timetable_rows}:
                 raise ValueError('Canonical dispatch context lost or invented dated trips')
+        next_morning = None
+        if input_config.get("bev_soc_deadline_mode") == "next_morning_operational_max":
+            from .next_morning import resolve_next_morning_contract
+
+            if not is_date_series:
+                raise ValueError("NEXT_MORNING_REQUIRES_DATED_TIMETABLE")
+            next_morning = resolve_next_morning_contract(
+                input_config,
+                timestep_min=timestep_min,
+                timetable_rows=source_timetable_rows,
+            )
         service_calendar_validation = (
             validate_dated_timetable(source_timetable_rows,date_contract) if is_date_series else
             validate_service_calendar_contract(
@@ -1288,6 +1308,20 @@ class ProblemBuilder:
             time_slots = tuple(all_time_slots)
         else:
             time_slots = tuple(base_time_slots)
+        if next_morning is not None:
+            if len(base_time_slots) != (1440 // timestep_min):
+                raise ValueError("NEXT_MORNING_REQUIRES_FULL_DAY_TARIFF")
+            extension = tuple(
+                EnergyPriceSlot(
+                    slot_index=len(time_slots) + index,
+                    grid_buy_yen_per_kwh=base_time_slots[index].grid_buy_yen_per_kwh,
+                    grid_sell_yen_per_kwh=base_time_slots[index].grid_sell_yen_per_kwh,
+                    demand_charge_weight=base_time_slots[index].demand_charge_weight,
+                    co2_factor=base_time_slots[index].co2_factor,
+                )
+                for index in range(next_morning["extra_slots"])
+            )
+            time_slots += extension
 
         energy_horizon_duration_min = len(time_slots) * int(timestep_min)
         energy_horizon_end_time = self._clock_time_after_minutes(
@@ -1514,6 +1548,14 @@ class ProblemBuilder:
                 "service_coverage_mode": service_coverage_mode,
                 "milp_max_successors_per_trip": milp_max_successors_per_trip,
                 "planning_days": planning_days,
+                "bev_soc_deadline_mode": input_config.get("bev_soc_deadline_mode", "legacy_day_end"),
+                "final_overnight_mode": input_config.get("final_overnight_mode", "exclude"),
+                "post_return_target_slots": (
+                    next_morning["target_slots"] if next_morning is not None else None
+                ),
+                "terminal_overnight_extra_slots": (
+                    next_morning["extra_slots"] if next_morning is not None else 0
+                ),
                 "operation_time_window_enabled": bool(operation_time_window_enabled),
                 "operation_time_window_requested_start_time": (
                     self._normalize_hhmm(requested_operation_start_time)
@@ -1866,6 +1908,14 @@ class ProblemBuilder:
                 if content_hash(raw.get('pv_capacity_factor_by_date') or []) != contract.get('pv_capacity_factor_rows_sha256'):
                     raise ValueError('Dated PV source changed after Prepare')
                 capacity_factor_series = dated_capacity_factors(raw,contract['service_dates'],timestep_min)
+                if sim_cfg.get("bev_soc_deadline_mode") == "next_morning_operational_max":
+                    from .next_morning import resolve_next_morning_contract
+
+                    extension = resolve_next_morning_contract(
+                        sim_cfg, timestep_min=timestep_min,
+                        timetable_rows=metadata_source.get("timetable_rows") or [],
+                    )
+                    capacity_factor_series += extension["next_day_pv_factors"]
                 if len(capacity_factor_series)!=slot_count:
                     raise ValueError('Dated PV slots do not exactly cover the solver horizon')
             elif self._depot_asset_has_full_day_pv_profile(raw):
@@ -2051,8 +2101,14 @@ class ProblemBuilder:
                     f"unsupported pv_input_semantics for {depot.depot_id}: "
                     f"{pv_input_semantics}"
                 )
+            load_series = raw.get("depot_load_kwh_by_slot")
+            if sim_cfg.get("bev_soc_deadline_mode") == "next_morning_operational_max" and isinstance(load_series, (list, tuple)):
+                service_slot_count = int(sim_cfg.get("planning_days") or 0) * 1440 // timestep_min
+                if len(load_series) == service_slot_count:
+                    # The source explicitly declares zero non-traction load;
+                    # carry that same declared assumption into the extension.
+                    load_series = tuple(load_series) + (0.0,) * (slot_count - service_slot_count)
             if pv_enabled and pv_input_semantics == "gross_generation_before_depot_load":
-                load_series = raw.get("depot_load_kwh_by_slot")
                 if (
                     raw.get("depot_load_model") != "explicit_zero_nontraction_load"
                     or not isinstance(load_series, (list, tuple))
@@ -2072,7 +2128,7 @@ class ProblemBuilder:
                 available_pv_surplus_kwh_by_slot=pv_series,
                 pv_input_semantics=pv_input_semantics,
                 depot_load_model=str(raw.get("depot_load_model") or "not_declared_legacy_surplus"),
-                depot_load_kwh_by_slot=tuple(float(value) for value in raw.get("depot_load_kwh_by_slot", ())),
+                depot_load_kwh_by_slot=tuple(float(value) for value in (load_series or ())),
                 bess_balance_period=str(raw.get('bess_balance_period') or 'evaluation_period'),
                 capacity_factor_by_slot=capacity_factor_series,
                 pv_case_id=str(raw.get("pv_case_id") or "default"),

@@ -32,6 +32,11 @@ def build_daily_return_ledgers(evaluator: Any, problem: Any, plan: Any, breakdow
     days = int(problem.scenario.planning_days)
     start = horizon_start_min(problem)
     step = int(problem.scenario.timestep_min)
+    service_slots = days * 1440 // step
+    paid_final_overnight = (
+        (problem.metadata or {}).get("bev_soc_deadline_mode") == "next_morning_operational_max"
+        and (problem.metadata or {}).get("final_overnight_mode") == "include"
+    )
     timelines = build_vehicle_timeline(problem, plan)
     ev = evaluator._evaluate_electricity_with_overwrite(
         problem, plan, evaluator._operating_electric_energy_kwh_by_slot(problem, plan))
@@ -58,9 +63,16 @@ def build_daily_return_ledgers(evaluator: Any, problem: Any, plan: Any, breakdow
                 provisional[day] += (event.energy_kwh if electric else event.fuel_l) * share * price
         for slot in plan.charging_slots:
             if str(slot.vehicle_id) == vehicle_id:
-                day = (int(slot.slot_index) * step) // 1440
-                if not 0 <= day < days:
+                slot_index = int(slot.slot_index)
+                if not 0 <= slot_index < len(problem.price_slots):
                     raise ValueError("Charging slot outside daily ledger horizon")
+                day = (slot_index * step) // 1440
+                if day >= days:
+                    if not paid_final_overnight or slot_index < service_slots:
+                        raise ValueError("Charging slot outside daily ledger horizon")
+                    # The eighth morning is a paid extension of the seventh
+                    # service day, not an invented eighth day of bus trips.
+                    day = days - 1
                 charges[day] += float(slot.charge_kw) * step / 60
                 discharges[day] += float(slot.discharge_kw) * step / 60
         for slot in plan.refuel_slots:
@@ -118,5 +130,9 @@ def build_daily_return_ledgers(evaluator: Any, problem: Any, plan: Any, breakdow
             ice_provisional_drive_cost_jpy=row["ice_prov"], ev_realized_charge_cost_jpy=row["ev_real"],
             ice_realized_refuel_cost_jpy=row["ice_real"], ev_leftover_provisional_cost_jpy=row["ev_left"],
             ice_leftover_provisional_cost_jpy=row["ice_left"], demand_charge_jpy=demand, total_cost_jpy=total,
-            other_operating_cost_allocated_jpy=other, cost_attribution_policy=ATTRIBUTION_POLICY))
+            other_operating_cost_allocated_jpy=other,
+            cost_attribution_policy=(
+                ATTRIBUTION_POLICY + "; paid_final_overnight_attributed_to_last_service_day"
+                if paid_final_overnight else ATTRIBUTION_POLICY
+            )))
     return tuple(sorted(entries, key=lambda row: (row.vehicle_id, row.day_index))), tuple(ledgers)

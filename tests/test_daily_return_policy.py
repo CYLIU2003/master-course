@@ -6,6 +6,7 @@ from src.dispatch.daily_return import crosses_service_day
 from src.dispatch.feasibility import FeasibilityEngine
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.optimization.common.feasibility import FeasibilityChecker
+from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.problem import AssignmentPlan, ChargingSlot, OptimizationConfig
 from src.optimization.common.result import ResultSerializer
 from src.optimization.common.vehicle_timeline import build_vehicle_timeline, complete_home_slots, fixed_path_slot_loads
@@ -257,6 +258,89 @@ def test_daily_return_energy_is_spent_before_night_charging_and_all_days_carry()
     premature = replace(charged, charging_slots=(replace(charged.charging_slots[0],slot_index=10),charged.charging_slots[1]))
     assert any("depot-residence" in error for error in FeasibilityChecker()._evaluate_soc(problem,premature))
     assert not validate_physical_event_schedule(problem=problem,serialized_result=ResultSerializer.serialize_plan(premature))["accepted"]
+
+
+def test_next_morning_energy_horizon_checks_paid_final_charge_and_each_deadline():
+    problem = daily_problem()
+    price = problem.price_slots[-1]
+    asset = problem.depot_energy_assets["DEPOT"]
+    problem = replace(
+        problem,
+        price_slots=problem.price_slots + (replace(price, slot_index=48),),
+        depot_energy_assets={"DEPOT": replace(
+            asset, pv_generation_kwh_by_slot=asset.pv_generation_kwh_by_slot + (0.0,)
+        )},
+        metadata={**problem.metadata, "bev_soc_deadline_mode": "next_morning_operational_max",
+                  "final_overnight_mode": "include",
+                  "bev_terminal_soc_policy": "fixed_target", "final_soc_target_percent": 80,
+                  "post_return_target_slots": [23, 48]},
+    )
+    plan = _fixed_plan(problem)
+    charged = replace(plan, charging_slots=(
+        ChargingSlot("bev-1", 23, "chg-1", 37 / .95, charging_depot_id="DEPOT"),
+        ChargingSlot("bev-1", 48, "chg-1", 37 / .95, charging_depot_id="DEPOT"),
+    ))
+    assert not FeasibilityChecker()._evaluate_soc(problem, charged)
+    assert 48 in complete_home_slots(
+        problem, problem.vehicles[0], build_vehicle_timeline(problem, charged)["bev-1"]
+    )
+    evaluator = CostEvaluator()
+    cost = evaluator.evaluate(problem, charged)
+    vehicle_rows, day_rows = evaluator.build_plan_ledgers(problem, charged, cost)
+    assert len(day_rows) == 2
+    assert day_rows[-1].total_cost_jpy > 0
+    assert sum(row.total_cost_jpy for row in day_rows) == pytest.approx(cost.total_cost, abs=1e-6)
+    assert vehicle_rows[-1].end_soc_kwh == pytest.approx(80)
+    assert "paid_final_overnight" in day_rows[-1].cost_attribution_policy
+    physical = validate_physical_event_schedule(
+        problem=problem, serialized_result=ResultSerializer.serialize_plan(charged)
+    )
+    assert physical["accepted"], physical["violations"]
+    without_final = replace(charged, charging_slots=charged.charging_slots[:1])
+    errors = FeasibilityChecker()._evaluate_soc(problem, without_final)
+    assert any("service_day=1" in error for error in errors), errors
+    without_first = replace(charged, charging_slots=charged.charging_slots[1:])
+    errors = FeasibilityChecker()._evaluate_soc(problem, without_first)
+    assert any("service_day=0" in error for error in errors), errors
+
+
+def test_next_morning_phase3_daily_return_native_stage2_preserves_deadlines():
+    pytest.importorskip("gurobipy")
+    from src.optimization.common.problem import OptimizationMode
+    from src.optimization.engine import OptimizationEngine
+
+    problem = daily_problem()
+    asset = problem.depot_energy_assets["DEPOT"]
+    problem = replace(
+        problem,
+        price_slots=problem.price_slots + (replace(problem.price_slots[-1], slot_index=48),),
+        depot_energy_assets={"DEPOT": replace(
+            asset, pv_generation_kwh_by_slot=asset.pv_generation_kwh_by_slot + (0.0,)
+        )},
+        metadata={**problem.metadata,
+                  "bev_soc_deadline_mode": "next_morning_operational_max",
+                  "final_overnight_mode": "include",
+                  "bev_terminal_soc_policy": "fixed_target",
+                  "final_soc_target_percent": 80,
+                  "post_return_target_slots": [23, 48],
+                  "max_start_fragments_per_vehicle": 100,
+                  "max_end_fragments_per_vehicle": 100},
+    )
+    result = OptimizationEngine().solve(problem, OptimizationConfig(
+        mode=OptimizationMode.MILP, phase="phase3_two_stage",
+        time_limit_sec=20, stage1_time_limit_sec=10,
+        stage2_time_limit_sec=10, mip_gap=.1, gurobi_threads=1,
+        allow_postsolve_repair=False,
+    ))
+    assert result.feasible, result.infeasibility_reasons
+    trace = result.plan.vehicle_soc_kwh_by_vehicle_slot["bev-1"]
+    assert trace[24] >= 80 - 1e-6
+    assert trace[49] >= 80 - 1e-6
+    assert result.plan.metadata["stage2_feasible"] is True
+    physical = validate_physical_event_schedule(
+        problem=problem, serialized_result=ResultSerializer.serialize_plan(result.plan)
+    )
+    assert physical["accepted"], physical["violations"]
 
 
 def test_native_duty_fragments_share_one_initial_state():
