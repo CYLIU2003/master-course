@@ -8,6 +8,8 @@
 
 初回の11件は配布・回収・ハッシュ確認が全件通ったが、`terminal_soc_balance_failed` で計画受理は0件だった。入力は当初`minimum_only`としたものの、既存BFFは比較のためBEVを`return_to_initial`に強制する。SOCイベント上は初期80%→最終80%で、ALNS計画がMILP専用の終端判定メタデータを出さず、物理再計算の合格を結果へ引き継げていないことが原因だった。BEV条件を緩めて採用する代わりに、独立FeasibilityCheckerが全制約を通した時に限り、ヒューリスティック結果の欠落フラグを補う修正を別固定版にする。初回11件は新条件の成功件数へ混ぜない。
 
+修正版`2e2333b3`を新しい固定配置へ配布し、新規11件すべてで4便充足・独立物理検証・160→160 kWh・Gurobi利用0を確認した。回収hashと原本照合を含む詳細は[渋24ダミー分散試験](notes/SHIBU24_DUMMY_CLUSTER_20260923.md)。登録12台目はオフラインのままで、正式研究採用はBLOCKED。
+
 親機の監視画面は `tools/cluster/install_resident_monitor.ps1 -Settings <固定版settings.json>` で現在のWindowsユーザーのログオンタスクへ登録し、直ちに起動する。固定版のclean SHAを起動前に検査し、127.0.0.1だけで待ち受ける。ログオン時に `/#cluster` を開き、画面はworkerを4秒ごと、jobを3秒ごとに更新する。閉じたブラウザは同URLから再表示でき、controllerは独立して動く。登録解除は `Unregister-ScheduledTask -TaskName MasterCourseClusterMonitor -Confirm:$false`。この常駐はAI監視や自動メールを行わない。キューに残る旧待機jobを起動前に確認し、意図しない計算を再開させない。
 
 **最新の運用は末尾の「現行運用（2026-09-23）」と

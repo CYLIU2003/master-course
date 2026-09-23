@@ -2,6 +2,8 @@
 
 ## 2026-09-23 渋24ダミーの短時間分散試験と親機常駐監視
 
+- 修正版clean固定版`2e2333b3d27aa49f62a16e5387a1df39897ce26f`を親機+オンライン従機10台へLFのsource、uv runtime、datasetをhash照合して配置。新batch11件はCOMPLETED/ZIP hash 11/11、架空4便充足・独立物理検査・BEV160→160 kWh 11/11、Gurobi Env/Model/optimize各0。`output/cluster-deployment/shibu24-dummy-fixed-2e2333b3-audit11.json` と同名physical-audit11.jsonを原本とする。オフラインの`laptop-a709una0`は投入無効、12/12・ログオン後自動復旧・正式研究採用は未確認。[判定](docs/notes/SHIBU24_DUMMY_CLUSTER_20260923.md)。
+
 - 初回固定版`a594b6f6`は親機＋オンライン子機10台への同一SHA/source/runtime/dataset hash照合を通過し、11件の独立1日試験がCOMPLETED・11 ZIP hash回収・Gurobi Env/Model/optimize各0回だった。ただし11件とも`terminal_soc_balance_failed`で研究受理は0件。SOCイベントは初期160→最終160 kWhだが、ALNSがMILP専用終端metadataを発行せず、FeasibilityCheckerの可行判定を最終metadataへ渡していなかった。初回は配布試験成功・計画受理失敗として保持する。
 - 既存BFFは画面からの前日計画を`return_to_initial`へ強制するため、初回の`minimum_only`指定は実効値ではなかった。架空渋24入力を明示的に`return_to_initial`へ戻し、ALNS/GA/ABCのplanに終端flagがない場合のみ、独立FeasibilityCheckerの全体可行判定から保守的に導く。MILPの明示flagは変更しない。新しいclean固定版を作り、初回11件とは別のIDで再実行する。
 
