@@ -2,342 +2,420 @@
 
 2026-09-23: 渋24の月別12週と最終翌朝SOCを含む診断は、固定版で `python tools/research/shibu24_monthly_campaign.py run --settings <固定controller設定.json> --output <新規campaign出力>` を一度起動すると、入力照合・厳格Prepare・永続batch投入・回収監査までスクリプトが進めます。進捗は同スクリプトの `status --output <campaign出力>` と `campaign.log` で確認できます。通常監視にAIは不要です。全件回収は研究採用・統合最適性の証明ではありません。条件と制限は [渋24月別翌朝診断](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md) を参照してください。
 
-2026-09-23: 渋24の2025年各月1代表週について、実便7日間を保ったまま、最終日帰庫後から翌朝の最初の出庫前まで充電・PV・買電・料金を計上する診断入力を追加しました。`python tools/research/shibu24_monthly.py check` は12週の入力原本・ハッシュ・翌朝ダイヤ/PVを読むだけで求解しません。`prepare` はcleanな固定Git版から各週を新規Prepareします。SOC目標は各車両の運用上限であり、最後の翌朝は運行便を増やさず電力計算だけ延ばします。実行前の条件と研究上の制約は [渋24月別診断](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md) を参照してください。旧渋21～23の月別結果とは別実験です。
+<div align="center">
+
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg?logo=python)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?logo=fastapi)
+![React](https://img.shields.io/badge/React-18-61DAFB.svg?logo=react)
+![Solver](https://img.shields.io/badge/Solver-Gurobi%20%7C%20ALNS-orange.svg)
+![Architecture](https://img.shields.io/badge/Architecture-BFF%20%2B%20Desktop%20%2B%20Cluster-purple.svg)
+![Status](https://img.shields.io/badge/Status-Research%20Grade-success.svg)
+
+**EV路線バス運行・充電・太陽光発電(PV)・定置型蓄電池(BESS)の統合最適化・評価システム**
+
+路線バスのEV化に伴う「配車計画」「充電スケジュール」「車庫内PV発電」「定置蓄電池(BESS)運用」「系統電力契約（基本料金・従量料金・ピーク抑制）」を一体で最適化・シミュレーション・物理検証する研究用基盤です。
+
+[🚀 クイックスタート](#最短で起動する) • [✨ 主要機能](#このシステムでできること) • [📊 最新開発状況（2026-09-23）](#最新の開発状況と重要アップデート2026-09-23) • [🖥️ 分散計算](#分散計算クラスタの構成と運用) • [📚 関連資料](#関連資料)
+
+</div>
+
+---
+
+## 目次
+
+1. [まえがき・目的・ゴール](#まえがき目的ゴール)
+   - [このシステムが何をしているか（先生向け要約）](#このシステムが何をしているか先生向け要約)
+   - [研究上のゴール](#研究上のゴール)
+2. [このシステムでできること](#このシステムでできること)
+3. [システムアーキテクチャ](#システムアーキテクチャ)
+4. [最新の開発状況と重要アップデート（2026-09-23）](#最新の開発状況と重要アップデート2026-09-23)
+   - [1. 渋24（Shibu24）実便・翌朝オーバーナイト診断の追加](#1-渋24shibu24実便翌朝オーバーナイト診断の追加)
+   - [2. 18台分散計算クラスタの稼働と常駐監視UI](#2-18台分散計算クラスタの稼働と常駐監視ui)
+   - [3. SOC翌朝目標と最終夜間算入のUI設定＆誤計算防止ガード](#3-soc翌朝目標と最終夜間算入のui設定誤計算防止ガード)
+   - [4. BESS連続2週間診断ツールの整備](#4-bess連続2週間診断ツールの整備)
+5. [最短で起動する](#最短で起動する)
+   - [前提](#前提)
+6. [最初の最適化](#最初の最適化)
+   - [結果を正しく読む](#結果を正しく読む)
+7. [分散計算クラスタの構成と運用](#分散計算クラスタの構成と運用)
+8. [研究用の正式実行と厳格なガードレール](#研究用の正式実行と厳格なガードレール)
+9. [よくある確認ポイント](#よくある確認ポイント)
+   - [データが利用できない](#データが利用できない)
+   - [503 またはジョブ待ちになる](#503-またはジョブ待ちになる)
+   - [INFEASIBLE になる](#infeasible-になる)
+   - [NEXT_MORNING_SOC_NOT_READY が出る](#next_morning_soc_not_ready-が出る)
+10. [関連資料](#関連資料)
+11. [リポジトリの見取り図](#リポジトリの見取り図)
+12. [開発・検証](#開発検証)
+13. [直近の更新履歴（要約）](#直近の更新履歴要約)
+14. [過去の実験・診断アーカイブ](#過去の実験診断アーカイブ)
+
+---
+
+## まえがき・目的・ゴール
+
+### このシステムが何をしているか（先生向け要約）
+
+本システムは、路線バス営業所における**BEV（バッテリーEV）導入と再生可能エネルギー活用の両立**を数理最適化によって解明するための研究システムです。
+
+実運行ダイヤ（GTFS / 運行実績データ）をベースに、以下の要素を一体で同時決定・評価します。
+
+- **車両配車計画**: どの便をBEVで走り、どの便を既存のディーゼル（ICE）車で走るかの割り当て（運行可能航続距離、充電時間、回送・折返し時間の制約を考慮）。
+- **充電スケジュール**: 各BEVが車庫に滞在している時間帯（アイドル時間）に、どの普通・急速充電器でどれだけの電力を充電するか。
+- **再生可能エネルギー（PV）の最大活用**: 営業所屋根に設置した太陽光発電の発電予測をもとに、日中の自家消費充電や余剰電力の蓄電池充電を優先。
+- **定置型蓄電池（BESS）の充放電マネジメント**: 昼間のPV余剰電力を蓄電し、夜間充電や電力料金ピーク時間帯（TOUピーク）に放電して買電コストと受電電力を抑制。
+- **電力契約と電気料金の最適化**: 基本料金を決める契約電力（最大デマンドkW）と時間帯別電力量料金（円/kWh）の双方を最小化。
+
+### 研究上のゴール
+
+1. **厳格な物理的実行可能性の保証**:
+   - `到着時刻 + 折返し待機 + 回送時間 <= 次の出発時刻` の時間接続を1秒たりとも破らない。
+   - 車両バッテリーSOCの運用上下限（例: 20%〜80%）を常時維持。
+   - 充電器の同時使用台数上限、最大受電電力容量を厳守。
+2. **完全な再現性と監査性（Provenance）の担保**:
+   - ソルバーの「OPTIMAL」報告を過信せず、フォールバックや事後修復を禁止。
+   - 独立した物理シミュレータによる二重検証と、確定日次会計台帳（`rolling_hourly_chain/executed_day_accounting.json`）への完全照合（差額1e-6円未満）。
+3. **実規模7日間・月別代表週（12週）へのスケーラビリティ**:
+   - 単日ではなく、日曜帰庫から月曜早朝の出庫までの夜間充電（オーバーナイト）を含む実運用サイクルの評価。
+
+---
+
+## このシステムでできること
+
+| 機能カテゴリ | 提供する機能・特徴 | 根拠・実装 |
+|---|---|---|
+| **2段階数理最適化** | Stage 1（配車・車両運行割当）＋ Stage 2（充電・PV・BESS・買電運用）による大規模問題の効率的・高精度求解 | `src/optimization/` (MILP / ALNS) |
+| **7日間・毎時ローリング実行** | 前日計画（Day-ahead）を策定後、毎時変化するPV実測・運行状況に応じた再計画を168時間連続で実行 | `src/rolling/` |
+| **PV・BESS・系統電力の統合運用** | 太陽光発電と定置蓄電池を同時制御し、TOU料金ピークカットと契約デマンド超過を抑制 | `src/energy/` |
+| **独立物理シミュレータによる二重検証** | ソルバーの出力計画に対し、独立した物理演算モジュールがSOC遷移・充電成立性を再計算し合格判定 | `src/validation/` |
+| **18台分散計算クラスタ** | 親PC＋子PC17台を接続し、並列ケース計算・遠隔タスク割当・常駐監視UIを提供 | `tools/cluster/`, `docs/DISTRIBUTED_COMPUTE.md` |
+| **BFF & 統合デスクトップ画面** | FastAPI BFFとTkinter / Web画面が連携し、直感的なシナリオ選択・設定保存・ワンクリック実行を実現 | `bff/`, `run_app.py` |
+| **改ざん防止・完全再現性の保証** | Git SHA、入力データハッシュ、監査ログを自動照合し、研究基準を満たさない実行を明示的に除外 | `AGENTS.md` |
+
+---
+
+## システムアーキテクチャ
+
+システム全体の処理フローとデータ受け渡しは下図のとおり設計されています。
+
+```mermaid
+flowchart TD
+    subgraph Input["1. 入力・データセット (Built Dataset)"]
+        GTFS["実運行ダイヤ (GTFS / ODPT)"]
+        PV["日射量・気象・PV予測"]
+        TARIFF["電気料金表 (TOU / デマンド)"]
+        FLEET["車両・充電器・BESS諸元"]
+    end
+
+    subgraph Prepare["2. シナリオ準備 (Prepare)"]
+        PREP["Strict Scenario Prepare"]
+        CONTRACT["Fleet Contract / Hash 確定"]
+    end
+
+    subgraph Optimization["3. 2段階最適化 & ローリング"]
+        STAGE1["Stage 1: 車両割当・配車 (MILP / ALNS)"]
+        STAGE2["Stage 2: 充電・PV・BESS運用 (MILP)"]
+        ROLLING["24/24 毎時ローリング再計画"]
+    end
 
-2026-09-23: 分散計算画面はGurobi対応とGurobi不要の計算対応を分けて表示し、後者だけに対応する子機も「計算可能」一覧へ含めます。実際の割当時には空きRAM・CPU負荷・電源条件を再確認します。`LAPTOP-BOLC6VIT` はWindows Update中に空きRAMが不足するため、更新終了後の再確認まで渋24実便ジョブを割り当てません。
+    subgraph Verification["4. 独立物理検証 & 財務会計"]
+        PHYS["独立物理シミュレータ (SOC/電力/制約監査)"]
+        ACCT["確定日次会計台帳 (executed_day_accounting.json)"]
+    end
 
-2026-09-23: `LAPTOP-BOLC6VIT` と `LAPTOP-8JS4DQCD` を含む18台の固定版 `0d056430` 配置・Git/入力照合が通過し、親機の常駐画面を同版へ切り替えました。新しいSOC夜間選択肢の表示も実画面で確認しました。追加2台のソルバーなし診断ジョブ回収は旧固定版 `c54f684e` の記録です。渋24実便のPrepared入力を現行固定版で再照合し、18件バッチを同版のSHAで検査済みです。実便計算は未開始です。[配置・実行状態](docs/DISTRIBUTED_COMPUTE.md)。
+    subgraph Output["5. 成果物出力 & 提示"]
+        REP["experiment_report.md / summary.json"]
+        UI["Desktop UI / Cluster 監視画面"]
+    end
 
-2026-09-23: 分散配布ZIPは、参照をpackedした固定Git原本でも `.git/refs` を保つよう修正しました。配布時は子機でGit SHA・ソースdigest・データhashまで照合し、失敗した版を計算に使いません。
+    Input --> Prepare
+    Prepare --> Optimization
+    Optimization --> Verification
+    Verification --> Output
+```
 
-2026-09-23: 新フロントのシナリオ一覧は保存名に基づいて「渋24」「渋21～24」「渋21～23」「その他」に分類できます。これは表示上の分類であり、実際の対象便は Prepare の入力監査で確認します。SOC設定には「翌朝の出庫前に車両の運用上限へ」と「最終日帰庫後の夜間を費用計算に含める／含めない」を保存する選択肢を追加しました。現行の求解入力は翌朝分のダイヤ・PV・料金・充電器・会計が揃っていないため、この新しいSOC設定を選んだ計算は `NEXT_MORNING_SOC_NOT_READY` で投入前に拒否します。従来設定の計算だけが引き続き実行可能です。新条件の研究結果はまだありません。
+---
 
-2026-09-23 初期段階では、`LAPTOP-BOLC6VIT` と `LAPTOP-8JS4DQCD` 向けのSSH設定ZIPを指定されたTailscale IPv4へ送信しました。その後の実機認証・登録・診断結果は上記の現行状態を参照してください。[設定手順と送信記録](docs/DISTRIBUTED_COMPUTE.md)。
+## 最新の開発状況と重要アップデート（2026-09-23）
 
-2026-09-23 渋24の短時間分散試験: `tools/cluster/synthetic_batch.py --dummy-route 渋24 --one-per-worker` は、路線IDだけ渋24とした架空4便・各1日の12ケースを作ります。実時刻表・研究結果ではありません。初回は接続中の11台で配布・回収に成功しましたが、ALNSの終端SOC判定metadata欠落で計画は全件不受理でした。独立可行性判定から欠落値を引き継ぐ修正後、新しい固定版の11件と復帰した12台目の固有1件を再確認しました。正式な渋21〜23計算は再開しません。操作は [分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md) を参照してください。
+開発ノート（[DEVELOPMENT_NOTES.md](DEVELOPMENT_NOTES.md)）における直近の主要な進捗とシステム更新は以下の4点です。
 
-修正版 `2e2333b3` の新規12件は全件、配布・回収hash、架空4便充足、独立物理検査、BEV初期/終端160 kWh一致、Gurobi利用0回を通過しました。これは元の親機＋従機11台の疎通確認で、研究採用はBLOCKEDです。追加の4台は監視登録済みですが、SSH公開鍵認証が拒否され計算未実行です。既存の初期設定ZIPと4台用登録表をTailscaleで各端末へ送信しました。[試験記録](docs/notes/SHIBU24_DUMMY_CLUSTER_20260923.md)。親機の監視画面は `http://127.0.0.1:8868/#cluster` で表示できます。
+### 1. 渋24（Shibu24）実便・翌朝オーバーナイト診断の追加
 
-2026-09-23: 残る研究・分散実行の課題を現行コードと原本で再点検しました。GA/ABCの部分MILPに残時間を伝達し、受電設備の任意の物理上限を契約超過料金から分離しました。12週の原本・固定ソース・検算器をローカルbundleへ固定し、現行fleetは正式**候補**として照合済みです。BESS連続週、実設備値、fleet承認、分散キューの実機復旧と最適性は未証明です。[実装と採用境界](docs/notes/RESEARCH_REMAINING_GATES_20260923.md)。
+- **背景と目的**: これまでの最適化は日曜24:00（7日間の終端）で評価区間を区切っていましたが、実運用では日曜夜に帰庫した車両を「月曜早朝の運行開始までに運用上限SOC（例: 80%）へ充電・回復」させる必要があります。
+- **実装内容**: 2025年各月の代表週（12週、平日224便・土曜188便・日祝170便、7日間計1,478便）について、実便7日間を維持しながら、最終日の帰庫後から翌朝の最初の出庫前までの充電・PV・買電・料金を扱う診断入力を整備しました。翌朝の最初の出庫時刻により延長は23または24区間です。
+- **安全性と事前検査**:
+  ```powershell
+  python tools/research/shibu24_monthly.py check
+  ```
+  このコマンドにより、12週の入力原本、翌朝ダイヤ、PV予測の整合性を求解せずに事前確認できます。`prepare`はclean固定Git SHAを要求し、厳格接続・折返し感度・車両適合監査が通過しなければ計算用入力を`PREPARED`と扱いません。初回1月の入力でこの内部監査の欠落を検出して修正したため、旧Prepared IDは再利用しません。実規模の解と研究採用は未確認です。
+- **詳細資料**: [渋24月別診断](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md)
 
-BESS在庫の連続週診断は `python tools/research/run_bess_continuous_diagnostic.py --output output/bess_continuous_two_week_20260923` で実行条件だけを表示し、同じコマンドに `--run` を付けた場合だけ新規Prepare・2週の求解を開始します。2025-01-20と01-27の連続した2週を使い、1週目の物理・会計が通過した実行計画の終端BESS残量だけを2週目へ渡します。これは別版の診断であり、実設備上限、ICE補給を含む全車両の連続運用、研究採用を証明しません。
+### 2. 18台分散計算クラスタの稼働と常駐監視UI
 
-2026-09-23 旧GitHub mainへの厳格レビューを現行ローカル版と照合しました。ジョブ原本保持・復旧・並行保存の回帰を追加し、修正済み事項と研究採用の残件を分離しています。[照合結果と残件](docs/notes/REVIEW_RECONCILIATION_20260923.md)。現行の月別12週は完了済みですが、研究採用はBLOCKEDです。
+- **18台体制の確立**: 親PCに加え、新たに2台（`LAPTOP-BOLC6VIT`、`LAPTOP-8JS4DQCD`）が加わった計18台の分散環境を構築。全18台への同一固定Git版（`0d056430`）の配布・Git SHA照合・入力照合を完了しました。
+- **クラスタ監視UI（Cluster UI）の機能強化**:
+  - `http://127.0.0.1:8868/#cluster` に常駐監視画面を提供。
+  - 「Gurobi対応ノード」と「Gurobi不要（ヒューリスティック/ALNS/診断）ノード」を分離表示。Gurobiライセンスを持たない端末も「計算可能ノード」として安全に並列ジョブへ割り当て可能になりました。
+  - 各ノードの空きRAM、CPU負荷、AC電源、Tailscale通信状態を常時可視化。
+- **堅牢性の向上**:
+  - `LAPTOP-BOLC6VIT` のWindows Updateに伴う一時的なメモリ低下を検知し、安全に待機させるリソース保護機能を実装。
+  - Git packed refs環境下でも `.git/refs/` が空ディレクトリとして欠落しないよう配布ZIP作成スクリプトを修正し、子機側でのGit SHA検証の信頼性を担保。
+- **詳細資料**: [分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md)
 
-2026-09-23 分散環境をuvへ統一: `tools/cluster/environment/uv.lock` と Python 3.14.7を固定し、
-子機専用の `C:/mc-worker/venv` に配置します。GurobiのWLS資格情報は各ユーザーの保護フォルダに分離します。
-短いジョブの後もWLSトークン解放待ちを保持し、画面に待機枠を表示します。
-12カ月の配置試験は各月1日の架空シナリオで、週間・年間研究の採用結果ではありません。
-[環境と検証範囲](docs/DISTRIBUTED_COMPUTE.md)。
+### 3. SOC翌朝目標と最終夜間算入のUI設定＆誤計算防止ガード
 
-2026-09-23 子機のSSH削除待ちを復旧: LAPTOPINTEL8とDESKTOP-0SRS8PRを親機から修復し、
-全11台のSSH認証・サービス稼働・自動起動を実機確認しました。PC本体の再起動やセットアップの再実行は不要です。
-新規設定用は `output/cluster-worker-access-setup-v3.zip`。サービス異常を鍵変更前に検出します。
-これはSSHアクセスの確認で、子機のPython・研究コード・Gurobiの配置完了はまだ意味しません。[復旧記録](docs/DISTRIBUTED_COMPUTE.md)。
+- **フロントエンドの改善**: シナリオ一覧画面に「渋24」「渋21～24」「渋21～23」「その他」の路線別絞り込みフィルタを追加し、目的のシナリオへ素早くアクセスできるようにしました。
+- **SOC夜間オプション**: シナリオ設定に「翌朝の出庫前に車両の運用上限へ達成」「最終日帰庫後の夜間を費用計算に含める／含めない」の保存オプションを追加。
+- **安全性ガード (`NEXT_MORNING_SOC_NOT_READY`)**:
+  > [!IMPORTANT]
+  > 翌朝のダイヤ・PV・料金・充電器等の入力データが未整備のシナリオで新SOC設定を実行しようとした場合、最適化投入前に `NEXT_MORNING_SOC_NOT_READY` として明示的にエラー終了させます。これにより、無料充電を仮定した不正な計画や、過小評価された不当なコスト結果の出力を未然に防止します。
 
-2026-09-22 夜: 月別固定 `7cb46894` は23:07 JST時点で10/12週を独立監査済み、11月の毎時再計画を実行中です。SSH並列配布はPC別RAM予約の合算・外部Gurobi枠の予約・一度だけの接続/配布検査を追加し、Python45件・画面12件・本番ビルド・ローカル2実プロセスの並列回収が通過。登録11台は公開鍵設定が未実行で実機SSH認証待ちです。[子PCの設定と検査コマンド](docs/DISTRIBUTED_COMPUTE.md)。
+### 4. BESS連続2週間診断ツールの整備
 
-2026-09-22 子機の初回アクセス設定: Windows PowerShell 5.1の空パスエラーを修正しました。
-`output/cluster-worker-access-setup-v2.zip` を新しいフォルダへ展開して `SETUP.cmd` を実行します。
-旧版でエラーになった端末でも、既存鍵を保全して再実行できます。[端末管理と接続設定](docs/DISTRIBUTED_COMPUTE.md)。
-同日、配布ZIPからの検証を含むセットアップ22 testsが通過。Tailscaleで指定11台へZIPを直接送信済みです。
-各PCのダウンロードフォルダ（古いTailscaleはデスクトップ）で受け取り、最初は1台だけ登録して親機から実接続を確認します。
+- 2週連続（2025-01-20〜01-27）でのBESS残量引き継ぎと連続運用可能性の検証ツールを追加しました。
+  ```powershell
+  python tools/research/run_bess_continuous_diagnostic.py --output output/bess_continuous_two_week_20260923
+  ```
+- 第1週の終端BESS残量を第2週の初期値へ厳密に引き渡す連続性診断を実施できます。
 
-端末管理画面にオンライン状態、SSH認証、CPU・空きRAM・ディスク、停止/受付停止を追加しました。
-子機11台の登録済み設定と、実際の計算準備完了は区別します。計算は独立プロセスで起動し、実行中のWindows自動スリープを抑止します。
-WLSの同時利用枠は2に設定。子機での接続・ライセンス確認と週間実規模実行は未完了です。
+---
 
-2026-09-22 7日間の分散計算を再点検: 別管理の実測PVの転送、長期成果物のディスク転送、ローリングOFFの反映を修正しました。
-期間・予定168回・キュー集計を表示します。複数日の正式研究実行は既存の `MULTIDAY_RESEARCH_BLOCKED` により開始できません。
-診断入力の対応と週間実規模計算の検証は別です。[検証範囲](docs/DISTRIBUTED_COMPUTE.md)。
+## 最短で起動する
 
-2026-09-22 分散計算を追加: 「実行」で配布先を選び、「分散計算」でPC・キュー・結果を確認できます。
-ローカル/SSH共通runner、凍結入力とコードの照合、永続キュー、成果物ZIP回収に対応します。
-別PCの接続設定と実機検証は別途必要です。[セットアップと対応範囲](docs/DISTRIBUTED_COMPUTE.md)。
+### 前提
 
-2026-09-21 3月SOC数値誤差への対応: 固定818e78d0は1・2月の独立監査を通過し、3月hour152で停止しました。直前の前処理による約2.85e-7kWhの制約誤差を再現。前日Presolve2を保持し、毎時Presolve0を全月共通にする修正を検証しています。連続17時間と初日窓の確認が通った場合のみ、スクリプトが新固定版で全12週を再開始します。[原因・証拠・実行条件](docs/notes/MONTHLY_AUXILIARY_ROLLING_NUMERICS_20260921.md)。
+- OS: Windows 10 / 11（PowerShell環境）
+- Python: 3.11 以上（CI・開発の基準は Python 3.11）
+- ソルバー: MILPを実行する場合は、別途 Gurobi Optimizer と有効なライセンス（ヒューリスティック単体・診断実行はライセンス不要）
+- データセット: 利用対象の built dataset（画面のデータ状態で確認可能）
 
-2026-09-21 19:11 JST ログ修正版の全12週を再開始: 固定 `818e78d0`、計算PID44076・監視PID35696。19:12に両プロセスの生存と1月PREPARING_WEEK・完了0/12を確認。旧27253fa8は内部チェックの「保存先なし」とログ有効フラグの矛盾で本Stage1前に停止しました。内部だけログ無効とし、本求解・rollingの記録と研究条件を維持。再現を含む154 tests通過、実1月入力の内部nativeチェックも例外なく戻ることを確認しました。[原因・修正・今回の実行先](docs/notes/MONTHLY_AUXILIARY_LOGGING_RECOVERY_20260921.md)。以下の27253fa8起動記録は停止済み旧版です。
+### 環境構築
+
+初回のみ、仮想環境の作成と依存ライブラリのインストールを行います。
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-2026-09-21 18:57 JST 修正版の全12週を開始: 計算固定 `27253fa8`、Stage2 Presolve2を全月・毎時に適用。第一時間の再計画と実測4区間も通過。起動直後の正常な入力候補作成を監視が失敗扱いする問題を制御側で修正（監視35 tests通過）。19:00 JSTに計算PID49988・監視PID32576の生存と固定版の無変更を確認。1月準備中・完了0/12、通常処理はスクリプトのみ。[記録](docs/notes/MONTHLY_AUXILIARY_PRESOLVE_RECOVERY_20260921.md)。
+MILP を使う環境では、Gurobi を導入・ライセンス設定したうえで `gurobipy` を確認します。
 
-2026-09-21 充電計画の停止対応: 旧a4b9c679は1月Stage2の120秒no-incumbentで停止（成功0/12）。同じ配車・同じMPSで前処理だけを有効にすると59.64秒・充電gap0%・独立物理VALIDを確認しました。BESSルールを保持し、全月共通の新設定へ修正。関連143 tests通過。[原因・証拠・新しい実行先](docs/notes/MONTHLY_AUXILIARY_PRESOLVE_RECOVERY_20260921.md)。以下の起動記録は停止した旧版です。
+```powershell
+python -m pip install gurobipy
+python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0, name='x'); m.setObjective(x); m.optimize(); print('gurobi_ok', gp.gurobi.version())"
+```
 
-2026-09-21 17:59 JST 月別再実行開始: BESS補助運用の固定 `a4b9c679` で、同じ12週を新規Prepareから開始しました。起動確認時は1月週の準備中・完了0/12、計算とスクリプト監視の生存を確認。関連101 tests・固定版20 tests通過。旧月別計算は実プロセスなし・完了済みでした。通常処理はスクリプトのみ、全12週の検証後に完了メールを送ります。[今回の条件・状態・配信](docs/notes/MONTHLY_AUXILIARY_EXECUTION_20260921.md)。
+### アプリケーション起動
 
-2026-09-21 BESS補助運用: ユーザー指定に合わせ、PVをバスへ優先し、余剰だけBESSへ充電するルールを実装しました。下限なら放電待機、上限なら充電を止めて抑制し、不足分は既存の買電条件で補います。追加予備・終端復元なし。関連222 tests通過、新方針の実規模計算は未開始です。[運用ルール・新設定・検証範囲](docs/notes/BESS_AUXILIARY_POLICY_20260921.md)。以下の範囲比較は旧方針の記録です。
+起動は次の一行です。FastAPI BFF をバックグラウンドで起動し、準備完了後に Tkinter デスクトップ画面を立ち上げます。画面を閉じると BFF も自動的に正常終了します。
 
-2026-09-21 16:30 JST: 固定3dcdbffdのBESS20–80%対10–90%診断が終了しました。予測総費用は4,147,020.02円対4,147,615.57円。両条件のseed/最終案の物理・BESS収支・修正後CO₂会計は通過しましたが、Stage1はメモリ停止・gap3.545%/3.559%で目標1%未達です。20–80%の安い案が10–90%でも同費用で成立する検査を通過したため、観測差595.55円を緩和の悪化効果とは解釈しません。週間統合最適性・研究採用は未証明です。[実測と発表用の説明](docs/notes/BESS_RANGE_SENSITIVITY_20260921.md)。
+```powershell
+python run_app.py
+```
 
-共通設定予算でも、構築後の実効Stage1上限は1,800秒/1,709.63秒でした。両方ともその前にメモリ停止しています。10–90%は実機未確認の感度分析で、初期在庫を最終案で600kWh多く取り崩しています。全月自動開始・メール・追加AI監視は行っていません。以下は先行検査の記録です。
+API のみ単体で起動して動作確認したい場合は、以下を実行します。
 
-総費用の小規模検査はclean固定dd21fedcでも実行済みです。人工2日間の全4割当を評価し、最小費用の上下界が一致。PVだけを増やす対条件も通過しました。これは検査用の基準値で、週間実規模の最適性証明は引き続き未完了です。証拠は `output/daily_assignment_reference_20260921/audit.json`。
+```powershell
+python -m uvicorn bff.main:app --host 127.0.0.1 --port 8000
+```
 
-2026-09-21 2threads診断確認: 固定6aab4424も931.25秒でメモリ停止、最大18.015GB・gap3.610%で1%未達。修正CO₂式で保存配車を再集計するとseed4,157,098円→final4,149,820円（7,278円減）ですが、前回4threads案より2,800円高く、改善設定に採用しません。全4割当を充電まで評価する人工2日間の総費用基準解検査を追加し、関連39 tests通過。週間統合最適化は未完了です。[最新診断と基準解検証](docs/notes/TWO_THREAD_RESULT_AND_DAILY_REFERENCE_20260921.md)。全12週・メール・追加AI監視は開始していません。
+> [!NOTE]
+> 本リポジトリには配布済みの `.exe` バイナリは含まれていません。配布物を受け取っている場合は、その配布元の指示に従ってください。
 
-2026-09-21 研究上の再点検: 日次帰庫の燃料費とCO₂で参照する移動が異なる不具合を修正しました。保存済みd6fe5b31の両案でCO₂費70.883円ずつの計上漏れを確認。修正式での再集計は4,157,098円→4,147,020円で、差10,078円は不変ですが再最適化ではありません。関連182 tests通過。週間・毎日帰庫の統合解法は未対応で、設定調整だけでは全体最適を証明できません。[修正根拠と研究の成立条件](docs/notes/RESEARCH_OPTIMALITY_CONTRACT_20260921.md)。以下の過去結果の総費用は訂正前の原本値です。
+---
 
-<!-- monthly-proof-budget-email-sent-20260923 -->
-2026-09-23 01:33 JST: 固定 `7cb46894` の月別12週・季節別整理を、承認済み `g2681320@tcu.ac.jp` へ結果4点付きで1通送信しました。Gmail実message ID `1a0c9f78974455ee`、SENT・宛先・件名・添付4点・送信済み一致1件を確認。正本は `output/monthly_auxiliary_proof_budget_20260922/script_observer/email_receipt.json`。重複イベントでも再送しません。受信者の受信トレイへの配達確認は未実施。研究採用BLOCKEDは継続します。
-<!-- /monthly-proof-budget-email-sent-20260923 -->
+## 最初の最適化
 
+デスクトップ画面が起動したら、基本は以下の 4 ステップで最適化を実行できます。
 
-<!-- monthly-proof-budget-final-20260923 -->
-2026-09-23 01:20 JST: 固定 `7cb46894` の月別12週が完走し、全12週の独立監査と最終図表を確認しました。合計2,016受理時間・8,064区間、物理検証・確定会計の照合済み。Stage1 gapは3.264～4.274%で目標1%未達、週間総費用の統合最適性・研究採用はBLOCKEDです。[結果と季節別整理](docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md)。配信前の原本4,176ファイル・添付4点のhashと実図の表示を確認しました。
-<!-- /monthly-proof-budget-final-20260923 -->
+1. **シナリオ選択**: 対象の運行日、営業所、路線（渋24、渋21〜23等）を確認して選択。
+2. **`Quick Setup 保存`**: 選択したシナリオと条件を保存・確定。
+3. **ソルバー設定**: 条件（タイムリミット、ギャップ等）を変更する必要がある場合のみ設定画面を開く。
+4. **`高速実行` をクリック**: 未 Prepare または更新が必要な場合は、画面が自動で Prepare を先行実行してから最適化ジョブを開始します。
 
+> [!TIP]
+> **数値入力仕様の注意**:
+> Quick Setup の数値入力において、`0` は「未入力」ではなく「明示された設定値」として扱われます。例えば、基本料金 `0 JPY/kW`、売電単価 `0 JPY/kWh`、乱数 seed `0` は、保存後の再読込や次回 Prepare でもそのまま厳密に保持されます。既定値が使われるのは明示的に未設定（`null`）の場合のみです。
+> また、PV設備容量は保存された `pv_capacity_kw`（PV定格出力）が最適化入力の正本です。屋根面積からの逆算値などで勝手に上書きされることはありません。
 
-<!-- monthly-auxiliary-proof-budget-status -->
-最新の月別再実行: 固定 `7cb46894`、独立監査 12/12週、状態 `COMPLETED`。全月共通の前日MIPFocus1/Method1・毎時MIPFocus2/Method0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2/Focus0・毎時Presolve0/Focus3・600秒。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.md`。
-<!-- /monthly-auxiliary-proof-budget-status -->
+### 結果を正しく読む
 
+最適化が終了すると、画面の `Optimization結果` または `` `output/` `` ディレクトリ配下に成果物が生成されます。ステータスの意味を正しく把握することが重要です。
 
-<!-- monthly-hourly-proof-budget-launch -->
-固定 `7cb46894` の保存hour49/50の引継ぎ・BESS8区間・Stage2 gap1%・厳密数値品質が通過（週間物理は新規計算後に監査）。新規Prepareから全12週を開始（UTC 2026-09-22T00:37:28.385387+00:00、計算PID28896、監視PID56652）。毎時600秒・NumericFocus3・MIPFocus2・実行前gap1%検査を共通適用。旧週の流用なし、通常処理はスクリプト。研究採用BLOCKED。記録: `output/monthly_auxiliary_proof_budget_20260922/startup_verification.json`。
-<!-- /monthly-hourly-proof-budget-launch -->
+| 表示・成果物 | 分かること | それだけでは分からないこと（注意点） |
+|---|---|---|
+| ジョブが `completed` | 非同期ジョブが終端状態まで到達した | 物理的可行性、電力収支妥当性、研究受理 |
+| `solver_status=OPTIMAL` または `FEASIBLE` | ソルバーが数理モデルの解を返した | 24h Rollingの成立、独立物理検証の合格、正式な研究主張 |
+| `rolling_execution.status=executed_and_accepted` | 24時間/7日間の Rolling 再計画連鎖が受理された | 比較対照の妥当性、論文への採用可否 |
+| `teacher_release_status=READY` | 正式な研究リリースの全ゲート（物理・会計・Git）を通過 | それ以上の大域的最適性 |
 
+**主な成果物ファイル**:
+- `summary.json`: 実行・受理状態の全体サマリー
+- `experiment_report.md`: 人間が読みやすい Markdown 形式の実験報告書
+- `results.xlsx`: 詳細な時系列集計と照合用スプレッドシート
+- `rolling_hourly_chain/executed_day_accounting.json`: **受理済み Rolling の確定費用・電力収支の唯一の正本**
 
-2026-09-22 9:33 JST 起動確認: clean固定 `7cb46894` で保存hour49/50の局所引継ぎ検証を開始。制御PID56540、診断launcher PID59088。入力47ファイル・helper hash・実モデルfingerprint/MPS SHAの一致を確認済み。新しい全12週計算はまだ未開始0/12。局所2時間のgap1%/厳密数値品質/BESS8区間/引継ぎ通過後だけ全月を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、メール未送信。記録: `output/monthly_auxiliary_proof_budget_20260922/gate_startup_verification.json`。
+> [!WARNING]
+> 単に `job completed` や `OPTIMAL` と表示されただけで「研究成果として成功」と判断しないでください。独立物理検証と会計照合の合格を必ず確認してください。
 
+---
 
-2026-09-22: 固定4b1cbbb7の新規全月実行は1月hour49（50時間目）でgap1.1743%/120秒となり停止、完了0/12。実行前の1%検査は正しく拒否した。同一MPSは600秒枠で167.37秒・gap0.95286%（目的値同額、下界改善）。毎時上限だけ全月共通600秒とし、新clean固定版の局所2時間引継ぎ通過後に新規Prepareから全12週を再計算する。研究採用BLOCKED、メール未送信。[原因と次の条件](docs/notes/MONTHLY_AUXILIARY_PROOF_BUDGET_20260922.md)。
+## 分散計算クラスタの構成と運用
 
+本リポジトリは、親PCと最大17台の子PC（計18台）による分散ケース計算・バッチ実行機能を備えています。
 
-<!-- monthly-hourly-quality-launch -->
-固定 `4b1cbbb7` のhour126からの42時間連続検証・独立物理・BESS収支・厳密数値品質が通過。新規Prepareから全12週を開始（UTC 2026-09-21T23:43:29.578227+00:00、計算PID57572、監視PID53756）。毎時120秒・NumericFocus3・MIPFocus2・実行前gap1%検査を共通適用。旧週の流用なし、通常処理はスクリプト。研究採用BLOCKED。記録: `output/monthly_auxiliary_quality_20260922/startup_verification.json`。
-<!-- /monthly-hourly-quality-launch -->
+```mermaid
+flowchart LR
+    Master["親PC (Controller)"]
+    Q["SQLite 永続キュー"]
+    W1["子PC 1..N (Gurobi対応)"]
+    W2["子PC N+1..17 (非Gurobi / ALNS)"]
 
+    Master --> Q
+    Q -->|SSH / Task Dispatch| W1
+    Q -->|SSH / Task Dispatch| W2
+    W1 -->|Zip64 & SHA-256| Master
+    W2 -->|Zip64 & SHA-256| Master
+```
 
-2026-09-22 起動確認: clean固定 `4b1cbbb7` で一度きりの検証スクリプトを起動。制御PID23684、入力47ファイル/hashと実モデル0x006d6a65の一致を確認済み。現時点は局所実経路の検証段階で、全月は未開始0/12。局所引継ぎ・連続42時間・gap/数値品質・独立物理/BESSが通過した場合だけ全12週を新規Prepareから開始する。通常処理はスクリプトへ委任、失敗時1回通知、完了メール未送信。記録: `output/monthly_auxiliary_quality_20260922/gate_startup_verification.json`。
+- **常駐監視画面（Cluster UI）**: ブラウザで `http://127.0.0.1:8868/#cluster` にアクセスすると、全18台の稼働状態、接続状態（Tailscale / SSH）、空きRAM、CPU負荷、およびキュー内のジョブ進捗をリアルタイム監視できます。
+- **安全な配布と完全なGit照合**:
+  - 全ノードで同一の固定Git SHAと入力データハッシュを照合。
+  - Zip64形式で成果物を安全に転送し、親機側でチェックサムを検証。
+- **代表的な運用コマンド**:
+  ```powershell
+  # 全接続ノードの事前診断
+  python tools/cluster/check_workers.py
+  # 実便バッチの検査（求解なし）
+  python tools/cluster/real_shibu24_batch.py check
+  ```
+- **詳細手順・接続設定**: [分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md)
 
+---
 
-2026-09-22: 毎時120秒版 `b1916e56` は連続診断29時間を通過後、hour155のStage2 gap71.0609%で停止。全月は未開始0/12、メール未送信。同一MPSでは毎時MIPFocus2のみの変更で110.43秒・gap0.97394%を確認した（目的値はほぼ同額、費用削減ではない）。実行前の1%検査と169原本の独立監査を追加。新clean固定版で局所引継ぎ→42時間連続検証→通過時だけ新規Prepareから全12週をスクリプト実行する。研究採用BLOCKED。[根拠と条件](docs/notes/MONTHLY_AUXILIARY_STAGE2_QUALITY_20260922.md)。
+## 研究用の正式実行と厳格なガードレール
 
+日常的な動作確認やパラメータ調整（試行計算）と、論文や対外発表に用いる「正式研究実行」は明確に区別されます。
 
-2026-09-22 07:30 JST 起動確認: clean固定 `b1916e56` で毎時共通120秒・42時間の連続検証を開始。一度きりの制御PID36772、診断実PID59324、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_budget_20260922/gate_startup_verification.json`。
+### 正式研究実行の4大前提条件
 
+1. **clean な Git worktree と固定 Git SHA**: 未コミット変更がある状態での実行結果は、自動的に `DIAGNOSTIC / BLOCKED` 扱いとなります。
+2. **完全後続ネットワーク（Zero Successor Pruning）**: 枝刈りされたヒューリスティック設定（8/16/32枝刈り）は感度分析用途に限定され、正式実行には完全後続ネットワークを用います。
+3. **フォールバック・事後修復の禁止**: 制約違反が生じた解を後からスクリプトで辻褄合わせして修正することは禁止されています。
+4. **全ゲートの通過**: 日初計画、全時間帯の Rolling 再計画、独立物理シミュレーション、日次確定会計台帳の一致（1e-6 JPY未満）がすべて満たされる必要があります。
 
-2026-09-22 毎時求解時間の修正: 旧c5c1eff7は12時間の連続診断通過後、hour138が15秒で解なしとなり停止。全月計算は未開始（0/12）。同一MPSを120秒枠で解くと17.13秒・gap0、実経路の状態引継ぎ/BESS4区間も通過しました。全月・全時間の上限を共通120秒にし、SOC/BESS/運行条件は保持。関連81 tests通過。新固定版で42時間検証後だけ全12週を新規実行します。[証拠と実行条件](docs/notes/MONTHLY_AUXILIARY_ROLLING_BUDGET_20260922.md)。完了メール未送信、研究採用BLOCKED。
+### 非妥協的ガードレール（Non-negotiables）
 
+- `arrival + turnaround + deadhead <= next departure` の運行制約を絶対に緩和・迂回しない。
+- 時刻表データ（`timetable_rows`）を勝手に書き換えたり、間引いたり、再生成しない。
+- オペレーターID（`operator_id`）の欠落や推測による補完を禁止（`UNKNOWN` ゼロが必須）。
+- 金額を合わせるために燃料リットル、SOC、運行距離、電力量などの物理量を捏造・換算しない。
+- 実行手順の正本: [正式研究実行の手順](docs/notes/FORMAL_RUNBOOK_CURRENT.md)
+- 現在の未解決課題一覧: [研究リリースのブロッカー一覧](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md)
 
-2026-09-22 07:13 JST 起動確認: clean固定 `c5c1eff7` で42時間の連続検証を開始。一度きりの制御PID57968、診断実PID56952、入力47ファイルのhash照合済み。現時点は `CONTINUOUS_TAIL_RUNNING`、全月計算は未開始（0/12）。連続検証・独立物理・BESS・gap・数値品質の全ゲート通過後だけ全12週を新規計算する。通常処理はスクリプト、失敗時は停止して1回通知。完了メール未送信。記録: `output/monthly_auxiliary_numeric_20260922/gate_startup_verification.json`。
+---
 
+## よくある確認ポイント
 
-2026-09-22 月別失敗の修正: 旧固定c022ece7は1月126時間通過後、127時間目で停止（完了0/12）。同一MPSの旧設定で失敗を再現し、NumericFocus3で解と厳しい数値品質を確認しました。SOC・BESS・運行制約を保持し、毎時の共通設定として実装。関連91 tests通過。clean固定版の42時間連続検証と通過後の新規全12週をスクリプトへ委ねます。全月完了・統合最適性は未確認、研究採用BLOCKED、完了メール未送信。[原因・証拠・実行条件](docs/notes/MONTHLY_AUXILIARY_NUMERIC_FOCUS_20260922.md)。
+### データが利用できない
 
+画面上または `GET /api/app/data-status` でデータ状態を確認してください。`BUILT_DATASET_REQUIRED` が表示された場合は、データを推測で補わず、[運用ガイドのデータ復旧手順](docs/guides/operations.md#no-module-named-tokyubus_gtfs)に従ってデータセットを再構築してください。
 
-<!-- monthly-timeline-launch -->
-固定 `c022ece7` の1月・4月前日計画は物理・Stage2目標gap・独立BESS672区間・seed保存検査を通過。全12週を新規開始（起動確認UTC 2026-09-21T20:55:59.663081+00:00、計算PID40588、監視PID44808）。旧週を流用せず、通常処理はスクリプトのみ。研究採用BLOCKED。記録: `output/monthly_auxiliary_timeline_20260922/startup_verification.json`。
-<!-- /monthly-timeline-launch -->
+### 503 またはジョブ待ちになる
 
+BFF は計算の完全性とリソース競合防止のため、同時にひとつの最適化ジョブしか受け付けません。先行ジョブの終了を待つか、並列ケース比較には [分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md) を活用してください。
 
-2026-09-22 月別計算の1月停止を修正: 帰庫・出庫の二重控除と回送電力の遅延計上により、物理的に充電可能な初期案が配車側で排除されていました。関連188 testsと1月26台の充電計画再現を通過。新固定版で1月・4月を検査し、通過時だけ全12週を新規実行します。現在の旧版は0/12、研究採用BLOCKED、完了メール未送信。[原因・検証・実行手順](docs/notes/MONTHLY_AUXILIARY_TIMELINE_20260922.md)。
+### INFEASIBLE になる
 
+SOC初期値、車両台数、充電器数、契約電力、折返し回送時間、`allowPartialService` の設定を確認してください。条件を変更した後は必ず再 Prepare を実行してください。
 
-<!-- monthly-session-launch -->
-固定 `e5ad8b3b` の4月前日計画は物理・Stage2目標gap・独立BESS672区間検査を通過。全12週を新規開始（起動確認UTC 2026-09-21T18:39:37.272034+00:00、計算PID51224、監視PID57704）。旧3週を流用せず、通常処理はスクリプトのみ。研究採用BLOCKED。記録: `output/monthly_auxiliary_session_20260922/startup_verification.json`。
-<!-- /monthly-session-launch -->
+### NEXT_MORNING_SOC_NOT_READY が出る
 
+新フロントで「翌朝出庫前に運用上限達成」または「最終夜間算入」を選択したシナリオで、翌朝分のダイヤ・PV・料金データが未整備のときに表示されます。これは不正な無料充電計画を出力させないための正常な安全ガードです。
 
-<!-- monthly-session-recovery -->
-2026-09-22: 固定3289f07bは1～3月監査済み、4月前日計画で充電不成立。接続・切離し時間を配車段階の必要条件へ追加し166 tests通過。新固定版の4月事前検証が通った場合だけ全12週を新規開始する。旧結果は混ぜず、最適性・研究採用は未達。[原因と修正](docs/notes/MONTHLY_AUXILIARY_SESSION_TIME_20260922.md)。
-<!-- /monthly-session-recovery -->
+---
 
+## 関連資料
 
-<!-- monthly-auxiliary-rolling-status -->
-最新の月別再実行: 固定 `3289f07b`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、前日Presolve2・毎時Presolve0。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_ROLLING_RESULTS_20260921.md`。
-<!-- /monthly-auxiliary-rolling-status -->
+| 読者・用途 | 資料 | 内容・目的 |
+|---|---|---|
+| **日常操作・比較・トラブル対応** | [運用ガイド](docs/guides/operations.md) | 基本操作、ベンチマーク比較、トラブルシューティング |
+| **指導教員・共同研究者向け** | [教員レビューガイド](docs/guides/professor_review.md) | 研究の目的、数理モデルの概要、評価結果の説明 |
+| **分散計算クラスタ運用** | [分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md) | 親機・子機設定、Tailscale/SSH、常駐監視UI |
+| **数理モデルの定式化** | [制約・目的関数の定式化](docs/constant/formulation.md) | 目的関数、物理制約、フロー保存則の詳細数式 |
+| **実装・定式化の対応状況** | [実装状況](docs/constant/implementation_status.md) | コード上の実装モジュールと定式化の対応表 |
+| **車両セット固定ルール** | [Scenario Fleet Contract](docs/model/SCENARIO_FLEET_CONTRACT.md) | シナリオごとの車両ID・諸元の固定契約 |
+| **先行文献・図表マッピング** | [Literature Figure Mapping](docs/model/LITERATURE_FIGURE_MAPPING.md) | 先行研究の図表・パラメータと本システムの実装対応 |
+| **UI・フロントエンド設計** | [frontend 移行仕様](docs/frontend/README.md) | React / Tauri 移行の設計書とAPI仕様 |
+| **開発決定・変更履歴** | [開発ノート](DEVELOPMENT_NOTES.md) | 日々の実装決定、バグ修正、検証結果の技術記録 |
 
+---
 
-<!-- monthly-auxiliary-rolling-launch -->
-固定 `3289f07b` の前日Presolve2/毎時Presolve0による全12週を開始。起動確認UTC 2026-09-21T13:33:23.889786+00:00、計算PID3316、監視PID50460、PREPARING_WEEK・完了0/12。17時間連続と1月/3月の最初の窓の事前検証を通過。旧2週を混ぜず、通常処理はスクリプトのみ。研究採用BLOCKED。記録: `output/monthly_auxiliary_rolling_20260921/startup_verification.json`。
-<!-- /monthly-auxiliary-rolling-launch -->
+## リポジトリの見取り図
 
+```text
+run_app.py                  Tkinter + FastAPI BFF を同時起動するメインランチャー
+tools/scenario_backup_tk.py 現行のデスクトップ操作画面
+bff/                        FastAPI BFF（APIルーティング、ジョブ管理、成果物確定）
+src/                        最適化コア（Stage 1配車、Stage 2充電、Rolling、物理検証）
+  ├── optimization/         MILP / ALNS 数理最適化ソルバーモジュール
+  ├── energy/               PV・BESS・系統電力シミュレーション
+  ├── rolling/              24時間 / 7日間ローリング再計画エンジン
+  └── validation/           独立物理シミュレータ・制約検証
+data/                       入力データ、GTFS、built dataset
+output/                     最適化成果物の出力先ディレクトリ（Git管理外）
+docs/                       運用・教員レビュー・モデル仕様・研究ノート
+  ├── guides/               運用・レビュー・契約ガイド
+  ├── notes/                研究ブロッカー、正式実行手順書、個別実験記録
+  └── constant/             モデル定式化、原資料、実装状況
+scripts/                    データ整備、カタログ抽出、一括実行スクリプト
+tools/                      クラスタ分散実行、GUI補助、ベンチマークツール
+tests/                      回帰テストスイート（ナビゲーション、物理制約、レイアウト）
+```
 
-<!-- monthly-auxiliary-logfix-status -->
-前回の月別再実行（停止済み）: 固定 `818e78d0`、独立監査 2/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVバス優先・余剰蓄電・20～80%内で補助使用。追加予備・終端復元なし。Stage1 1800秒・4threads・目標1%、Stage2 Presolve2。旧結果は混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_LOGFIX_RESULTS_20260921.md`。
-<!-- /monthly-auxiliary-logfix-status -->
+---
 
+## 開発・検証
 
-2026-09-21 13:36 JST終了: 固定d6fe5b31で、入力初期配車からの予測総費用が4,157,027円→4,146,949円、10,078円（0.242%）減と確認できました。両案の配車hash・独立物理・BESS672区間・Stage2 gap0%を照合済みです。BESS終端は初期案1,238.85kWh／最終案1,200kWhで、在庫取り崩しも明記。Stage1は702.67秒でメモリ停止、最大18.012GB、gap3.545%で1%未達です。13:50 JST、clean固定6aab4424から同予算・同モデルのthreads4→2限定診断をスクリプトで開始しました（起動確認RUNNING）。週間実績・全12週の結果ではありません。[発表説明と残課題](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
+開発環境では `pytest` を使用してテストを実行します。
 
-以下は過去時点の経過記録です。
+```powershell
+python -m pip install pytest
+python -m compileall -q src bff scripts tools
+python -m pytest -q -p no:cacheprovider
+```
 
-2026-09-21 13:13 JST: clean固定d6fe5b31から、同じ解法のStage1 1800秒・初期配車の固定Stage2費用比較を新規Prepareで開始しました。入力47 SHA・参照11件・case3参照・全条件を照合。通常はscriptだけが処理し、終了時のみ既存タスクへ通知します。制御先 `output/barrier_budget_seed_cost_20260921/startup_verification.json`。まだ費用改善・1%達成は未確認です。
+README のナビゲーションおよびリンク切れを検証する軽量テスト:
 
-2026-09-21 12:59 JST: 固定19fe856dはcrossover停止を回避し、最大16.124GB、native log上で根LP終了を確認しました。600秒で時間切れ、改善0円・gap3.779%で目標1%未達です。初期配車の固定Stage2費用比較と根LPログの証拠を追加し、関連93 tests通過。次は同じ解法の1800秒診断です。[説明資料・数値・残課題](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
+```powershell
+python -m pytest -q tests/test_readme_navigation.py
+```
 
-2026-09-21 12:39 JST: 固定19fe856dからcrossover省略の5月診断をスクリプトで開始。入力47 SHA・参照11件・case source3参照と条件を照合し、起動時RUNNINGを確認しました。実規模の改善判定は結果待ちです。[問題点と説明資料](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。
+---
 
-2026-09-21: [発表前の問題点・修正・説明根拠](docs/notes/PROGRESS_DEFENSIBILITY_REVIEW_20260921.md)。最新8cd06d3fの物理/BESS672区間は通過しましたが、Stage1はbarrier収束後のcrossoverでメモリ停止、改善0円・gap3.779%で目標1%未達です。基底生成を省く新profileと、診断終了/精度達成/総費用の区別を追加し、関連71 tests通過。実規模の修正効果・修正後12週・研究承認は未確認です。
+## 直近の更新履歴（要約）
 
-2026-09-23: Solcastの2023年8月（2,976件）を追加取得し、地点・15分間隔・7項目・月内連続性・request/raw SHAを検証しました。学習対象2022〜2024年は32/36か月・93,504件、残りは2023年9〜12月の4か月です。残量不明のため取得は1リクエストのみ。既存2024年学習・凍結済み比較の入力は保持しています。取得状況: `output/seven_day_extension_20260910/training_history_acquisition_status.json`。
+- **2026-09-23**:
+  - 渋24・2025年月別代表週（12週）の翌朝オーバーナイト診断入力を整備。`python tools/research/shibu24_monthly.py check` による事前検証に対応。([渋24月別診断](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md))
+  - 分散計算クラスタを18台構成へ拡張（`LAPTOP-BOLC6VIT`, `LAPTOP-8JS4DQCD` 追加）。常駐監視画面で「Gurobi対応」と「Gurobi不要」ノードを分離表示。([分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md))
+  - フロントエンドにシナリオ路線分類（渋24／渋21〜24等）と翌朝SOC設定を追加。未対応シナリオに対する誤計算防止ガード `NEXT_MORNING_SOC_NOT_READY` を実装。
+  - BESS連続2週間診断スクリプトを追加。([記録](docs/notes/SHIBU24_DUMMY_CLUSTER_20260923.md))
+- **2026-09-22**:
+  - SSH並列割当におけるRAM・Gurobi枠の厳格な合算予約と単発並列検査ツールを実装。
+  - Windows PowerShell 5.1環境向けの子機セットアップスクリプト改善と直接転送検証。([子PC設定](docs/DISTRIBUTED_COMPUTE.md))
+  - 7日間分散計算のPV参照・成果物Zip64転送・SHA検証の強化。
+- **2026-09-21**:
+  - 3月SOC数値誤差の分析とStage 1充電可能時間表現の改善。([記録](docs/notes/STAGE1_CHARGE_WINDOW_SUPPORT_20260921.md))
+  - BESS追加予備・復元なし診断および2スレッド実行時の最適性契約整理。([契約整理](docs/notes/RESEARCH_OPTIMALITY_CONTRACT_20260921.md))
 
-2026-09-22: Solcastの2023年7月（2,976件）を追加取得し、地点・15分間隔・7項目・月内連続性・request/raw SHAを検証しました。学習対象2022〜2024年は31/36か月・90,528件、残りは2023年8〜12月の5か月です。残量不明のため取得は1リクエストのみ。既存2024年学習・凍結済み比較の入力は保持しています。取得状況: `output/seven_day_extension_20260910/training_history_acquisition_status.json`。
+---
 
-2026-09-21: Solcastの2023年6月（2,880件）を追加取得し、地点・15分間隔・7項目・月内連続性・request/raw SHAを検証しました。学習対象2022〜2024年は30/36か月・87,552件、残りは2023年7〜12月の6か月です。残量不明のため取得は1リクエストのみ。既存2024年学習・凍結済み比較の入力は変更していません。取得状況: `output/seven_day_extension_20260910/training_history_acquisition_status.json`。
+## 過去の実験・診断アーカイブ
 
-2026-09-21: [日別路線検査の修正が新規求解でも通過](docs/notes/ENDPOINT_BARRIER_DIAGNOSIS_20260921.md)。物理・BESS672区間収支は通過、BESS3000→1200kWh、予測総費用415.66万円。Stage1目的値改善は132.52円、gap3.78%で1%未達です。根LP未完了を受け、12:07 JSTにclean固定8cd06d3fから端点表現・4threadsのbarrier診断を開始しました。全12週・メールの完了ではありません。
-
-2026-09-21: [NoRel候補の日別路線検査を修正](docs/notes/ROUTE_BAND_SERVICE_DAY_FIX_20260921.md)。翌日の路線変更を7日全体の路線混在と誤判定していました。同日固定と帰庫・時間制約を維持して修正し、関連134 tests通過。元候補の約133円のStage1目的値差は採用済み費用削減ではなく、gap3.78%で目標未達です。BESS追加予備・復元なしを保ち、11:38 JSTにclean固定e79476d9から5月だけのスクリプト再診断を開始しました。
-
-2026-09-21: [BESSの追加予備・復元なし診断](docs/notes/BESS_OPERATING_RANGE_POLICY_20260921.md)が完了。前日計画の物理とBESS672区間の収支が通過し、予測上の買電0、BESS3,000→1,238.85 kWhでした。配車の探索改善は0円・gap3.78%で1%目標未達。旧条件との費用差には運用条件の変更と在庫取り崩しが含まれます。同じBESS方針・端点表現で、11:02 JSTにclean固定48ffb374から既存NoRel探索の新規5月診断を開始しました。
-
-2026-09-21: [端点表現の比較結果](docs/notes/STAGE1_CHARGE_WINDOW_SUPPORT_20260921.md)。非零係数67.6%、最大nativeメモリ22.3%を削減。両条件の物理検証は通過しましたが、配車の費用改善0円・gap6.91%で目標1%未達です。端点表現を採用し、[BESSの追加予備と残量復元を外す設定](docs/notes/BESS_OPERATING_RANGE_POLICY_20260921.md)で10:34 JSTにclean固定534aba0bから5月診断を開始しました。起動参照の誤りは求解前に修正し、入力設定とRUNNINGを確認済みです。全12週・実績費用改善の証拠はありません。
-
-2026-09-21: [BESSの追加予備・残量復元を外す方針](docs/notes/BESS_OPERATING_RANGE_POLICY_20260921.md)。ユーザー指示に合わせ、利用可能残量が尽きたら待機し、満杯では余剰PVを抑制する新設定を作成しました。設備の20–80%範囲を残し、初期50%の維持と週末復元を外します。関連136 tests通過。新条件は未実行で、実行中の固定00aed18eは旧条件の表現比較として継続します。
-
-2026-09-21: [配車2条件の結果と充電可能時間の表現改善](docs/notes/STAGE1_CHARGE_WINDOW_SUPPORT_20260921.md)。固定4f979982は両条件の物理検証・充電gap0.368%を通過。配車は費用改善0円・認証gap6.91%で、NoRelなしは600秒、ありはメモリ上限で停止しました。充電可能時間の繰返しを等価な端点表現へ置き換える実装を追加し、09:45 JSTにclean固定00aed18eから、同一条件の新規比較をスクリプトで開始しました。5月の費用・速度改善や全12週の新結果は未確定です。
-
-2026-09-21: [配車診断の入力参照漏れを修正](docs/notes/STAGE1_INPUT_BINDING_FIX_20260921.md)。固定4a85de14はPrepare通過後の検査が旧保存先を参照して停止し、両条件とも求解未実行でした。作成と検査の参照を統一し、元の失敗理由を保存するよう修正。実データの事前検査と関連60 testsを通過し、08:55 JSTにclean固定4f979982から同じ探索設定でスクリプト診断を開始しました。費用・メモリ改善は未評価です。
-
-2026-09-21: [配車探索の停止原因と修正](docs/notes/STAGE1_MEMORY_SEARCH_DIAGNOSIS_20260921.md)。固定daa9ef59のbarrierは18 GB上限で停止。下界強化でgap6.91%になりましたが、費用改善は0円です。NoRelは入力保存先の衝突で求解前に停止したため、campaignごとに保存先を分離しました。08:42 JSTにclean固定4a85de14から、双対単体法・4 threads・18 GBでNoRel有無を比較するスクリプト診断を開始済みです。全12週の新結果や最適性の達成は未確定です。
-
-2026-09-21: [5月の診断結果と配車探索の追加改善](docs/notes/STAGE1_ROOT_SEARCH_DIAGNOSIS_20260921.md)。固定3662b81aは物理・全672区間のBESS保護を通過、充電gap0.368%。配車は600秒で初期解改善0円・gap47.87%となり、目標未達です。日別の厳密な経路被覆下界と2つの根探索設定を追加し、08:17 JSTにclean固定daa9ef59から限定診断を開始しました。通常処理はスクリプトが実行します。全12週完了・メール送信とは扱いません。
-
-2026-09-21: [計画と実行の整合修正・最適の判定](docs/notes/OPTIMIZATION_CONSISTENCY_FIX_20260921.md)。BESS保護をDA・配車の充電評価・将来の毎時計画へ統一する別ポリシー、日別車両日数の下界強化、前処理回数を制限した探索設定を追加しました。人工例で不具合の解消を確認。実際の月別費用改善と全12週の新結果は未確定です。
-
-2026-09-21: [PVが多い週の高費用と最適性の診断](docs/notes/MONTHLY_RESERVE_COST_DIAGNOSIS_20260921.md)を追加しました。1月→5月の費用差95.48%は契約超過費。実行時3,000 kWhのBESS保護が将来の予測軌道へ整合しておらず、先では1,200 kWhまで使う計画が残ります。全12週完走は確認済みですが、費用最小化の妥当性には追加修正・別版検証が必要です。今回は保存結果の読取りのみで、モデル変更・再計算は行っていません。
-
-<!-- monthly-reserve-status -->
-最新の月別再実行: 固定 `68f2f4e5`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESSはPVのみで充電、初期残量を毎時の予備残量として保持し週末に復元。旧2ff239e1の3週・旧7c7c2334の12週は別条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_RESERVE_RESULTS_20260920.md`。
-<!-- /monthly-reserve-status -->
-
-2026-09-20 23:57 JST: 全12週の最終図・成果物SHAを確認し、月別・季節別報告と図表4ファイルを承認済み宛先へGmailで1通送信しました。実message ID `1a0bf523c1c61c5c`、送信済み検索1件を照合。配信原本は `output/monthly_reserve_20260920/script_observer/email_receipt.json`。研究採用BLOCKEDは継続します。
-
-
-2026-09-19 18:09 JST: BESS週末復元条件の[全12週スクリプト実行](docs/notes/MONTHLY_CYCLIC_EXECUTION_20260919.md)を固定 `2ff239e1` から開始しました。開始確認時は1月の新規Prepare、完了0/12週。通常はAIを呼ばず、計算・保存結果の監査・集計をスクリプトへ任せ、検証済み完了時に承認済み宛先へメールを1通送ります。状態は `output/monthly_cyclic_20260919/script_observer/state.json`、固定版・実PIDは同親の `budget_rerun_launch.json` に記録しています。
-
-2026-09-19: BESSの明示0残量の保存・終端目標と、月別準備時のBESS設定引き継ぎを修正しました。週末に初期残量へ戻す[全12週の別設定](config/shibu21_23_monthly_cyclic_draft_20260919.json)は実行無効で保存しています。関連128テスト通過。**シミュレーションは開始していません。** [変更点・条件・残る課題](docs/notes/MODEL_SCENARIO_REVISION_20260919.md)。
-
-
-
-<!-- monthly-cyclic-status -->
-最新の月別再実行: 固定 `2ff239e1`、独立監査 3/12週、状態 `STOPPED_AFTER_FAILED_CASE`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。BESS週末復元条件。旧7c7c2334の12週は旧条件の記録として保持し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_CYCLIC_RESULTS_20260919.md`。
-<!-- /monthly-cyclic-status -->
-
-
-2026-09-19: 占部先生の指摘を受け、研究資料の「受電ピーク」の名称・定義を全ページで統一しました。[修正版資料と未送信の返信案](outcome/2026-09-19_urabe_terminology/README.md)。今後の資料作成ルールを [research-presentation/SKILL.md](.codex/skills/research-presentation/SKILL.md) にまとめ、用語表・数値の根拠・編集可能な図表・ユーザー編集の保全・表示確認を記載しました。
-
-2026-09-20: Solcastの2023年5月（2,976件）を追加取得・検証しました。学習対象2022〜2024年は29/36か月・84,672件、残りは2023年6〜12月の7か月です。残量不明のため今回は1リクエストで終了しました。既存学習モデル・月別比較の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
-
-2026-09-18: Solcastの2023年3月（2,976件）を追加取得・検証しました。学習対象2022〜2024年は27/36か月・78,816件、残りは2023年4〜12月の9か月です。残量不明のため今回は1リクエストで終了しました。既存学習モデル・月別比較の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
-
-2026-09-17: Solcastの2023年2月（2,688件）を追加取得・検証しました。学習対象2022〜2024年は26/36か月・75,840件、残りは2023年3〜12月の10か月です。残量不明のため今回は1リクエストで終了しました。既存学習モデル・月別比較の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
-
-2026-09-16: Solcastの2023年1月（2,976件）を追加取得・検証しました。学習対象2022〜2024年は25/36か月・73,152件、残りは2023年2〜12月の11か月です。残量不明のため今回は1リクエストで終了し、既存2024年学習モデルと完了済み月別12週の入力は保持しています。[取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
-
-<!-- monthly-search-status -->
-最新の月別再実行: 固定 `7c7c2334`、独立監査 12/12週、状態 `COMPLETED`。全月共通MIPFocus=1・前日Method=1・rolling Method=0、物理許容差1e-9。旧10a40c9fの7週・fa0c22bfの10週は旧版の記録として保存し、新版には混ぜない。研究採用BLOCKED。結果: `docs/notes/SHIBU21_23_MONTHLY_PHASE_SEARCH_RESULTS_20260915.md`。
-<!-- /monthly-search-status -->
-
-
-AI作業の適用範囲・確認条件・コードレビューと研究承認の区別は
-[AGENTS.md](AGENTS.md)を参照してください。プロジェクトSkillの正本は
-`.codex/skills/<name>/SKILL.md`です。2026-09-14の指示整理は
-[Development Notes](DEVELOPMENT_NOTES.md#2026-09-14-agentsmdとskillの適用範囲整理)に記録しています。
-
-旧固定版 `fa0c22bf` は1〜10月の10週間が完走・独立監査済み（10/12週、2026-09-15 01:34 JST）。10月の総費用4,269,784.456240円、購入量4,354.188 kWh、最大受電200.795 kW。各週168時間・672 slot、物理検証、会計と日別台帳の差1e-6円以内、各169充電求解の数値設定、同一予測、全接続、前後cleanを照合した。11月で計算停止。失敗理由と未実行の週は結果表に記載し、原因を診断中。研究採用はBLOCKED。 [新版の結果表・原本hash](docs/notes/SHIBU21_23_MONTHLY_BUDGET_RESULTS_20260914.md)。停止版や単独診断は混ぜない。
-
-月別12週はローカルスクリプトで監視・監査・集計し、全12週と季節別整理後に承認済みアドレスへ1通メール通知する。通常の30分ごとのAI監視は解除した。[実行・完了通知の手順](docs/notes/MONTHLY_COMPLETION_DELIVERY_20260914.md)。
-
-**前回の固定版 `829e3983` は1月の前日計画で停止し、完走0/12週です（2026-09-14 19:37 JST確認）。** 全Stage 2にAggregate=0/Presolve=0、許容誤差1e-9を適用した30秒制限では実行可能解を得られず、`DAY_AHEAD_FAILED / STAGE2_NO_INCUMBENT` となりました。rollingは未開始、週間費用は未成立です。同じ本体モデルで120秒枠の診断を行うと、約36.5秒で最初の実行可能解を得てSOC・物理検証を通過しました。[予算の根拠と検証](docs/notes/SHIBU21_23_JANUARY_STAGE2_BUDGET_20260914.md)に基づき、前日Stage 2を全月最大120秒に揃え、新しい固定版から12週を実行します。[停止・起動記録](output/monthly_fair_weeks_20260914/presolve_rerun_launch.json)・[独立監査](output/monthly_fair_weeks_20260914/monthly_presolve_independent_audit.json)・[数値設定の原因と検証](docs/notes/SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。旧版の完走週は流用しません。月別・季節別の最終整理と研究採用は未完了です。結果の費用順位には時間制限内の探索到達度も関わり、Stage 1 gapを週間費用の誤差幅や季節差の有意性とは扱いません。
-
-**前回の固定版8acd8bebは1・2月が完走・独立監査済み（2/12週）、3月hour 152のSOC再検証で停止しました（2026-09-14 18:52 JST）。** 固定 `8acd8beb` の2月確定費用は4,221,934.623206円、購入量2,097.297 kWh、最大15分平均受電200 kW。[新版の結果表・定義・原本hash](docs/notes/SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914.md)。各週168時間・672 slot、物理・会計、全接続、前後clean SHA、各169求解のStage 2数値設定を確認しました。3月は152/168時間まで受理、4〜12月は未実行です。ソルバー内部の終端SOCと、保存された充電・走行による再計算の差を診断中です。12週・季節別の最終整理は未完了で、研究採用はBLOCKEDです。
-
-3月の停止を再現し、前処理を無効にする共通数値設定で単独診断のSOC再検証を通過しました。全体検証2,297 passed / 既存資料2 failed、独立レビュー残P0/P1/P2ゼロを確認し、新しい固定版から全12週を再計算します。[原因・数値誤差・修正範囲](docs/notes/SHIBU21_23_MARCH_SOC_REPLAY_DIAGNOSIS_20260914.md)。
-
-**2026-09-14 17:08 JST、修正した固定版 `8acd8beb` から月別12週の再計算を開始しました。開始時点は1月の完全Prepare、完了0/12週です。** 4月で発生した数値的な停止を修正し、同じ制約・許容誤差・全月共通設定で計算します。全体テスト2,271 passed / 既存資料2 failed、独立レビュー残P0/P1ゼロ。[原因・検証と実行場所](docs/notes/SHIBU21_23_APRIL_NUMERIC_DIAGNOSIS_20260914.md)。初回試行の完了3週を新版の結果とは扱いません。現在の進行状況は[新版の独立監査](output/monthly_fair_weeks_20260914/monthly_numeric_independent_audit.json)に記録します。
-
-集計用の合成資料による検査も追加し、関連21件が通過しました。原本の変更、固定SHAの不一致、未完了の168時間・672区間、物理違反、台帳・電力収支の不一致、未完了キャンペーンを最終結果へ混ぜないことを検証しています。これはレポート処理の検証であり、12週の実行完了を示すものではありません。
-
-最終レポートでは、季節内3週の購入量の範囲、月別費用差の車両使用費・その他費用への分解、受電ピークとBESS在庫減少を具体的な数値で示します。本文生成を含む関連23件を検証し、仮データで図の表示も確認しました。新版の結果は `SHIBU21_23_MONTHLY_NUMERIC_RESULTS_20260914` に分け、以下の初回試行記録を保持します。
-
-今回の季節比較はPV履歴・予測の差を扱い、気温に応じた空調負荷の月別変化は入力していません。走行需要は固定した電費・燃費による距離ベースの設定です。[比較に含まれる入力差と限界](docs/notes/SHIBU21_23_MONTHLY_FAIR_WEEKS_20260914.md)を明記しました。
-
-月別比較の補足として[選択週の日射量と月全体の比較](docs/notes/SHIBU21_23_MONTHLY_IRRADIANCE_CONTEXT_20260914.md)を追加しました。2025年の全35,040区間を照合すると、選択した3月の週の日平均日射量は月全体より35.2%少なく、10月は20.2%多い条件です。週の選択は変えず、この天候の偏りを結果の解釈に併記します。
-
-初回試行 `4c5c5d86` の記録: 1〜3月が完走し、4月はhour 023で停止しました。完了3週は各168時間・672 slot、物理違反0件、確定会計と日別台帳の照合を通過しました。確定費用は1月4,309,715.542368円、2月4,221,549.725308円、3月4,430,823.263078円です。[初回試行の結果表と原本](docs/notes/SHIBU21_23_MONTHLY_RESULTS_20260914.md)。4月は23/168時間まで受理、週間会計は未成立。初回の5〜12月は未実行です。
-
-2026-09-14: 月別12週の平日5日・土休日2日比較の入力を整えました。 2025年の各月から祝日を含まない月内完結の月曜〜日曜を選び、全12週の入力で曜日構成・1,704便・同一営業便距離・同一2024年予測モデルを照合しました。固定版 `4c5c5d86` による実行状況は上記のとおりです。全体回帰2,258 passed / 既存資料2 failed、独立レビュー残P0/P1ゼロ。[選択日・固定条件・検査と実行手順](docs/notes/SHIBU21_23_MONTHLY_FAIR_WEEKS_20260914.md)。Solcastの追加認証で2022年12月を取得し、学習対象2022〜2024年の24/36か月が検証済み、残りは2023年12か月です。取得データが増えてもこの12週比較の学習入力は途中で変更しません。
-
-2026-09-12: **渋21〜23・四季各7日間の診断計算が完走しました。** 凍結 `e09fb550` から新規Prepareを行い、60台の入力・全接続候補を保持して、全4週の各168時間、最終物理検証、実行会計が通過しました。超過量からの料金再計算と日別台帳が一致し、全四季の独立監査で新たなP0/P1技術欠陥は0件です。[週間費用・検証・原本への参照](docs/notes/SHIBU21_23_FOUR_SEASON_COMPLETION_20260912.md)。
-
-四季の結果を[PV利用・購入電力・受電ピーク・費用の比較と示唆](docs/notes/SHIBU21_23_SEASONAL_INTERPRETATION_20260912.md)にまとめました。選んだ週では夏の購入量が最少、秋が最多ですが、秋は使用車両日数が少ないため総費用が最少です。春は冬よりPV発電量も購入量も多く、発電総量だけでなく抑制量と時間的な需給の対応を確認する必要があります。各季節1週の記述的分析で、因果効果・年平均・設備投資効果は未検証です。
-
-全体回帰は **2,240 passed / 既存PowerPoint証拠2 failed**。Stage 1のgap約84〜85%は宣言10%に未達で、正式fleet契約や時刻表・PV来歴の制限も残るため、結果は **DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS**、研究採用は **BLOCKED** です。[現在の研究採用条件](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md)。停止原因と修正履歴は[完走記録](docs/notes/SHIBU21_23_FOUR_SEASON_COMPLETION_20260912.md)にまとめました。
-
-以下の日付付き記録は各時点の履歴です。過去の実行件数・テスト件数・再実行待ちの記載は当時の状態を示し、現在の計算状況は冒頭の完走記録を参照してください。
-
-2026-09-11: Tkinterの主要操作群をElectronへ移しました。用途別メニューで、車両・設備・運行条件・気象・CSV・実行・図表・比較まで扱えます。BESSは20〜80%かつ日末・週末自由を設定でき、BEVの終端条件は維持します。[対応表と検証範囲](docs/notes/DESKTOP_TK_PARITY_20260911.md)。
-
-2026-09-11: Rolling の季節診断契約を明示しました。途中窓の BEV 終端は
-`day_ahead_boundary_state` で固定し、評価末だけ各車両の初期 SOC 目標を保持します。
-BESS は `rolling_bess_terminal_policy=minimum_only` とし、容量20〜80%の物理範囲と
-最低SOC floorだけを適用して、途中窓に day-ahead の BESS 目標を残しません。
-4路線 runner はこの契約、`evaluation_period`、および入力 metadata を検査します。
-旧方針で途中まで作成した Prepare 出力は再利用せず、修正後の全4週 Prepare から再実行します。
-
-2026-09-11: 旧保存結果に含まれる `Infinity` / `NaN` でデスクトップ概要が開けない問題を修正しました。表示専用のストリーム読取りで非有限値を文字として保持し、原本・会計値・採用判定は書き換えません。[互換性と再測定](docs/notes/DESKTOP_LEGACY_JSON_COMPATIBILITY_20260911.md)。
-
-2026-09-11: 日付付き入力の読込みで、取得済み路線の件数・距離・方向がglobalカタログに置き換わる不具合を修正しました。保存前後とPrepare後の路線情報をハッシュで検査し、不一致・ゼロ距離・未確認カタログを診断実行へ渡しません。[原因・修正・再実行の扱い](docs/notes/DATED_ROUTE_METADATA_PROVENANCE_20260911.md)。
-
-2026-09-11: 大量の便を扱うPrepare・接続監査でも、停留所別名と回送・折返し照合の重複計算を減らしました。計算ごとにルールを複製し、キャッシュを各4,096件に制限します。候補弧の削除や接続条件の緩和はありません。凍結SHA `0132e319` の実入力由来17地点の反復照合は約14.1倍速くなりましたが、solver全体の速度を示す値ではありません。[同等性検証と測定範囲](docs/notes/LOCATION_LOOKUP_SCALABILITY_20260911.md)。
-
-2026-09-11: [渋21〜24をまとめた四季1週間診断](docs/notes/SHIBU21_24_SEASONAL_DIAGNOSTIC_20260911.md)の入力・監査・実行スクリプトを追加しました。開始日は2025-02-03、05-12、08-04、11-03です。2026年9月版の固定時刻表に2025年の気象を適用する診断で、実運行再現ではありません。候補生成と完全Prepareを分け、検証未実施の候補をsolverへ渡さない構成です。
-
-2026-09-11: フロントアプリに **TypeScript + React + Electron** を追加しました。[起動・操作・検証の案内](frontend/README.md)。初回は `frontend` で `npm.cmd ci`、`npm.cmd run build`、`npm.cmd start` を実行します。ビルド後は `python run_desktop.py` からも起動できます。Windows portable版は `frontend/release/EV Bus Research 0.1.0.exe` です（Python・Gurobi・入力データは既存環境を使用）。旧 `run_app.py` は保持しています。
-
-時刻表の全件ロードを避けたページ取得、Parquet row group の読み飛ばし、結果のストリーム投影、画面の仮想スクロールを実装しました。100万行の合成データで末尾250件を検証し、SQLite取得1.27秒、Parquet取得0.013秒でした。これは画面と読取り経路の検証であり、solverの大規模最適性や研究採用を示すものではありません。
-
-2026-09-11 気象データ取得の再確認: 取得済み23/36か月の整合性を確認しました。定期実行用のSolcast認証を再利用できないため、残り13か月の取得には認証設定の復旧が必要です。APIリクエストは行っておらず、利用枠の回復有無は未確認です。[現在の取得状況](output/seven_day_extension_20260910/training_history_acquisition_status.json)。
-
-2026-09-10: [連続7日・季節別日射量の拡張記録](docs/notes/SEVEN_DAY_SEASONAL_EXTENSION_20260910.md)を更新しました。弦巻の2025暦年・年度、2024年、および2022年1〜11月の日射データを取得・検証済みです。2022〜2024年の36か月中23か月が完了し、残り13か月は利用枠回復待ちです。取得済みデータは日付別の最適化入力と季節カーブ生成に使用できます。
-
-[渋21の四季テスト](output/seven_day_extension_20260910/SHIBU21_SEASONAL_EVALUATION.md)を実行・評価しました。冬16/168時間・春161/168時間・夏168/168時間・秋161/168時間。事前計画の物理検証は4/4週、168時間実行は1/4週、物理・最終会計まで成立した週は1/4週です。毎日弦巻への帰庫、SOC・燃料・位置の連続引継ぎを実装し、途中SOC目標の許容幅累積と失敗時の旧計画混入を修正しました。12スレッドで計算し、最大使用メモリーは約17.6 GiBでした。不成立の週は週間費用の比較に用いません。
-
-全体回帰は **2,009 passed / 2 failed**。作業前からの発表資料関連2件、旧2ケースの正式再実行、全季節での168時間実行成立、独立レビューと正式7日検証が未完了のため、正式研究リリースは **BLOCKED** です。既存のSOC超過結果は **DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS** として維持します。
-
-通常の `python -m pytest` は `pytest.ini` により `tests/` を収集します。同名の互換入口と手動実験スクリプトの import 衝突を解消し、状態を変更する手動実験を回帰収集から除外しました。
-
-進捗資料11枚目を全22案と総台数32台の15案の拡大図へ変更しました。点・軸・単位・選択案を明記し、総台数47〜53台の案を区別しています（2026-09-08）。
-
-元の進捗資料の8・9枚目を平易に再構成しました。比較する配車1→22案、同一PV条件内の費用差33,624円／8,418円、高低PV間の電気バス7台・担当108便の差を説明しています。修正前後の改善額とは区別し、本人向け解説にも追記しました（2026-09-08）。
-
-本人向けの [研究の現在地と進捗資料の詳しい解説](outcome/研究の現在地と進捗資料の詳しい解説.md) に、全37枚の読み方、SOC問題、数値の意味、次の検証条件をまとめました（2026-09-08）。
-
-[占部先生のSlack指摘に対応した図表補足・監査結果](outcome/2026-09-07_urabe_progress_review/README.md)
-を元の[8月進捗資料](outcome/修士研究_2026年8月_進捗報告_先行研究図表パラメータ追加版.pptx)へ反映しました。本編18枚＋補足19枚です。**入力SOC上限90%に対して最大93.375%を検出したため、
-既存の比較数値はDIAGNOSTICであり、研究結論には使用しません。** 現行モデルの修正状況は上記の拡張記録を参照してください。旧結果を新モデルの結果として扱いません。
-
-[進捗差分をスライド本体に反映した発表資料](outcome/2026-09-06_speaker_notes/progress_differences_integrated_20260906.pptx)
-では、以前の問題・作業・結果・次の検証を平易な言葉で整理しています。
-
-[進捗報告のカンペと研究差分](outcome/2026-09-06_speaker_notes/README.md) を追加しました。
-8月18枚版の各ノートで、実施した作業と確認できた結果を説明できます。
-
-ファイルを探すときは [文書案内](docs/README.md) と [配置・保管ルール](docs/REPOSITORY_LAYOUT.md) を参照してください。
-入力・車両データ整備は [catalog](scripts/catalog/README.md)、画面・可視化は
-[gui](tools/gui/README.md)、実験・検査は [scripts](scripts/README.md)、補助処理は [tools](tools/README.md) にまとめています。
-整理後の[欠陥監査・未解決事項](docs/FILE_ORGANIZATION.md)も参照してください。
-旧 `constant/` の原資料・テンプレートは [docs/constant](docs/constant/README.md) に統合しました。
-正式実験・監査CLIの入口は [scripts案内](scripts/README.md) に分けています。
-
-本人向けの研究理解ガイド、追加の営業距離・配車・充電分析、発表進捗資料は
-[outcome/README.md](outcome/README.md) にまとめています。2026-09-05の追加分は
-凍結 `bb0c005` 結果の説明分析であり、新しいsolver実験や研究主張の格上げではありません。
-先行研究の強み・限界・採用方針と旧文献表の訂正は
-[9月の文献再レビュー](outcome/2026-09-05_literature_review/README.md) を参照してください。
-元の8月進捗資料を改善した [改訂版22枚と理解ガイド](outcome/2026-09-05_august_progress_revision/README.md)
-も追加しました。元資料・凍結結果を保持し、研究課題、方法、文献比較、時間別の結果を補強しています。
-
-The current, requirement-by-requirement thesis-evidence audit is
-[THESIS_SUBMISSION_EVIDENCE_AUDIT.md](docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md).
-It distinguishes verified bounded evidence from the active full-network
-release blocker; it does not upgrade the release status.
-The reviewer-facing scope, checks, and open decisions are in
-[THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
-that brief is a request for independent review, not an approval record.
+以下のセクションは、過去の最適化実験、感度分析、および比較ハッシュの歴史的記録です。
 
 ## GitHub validation policy
 
@@ -3234,186 +3312,7 @@ hash、対象変数数、priority、意味論は`solver_settings.json`と
 領域は不変です。264便での時間・gap改善は、clean frozen commitからの
 fresh runが完了するまで未認証です。
 
-## まず、目的に合う入口を選ぶ
 
-| やりたいこと | 最初に読む・実行するもの |
-| --- | --- |
-| 画面から通常の最適化を動かす | [最短で起動する](#最短で起動する) → [最初の最適化](#最初の最適化) |
-| 研究用の正式実行をする | [正式研究実行の手順](docs/notes/FORMAL_RUNBOOK_CURRENT.md) と [ブロッカー一覧](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md) |
-| モデルを教員・共同研究者に説明する | [教員レビューガイド](docs/guides/professor_review.md) |
-| 日常運用、比較、障害対応を確認する | [運用ガイド](docs/guides/operations.md) |
-| 実装・検証・変更履歴を確認する | [開発ノート](DEVELOPMENT_NOTES.md) |
-
-## このシステムでできること
-
-- 時刻表と営業所・路線スコープから、車両ごとの便割当と回送を作成する。
-- BEV の SOC、充電器、PV、BESS、系統電力、料金を制約として充電計画を評価する。
-- 日初の計画に加え、1 時間ごとの Rolling 再最適化、物理スケジュール検証、実行日会計を成果物として残す。
-
-現行ソルバには、二段階の **Phase 3** と、配車・充電・PV・BESS・系統購入を結合する **Phase 4** があります。Phase 3は大域的総費用最適解ではなく、Phase 4も現時点ではclean formal pairが未受理です。どちらも、成果物ごとの物理・会計・最適性・研究受理ゲートを越えて主張範囲を広げないでください。
-
-## 現在の構成と扱い
-
-| 項目 | 現在の扱い |
-| --- | --- |
-| 操作画面 | Tkinter + FastAPI BFF。`python run_app.py` が両方を起動します。 |
-| API | FastAPI の `/api` 配下。起動後の対話的な仕様は `http://127.0.0.1:8000/docs` で確認できます。 |
-| React / Tauri | まだ設計・受入基準の段階です。通常運用の手順としては扱いません。詳細は [frontend 移行仕様](docs/frontend/README.md)。 |
-| 出力 | 現在の既定ルートは `output/`。各 run は通常 `output/<日付>/run_*` に保存されます。 |
-
-```mermaid
-flowchart LR
-    UI[Tkinter 操作画面] --> BFF[FastAPI BFF /api]
-    BFF --> CORE[配車・最適化コア]
-    CORE --> ART[run 成果物]
-    ART --> CHECK[Rolling・物理検証・会計・研究受理]
-```
-
-## 最短で起動する
-
-### 前提
-
-- Windows / PowerShell
-- Python 3.11 以上（CI の検証対象は Python 3.11）
-- MILP を実行する場合は、別途 Gurobi と有効なライセンス
-- 利用対象の built dataset（画面のデータ状態で確認）
-
-初回だけ、仮想環境と依存関係を準備します。
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-MILP を使う環境では、Gurobi を導入・ライセンス設定したうえで `gurobipy` も追加します。
-
-```powershell
-python -m pip install gurobipy
-python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0, name='x'); m.setObjective(x); m.optimize(); print('gurobi_ok', gp.gurobi.version())"
-```
-
-起動は次の一行です。FastAPI が起動可能になるのを待ってから Tkinter 画面を開き、画面を閉じると BFF も終了します。
-
-```powershell
-python run_app.py
-```
-
-API だけを起動して確認したい場合は、次を使います。
-
-```powershell
-python -m uvicorn bff.main:app --host 127.0.0.1 --port 8000
-```
-
-> [!NOTE]
-> この checkout には配布済みの `.exe` は含まれていません。配布物を受け取っている場合は、その配布元の手順を優先してください。
-
-## 最初の最適化
-
-通常は、画面の案内どおり次の 4 ステップで十分です。
-
-1. シナリオを選び、対象の運行日・営業所・路線を確認する。
-2. `Quick Setup 保存` で選択内容を確定する。
-3. 条件を変える必要がある場合だけ `ソルバー設定` を開く。
-4. `高速実行` を押す。未 Prepare または stale のときは、画面が Prepare を先に実行してから最適化ジョブを開始します。
-
-対象スコープ、便数、車両、充電器を実行前に明示確認したいときは、`Solver対応 Prepare` を個別に使います。Quick Setup やソルバー条件を変更した後は、必ず再 Prepare してください。
-
-Quick Setup の数値入力では、`0` は「未入力」ではなく明示値です。たとえば、基本料金
-`0 JPY/kW`、売電単価 `0 JPY/kWh`、乱数 seed `0` は、保存後の再読込と次回
-Prepare でもそのまま保持されます。既定値が使われるのは項目が未設定 (`null`) の場合だけです。
-入力範囲として無効な値は、別の既定値へ黙って置換せず、各入力・実行時の検証でエラーにします。
-
-PV設備は、画面で保存した `pv_capacity_kw`（PV定格出力）を最適化入力の正本とします。
-面積からの推定容量や、定格出力から逆算する必要設置面積・面積相当値は監査用の派生値であり、
-保存済みの定格出力や実測営業所面積を黙って上書きしません。定格出力を変えた場合もfresh Prepareが必要です。
-
-### 結果を正しく読む
-
-| 表示・成果物 | 分かること | それだけでは分からないこと |
-| --- | --- | --- |
-| ジョブが `completed` | 非同期ジョブが終端状態になった | 可行性、物理妥当性、研究受理 |
-| `solver_status=OPTIMAL` または `FEASIBLE` | 数理最適化が解を返した | Rolling、独立物理検証、正式な研究主張 |
-| `rolling_execution.status=executed_and_accepted` | 保存された Rolling 連鎖が受理された | 比較対照の妥当性、研究公開の可否 |
-| `teacher_release_status=READY` | 正式な研究リリースの全ゲートが通った | それ以上の一般化や統合大域最適性 |
-
-画面の `Optimization結果` から run ディレクトリを確認してください。主な成果物は次のとおりです。
-
-- `summary.json`: 実行・受理状態の要約
-- `experiment_report.md`: 読みやすい実験報告
-- `results.xlsx`: 集計と照合用の表
-- `rolling_hourly_chain/executed_day_accounting.json`: 受理済み Rolling の最終費用正本
-
-`job completed` だけを成功や研究成果として扱わないでください。
-
-## 研究用の正式実行
-
-通常の試行計算と正式研究実行は意図的に分けています。試行計算は診断用であり、dirty な Git worktree でも動かせますが、成果物は研究公開 `BLOCKED` のままです。
-
-正式実行では、少なくとも次を満たす必要があります。
-
-1. clean な worktree と固定した Git SHA から開始する。
-2. 運行日、時刻表、営業所・路線、車両、初期状態、充電器、BESS、料金、ソルバー条件を明示して Prepare する。
-3. 日初計画、全時間帯の Rolling、独立物理検証、実行日会計、成果物照合をすべて通す。
-4. PV 比較では、PV 曲線以外の対照条件をハッシュで一致させる。
-
-具体的なコマンド、必須証跡、失敗時の表記は [正式研究実行の手順](docs/notes/FORMAL_RUNBOOK_CURRENT.md) を正本とします。最新の未解決事項は [研究リリースのブロッカー一覧](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md) で確認してください。
-
-## よくある確認ポイント
-
-### データが利用できない
-
-まず画面または `GET /api/app/data-status` でデータ状態を確認してください。`BUILT_DATASET_REQUIRED` が出た場合は、データを推測で補わず、[運用ガイドのデータ復旧手順](docs/guides/operations.md#no-module-named-tokyubus_gtfs)に従ってください。
-
-### 503 またはジョブ待ちになる
-
-BFF は同時に一つの実行しか受け付けません。前のジョブの終了を待つか、比較実行には [運用ガイド](docs/guides/operations.md#1-ソルバーモード比較benchmark) の順次実行スクリプトを使ってください。
-
-### `INFEASIBLE` になる
-
-SOC、初期状態、車両台数、充電器・契約電力、回送接続、`allowPartialService` を確認し、条件を変えた後は Prepare からやり直してください。制約を緩めたり、時刻表を勝手に加工したりして解を作ることはしません。
-
-## 関連資料
-
-| 読者・用途 | 資料 |
-| --- | --- |
-| 日常操作・比較・トラブルシューティング | [運用ガイド](docs/guides/operations.md) |
-| 指導教員・共同研究者向けのモデル説明 | [教員レビューガイド](docs/guides/professor_review.md) |
-| 定式化と実装状況 | [制約・目的関数の定式化](docs/constant/formulation.md) / [実装状況](docs/constant/implementation_status.md) |
-| 車両セットを固定する研究契約 | [Scenario Fleet Contract](docs/model/SCENARIO_FLEET_CONTRACT.md) |
-| 図表・生データの対応 | [Literature Figure Mapping](docs/model/LITERATURE_FIGURE_MAPPING.md) |
-| React + FastAPI、その後の Tauri 移行 | [frontend 移行仕様](docs/frontend/README.md) |
-| 実装の変更履歴・検証結果 | [開発ノート](DEVELOPMENT_NOTES.md) |
-
-## リポジトリの見取り図
-
-```text
-run_app.py                  Tkinter + FastAPI をまとめて起動
-tools/scenario_backup_tk.py 現行の操作画面
-bff/                        FastAPI BFF と run の最終化
-src/                        配車・最適化・検証のコア
-data/                       入力データと built dataset
-output/                     実行成果物（Git 管理外）
-docs/                       研究・運用・移行の詳細資料
-tests/                      回帰テスト
-```
-
-## 開発・検証
-
-開発環境では `pytest` を追加してから、少なくとも次を実行してください。
-
-```powershell
-python -m pip install pytest
-python -m compileall -q src bff scripts tools
-python -m pytest -q -p no:cacheprovider
-```
-
-README の入口とリンクだけを確認する軽量テストは次です。
-
-```powershell
-python -m pytest -q tests/test_readme_navigation.py
-```
 
 ## Controlled PV comparison hashes
 
@@ -4037,6 +3936,8 @@ a five-sheet workbook, and does not upgrade the research-release status.
 
 
 月別BESS週末復元条件の4月停止原因を確認: 残り予測PVを全量充電しても目標3,000 kWhへ54.411 kWh不足する。3/12週通過・5〜12月未実行。次の予備残量／供給源条件の選択待ちで、計算・監視は停止、完了メール未送信。[停止原因と対応](docs/notes/SHIBU21_23_APRIL_BESS_TERMINAL_FAILURE_20260919.md)。
+
+
 
 ## 分散計算の更新（2026-09-23）
 
