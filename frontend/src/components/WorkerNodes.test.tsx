@@ -65,7 +65,7 @@ it("does not present Tailnet online as SSH or compute readiness", () => {
 });
 it("explains SSH timeouts without exposing a raw subprocess command", () => {
   mount([{ ...node, probe_error_code: "SSH_TIMEOUT", last_error: "Command '['ssh', '100.72.59.121']' timed out after 10 seconds" }]);
-  expect(screen.getByText(/SSHの応答がありません。自動で再確認します/)).toBeTruthy();
+  expect(screen.getByText(/同じ通信を1回だけ再試行しました。復旧確認までこのPCへの新規割当を止め、自動で再確認します/)).toBeTruthy();
   expect(screen.queryByText(/Command \[/)).toBeNull();
 });
 it("sets each worker's job role and does not offer Gurobi on an unconfigured worker", () => {

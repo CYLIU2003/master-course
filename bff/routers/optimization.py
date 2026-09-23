@@ -14309,7 +14309,11 @@ def enqueue_optimization(
             depot_id=request.depot_id,
             persist=True,
         )
-    scenario = store.get_scenario_document_shallow(scenario_id)
+    scenario = (
+        store.get_scenario_document(scenario_id, repair_missing_master=False)
+        if request.prepared_input_id
+        else store.get_scenario_document_shallow(scenario_id)
+    )
     if timestep_min is not None and not request.prepared_input_id:
         _apply_timestep_min_to_scenario(scenario, timestep_min)
         store.set_field(scenario_id, "simulation_config", scenario["simulation_config"])
@@ -14319,8 +14323,29 @@ def enqueue_optimization(
         scenarios_dir=_prepared_inputs_root(),
         routes_df=_app_state.get("routes_df"),
         force_rebuild=bool(request.force_reprepare),
+        expected_prepared_input_id=request.prepared_input_id,
     )
+    if request.prepared_input_id and prep.prepared_input_id != request.prepared_input_id:
+        raise HTTPException(
+            status_code=409,
+            detail=make_error(
+                AppErrorCode.SCENARIO_INCOMPLETE,
+                "Prepared input is stale. Run Prepare again before starting optimization.",
+                preparedInputId=request.prepared_input_id,
+                currentPreparedInputId=prep.prepared_input_id,
+            ),
+        )
     if not prep.is_valid:
+        if request.prepared_input_id:
+            raise HTTPException(
+                status_code=409,
+                detail=make_error(
+                    AppErrorCode.SCENARIO_INCOMPLETE,
+                    f"Pinned Prepared input cannot be used: {prep.error or 'identity validation failed'}",
+                    preparedInputId=request.prepared_input_id,
+                    currentPreparedInputId=prep.prepared_input_id,
+                ),
+            )
         error_code = AppErrorCode(prep.error_code) if prep.error_code else AppErrorCode.SCENARIO_INCOMPLETE
         raise HTTPException(
             status_code=422 if prep.error_code else 500,
@@ -14338,6 +14363,23 @@ def enqueue_optimization(
         depot_id=request.depot_id,
         persist=False,
     )
+    if request.prepared_input_id:
+        prepared_service_ids = set(prep.scope_summary.get("service_ids") or [])
+        prepared_depot_ids = set(prep.scope_summary.get("depot_ids") or [])
+        if (
+            scope.get("serviceId") not in prepared_service_ids
+            or scope.get("depotId") not in prepared_depot_ids
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=make_error(
+                    AppErrorCode.SCENARIO_INCOMPLETE,
+                    "Requested dispatch scope does not match the pinned Prepared input.",
+                    preparedInputId=request.prepared_input_id,
+                    serviceId=scope.get("serviceId"),
+                    depotId=scope.get("depotId"),
+                ),
+            )
     active_bev_count = None
     if request.research_run and normalized_requested_mode == "phase3_two_stage":
         active_bev_count = _prepared_active_bev_count_or_http_error(
@@ -14367,21 +14409,11 @@ def enqueue_optimization(
         enable_weather_operation_policy=request.enableWeatherOperationPolicy,
         weather_proxy_forecast_path=request.weatherProxyForecastPath,
     )
-    if request.prepared_input_id and prep.prepared_input_id != request.prepared_input_id:
-        raise HTTPException(
-            status_code=409,
-            detail=make_error(
-                AppErrorCode.SCENARIO_INCOMPLETE,
-                "Prepared input is stale. Run prepare again before starting optimization.",
-                preparedInputId=request.prepared_input_id,
-                currentPreparedInputId=prep.prepared_input_id,
-            ),
-        )
     scope = _resolve_dispatch_scope(
         scenario_id,
         service_id=scope.get("serviceId"),
         depot_id=scope.get("depotId"),
-        persist=True,
+        persist=not bool(request.prepared_input_id),
     )
     job = job_store.create_job(execution_model=_executor_mode(), **({"job_id": submission_job_id} if submission_job_id else {}))
     job_store.update_job(

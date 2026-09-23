@@ -2922,6 +2922,7 @@ def get_or_build_run_preparation(
     routes_df,
     *,
     force_rebuild: bool = False,
+    expected_prepared_input_id: Optional[str] = None,
 ) -> RunPreparation:
     scenario_id = _scenario_id(scenario)
     dataset_id = _dataset_id(scenario)
@@ -2946,6 +2947,70 @@ def get_or_build_run_preparation(
         _prepared_input_dir(scenarios_dir, scenario_id)
         / f"{prepared_input_id}.json"
     )
+
+    if expected_prepared_input_id is not None:
+        # An explicitly selected Prepared input is immutable. Validate it against
+        # the current complete scenario and scope, and never silently Prepare a
+        # replacement as a side effect of an optimization request.
+        if force_rebuild:
+            return RunPreparation(
+                scenario_id=scenario_id,
+                dataset_version=dataset_version,
+                scenario_hash=scenario_hash,
+                scope_hash=scope_hash,
+                solver_input_path=None,
+                prepared_input_id=prepared_input_id,
+                scope_summary={},
+                error_code="PREPARED_INPUT_CONFLICT",
+                error="A pinned prepared_input_id cannot be force-reprepared during optimization.",
+            )
+        if str(expected_prepared_input_id) != prepared_input_id:
+            return RunPreparation(
+                scenario_id=scenario_id,
+                dataset_version=dataset_version,
+                scenario_hash=scenario_hash,
+                scope_hash=scope_hash,
+                solver_input_path=None,
+                prepared_input_id=prepared_input_id,
+                scope_summary={},
+                error_code="PREPARED_INPUT_STALE",
+                error="The supplied prepared_input_id does not match the current scenario and scope.",
+            )
+        if not prepared_input_path.is_file():
+            return RunPreparation(
+                scenario_id=scenario_id,
+                dataset_version=dataset_version,
+                scenario_hash=scenario_hash,
+                scope_hash=scope_hash,
+                solver_input_path=None,
+                prepared_input_id=prepared_input_id,
+                scope_summary={},
+                error_code="PREPARED_INPUT_MISSING",
+                error="The supplied Prepared input is not present on this controller.",
+            )
+        try:
+            persisted = _run_preparation_from_persisted_input(
+                path=prepared_input_path,
+                scenario_id=scenario_id,
+                dataset_version=dataset_version,
+                scenario_hash=scenario_hash,
+                scope_hash=scope_hash,
+                prepared_input_id=prepared_input_id,
+            )
+        except (OSError, ValueError, PreparedInputIdentityCollisionError) as exc:
+            return RunPreparation(
+                scenario_id=scenario_id,
+                dataset_version=dataset_version,
+                scenario_hash=scenario_hash,
+                scope_hash=scope_hash,
+                solver_input_path=None,
+                prepared_input_id=prepared_input_id,
+                scope_summary={},
+                error_code="PREPARED_INPUT_INVALID",
+                error=f"The supplied Prepared input failed identity validation: {exc}",
+            )
+        _prep_cache[cache_key] = persisted
+        return persisted
 
     if cache_key in _prep_cache and not force_rebuild:
         cached = _prep_cache[cache_key]

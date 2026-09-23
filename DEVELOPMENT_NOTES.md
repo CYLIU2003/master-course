@@ -6,8 +6,10 @@
 - 再試行後にSSHが戻らない場合、workerの直近接続確認を即座に無効化し、次のprobeが成功するまで新規ジョブの割当候補から外す。probeの失敗回数に応じて再確認を最大120秒まで間隔調整する。失敗前に始まっていたprobeの遅延成功は、SQLiteトランザクション内で新しい切断記録と比較して破棄する。
 - 起動前のSSH失敗は `BLOCKED`、起動後の通信不確実性は `LOST` とし、後者は同じattemptの照合を続けてworker枠・Gurobi予約を保持する。新IDの自動再投入、数理モデル・入力・研究gateの変更はない。
 - batch CLIはHTTP拒否時に、標準エラー本文を無加工保存せず、資格情報を伏せた最大240字の理由と安定エラーコードを記録する。月次Prepare/Batch CLIの表示は、Batch時に実際の12 task数を示す。
-- 現行固定版 `b9d0c60b8dc6f72faa0eaf72969ccd91fa0c3614` のcontrollerとソースは変更していない。読み取り専用APIでPrepared 12/12、worker 18台（有効16・無効2）、実行中0件、Gurobi予約0を確認。12 task投入はHTTP 409で拒否され、Git preflight自体は一致していた。拒否理由は従来のbatch状態に保存されておらず、最適化ジョブはまだ作成されていない。再試行で安全に理由を回収し、投入条件を再確認する。
-- 変更は `codex/ssh-reliability-20260924` のローカル変更で、現行controllerへ未配置。凍結controllerは維持し、テスト・実機再接続・7日間求解・成果物監査は未実施。
+- 現行固定版 `b9d0c60b8dc6f72faa0eaf72969ccd91fa0c3614` のcontrollerとソースは変更していない。読み取り専用APIでPrepared 12/12、worker 18台（有効16・無効2）、実行中0件、Gurobi予約0を確認。batch再試行で最初のtaskがHTTP 500となり、最適化ジョブは作成されなかった。
+- HTTP 500の直接原因は、Prepared ID付き最適化要求がshallow scenarioを使い、空の `timetable_rows` を日付付き時刻表として検証したこと。Preparedの実時刻表SHA-256とdate-series contractのハッシュは一致しており、このエラー文は時刻表データ破損を示していなかった。
+- batchのPreparedファイルは12/12存在するが、scenario hashは11/12一致で、`month-2025-01` だけPrepared `1bc2a3713c205963` / 現行 `7adccacdf7a2c128` と不一致。同じコードでshallow/fullを読み込んでも現行hashは双方 `7adccacdf7a2c128` であり、loader表現の差ではない。2〜12月の11件はこの照合では一致。投入要求は完全なscenario/scopeと既存Preparedを照合し、古ければ再Prepareを自動実行せずHTTP 409で止める。Preparedのservice/depot範囲がrequestと違う場合もjob作成前に拒否し、Pinned inputの確認後にscopeを保存し直さない。batch CLIはAPIの `error` フィールドもエラーコードとして保存する。
+- 修正は `codex/ssh-reliability-20260924` のローカル変更で、現行controllerと凍結版には未配置。関連Python 81件、WorkerNodes画面7件、TypeScript typecheckは通過。Prepared 12件の個別scenario hash再照合では11件一致・1月だけ不一致。実機再接続、7日間求解、成果物監査と独立レビューは未実施。現行12週campaignは未開始であり、コード変更を使う場合は別のclean SHAと12件すべての新しいPrepareが必要。
 
 ## 2026-09-23 通信切断後の未開始確定とジョブ予約
 

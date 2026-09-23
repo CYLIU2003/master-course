@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-24: 分散計算の一時SSH切断は同じattempt IDで1回だけ再試行し、通信結果が不明な試行は予約を保持して照合します。失敗workerは接続probe成功まで割当から外します。固定 `prepared_input_id` は完全なscenario/scopeと照合し、古ければjobを作らず停止します。今回見つかったshallow読込の不具合修正は隔離worktreeのみで、現行controllerには未配置です。現行12週campaignはjob作成前に停止しており、修正を使う場合は新しいclean SHAとPrepareが必要です。[分散計算の復旧と状態](docs/DISTRIBUTED_COMPUTE.md)。
+
 2026-09-24: 渋24の新しい月別7日間実験は、18台の分散ジョブ管理修正を含む `codex/worker-sort-passmark-20260923` の `5aa61f7a` を土台に、翌朝SOC・電力計上を統合した別の固定版から実施します。旧分岐 `70f331b7` は12週の入力準備までで求解未実行です。新旧のPrepared入力や結果を混ぜません。配置に失敗した端末は監視のみとして、新版コード・実行環境・データの証拠が一致した端末だけを投入対象にします。[実験契約](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md)。
 
 2026-09-23: 分散キューのGurobi不要ALNSジョブは、条件を満たすGurobi不要の子機を先に選び、空きがなければGurobi対応機も候補にします。Gurobiジョブは引き続きGurobi対応機だけを使用します。現行の `alns_no_gurobi_v1` は単日診断専用で、7日間・時間別Rollingは未対応です。[分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md)。

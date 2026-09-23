@@ -17,7 +17,8 @@ from bff.services.cluster.runner import archive_result, execute_optimization, ve
 from bff.services.cluster.scheduler import Scheduler, collect_artifacts
 from bff.services.cluster.scheduler import validate_portable_paths
 from bff.services.cluster.store import ControllerLock, JobStore
-from bff.services.cluster.transport import command, invoke
+from bff.services.cluster import transport as transport_module
+from bff.services.cluster.transport import SSHTransportError, command, invoke
 
 
 @pytest.fixture
@@ -240,7 +241,10 @@ def test_freezer_binds_snapshot_to_prepared_identity(scheduler, tmp_path, monkey
     monkeypatch.setattr(module, "ROOT", root)
     monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})
     monkeypatch.setattr(output_paths, "outputs_root", lambda: output)
-    monkeypatch.setattr(scenario_store, "get_scenario_document_shallow", lambda _: dict(scenario))
+    monkeypatch.setattr(scenario_store, "get_scenario_document",
+                        lambda _scenario_id, **_kwargs: dict(scenario))
+    monkeypatch.setattr(scenario_store, "get_scenario_document_shallow",
+                        lambda _scenario_id: pytest.fail("Snapshot checks must load the complete scenario"))
     def executor(scenario_id, job_id, prepared_input_id, rebuild_dispatch, use_existing_duties):
         raise AssertionError("Freezing must not execute a solver")
     submission = {"fn": executor, "args": ("scenario", "frozen-job", "prepared", False, False), "job_id": "frozen-job"}
@@ -250,6 +254,116 @@ def test_freezer_binds_snapshot_to_prepared_identity(scheduler, tmp_path, monkey
     scenario["simulation_config"]["initial_soc_percent"] = 90
     with pytest.raises(ValueError, match="changed after Prepare"):
         scheduler.freeze_optimization(None, {"built_dir": str(dataset)}, 0, **submission)
+
+
+def _stub_pinned_optimization_enqueue(monkeypatch, *, actual_prepared_id="prepared", resolved_service_id=None):
+    from types import SimpleNamespace
+    from bff.routers import optimization
+    from bff.services.optimization_run import solver_policy
+
+    class JobCreationReached(Exception):
+        pass
+
+    calls = {"full_load": [], "prepare_ids": [], "scope_persist": [], "job_create": 0}
+    monkeypatch.setattr(optimization, "_require_scenario", lambda _scenario_id: None)
+    monkeypatch.setattr(optimization, "_require_research_git_preflight_before_job_creation",
+                        lambda **_kwargs: None)
+    monkeypatch.setattr(solver_policy, "validate_execution_request", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(optimization, "_normalize_solver_mode", lambda _mode: "phase3_two_stage")
+    monkeypatch.setattr(optimization, "normalize_frontend_run_profile", lambda _profile: "test-profile")
+    monkeypatch.setattr(optimization, "frontend_rolling_is_required", lambda _profile: False)
+    monkeypatch.setattr(optimization, "_validate_formal_runtime_controls_or_http_error", lambda _request: None)
+    monkeypatch.setattr(optimization, "_request_timestep_min", lambda *_args: None)
+    monkeypatch.setattr(optimization, "_preflight_weather_proxy_request", lambda **_kwargs: None)
+    monkeypatch.setattr(optimization, "_executor_mode", lambda: "cluster")
+    monkeypatch.setattr(optimization, "_apply_research_phase3_candidate_coverage_policy_or_http_error",
+                        lambda request, **_kwargs: request)
+    monkeypatch.setattr(optimization.store, "get_scenario_document_shallow",
+                        lambda _scenario_id: {"simulation_config": {}})
+
+    def load_full(scenario_id, **kwargs):
+        calls["full_load"].append((scenario_id, kwargs))
+        return {"meta": {"id": scenario_id}, "simulation_config": {}}
+
+    monkeypatch.setattr(optimization.store, "get_scenario_document", load_full)
+    prep = SimpleNamespace(
+        is_valid=True,
+        prepared_input_id=actual_prepared_id,
+        solver_input_path=Path("prepared.json"),
+        error=None,
+        error_code=None,
+        scope_summary={
+            "trip_count": 1,
+            "service_ids": ["WEEKDAY"],
+            "depot_ids": ["depot-1"],
+        },
+    )
+
+    def get_preparation(**kwargs):
+        calls["prepare_ids"].append(kwargs.get("expected_prepared_input_id"))
+        return prep
+
+    monkeypatch.setattr(optimization, "get_or_build_run_preparation", get_preparation)
+
+    def resolve_scope(_scenario_id, *, service_id=None, depot_id=None, persist=False):
+        calls["scope_persist"].append(persist)
+        return {
+            "serviceId": resolved_service_id or service_id or "WEEKDAY",
+            "depotId": depot_id or "depot-1",
+        }
+
+    monkeypatch.setattr(optimization, "_resolve_dispatch_scope", resolve_scope)
+
+    def stop_before_job(*_args, **_kwargs):
+        calls["job_create"] += 1
+        raise JobCreationReached()
+
+    monkeypatch.setattr(optimization.job_store, "create_job", stop_before_job)
+    request = optimization.RunOptimizationBody(
+        mode="phase3_two_stage",
+        prepared_input_id="prepared",
+        service_id="WEEKDAY",
+        depot_id="depot-1",
+    )
+    return optimization, request, calls, JobCreationReached
+
+
+def test_pinned_optimization_uses_full_scenario_and_never_persists_scope(monkeypatch):
+    optimization, request, calls, JobCreationReached = _stub_pinned_optimization_enqueue(monkeypatch)
+
+    with pytest.raises(JobCreationReached):
+        optimization.enqueue_optimization("scenario", request, {"built_dir": "built"})
+
+    assert calls["full_load"] == [("scenario", {"repair_missing_master": False})]
+    assert calls["prepare_ids"] == ["prepared"]
+    assert calls["scope_persist"] == [False, False]
+    assert calls["job_create"] == 1
+
+
+def test_pinned_optimization_rejects_scope_mismatch_before_job_creation(monkeypatch):
+    optimization, request, calls, _ = _stub_pinned_optimization_enqueue(
+        monkeypatch, resolved_service_id="SATURDAY"
+    )
+
+    with pytest.raises(HTTPException) as error:
+        optimization.enqueue_optimization("scenario", request, {"built_dir": "built"})
+
+    assert error.value.status_code == 409
+    assert calls["scope_persist"] == [False]
+    assert calls["job_create"] == 0
+
+
+def test_pinned_optimization_rejects_stale_id_before_job_creation(monkeypatch):
+    optimization, request, calls, _ = _stub_pinned_optimization_enqueue(
+        monkeypatch, actual_prepared_id="current-prepared"
+    )
+
+    with pytest.raises(HTTPException) as error:
+        optimization.enqueue_optimization("scenario", request, {"built_dir": "built"})
+
+    assert error.value.status_code == 409
+    assert calls["prepare_ids"] == ["prepared"]
+    assert calls["job_create"] == 0
 
 
 def test_dataset_mismatch_is_blocked_before_solver(tmp_path, monkeypatch):
@@ -297,6 +411,86 @@ def test_transport_failure_before_dispatch_is_blocked_not_lost(scheduler, monkey
     monkeypatch.setattr(module, "invoke", disconnected)
     scheduler.execute(row["id"], scheduler.worker("local"))
     assert scheduler.store.get(row["id"])["state"] == "BLOCKED"
+
+
+def test_ssh_operation_retries_same_attempt_and_identical_request_bytes(tmp_path, monkeypatch):
+    calls = []
+    worker = Worker(id="remote", name="Remote", transport="ssh", host="worker.example",
+                    ssh_user="runner", repo="C:/worker/repo")
+
+    class FakeProcess:
+        def __init__(self, attempt, stdout, stderr):
+            self.attempt = attempt
+            self.stdout = stdout
+            self.stderr = stderr
+            self.returncode = 255 if attempt == 1 else 0
+
+        def communicate(self, payload, timeout=None):
+            calls.append((self.attempt, payload))
+            if self.attempt == 1:
+                self.stderr.write(b"Connection timed out\n")
+            else:
+                self.stdout.write(b'{"state":"COMPLETED"}')
+
+    def fake_popen(_command, **kwargs):
+        return FakeProcess(len(calls) + 1, kwargs["stdout"], kwargs["stderr"])
+
+    monkeypatch.setattr(transport_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(transport_module.time, "sleep", lambda _seconds: None)
+
+    request = {"operation": "submit", "id": "same-attempt"}
+    result = transport_module.invoke(worker, request, tmp_path, timeout=5)
+
+    assert result == {"state": "COMPLETED"}
+    assert len(calls) == 2
+    assert [attempt for attempt, _payload in calls] == [1, 2]
+    assert calls[0][1] == calls[1][1] == canonical(request)
+
+
+def test_ssh_authentication_failure_is_not_retried(tmp_path, monkeypatch):
+    calls = []
+    worker = Worker(id="remote", name="Remote", transport="ssh", host="worker.example",
+                    ssh_user="runner", repo="C:/worker/repo")
+
+    class FakeProcess:
+        returncode = 255
+
+        def __init__(self, stderr):
+            self.stderr = stderr
+
+        def communicate(self, _payload, timeout=None):
+            calls.append(True)
+            self.stderr.write(b"Permission denied (publickey)\n")
+
+    def fake_popen(_command, **kwargs):
+        return FakeProcess(kwargs["stderr"])
+
+    monkeypatch.setattr(transport_module.subprocess, "Popen", fake_popen)
+
+    with pytest.raises(SSHTransportError) as error:
+        transport_module.invoke(worker, {"operation": "probe"}, tmp_path, timeout=5)
+
+    assert len(calls) == 1
+    assert error.value.error_code == "SSH_AUTHENTICATION_FAILED"
+    assert error.value.attempts == 1
+
+
+def test_runtime_ssh_failure_quarantines_worker_until_a_new_probe(scheduler, monkeypatch):
+    worker = scheduler.worker("local")
+    scheduler.registry.update(worker.id, {"session_verified": True, "ssh_ready": True})
+
+    def disconnected(*_args, **_kwargs):
+        raise SSHTransportError("status", "SSH_TIMEOUT", 2)
+
+    monkeypatch.setattr(module, "invoke", disconnected)
+    with pytest.raises(SSHTransportError):
+        scheduler.invoke_worker(worker, {"operation": "status", "id": "attempt"}, scheduler.store.root)
+
+    observation = scheduler.registry.get(worker.id)["observation"]
+    assert observation["session_verified"] is False
+    assert observation["ssh_ready"] is False
+    assert observation["probe_error_code"] == "SSH_TIMEOUT"
+    assert observation["next_probe_at"] > time.time()
 
 
 def test_ssh_commands_reject_host_options_and_quote_paths():

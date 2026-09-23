@@ -92,3 +92,20 @@ def test_failed_cases_remain_in_the_denominator(tmp_path):
     assert summary["total"] == summary["failed"] == 12
     assert summary["completed"] == 0
     assert summary["failure_fraction_of_declared_tasks"] == 1 and summary["excluded_tasks"] == 0
+
+
+def test_http_rejection_keeps_api_error_code_and_redacts_credentials():
+    from urllib.error import HTTPError
+    from tools.cluster.batch import sanitized_rejection
+
+    body = json.dumps({"detail": {
+        "error": "SCENARIO_INCOMPLETE",
+        "message": "Run preparation failed: Bearer private-token-value",
+    }}).encode("utf-8")
+    error = HTTPError("http://127.0.0.1:8868/api/cluster/jobs", 500, "Error", {}, io.BytesIO(body))
+
+    result = sanitized_rejection(error)
+
+    assert result["error_code"] == "SCENARIO_INCOMPLETE"
+    assert result["detail"] == "Run preparation failed: Bearer [REDACTED]"
+    assert "private-token-value" not in json.dumps(result)

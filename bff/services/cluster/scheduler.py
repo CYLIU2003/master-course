@@ -316,9 +316,12 @@ class Scheduler:
         if kwargs["rebuild_dispatch"] or kwargs["use_existing_duties"]:
             raise ValueError("Distributed execution requires rebuild_dispatch=false and use_existing_duties=false")
         scenario_id, prepared_id = segment(kwargs["scenario_id"]), segment(kwargs["prepared_input_id"])
-        # The canonical executor reads shallow base configuration and the exact prepared
-        # bytes. Avoid loading/normalizing any original timetable in this adapter.
-        scenario = scenario_store.get_scenario_document_shallow(scenario_id)
+        # Snapshot validation must hash the complete persisted scenario. The
+        # shallow loader omits source fields needed by dated Prepare contracts.
+        scenario = scenario_store.get_scenario_document(
+            scenario_id,
+            repair_missing_master=False,
+        )
         if scenario.get("meta", {}).get("id") != scenario_id:
             raise ValueError("Scenario document ID mismatch")
         scenario.pop("refs", None)

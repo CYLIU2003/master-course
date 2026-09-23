@@ -91,5 +91,6 @@ def test_controller_refusal_is_persisted_without_sensitive_body(tmp_path, monkey
     monkeypatch.setattr(batch.sys, "argv", ["batch.py", "run", str(manifest), "--state-dir", str(tmp_path)])
     assert batch.main() == 1
     state = json.loads((tmp_path / "batch-state.json").read_bytes())
-    assert state["connection"] == {"status": "REQUEST_REJECTED", "http_status": 409, "retryable": False}
+    assert state["connection"] == {"status": "REQUEST_REJECTED", "http_status": 409,
+                                   "retryable": False, "error_code": "HTTP_409_UNCLASSIFIED"}
     assert "secret-body" not in capsys.readouterr().out

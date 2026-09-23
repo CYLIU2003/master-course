@@ -87,7 +87,20 @@ function timeLabel(value: string | null) {
   return value ? new Date(value).toLocaleString("ja-JP") : "未確認";
 }
 function workerErrorMessage(node: WorkerNode) {
-  switch (node.probe_error_code) {
+  const legacyError = (node.last_error ?? "").toLowerCase();
+  const errorCode = node.probe_error_code ?? (
+    legacyError.includes("permission denied")
+      || legacyError.includes("publickey")
+      || legacyError.includes("authentication failed")
+      ? "SSH_AUTHENTICATION_FAILED"
+      : legacyError.includes("timed out")
+        ? "SSH_TIMEOUT"
+        : legacyError.includes("host key verification failed")
+          || legacyError.includes("remote host identification has changed")
+          ? "SSH_HOST_KEY_MISMATCH"
+          : null
+  );
+  switch (errorCode) {
     case "SSH_TIMEOUT":
       return "SSHの応答がなく、同じ通信を1回だけ再試行しました。復旧確認までこのPCへの新規割当を止め、自動で再確認します。";
     case "SSH_CONNECTION_UNAVAILABLE":
@@ -102,7 +115,7 @@ function workerErrorMessage(node: WorkerNode) {
     case "SSH_HANDSHAKE_FAILED":
       return "SSHの接続確認に失敗しました。認証情報とホスト鍵を確認してください。";
     default:
-      return node.last_error ?? "Workerの接続確認に失敗しました。";
+      return "接続確認に失敗しました。詳細は親機のログで確認してください。";
   }
 }
 function metric(value: number | null | undefined, suffix: string) {

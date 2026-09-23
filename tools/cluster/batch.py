@@ -75,7 +75,7 @@ def sanitized_rejection(exc: HTTPError) -> dict:
         exc.close()
     detail = payload.get("detail") if isinstance(payload, dict) else None
     if isinstance(detail, dict):
-        code = detail.get("code") or detail.get("error_code")
+        code = detail.get("code") or detail.get("error_code") or detail.get("error")
         message = detail.get("message") or detail.get("error")
         if isinstance(code, str) and re.fullmatch(r"[A-Z][A-Z0-9_]{1,79}", code):
             result["error_code"] = code
