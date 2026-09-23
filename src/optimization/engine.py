@@ -2445,9 +2445,21 @@ class OptimizationEngine:
             )
             or 0.0
         )
-        solver_metadata["bev_terminal_soc_balance_satisfied"] = bool(
-            plan.metadata.get("bev_terminal_soc_balance_satisfied", False)
-        )
+        plan_terminal_balance = plan.metadata.get("bev_terminal_soc_balance_satisfied")
+        if plan_terminal_balance is None and result.mode in {
+            OptimizationMode.ALNS, OptimizationMode.GA, OptimizationMode.ABC
+        }:
+            # Heuristic plans do not emit the MILP terminal ledger. The
+            # independent feasibility checker above evaluates the same
+            # post-return SOC target, including return_to_initial equality.
+            # Only its fully feasible verdict can fill the missing flag.
+            solver_metadata["bev_terminal_soc_balance_satisfied"] = bool(report.feasible)
+            solver_metadata["bev_terminal_soc_balance_source"] = "independent_feasibility_checker"
+        else:
+            solver_metadata["bev_terminal_soc_balance_satisfied"] = bool(plan_terminal_balance)
+            solver_metadata["bev_terminal_soc_balance_source"] = (
+                "solver_plan_metadata" if plan_terminal_balance is not None else "missing"
+            )
         for key in (
             "physical_charger_assignment_semantics",
             "physical_charger_assignment_variable_count",

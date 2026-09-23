@@ -45,7 +45,6 @@ def main():
             # This tests the route-specific dispatch path without claiming the
             # four fictional trips represent the published timetable.
             scenario["scenario_overlay"]["dataset_version"] = "synthetic-shibu24-v1"
-            scenario["simulation_config"]["bev_terminal_soc_policy"] = "minimum_only"
         scenario_id = segment(f"{args.batch_id}-{month:02d}")
         try:
             scenario_store.get_scenario_document_shallow(scenario_id)

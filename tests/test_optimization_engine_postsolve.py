@@ -27,6 +27,49 @@ class _FakeMILPOptimizer:
         return self._result
 
 
+def test_heuristic_terminal_balance_uses_independent_validation_when_plan_flag_missing() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="heuristic-terminal", timestep_min=30),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        metadata={"bev_terminal_soc_policy": "return_to_initial"},
+    )
+    result = OptimizationEngineResult(
+        mode=OptimizationMode.ALNS,
+        solver_status="SOLVED_FEASIBLE",
+        objective_value=0.0,
+        plan=AssignmentPlan(),
+        feasible=True,
+        cost_breakdown={},
+        solver_metadata={},
+    )
+    engine = OptimizationEngine()
+    finalized = engine._finalize_result(
+        problem, result,
+        OptimizationConfig(mode=OptimizationMode.ALNS, allow_postsolve_repair=False),
+    )
+    assert finalized.solver_metadata["postsolve_feasible"] is True
+    assert finalized.solver_metadata["bev_terminal_soc_balance_satisfied"] is True
+    assert finalized.solver_metadata["bev_terminal_soc_balance_source"] == "independent_feasibility_checker"
+
+    explicit_failure = engine._finalize_result(
+        problem,
+        OptimizationEngineResult(
+            mode=OptimizationMode.ALNS,
+            solver_status="SOLVED_FEASIBLE",
+            objective_value=0.0,
+            plan=AssignmentPlan(metadata={"bev_terminal_soc_balance_satisfied": False}),
+            feasible=True,
+            cost_breakdown={},
+            solver_metadata={},
+        ),
+        OptimizationConfig(mode=OptimizationMode.ALNS, allow_postsolve_repair=False),
+    )
+    assert explicit_failure.solver_metadata["bev_terminal_soc_balance_satisfied"] is False
+    assert explicit_failure.solver_metadata["bev_terminal_soc_balance_source"] == "solver_plan_metadata"
+
+
 def test_postsolve_bess_terminal_soc_repair_shifts_late_discharge_to_grid() -> None:
     problem = CanonicalOptimizationProblem(
         scenario=OptimizationScenario(scenario_id="s-bess", timestep_min=60),

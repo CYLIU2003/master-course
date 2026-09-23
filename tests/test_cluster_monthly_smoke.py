@@ -77,5 +77,5 @@ def test_batch_generator_persists_scope_before_prepare_and_preserves_output_dire
     manifest = json.loads((tmp_path / "requested/batch.json").read_bytes())
     assert len(manifest["tasks"]) == len(normalized) == 12
     assert all(document["scenario_overlay"]["route_ids"] == ["渋24"] for document in documents.values())
-    assert all(document["simulation_config"]["bev_terminal_soc_policy"] == "minimum_only" for document in documents.values())
+    assert all(document["simulation_config"]["bev_terminal_soc_policy"] == "return_to_initial" for document in documents.values())
     assert not (release / "requested/batch.json").exists()

@@ -2,9 +2,11 @@
 
 ## 渋24の架空4便による12台疎通試験（2026-09-23）
 
-旧渋21〜23の長時間診断は利用者指示で停止し、元の出力を保持した。新しい短時間試験は既存のPrepare→BFF→永続キュー→worker→成果物回収を使う。`synthetic_batch.py --dummy-route 渋24 --one-per-worker` は、各月1日の架空4便を親機と登録済み11台へ1件ずつ割り当てる。停留所、10 km距離、車両、時刻はすべて試験値で、公式の渋24ダイヤ、研究用fleet、PV/BESS結果を表さない。BEV終端はこの疎通試験に限り `minimum_only` とし、期末SOCと独立物理検証の結果を成果物で必ず確認する。
+旧渋21〜23の長時間診断は利用者指示で停止し、元の出力を保持した。新しい短時間試験は既存のPrepare→BFF→永続キュー→worker→成果物回収を使う。`synthetic_batch.py --dummy-route 渋24 --one-per-worker` は、12台すべてが有効な時に、各月1日の架空4便を1台へ1件ずつ割り当てる。1台がオフラインの初回は、12件をPrepareした後、稼働中11台へ11件だけを固定割当した別manifestを使った。停留所、10 km距離、車両、時刻はすべて試験値で、公式の渋24ダイヤ、研究用fleet、PV/BESS結果を表さない。BEV終端は既存BFFの`return_to_initial`が実効条件で、期末SOCと独立物理検証の結果を成果物で必ず確認する。
 
 固定版の配置・source/runtime/dataset hash照合が済んだworkerにだけ投入する。現在の登録12台は投入可能12台という意味ではない。1台がオフラインならその端末を投入無効として残し、11台の結果を12台成功と報告しない。回線復帰後は同じ固定SHAで当該端末をstageし、未実行の固有caseを再開する。Gurobiなしprofileを使い、Env起動回数と求解回数が0であることを `audit_batch.py` で確認する。既存の旧12ケース、週間研究結果と混ぜない。
+
+初回の11件は配布・回収・ハッシュ確認が全件通ったが、`terminal_soc_balance_failed` で計画受理は0件だった。入力は当初`minimum_only`としたものの、既存BFFは比較のためBEVを`return_to_initial`に強制する。SOCイベント上は初期80%→最終80%で、ALNS計画がMILP専用の終端判定メタデータを出さず、物理再計算の合格を結果へ引き継げていないことが原因だった。BEV条件を緩めて採用する代わりに、独立FeasibilityCheckerが全制約を通した時に限り、ヒューリスティック結果の欠落フラグを補う修正を別固定版にする。初回11件は新条件の成功件数へ混ぜない。
 
 親機の監視画面は `tools/cluster/install_resident_monitor.ps1 -Settings <固定版settings.json>` で現在のWindowsユーザーのログオンタスクへ登録し、直ちに起動する。固定版のclean SHAを起動前に検査し、127.0.0.1だけで待ち受ける。ログオン時に `/#cluster` を開き、画面はworkerを4秒ごと、jobを3秒ごとに更新する。閉じたブラウザは同URLから再表示でき、controllerは独立して動く。登録解除は `Unregister-ScheduledTask -TaskName MasterCourseClusterMonitor -Confirm:$false`。この常駐はAI監視や自動メールを行わない。キューに残る旧待機jobを起動前に確認し、意図しない計算を再開させない。
 

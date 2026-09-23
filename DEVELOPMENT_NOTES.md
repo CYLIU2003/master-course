@@ -2,8 +2,11 @@
 
 ## 2026-09-23 渋24ダミーの短時間分散試験と親機常駐監視
 
+- 初回固定版`a594b6f6`は親機＋オンライン子機10台への同一SHA/source/runtime/dataset hash照合を通過し、11件の独立1日試験がCOMPLETED・11 ZIP hash回収・Gurobi Env/Model/optimize各0回だった。ただし11件とも`terminal_soc_balance_failed`で研究受理は0件。SOCイベントは初期160→最終160 kWhだが、ALNSがMILP専用終端metadataを発行せず、FeasibilityCheckerの可行判定を最終metadataへ渡していなかった。初回は配布試験成功・計画受理失敗として保持する。
+- 既存BFFは画面からの前日計画を`return_to_initial`へ強制するため、初回の`minimum_only`指定は実効値ではなかった。架空渋24入力を明示的に`return_to_initial`へ戻し、ALNS/GA/ABCのplanに終端flagがない場合のみ、独立FeasibilityCheckerの全体可行判定から保守的に導く。MILPの明示flagは変更しない。新しいclean固定版を作り、初回11件とは別のIDで再実行する。
+
 - 利用者指示で旧渋21〜23の2週連続計算を親・子PIDを照合して停止し、`output/bess_continuous_two_week_20260923/`を保持した。共有Gurobi予約は即時解放せず既定のWLS解放待ちへ遷移した。旧結果は中断であり完了扱いしない。
-- `monthly_smoke.scenario_for_month` の路線IDを選べるようにし、`synthetic_batch.py --dummy-route 渋24` を追加した。架空4便の出典と`research_eligible=false`は保持し、渋24版に限りBEV終端を`minimum_only`にする。Prepareで渋244便、宣言済み正値距離、運行日、車両を確認した。実渋24ダイヤ・研究車両・週間BESSの検証ではない。
+- `monthly_smoke.scenario_for_month` の路線IDを選べるようにし、`synthetic_batch.py --dummy-route 渋24` を追加した。架空4便の出典と`research_eligible=false`は保持する。Prepareで渋244便、宣言済み正値距離、運行日、車両を確認した。実渋24ダイヤ・研究車両・週間BESSの検証ではない。
 - 最初の全台probeは親機と子機10台がSSH応答、`laptop-a709una0`がオフライン。全応答機も旧固定SHA `a23e7592` で、現開発版とは不一致のため計算可能とはしない。新固定版の配置・再probe・実ジョブ・回収監査で別々に判定する。
 - 親機向けに固定版の事前検査、127.0.0.1上のcontroller二重起動防止、隠しウィンドウ起動、ログオンタスクと`/#cluster`表示を追加した。画面の表示継続はブラウザを開いている間で、controllerは独立プロセス。新しいAI監視やメールは使わない。
 
