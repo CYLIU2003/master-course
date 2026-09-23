@@ -4,7 +4,9 @@
 
 SSH疎通確認で応答が10秒以内に返らない場合は、同じ固定ホスト・ユーザー・厳格なホスト鍵検証のまま20秒の再試行を1回行う。2回とも失敗した端末は計算へ割り当てず、自動監視で再確認する。機器管理画面の `SSH_TIMEOUT` は短い日本語の案内を表示する。Tailscale自体がオフラインの端末はSSH再試行の対象ではない。
 
-2026-09-23 21:14 JSTの実機確認では18台を登録し、Gurobi担当5台・ソルバー不要ALNS優先13台とした。`LAPTOP-8JS4DQCD` は新固定版のSSH・環境・ソース一致を確認済み。`LAPTOP-BOLC6VIT` は20:00 UTCからTailscaleオフラインで、復帰と空きRAMの再確認待ち。`DESKTOP-3PRU7QP` のSSH・環境・ソース一致は確認したが、登録本人用Academic WLSの実起動が `10009 License has expired` で失敗したためALNS担当に戻した。資格情報の配置だけをGurobi可用性の証明としない。[Gurobi公式の期限更新手順](https://support.gurobi.com/hc/en-us/articles/20183190511889--ERROR-10009-License-has-expired-for-an-Academic-WLS-license)に従って登録本人が更新し、新しい管理下Env/Model試験が通るまでGurobi担当にはしない。現行の親機設定は `output/cluster-deployment/onboard-20260923/controller-alns-roles-dd14d874-wls-expired-settings.json`。
+2026-09-23 21:14 JSTの実機確認では18台を登録し、Gurobi担当5台・ソルバー不要ALNS優先13台とした。`LAPTOP-8JS4DQCD` は新固定版のSSH・環境・ソース一致を確認済み。`LAPTOP-BOLC6VIT` は20:00 UTCからTailscaleオフラインで、復帰と空きRAMの再確認待ち。`DESKTOP-3PRU7QP` のSSH・環境・ソース一致は確認したが、登録本人用Academic WLSの実起動が `10009 License has expired` で失敗したためALNS担当に戻した。資格情報の配置だけをGurobi可用性の証明としない。[Gurobi公式の期限更新手順](https://support.gurobi.com/hc/en-us/articles/20183190511889--ERROR-10009-License-has-expired-for-an-Academic-WLS-license)に従って登録本人が更新し、新しい管理下Env/Model試験が通るまでGurobi担当にはしない。21:14 JST時点の親機設定は `output/cluster-deployment/onboard-20260923/controller-alns-roles-dd14d874-wls-expired-settings.json`。
+
+21:28 JSTの更新: 固定版 `0ce4a25f` を18台すべてに配置してコード・依存・データを照合し、親機設定を `output/cluster-deployment/onboard-20260923/controller-worker-roles-0ce4a25f-settings.json` に切り替えた。Gurobi実行確認済み5台は `gurobi_only`、残り13台は `alns_only`。先にオフラインだった `LAPTOP-BOLC6VIT` もSSH・環境照合に通ったが、空きRAMは0.14 GBで、1 GBのジョブ要件とOS用1 GBの予約を満たさない。投入時の資源判定は引き続き拒否する。問題報告のあった6台を4回再確認し、全24観測でSSH接続済みだった。これは継続的な無障害保証ではない。
 
 Gurobi不要のALNS診断を自動割当するときは、空きRAM・CPU・ストレージ等の既存条件に通ったGurobi不要の子機を優先する。対象がなければGurobi対応機も使える。Gurobiを使うジョブはGurobi対応として登録・検証された子機だけに割り当てる。現行の `alns_no_gurobi_v1` は単日・BESSなし・時間別Rollingなしの診断専用で、7日間や時間別Rollingに対するソルバー不要の求解・検証経路はまだない。Rollingは現行の固定仕業MILP再最適化とGurobi利用の受理条件を持つため、設定だけで切り替えない。
 
