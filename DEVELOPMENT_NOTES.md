@@ -1,5 +1,10 @@
 # Development Notes
 
+## 2026-09-23 分散配布ZIPの空Git参照ディレクトリ
+
+- 18機へのUI文言修正版配布で、子機17機のGit照合が同時に失敗した。原本ZIPと子機の展開先を比較し、detached commitかつpacked refsのみのstandalone cloneでは `.git/refs` が空になり、ファイルだけをZIP化する配布器がその必須ディレクトリを欠落させたことを特定した。子機は計算を開始していない。直前の固定 `c54f684e` の常駐画面とworker設定は維持した。
+- `tools/cluster/release.py` は `.git/refs/` を明示的にZIPへ入れる。空refsの一時Git原本からZIPを展開し、Git SHAを照合する回帰試験を追加した。Windows PowerShellの配布安全性を含む `tests/test_cluster_release.py` 10件が通過。修正後の新しいclean固定版で18機を再配布・再照合する。
+
 ## 2026-09-23 翌朝SOC期限と最終夜間の算入選択
 
 - ユーザー指定: 車両のSOC目標は物理上限ではなくシナリオの運用上限（例20～80%なら80%）。帰庫時や24:00ではなく翌朝の運転開始前までに達成すればよい。最終日の帰庫後から翌朝までの充電・受電・費用を計算期間へ含めるかはシナリオごとに選べるようにする。

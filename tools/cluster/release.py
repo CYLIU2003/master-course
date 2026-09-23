@@ -67,6 +67,9 @@ def package(release: Path, output: Path, dataset: str) -> dict:
         raise ValueError("Use a new package directory; existing releases are immutable")
     temporary = archive_path.with_suffix(".partial")
     with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
+        # A detached, packed-refs-only clone can have an empty refs directory.
+        # Git still requires .git/refs to recognize the extracted repository.
+        archive.writestr(".git/refs/", b"")
         for path in sorted(paths):
             name = path.relative_to(release).as_posix()
             if name == ".git/config":

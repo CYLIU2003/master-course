@@ -83,6 +83,33 @@ def test_crlf_release_keeps_effective_git_checkout_policy(tmp_path):
     assert not subprocess.check_output(["git", "-C", str(unpacked), "status", "--porcelain"]).strip()
 
 
+def test_detached_packed_refs_release_remains_a_git_repository(tmp_path):
+    root = tmp_path / "detached"
+    root.mkdir()
+    git(root, "init")
+    (root / "src").mkdir()
+    (root / "src/example.py").write_text("pass\n", encoding="utf-8")
+    lock = root / "tools/cluster/environment/uv.lock"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("locked", encoding="utf-8")
+    dataset = root / "data/built/test"
+    dataset.mkdir(parents=True)
+    (dataset / "trips.json").write_text("[]", encoding="utf-8")
+    (root / ".gitignore").write_text("data/\n", encoding="utf-8")
+    git(root, "add", ".")
+    git(root, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "fixture")
+    git(root, "checkout", "--detach", "HEAD")
+    git(root, "pack-refs", "--all", "--prune")
+    assert not any(path.is_file() for path in (root / ".git/refs").rglob("*"))
+
+    manifest = package(root, tmp_path / "bundle", "data/built/test")
+    with zipfile.ZipFile(tmp_path / "bundle" / manifest["archive"]) as archive:
+        assert ".git/refs/" in archive.namelist()
+        unpacked = tmp_path / "remote"
+        archive.extractall(unpacked)
+    assert git(unpacked, "rev-parse", "HEAD").decode().strip() == manifest["git"]["sha"]
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows staging")
 @pytest.mark.parametrize("entry,allowed", [("src/ok.py", True), ("../escaped", False), ("C:/escaped", False), ("src/name. ", False)])
 def test_powershell_staging_paths_are_bounded_and_existing_releases_preserved(tmp_path, entry, allowed):
