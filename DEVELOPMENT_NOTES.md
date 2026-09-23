@@ -10631,3 +10631,6 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - rolling側のPV実測入力が旧672区間で止まることを発見。翌朝の実測Solcast行・原本SHAをovernight契約へ固定し、`_prepare_actual_pv_execution_file`が追加区間のkWhを作るよう修正。rolling窓終端は`len(price_slots)×timestep`へ変更し、最終翌朝までの有料電力期間と一致させる。52件の関連回帰は通過。実規模全時間窓の物理・会計照合は未実施。
 - 追加の自己検査で、有料期間7日＋5時間45分が旧60分rollingの割切り検査で拒否されることを発見。最終窓45分を15分境界上で許可し、完了期待窓数を切上げに変更。cluster summaryも運行168時間と有料電力期間・期待窓数を分けた。実規模の全窓求解は別ゲート。
 - 月別Prepared状態に入力原本SHAを記録し、再開・batch生成時に照合する。12週の厳格監査が揃うまで投入用batchを作らない。固定版設定のSHA一致、同一設定の12件、既存永続キューへの投入・再開、成果物hash監査、失敗保存を無人CLIへまとめた。AI定期監視・自動メールは追加しない。回収完了を研究採用へ昇格させない。
+
+- 固定worktreeでのPrepare原本をコントローラーの別出力先へ安全に渡す必要を確認。12件のPrepared JSONと別原本の実測PV JSONをSHAで検査し、異なる既存ファイルを上書きしない `stage_shibu24_monthly_inputs.py` を追加。転送は再Prepare・求解・研究採用を行わない。
+- 70f331b7配置の初回試行は、配置スクリプトを開発作業ツリーから起動したことで、固定リリースの改行コードと異なる`uv.lock`のraw SHAを読み、17台を`RELEASE_RUNTIME_MISMATCH`と判定した。固定リリース自身の配置スクリプトを設定済みPythonで起動し直した。これは計算コードの不一致ではなく、配置実行場所の誤りである。残る1台の接続失敗は別事象として保持する。再試行結果は配置evidenceで確認する。

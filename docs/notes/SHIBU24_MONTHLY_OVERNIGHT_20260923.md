@@ -30,3 +30,5 @@ Phase 3二段階のStage 1 gapはStage 1の目的に対する値であり、週�
 rollingの実測PV生成は従来7日分だけだったため、翌朝の実測日射行とraw原本SHAを契約へ固定し、追加区間のPVを実行入力へ含めた。rolling窓の終端も運行日数ではなく有料電力区間数から求める。これはコードと小規模回帰の通過であり、実規模の全時間窓・会計・物理の受入は別途確認する。
 
 2026-09-23追記: 1月など翌朝05:45に終わる週は、60分rollingを173回行った後に45分の最終窓が必要となる。実行窓の長さを残り有料区間で切り、モデルの15分境界に一致する場合だけ最後の短縮を認めた。クラスタの予定窓数も同じ有料区間から計算する。実データ12週のPrepared入力が全件厳格監査を通過した後、`tools/research/shibu24_monthly.py batch`が原本SHAを再検査して12件の固定batchを作る。`tools/research/shibu24_monthly_campaign.py run --settings <fixed-controller-settings.json> --output <new-campaign-directory>`は既存Prepare・永続batch・成果物監査を順に呼び、失敗時は停止して記録を保持する。通常監視にAIを使わず、メールも自動送信しない。回収完了は研究採用や統合最適性を意味しない。
+
+2026-09-23追記: Prepare用の独立worktreeからコントローラー固定リリースへ渡す際は、`tools/research/stage_shibu24_monthly_inputs.py` が12件のPrepared JSONと各週の実測PV JSONを原本SHAで照合し、同一内容だけを配置する。Preparedの再作成や求解はしない。既存ファイルが異なる場合は上書きせず停止する。月別batchは配置済みPrepared原本を再検査してから作る。固定版70f331b7のPrepareと実行結果は、後続の配送ツール変更を理由に別SHAの結果へ付け替えない。

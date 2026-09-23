@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-23: 固定版の月別Prepareが完了したら、`python tools/research/stage_shibu24_monthly_inputs.py --campaign <出力> --source-worktree <固定worktree> --settings <固定controller設定.json>` で12件のPrepared原本と実測PV入力をハッシュ照合してコントローラーへ配置できます。同じファイルなら再実行でき、内容が違えば上書きせず停止します。これは求解や研究採用を行いません。
+
 2026-09-23: 渋24の月別12週と最終翌朝SOCを含む診断は、固定版で `python tools/research/shibu24_monthly_campaign.py run --settings <固定controller設定.json> --output <新規campaign出力>` を一度起動すると、入力照合・厳格Prepare・永続batch投入・回収監査までスクリプトが進めます。進捗は同スクリプトの `status --output <campaign出力>` と `campaign.log` で確認できます。通常監視にAIは不要です。全件回収は研究採用・統合最適性の証明ではありません。条件と制限は [渋24月別翌朝診断](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md) を参照してください。
 
 <div align="center">
