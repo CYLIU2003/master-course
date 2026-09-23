@@ -752,6 +752,8 @@ class UpdateScenarioBody(BaseModel):
     finalSocFloorPercent: Optional[float] = None
     finalSocTargetPercent: Optional[float] = None
     finalSocTargetTolerancePercent: Optional[float] = None
+    bevSocDeadlineMode: Optional[Literal["legacy_day_end", "next_morning_operational_max"]] = None
+    finalOvernightMode: Optional[Literal["exclude", "include"]] = None
     initialIceFuelPercent: Optional[float] = None
     minIceFuelPercent: Optional[float] = None
     maxIceFuelPercent: Optional[float] = None
@@ -893,6 +895,8 @@ class UpdateQuickSetupBody(BaseModel):
     finalSocFloorPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     finalSocTargetPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     finalSocTargetTolerancePercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    bevSocDeadlineMode: Optional[Literal["legacy_day_end", "next_morning_operational_max"]] = None
+    finalOvernightMode: Optional[Literal["exclude", "include"]] = None
     initialIceFuelPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     minIceFuelPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     maxIceFuelPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
@@ -1119,6 +1123,10 @@ def _apply_scenario_simulation_settings(
         simulation_config["final_soc_target_tolerance_percent"] = float(
             body.finalSocTargetTolerancePercent
         )
+    if body.bevSocDeadlineMode is not None:
+        simulation_config["bev_soc_deadline_mode"] = body.bevSocDeadlineMode
+    if body.finalOvernightMode is not None:
+        simulation_config["final_overnight_mode"] = body.finalOvernightMode
     if body.initialIceFuelPercent is not None:
         simulation_config["initial_ice_fuel_percent"] = float(body.initialIceFuelPercent)
     if body.minIceFuelPercent is not None:
@@ -2132,6 +2140,8 @@ def _builder_defaults(
             "final_soc_target_tolerance_percent",
             0.0,
         ),
+        "bevSocDeadlineMode": simulation_config.get("bev_soc_deadline_mode", "legacy_day_end"),
+        "finalOvernightMode": simulation_config.get("final_overnight_mode", "exclude"),
         "initialIceFuelPercent": simulation_config.get("initial_ice_fuel_percent", 100.0),
         "minIceFuelPercent": simulation_config.get("min_ice_fuel_percent", 10.0),
         "maxIceFuelPercent": simulation_config.get("max_ice_fuel_percent", 90.0),
@@ -2806,6 +2816,8 @@ def _build_quick_setup_payload(
             "finalSocFloorPercent": builder_defaults.get("finalSocFloorPercent"),
             "finalSocTargetPercent": builder_defaults.get("finalSocTargetPercent"),
             "finalSocTargetTolerancePercent": builder_defaults.get("finalSocTargetTolerancePercent"),
+            "bevSocDeadlineMode": builder_defaults.get("bevSocDeadlineMode"),
+            "finalOvernightMode": builder_defaults.get("finalOvernightMode"),
             "initialIceFuelPercent": builder_defaults.get("initialIceFuelPercent"),
             "minIceFuelPercent": builder_defaults.get("minIceFuelPercent"),
             "maxIceFuelPercent": builder_defaults.get("maxIceFuelPercent"),
@@ -3465,6 +3477,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["final_soc_target_tolerance_percent"] = float(
                 body.finalSocTargetTolerancePercent
             )
+        if body.bevSocDeadlineMode is not None:
+            simulation_config["bev_soc_deadline_mode"] = body.bevSocDeadlineMode
+        if body.finalOvernightMode is not None:
+            simulation_config["final_overnight_mode"] = body.finalOvernightMode
         if body.initialIceFuelPercent is not None:
             simulation_config["initial_ice_fuel_percent"] = float(body.initialIceFuelPercent)
         if body.minIceFuelPercent is not None:

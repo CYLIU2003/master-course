@@ -29,6 +29,7 @@ from src.optimization.common.bess_dispatch_policy import validate_auxiliary_bess
 from src.optimization.common.bev_terminal_policy import (
     BevTerminalSocPolicy,
     normalize_bev_terminal_soc_policy,
+    validate_bev_soc_timing_config,
 )
 from src.route_family_runtime import (
     merge_deadhead_metrics,
@@ -117,6 +118,7 @@ class ProblemBuilder:
         config: Optional[OptimizationConfig] = None,
         planning_days: int = 1,
     ) -> CanonicalOptimizationProblem:
+        validate_bev_soc_timing_config(scenario.get("simulation_config") or {})
         research_run = bool(getattr(config, "research_run", False))
         fleet_contract = None
         if research_run:

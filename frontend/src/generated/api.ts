@@ -3517,6 +3517,12 @@ export interface components {
       status?: string | null;
       /** Updatedat */
       updatedAt?: string | null;
+      /**
+       * Routegroup
+       * @default other
+       * @enum {string}
+       */
+      routeGroup: "shibu24" | "shibu21_24" | "shibu21_23" | "other";
     };
     /** SeedInventory */
     SeedInventory: {
@@ -3588,6 +3594,8 @@ export interface components {
       identity_verification: string;
       /** Workspace */
       workspace?: string | null;
+      /** Repo */
+      repo?: string | null;
       /** Python Executable */
       python_executable?: string | null;
       /** Capabilities Verification */
@@ -3920,6 +3928,11 @@ export interface components {
       finalSocTargetPercent?: number | null;
       /** Finalsoctargettolerancepercent */
       finalSocTargetTolerancePercent?: number | null;
+      /** Bevsocdeadlinemode */
+      bevSocDeadlineMode?:
+        ("legacy_day_end" | "next_morning_operational_max") | null;
+      /** Finalovernightmode */
+      finalOvernightMode?: ("exclude" | "include") | null;
       /** Initialicefuelpercent */
       initialIceFuelPercent?: number | null;
       /** Minicefuelpercent */
@@ -4092,6 +4105,11 @@ export interface components {
       finalSocTargetPercent?: number | null;
       /** Finalsoctargettolerancepercent */
       finalSocTargetTolerancePercent?: number | null;
+      /** Bevsocdeadlinemode */
+      bevSocDeadlineMode?:
+        ("legacy_day_end" | "next_morning_operational_max") | null;
+      /** Finalovernightmode */
+      finalOvernightMode?: ("exclude" | "include") | null;
       /** Initialicefuelpercent */
       initialIceFuelPercent?: number | null;
       /** Minicefuelpercent */
@@ -5488,6 +5506,7 @@ export interface operations {
         q?: string;
         offset?: number;
         limit?: number;
+        route_group?: "all" | "shibu24" | "shibu21_24" | "shibu21_23" | "other";
       };
       header?: never;
       path?: never;

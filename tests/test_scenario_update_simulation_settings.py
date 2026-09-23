@@ -14,6 +14,8 @@ def test_update_scenario_persists_simulation_settings() -> None:
         finalSocFloorPercent=0.2,
         finalSocTargetPercent=0.8,
         finalSocTargetTolerancePercent=0.15,
+        bevSocDeadlineMode="next_morning_operational_max",
+        finalOvernightMode="include",
         initialSocPercent=0.88,
         initialSoc=0.85,
         socMin=0.2,
@@ -81,6 +83,8 @@ def test_update_scenario_persists_simulation_settings() -> None:
     assert simulation_config["final_soc_floor_percent"] == 0.2
     assert simulation_config["final_soc_target_percent"] == 0.8
     assert simulation_config["final_soc_target_tolerance_percent"] == 0.15
+    assert simulation_config["bev_soc_deadline_mode"] == "next_morning_operational_max"
+    assert simulation_config["final_overnight_mode"] == "include"
     assert simulation_config["initial_soc"] == 0.85
     assert simulation_config["soc_min"] == 0.2
     assert simulation_config["soc_max"] == 0.9

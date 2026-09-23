@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import RunPanel, { executionControls } from "./RunPanel";
 import type { Overview } from "../api";
 const overview: Overview = {
-  meta: { id: "s1", name: "Saved scenario" },
+  meta: { id: "s1", name: "Saved scenario", routeGroup: "other" },
   stats: {},
   scope: {},
   settings: {
@@ -209,11 +209,20 @@ it("sends frozen optimization to the distributed queue with the selected worker"
 it("sends the chosen RAM floor with a distributed optimization", async () => {
   mount();
   await prepare();
-  fireEvent.change(screen.getByLabelText("計算の配布先"), { target: { value: "auto" } });
-  fireEvent.change(screen.getByLabelText("必要な空きRAM（GB）"), { target: { value: "24" } });
+  fireEvent.change(screen.getByLabelText("計算の配布先"), {
+    target: { value: "auto" },
+  });
+  fireEvent.change(screen.getByLabelText("必要な空きRAM（GB）"), {
+    target: { value: "24" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
-  await waitFor(() => expect(requests.some((row) => row.url === "/api/cluster/jobs")).toBe(true));
-  expect(requests.find((row) => row.url === "/api/cluster/jobs")?.body.minimum_ram_gb).toBe(24);
+  await waitFor(() =>
+    expect(requests.some((row) => row.url === "/api/cluster/jobs")).toBe(true),
+  );
+  expect(
+    requests.find((row) => row.url === "/api/cluster/jobs")?.body
+      .minimum_ram_gb,
+  ).toBe(24);
 });
 it("routes simulation through the prepared-simulation endpoint", async () => {
   mount();
@@ -254,23 +263,39 @@ it("reuses a durable submission identity after a lost response and a remount", a
     const response = originalFetch(url, options);
     if (url === "/api/cluster/jobs" && dropReply) {
       dropReply = false;
-      return response.then(() => { throw new TypeError("accepted response lost"); });
+      return response.then(() => {
+        throw new TypeError("accepted response lost");
+      });
     }
     return response;
   });
   mount();
   await prepare();
-  fireEvent.change(screen.getByLabelText("計算の配布先"), { target: { value: "auto" } });
+  fireEvent.change(screen.getByLabelText("計算の配布先"), {
+    target: { value: "auto" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
-  await waitFor(() => expect(requests.some((row) => row.url === "/api/cluster/jobs")).toBe(true));
-  const first = requests.find((row) => row.url === "/api/cluster/jobs")!.body.idempotency_key;
+  await waitFor(() =>
+    expect(requests.some((row) => row.url === "/api/cluster/jobs")).toBe(true),
+  );
+  const first = requests.find((row) => row.url === "/api/cluster/jobs")!.body
+    .idempotency_key;
   expect(typeof first).toBe("string");
   await screen.findByText(/accepted response lost/);
   cleanup();
   mount();
   await prepare();
-  fireEvent.change(screen.getByLabelText("計算の配布先"), { target: { value: "auto" } });
+  fireEvent.change(screen.getByLabelText("計算の配布先"), {
+    target: { value: "auto" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "2. 計算を開始" }));
-  await waitFor(() => expect(requests.filter((row) => row.url === "/api/cluster/jobs").length).toBe(2));
-  expect(requests.filter((row) => row.url === "/api/cluster/jobs")[1].body.idempotency_key).toBe(first);
+  await waitFor(() =>
+    expect(
+      requests.filter((row) => row.url === "/api/cluster/jobs").length,
+    ).toBe(2),
+  );
+  expect(
+    requests.filter((row) => row.url === "/api/cluster/jobs")[1].body
+      .idempotency_key,
+  ).toBe(first);
 });

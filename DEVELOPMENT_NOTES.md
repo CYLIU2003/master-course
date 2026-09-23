@@ -1,5 +1,14 @@
 # Development Notes
 
+## 2026-09-23 翌朝SOC期限と最終夜間の算入選択
+
+- ユーザー指定: 車両のSOC目標は物理上限ではなくシナリオの運用上限（例20～80%なら80%）。帰庫時や24:00ではなく翌朝の運転開始前までに達成すればよい。最終日の帰庫後から翌朝までの充電・受電・費用を計算期間へ含めるかはシナリオごとに選べるようにする。
+- `bev_soc_deadline_mode` と `final_overnight_mode` をシナリオの保存設定・新フロントのSOC欄・読戻しAPIへ追加。既存シナリオの既定値は `legacy_day_end` / `exclude` とし、過去の固定実験の意味を変えない。
+- 現行の価格/PV時系列はサービス日数ちょうどで、車両タイムライン・Stage2終端・独立物理検証もその境界を使う。ここで新選択を既存の `return_to_initial` として実行すると、8日目早朝の買電・充電・費用を落とし、SOC達成を誤認する。このため新条件は BFF の投入前と canonical ProblemBuilder の双方で `NEXT_MORNING_SOC_NOT_READY` として拒否する。設定保存は実装済みだが、**新条件での計算は未実装・未実行**。
+- 次の実装条件: 翌日ダイヤからの締切、最終翌日の価格・日付別PVの検証済み入力、実際の充電可能区間と電力・SOC制約、最終夜間を含むBESS/系統会計、日ごとの目標と独立物理再計算、比較可能性の別版監査を一緒に通す。最終夜間を除く場合は終端SOCと翌朝目標への不足を記録し、翌朝運行可能と判定しない。旧12週と混ぜない。
+- 2追加従機 `LAPTOP-BOLC6VIT` / `LAPTOP-8JS4DQCD` は鍵照合・SSH・実行環境・固定 `0a03675a` の配布を確認し、親機+17子機の設定を `output/cluster-deployment/onboard-20260923/workers-eighteen-staged-real.local.json` に統合した。これは実便渋24の18機計算完了を意味しない。新条件の正式投入は行っていない。
+- 検証: シナリオ分類/API、設定保存、SOC新条件の実行前拒否、OpenAPI生成、frontend typecheck/build の対象テストを実施。独立した研究レビューと新条件の実計算は未実施。
+
 ## 2026-09-23 新規子機候補2台への初期設定ZIP送信
 
 - 指定された `LAPTOP-BOLC6VIT / pslab / 100.65.118.103` と `LAPTOP-8JS4DQCD / pslab / 100.87.44.64` は、Tailscale statusのnode ID・Windows端末名・オンライン状態を照合し、両IPへのTailscale ping応答を確認した。

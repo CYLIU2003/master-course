@@ -10,6 +10,7 @@ class ScenarioSummary(BaseModel):
     description: str | None = None
     status: str | None = None
     updatedAt: str | None = None
+    routeGroup: Literal["shibu24", "shibu21_24", "shibu21_23", "other"] = "other"
 
 
 class DesktopPage(BaseModel):

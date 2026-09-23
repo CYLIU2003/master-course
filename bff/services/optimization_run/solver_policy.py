@@ -80,7 +80,10 @@ def local_resource_scope(job_id: str, cpu_threads: int):
 
 
 def validate_execution_request(request, scenario: dict) -> None:
+    from src.optimization.common.bev_terminal_policy import validate_bev_soc_timing_config
+
     config = scenario.get("simulation_config") or {}
+    validate_bev_soc_timing_config(config)
     profile = request.execution_profile
     if profile != config.get("execution_profile", DEFAULT_PROFILE):
         raise SolverPolicyViolation("EXECUTION_PROFILE_CHANGED: save the profile and Prepare again")

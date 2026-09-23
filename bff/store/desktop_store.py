@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import sqlite3
+import unicodedata
 from contextlib import closing, contextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -18,6 +20,7 @@ from bff.store.output_paths import outputs_root, project_root
 
 MASTER_TABLES = frozenset({"routes", "depots", "vehicles", "stops", "chargers", "vehicle_templates"})
 ARTIFACT_TABLES = frozenset({"timetable_rows", "trips", "duties", "blocks"})
+SCENARIO_ROUTE_GROUPS = frozenset({"shibu24", "shibu21_24", "shibu21_23", "other"})
 RESULT_PATHS = (
     "status",
     "solver_status",
@@ -80,13 +83,36 @@ def _metadata(path: str, modified_ns: int, size: int) -> dict[str, Any]:
         or not isinstance(meta.get("name"), str)
     ):
         raise ValueError("Invalid scenario metadata")
-    return {
+    result = {
         key: meta.get(key)
         for key in ("id", "name", "description", "status", "updatedAt", "operatorId")
     }
+    result["routeGroup"] = scenario_route_group(str(meta["name"]))
+    return result
 
 
-def scenario_page(query: str, offset: int, limit: int) -> dict[str, Any]:
+def scenario_route_group(name: str) -> str:
+    """Conservative display-only grouping based on a saved scenario's name.
+
+    A name does not prove the underlying route scope. Unnamed or ambiguous
+    scenarios remain in ``other``; optimization never consumes this label.
+    """
+    normalized = unicodedata.normalize("NFKC", name).casefold()
+    compact = re.sub(r"\s+", "", normalized)
+    if re.search(r"(?:渋|shibu)21[-~](?:(?:渋|shibu)?22[-~])?(?:渋|shibu)?24", compact):
+        return "shibu21_24"
+    if re.search(r"(?:渋|shibu)21[-~](?:(?:渋|shibu)?22[-~])?(?:渋|shibu)?23", compact):
+        return "shibu21_23"
+    if re.search(r"(?:渋|shibu)24(?!\d)", compact):
+        return "shibu24"
+    if re.search(r"(?:渋|shibu)2[123](?!\d)", compact):
+        return "shibu21_23"
+    return "other"
+
+
+def scenario_page(query: str, offset: int, limit: int, route_group: str = "all") -> dict[str, Any]:
+    if route_group != "all" and route_group not in SCENARIO_ROUTE_GROUPS:
+        raise ValueError("Unknown scenario route group")
     items, errors = [], []
     for path in scenario_store.scenario_metadata_paths():
         try:
@@ -95,6 +121,7 @@ def scenario_page(query: str, offset: int, limit: int) -> dict[str, Any]:
             if (
                 meta.get("id")
                 and query.casefold() in str(meta.get("name") or "").casefold()
+                and (route_group == "all" or meta["routeGroup"] == route_group)
             ):
                 items.append(meta)
         except (OSError, ValueError, ijson.JSONError) as exc:

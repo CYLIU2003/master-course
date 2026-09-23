@@ -1811,6 +1811,23 @@
               "default": 50,
               "title": "Limit"
             }
+          },
+          {
+            "name": "route_group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "shibu24",
+                "shibu21_24",
+                "shibu21_23",
+                "other"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Route Group"
+            }
           }
         ],
         "responses": {
@@ -10789,6 +10806,17 @@
               }
             ],
             "title": "Updatedat"
+          },
+          "routeGroup": {
+            "type": "string",
+            "enum": [
+              "shibu24",
+              "shibu21_24",
+              "shibu21_23",
+              "other"
+            ],
+            "title": "Routegroup",
+            "default": "other"
           }
         },
         "type": "object",
@@ -10941,6 +10969,17 @@
               }
             ],
             "title": "Workspace"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
           },
           "python_executable": {
             "anyOf": [
@@ -12251,6 +12290,36 @@
             ],
             "title": "Finalsoctargettolerancepercent"
           },
+          "bevSocDeadlineMode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "legacy_day_end",
+                  "next_morning_operational_max"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bevsocdeadlinemode"
+          },
+          "finalOvernightMode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "exclude",
+                  "include"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finalovernightmode"
+          },
           "initialIceFuelPercent": {
             "anyOf": [
               {
@@ -13160,6 +13229,36 @@
               }
             ],
             "title": "Finalsoctargettolerancepercent"
+          },
+          "bevSocDeadlineMode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "legacy_day_end",
+                  "next_morning_operational_max"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bevsocdeadlinemode"
+          },
+          "finalOvernightMode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "exclude",
+                  "include"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finalovernightmode"
           },
           "initialIceFuelPercent": {
             "anyOf": [

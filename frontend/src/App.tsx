@@ -28,6 +28,14 @@ import { api, post, type Page, type Scenario } from "./api";
 import { ErrorBox, Pager } from "./components/common";
 import Workspace from "./components/Workspace";
 import ClusterPanel from "./components/ClusterPanel";
+const routeGroups = [
+  ["all", "すべて"],
+  ["shibu24", "渋24"],
+  ["shibu21_24", "渋21〜24"],
+  ["shibu21_23", "渋21〜23"],
+  ["other", "未分類・その他"],
+] as const;
+type RouteGroup = (typeof routeGroups)[number][0];
 const pages = [
   ["overview", "概要と検証", Home],
   ["settings", "運行・計算設定", Settings2],
@@ -58,6 +66,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
+  const [routeGroup, setRouteGroup] = useState<RouteGroup>("all");
   const [name, setName] = useState("");
   const [dataset, setDataset] = useState("");
   const [seed, setSeed] = useState(42);
@@ -71,10 +80,10 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [search]);
   const list = useQuery({
-    queryKey: ["scenarios", query, offset],
+    queryKey: ["scenarios", query, offset, routeGroup],
     queryFn: ({ signal }) =>
       api<Page<Scenario>>(
-        `/desktop/scenarios?q=${encodeURIComponent(query)}&offset=${offset}&limit=50`,
+        `/desktop/scenarios?q=${encodeURIComponent(query)}&offset=${offset}&limit=50&route_group=${routeGroup}`,
         { signal },
       ),
     placeholderData: keepPreviousData,
@@ -156,7 +165,11 @@ export default function App() {
                 setPage(key);
                 if (key === "cluster") window.location.hash = "cluster";
                 else if (window.location.hash === "#cluster") {
-                  window.history.replaceState(null, "", window.location.pathname);
+                  window.history.replaceState(
+                    null,
+                    "",
+                    window.location.pathname,
+                  );
                 }
               }}
             >
@@ -325,6 +338,27 @@ export default function App() {
               </form>
             )}
             <ErrorBox error={list.error} />
+            <div className="scenario-group-filter">
+              <label htmlFor="scenario-route-group">路線で分類</label>
+              <select
+                id="scenario-route-group"
+                aria-label="路線別に絞り込む"
+                value={routeGroup}
+                onChange={(event) => {
+                  setRouteGroup(event.target.value as RouteGroup);
+                  setOffset(0);
+                }}
+              >
+                {routeGroups.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <small>
+                保存名による表示分類です。計算対象の路線は入力準備で確認します。
+              </small>
+            </div>
             {!!list.data?.warnings?.length && (
               <details className="warning">
                 <summary>読み込めないシナリオがあります</summary>
@@ -335,31 +369,45 @@ export default function App() {
             )}
             <div className="scenario-list">
               {list.isPending && <p>読み込み中…</p>}
-              {list.data?.items.map((row) => (
-                <button
-                  key={row.id}
-                  className={
-                    "scenario " + (selected === row.id ? "selected" : "")
-                  }
-                  disabled={list.isPlaceholderData}
-                  onClick={() => select(row.id)}
-                >
-                  <div className="scenario-symbol">
-                    <Layers3 size={20} />
-                  </div>
-                  <span>
-                    {row.name}
-                    <small>
-                      {row.description || "運行・充電・エネルギー計画"}
-                    </small>
-                  </span>
-                  <small>
-                    {row.updatedAt?.slice(0, 10)}
-                    <br />
-                    {row.status}
-                  </small>
-                </button>
-              ))}
+              {routeGroups.slice(1).map(([group, label]) => {
+                const rows = (list.data?.items ?? []).filter(
+                  (row) => (row.routeGroup ?? "other") === group,
+                );
+                if (!rows.length) return null;
+                return (
+                  <section key={group} className="scenario-group">
+                    <h3>
+                      {label} <small>{rows.length}件（このページ）</small>
+                    </h3>
+                    {rows.map((row) => (
+                      <button
+                        key={row.id}
+                        className={
+                          "scenario " + (selected === row.id ? "selected" : "")
+                        }
+                        disabled={list.isPlaceholderData}
+                        onClick={() => select(row.id)}
+                      >
+                        <div className="scenario-symbol">
+                          <Layers3 size={20} />
+                        </div>
+                        <span>
+                          {row.name}
+                          <small>識別ID: {row.id.slice(0, 8)}</small>
+                          <small>
+                            {row.description || "運行・充電・エネルギー計画"}
+                          </small>
+                        </span>
+                        <small>
+                          {row.updatedAt?.slice(0, 10)}
+                          <br />
+                          {row.status}
+                        </small>
+                      </button>
+                    ))}
+                  </section>
+                );
+              })}
             </div>
             <Pager
               offset={offset}

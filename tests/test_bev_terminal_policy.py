@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import pytest
+from types import SimpleNamespace
+
+from bff.services.optimization_run.solver_policy import validate_execution_request
+from src.optimization.common.builder import ProblemBuilder
 
 from src.optimization.common.bev_terminal_policy import (
     BevTerminalSocPolicy,
     normalize_bev_terminal_soc_policy,
     resolve_bev_terminal_soc_target_kwh,
+    validate_bev_soc_timing_config,
 )
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
@@ -80,3 +85,24 @@ def test_fixed_target_requires_configured_target() -> None:
             terminal_soc_floor_kwh=30.0,
             maximum_soc_kwh=300.0,
         )
+
+
+def test_final_overnight_choice_never_runs_with_incomplete_energy_horizon() -> None:
+    assert validate_bev_soc_timing_config({}) == ("legacy_day_end", "exclude")
+    with pytest.raises(ValueError, match="NEXT_MORNING_SOC_NOT_READY"):
+        validate_bev_soc_timing_config(
+            {
+                "bev_soc_deadline_mode": "next_morning_operational_max",
+                "final_overnight_mode": "include",
+            }
+        )
+    with pytest.raises(ValueError, match="NEXT_MORNING_SOC_NOT_READY"):
+        validate_bev_soc_timing_config({"final_overnight_mode": "include"})
+
+
+def test_new_soc_timing_is_rejected_before_frontend_job_or_problem_build() -> None:
+    scenario = {"simulation_config": {"final_overnight_mode": "include"}}
+    with pytest.raises(ValueError, match="NEXT_MORNING_SOC_NOT_READY"):
+        validate_execution_request(SimpleNamespace(execution_profile="alns_no_gurobi_v1"), scenario)
+    with pytest.raises(ValueError, match="NEXT_MORNING_SOC_NOT_READY"):
+        ProblemBuilder().build_from_scenario(scenario, depot_id="depot", service_id="test")
