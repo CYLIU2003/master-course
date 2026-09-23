@@ -26,6 +26,7 @@ export type WorkerNode = {
   network_checked_at: string | null;
   last_seen_at: string | null;
   last_probe_at: string | null;
+  next_probe_at?: number | null;
   last_error: string | null;
   probe_error_code?: string | null;
   probing: boolean;
@@ -84,6 +85,25 @@ const stateLabels: Record<string, string> = {
 };
 function timeLabel(value: string | null) {
   return value ? new Date(value).toLocaleString("ja-JP") : "未確認";
+}
+function workerErrorMessage(node: WorkerNode) {
+  switch (node.probe_error_code) {
+    case "SSH_TIMEOUT":
+      return "SSHの応答がなく、同じ通信を1回だけ再試行しました。復旧確認までこのPCへの新規割当を止め、自動で再確認します。";
+    case "SSH_CONNECTION_UNAVAILABLE":
+    case "SSH_PORT_UNREACHABLE":
+      return "SSHへ接続できません。端末の電源・Tailscale・SSHサービスを確認し、復旧後の自動確認を待ってください。";
+    case "SSH_AUTHENTICATION_FAILED":
+      return "SSH認証に失敗しました。公開鍵とログインユーザーの設定を確認してください。";
+    case "SSH_HOST_KEY_MISMATCH":
+      return "SSHホスト鍵が登録値と一致しません。接続先の本人確認後にknown_hostsを更新してください。";
+    case "SSH_CLIENT_UNAVAILABLE":
+      return "親機のSSHクライアントを起動できません。親機のOpenSSH Clientの導入状態を確認してください。";
+    case "SSH_HANDSHAKE_FAILED":
+      return "SSHの接続確認に失敗しました。認証情報とホスト鍵を確認してください。";
+    default:
+      return node.last_error ?? "Workerの接続確認に失敗しました。";
+  }
 }
 function metric(value: number | null | undefined, suffix: string) {
   return value == null ? "未確認" : `${value.toFixed(1)} ${suffix}`;
@@ -402,6 +422,12 @@ export default function WorkerNodes({
               最終環境確認: {timeLabel(node.last_probe_at)}
               <br />
               最終Tailscale確認: {timeLabel(node.network_checked_at)}
+              {node.probe_error_code && !node.probing && node.next_probe_at != null && (
+                <>
+                  <br />
+                  次の自動確認は{new Date(node.next_probe_at * 1000).toLocaleString("ja-JP")}以降
+                </>
+              )}
             </p>
             {node.active_jobs.map((job) => (
               <p key={job.id}>
@@ -428,11 +454,7 @@ export default function WorkerNodes({
                 {node.probe_error_code && (
                   <strong>{node.probe_error_code}: </strong>
                 )}
-                {node.probe_error_code === "SSH_TIMEOUT"
-                  ? "SSHの応答がありません。自動で再確認します。続く場合は端末の電源とネットワークを確認してください。"
-                  : node.last_error.includes("Permission denied")
-                  ? "SSH認証に失敗しました。公開鍵とログインユーザーを確認してください。"
-                  : node.last_error}
+                {workerErrorMessage(node)}
               </p>
             )}
             <label>

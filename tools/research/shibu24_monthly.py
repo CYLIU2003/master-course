@@ -360,9 +360,14 @@ def main() -> None:
         result = check() if args.command == "check" else prepare(args.output.resolve(), limit=args.limit)
     if args.command == "prepare":
         _write(args.output.resolve() / "summary.json", result)
-    print(json.dumps({"status": result.get("status", "PREPARE_COMPLETE"),
-                      "weeks": len(result.get("weeks", result.get("cases", []))),
-                      "all_prepared": result.get("all_prepared")}, ensure_ascii=False))
+    summary = {"status": result.get("status", "PREPARE_COMPLETE")}
+    if args.command == "batch":
+        summary.update(tasks=result["tasks"], manifest_sha256=result["manifest_sha256"])
+    elif args.command == "prepare":
+        summary.update(weeks=len(result.get("cases", [])), all_prepared=result.get("all_prepared"))
+    else:
+        summary["weeks"] = len(result.get("weeks", []))
+    print(json.dumps(summary, ensure_ascii=False))
 
 
 if __name__ == "__main__":

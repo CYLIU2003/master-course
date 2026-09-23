@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 
 
 def classify_probe_error(error: BaseException) -> str:
+    if getattr(error, "error_code", None):
+        return str(error.error_code)
     message = str(error).lower()
     if "host key" in message or "identification has changed" in message:
         return "SSH_HOST_KEY_MISMATCH"
@@ -27,6 +29,9 @@ def classify_probe_error(error: BaseException) -> str:
         return "SSH_TIMEOUT"
     if "connection refused" in message or "no route to host" in message:
         return "SSH_PORT_UNREACHABLE"
+    if any(marker in message for marker in ("connection reset", "network is unreachable", "broken pipe",
+                                             "connection closed", "connection aborted", "could not resolve hostname")):
+        return "SSH_CONNECTION_UNAVAILABLE"
     return "WORKER_PROBE_FAILED"
 
 
@@ -148,6 +153,7 @@ class WorkerMonitor:
         return True
 
     def probe(self, worker: Worker):
+        started_at = time.time()
         ssh_ready = worker.transport == "local"
         capability, error, error_code = None, None, None
         try:
@@ -159,14 +165,13 @@ class WorkerMonitor:
             error = str(exc)
             error_code = classify_probe_error(exc)
         finally:
-            previous = self.registry.get(worker.id)["observation"].get("probe_failures", 0)
-            failures = previous + 1 if error else 0
-            self.registry.update(worker.id, {"last_probe_at": now(), "ssh_ready": ssh_ready,
-                "session_verified": True, "capability": capability, "probe_error": error, "probing": False,
-                "probe_error_code": error_code, "probe_failures": failures,
-                "next_probe_at": time.time() + min(120, 30 * 2 ** min(max(failures - 1, 0), 2))})
-            with self.lock:
-                self.inflight.discard(worker.id)
+            try:
+                self.registry.record_probe_result(worker.id, {"last_probe_at": now(), "ssh_ready": ssh_ready,
+                    "session_verified": True, "capability": capability, "probe_error": error, "probing": False,
+                    "probe_error_code": error_code}, started_at)
+            finally:
+                with self.lock:
+                    self.inflight.discard(worker.id)
 
     def stop(self):
         self.stop_event.set()

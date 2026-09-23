@@ -20,7 +20,7 @@ from bff.store import output_paths
 from .contracts import RESERVED, ROOT, ClusterConfig, Worker, canonical, digest, git_state, read_config, runtime_versions, segment, source_digest
 from .runner import MAX_ARTIFACT_BYTES, file_hashes
 from .store import ControllerLock, JobStore
-from .transport import invoke
+from .transport import SSHTransportError, invoke
 from .weekly_inputs import stage_execution_inputs, horizon_summary
 from .artifacts import file_digest, copy_verified_member
 from .worker_registry import WorkerRegistry, JOB_ROLES, job_role_allows
@@ -166,6 +166,14 @@ class Scheduler:
 
     def worker(self, worker_id: str) -> Worker:
         return next(worker for worker in self.config.workers if worker.id == worker_id)
+
+    def invoke_worker(self, worker: Worker, request: dict, directory: Path,
+                      *, timeout: float | None = None) -> dict:
+        try:
+            return invoke(worker, request, directory, timeout=timeout)
+        except SSHTransportError as exc:
+            self.registry.quarantine_transport_failure(worker.id, exc.error_code, str(exc))
+            raise
 
     def recover_ready_jobs(self):
         with self.lock:
@@ -394,7 +402,7 @@ class Scheduler:
         row = self.store.get(job_id)
         directory = self.store.root / "jobs" / job_id
         try:
-            capability = invoke(worker, {"operation": "probe"}, directory / "preflight", timeout=45)
+            capability = self.invoke_worker(worker, {"operation": "probe"}, directory / "preflight", timeout=45)
             if capability["git"] != row["manifest"]["git"] or capability["source_digest"] != row["manifest"]["source_digest"]:
                 raise ValueError("Worker code does not match the frozen controller code")
             if (row["manifest"]["requires_gurobi"]
@@ -421,12 +429,12 @@ class Scheduler:
             if not self.store.transition(job_id, "RUNNING", expected={"STAGING"}):
                 return
             self.mirror(job_id, "running", "別PCで実行中")
-            response = invoke(worker, {"operation": "submit", "id": job_id, "manifest": row["manifest"], "bundle": bundle}, directory, timeout=30)
+            response = self.invoke_worker(worker, {"operation": "submit", "id": job_id, "manifest": row["manifest"], "bundle": bundle}, directory, timeout=30)
             while response.get("state") == "RUNNING":
                 if self.stop_event.wait(3):
                     return  # The child continues; restart recovery retains its reservation as LOST.
-                response = invoke(worker, {"operation": "status", "id": job_id}, directory / "status", timeout=20)
-            response = invoke(worker, {"operation": "collect", "id": job_id, "stream_artifacts": True}, directory / "collect")
+                response = self.invoke_worker(worker, {"operation": "status", "id": job_id}, directory / "status", timeout=20)
+            response = self.invoke_worker(worker, {"operation": "collect", "id": job_id, "stream_artifacts": True}, directory / "collect")
             self.finish(row, response)
         except Exception as exc:
             if self.store.transition(job_id, "LOST", expected=RESERVED, error=str(exc)):
@@ -441,7 +449,7 @@ class Scheduler:
         archive_path = None
         if response.get("archive_sha256"):
             worker_id = self.store.get(row["id"])["worker_id"]
-            download = invoke(self.worker(worker_id), {"operation": "archive", "id": row["id"]}, directory / "download")
+            download = self.invoke_worker(self.worker(worker_id), {"operation": "archive", "id": row["id"]}, directory / "download")
             archive_path = Path(download["archive_path"])
         result = collect_artifacts(response, row["manifest"], directory / "artifacts", archive_path)
         self.store.transition(row["id"], result["state"], expected={"COLLECTING"}, result=result, error=result.get("error"))
@@ -480,7 +488,7 @@ class Scheduler:
             if row["state"] != "LOST":
                 raise ValueError("Only LOST jobs need reconciliation")
         manifest_hash = digest(canonical(row["manifest"]))
-        fence = invoke(self.worker(row["worker_id"]),
+        fence = self.invoke_worker(self.worker(row["worker_id"]),
                        {"operation": "fence-unstarted", "id": job_id, "manifest_sha256": manifest_hash},
                        self.store.root / "jobs" / job_id / "fence", timeout=30)
         if fence.get("id") != job_id or fence.get("manifest_sha256") != manifest_hash:
@@ -500,8 +508,8 @@ class Scheduler:
             return self.store.get(job_id)
         if fence.get("state") != "EXISTS":
             raise ValueError("Unknown worker fence state")
-        response = invoke(self.worker(row["worker_id"]), {"operation": "collect", "id": job_id, "stream_artifacts": True},
-                          self.store.root / "jobs" / job_id / "reconcile", timeout=30)
+        response = self.invoke_worker(self.worker(row["worker_id"]), {"operation": "collect", "id": job_id, "stream_artifacts": True},
+                                      self.store.root / "jobs" / job_id / "reconcile", timeout=30)
         if response.get("state") == "RUNNING":
             if response.get("id") != job_id or response.get("manifest_sha256") != digest(canonical(row["manifest"])):
                 raise ValueError("Running receipt belongs to a different attempt")

@@ -64,6 +64,39 @@ def save(path: Path, value: dict):
     temporary.replace(path)
 
 
+def sanitized_rejection(exc: HTTPError) -> dict:
+    """Keep an actionable bounded API reason without storing arbitrary response data."""
+    result = {"status": "REQUEST_REJECTED", "http_status": exc.code, "retryable": False}
+    try:
+        payload = json.loads(exc.read(64 * 1024))
+    except (ValueError, OSError):
+        payload = None
+    finally:
+        exc.close()
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    if isinstance(detail, dict):
+        code = detail.get("code") or detail.get("error_code")
+        message = detail.get("message") or detail.get("error")
+        if isinstance(code, str) and re.fullmatch(r"[A-Z][A-Z0-9_]{1,79}", code):
+            result["error_code"] = code
+        detail = message
+    if isinstance(detail, str):
+        prefixed_code = re.match(r"^([A-Z][A-Z0-9_]{1,79}):\s*(.*)$", detail, flags=re.DOTALL)
+        if prefixed_code:
+            result.setdefault("error_code", prefixed_code.group(1))
+            detail = prefixed_code.group(2)
+        detail = re.sub(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+", "Bearer [REDACTED]", detail)
+        detail = re.sub(
+            r"(?i)\b(password|token|secret|credential|api[-_ ]?key|wls[-_ ]?key)\b\s*[:=]\s*[^\s,;]+",
+            r"\1=[REDACTED]", detail,
+        )
+        detail = " ".join(detail.split())[:240]
+        if detail:
+            result["detail"] = detail
+    result.setdefault("error_code", f"HTTP_{exc.code}_UNCLASSIFIED")
+    return result
+
+
 def validate_batch(spec: dict, *, allow_formal: bool = False):
     if set(spec) - {"schema_version", "batch_id", "controller_url", "git_sha", "tasks"} or spec.get("schema_version") != 1:
         raise ValueError("Unsupported batch schema")
@@ -194,10 +227,8 @@ def main() -> int:
                 if isinstance(exc, HTTPError) and exc.code not in {502, 503, 504}:
                     # Preserve refusal across CLI restarts without persisting
                     # arbitrary response bodies that could contain credentials.
-                    state["connection"] = {"status": "REQUEST_REJECTED", "http_status": exc.code,
-                                           "retryable": False}
+                    state["connection"] = sanitized_rejection(exc)
                     save(path, state)
-                    exc.close()
                     print(json.dumps(state["connection"]), flush=True)
                     return 1
                 failures += 1

@@ -19,7 +19,6 @@ from bff.routers.optimization import (
 )
 from bff.services.cluster.contracts import RESERVED, segment
 from bff.services.cluster.scheduler import get_scheduler
-from bff.services.cluster.transport import invoke
 from bff.services.cluster.seed_import import SeedInventory
 from bff.services.cluster.worker_registry import job_role_allows
 from src.solver_policy import NO_GUROBI_PROFILE
@@ -234,7 +233,7 @@ def cancel(job_id: str):
             raise HTTPException(409, "Job already has a terminal state")
         from bff.services.cluster.contracts import canonical, digest
         try:
-            response = invoke(scheduler.worker(row["worker_id"]), {
+            response = scheduler.invoke_worker(scheduler.worker(row["worker_id"]), {
                 "operation": "cancel", "id": job_id, "manifest_sha256": digest(canonical(row["manifest"]))},
                 scheduler.store.root / "jobs" / job_id / "cancel", timeout=20)
             return {**scheduler.store.get(job_id), "cancel_requested": response.get("cancel_requested", False)}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 
 from .contracts import Worker, canonical, digest, comparable_runtime
@@ -77,6 +78,52 @@ class WorkerRegistry:
             observation = {**json.loads(row[0]), **values}
             db.execute("UPDATE workers SET observation=?, updated_at=? WHERE id=?", (json.dumps(observation), now(), worker_id))
 
+    def quarantine_transport_failure(self, worker_id: str, error_code: str, error: str) -> None:
+        """Invalidate stale readiness immediately after an SSH operation fails."""
+        with self.store.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT observation FROM workers WHERE id=?", (worker_id,)).fetchone()
+            if row is None:
+                raise KeyError(worker_id)
+            observation = json.loads(row[0])
+            failures = int(observation.get("probe_failures", 0) or 0) + 1
+            failed_at = time.time()
+            observation.update({
+                "session_verified": False,
+                "ssh_ready": False,
+                "probing": False,
+                "transport_failure_at": failed_at,
+                "probe_error": error,
+                "probe_error_code": error_code,
+                "probe_failures": failures,
+                "next_probe_at": failed_at + min(120, 30 * 2 ** min(failures - 1, 2)),
+            })
+            db.execute("UPDATE workers SET observation=?, updated_at=? WHERE id=?",
+                       (json.dumps(observation), now(), worker_id))
+
+    def record_probe_result(self, worker_id: str, values: dict, started_at: float) -> bool:
+        """Ignore a probe that started before a newer runtime SSH failure."""
+        with self.store.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT observation FROM workers WHERE id=?", (worker_id,)).fetchone()
+            if row is None:
+                raise KeyError(worker_id)
+            observation = json.loads(row[0])
+            latest_failure = float(observation.get("transport_failure_at", 0) or 0)
+            if latest_failure > started_at:
+                # This older in-flight probe must not make the worker schedulable again.
+                observation["probing"] = False
+                db.execute("UPDATE workers SET observation=?, updated_at=? WHERE id=?",
+                           (json.dumps(observation), now(), worker_id))
+                return False
+            failures = int(observation.get("probe_failures", 0) or 0) + 1 if values.get("probe_error") else 0
+            observation.update(values)
+            observation["probe_failures"] = failures
+            observation["next_probe_at"] = time.time() + min(120, 30 * 2 ** min(max(failures - 1, 0), 2))
+            db.execute("UPDATE workers SET observation=?, updated_at=? WHERE id=?",
+                       (json.dumps(observation), now(), worker_id))
+            return True
+
     def set_mode(self, worker_id: str, mode: str):
         if mode not in {"active", "disabled", "draining"}:
             raise ValueError("Invalid worker mode")
@@ -149,6 +196,7 @@ class WorkerRegistry:
                 "can_run_diagnostic": runner_ready and mode == "active", "readiness_reasons": reasons,
                 "last_seen_at": observation.get("last_seen_at"), "network_checked_at": observation.get("network_checked_at"),
                 "last_probe_at": observation.get("last_probe_at"), "probing": observation.get("probing", False),
+                "next_probe_at": observation.get("next_probe_at"),
                 "last_error": observation.get("probe_error") or observation.get("network_error"),
                 "probe_error_code": observation.get("probe_error_code"),
                 "capability": capability, "metrics_stale": not recent,
