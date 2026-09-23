@@ -21,6 +21,8 @@ from bff.services.cluster.contracts import RESERVED, segment
 from bff.services.cluster.scheduler import get_scheduler
 from bff.services.cluster.transport import invoke
 from bff.services.cluster.seed_import import SeedInventory
+from bff.services.cluster.worker_registry import job_role_allows
+from src.solver_policy import NO_GUROBI_PROFILE
 
 
 def require_local_controller(request: Request):
@@ -177,6 +179,10 @@ def _submit_once(scheduler, body: SubmitBody, app_state: dict):
             control = scheduler.registry.get(worker.id)["mode"] or ("active" if worker.enabled else "disabled")
             if control != "active":
                 raise ValueError("Worker is disabled or draining")
+            requires_gurobi = body.request.execution_profile != NO_GUROBI_PROFILE
+            if not job_role_allows(scheduler.registry.job_role(worker),
+                                   {"kind": "optimization", "requires_gurobi": requires_gurobi}):
+                raise ValueError("Selected worker job role does not allow this optimization profile")
         if not body.request.prepared_input_id or body.request.force_reprepare:
             raise ValueError("An existing prepared_input_id is required; reprepare on workers is forbidden")
         if body.request.rebuild_dispatch or body.request.use_existing_duties:

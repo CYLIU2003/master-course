@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from bff.services.cluster import scheduler as module
@@ -100,6 +101,28 @@ def test_worker_job_role_rejects_incompatible_pinned_jobs(scheduler, monkeypatch
     with pytest.raises(ValueError, match="job role"):
         scheduler.enqueue("optimization", {}, worker.id)
     assert scheduler.store.get(row["id"])["state"] == "QUEUED"
+
+
+@pytest.mark.parametrize("gurobi,role,profile", [
+    (False, "alns_only", "existing_solver_v1"),
+    (True, "gurobi_only", "alns_no_gurobi_v1"),
+])
+def test_pinned_role_rejected_before_parent_job_creation(scheduler, monkeypatch, gurobi, role, profile):
+    from bff.routers import cluster
+    from bff.services.cluster.worker_registry import WorkerRegistry
+
+    worker = Worker(id="local", name="Local", gurobi=gurobi)
+    scheduler.config = ClusterConfig(workers=[worker])
+    scheduler.registry = WorkerRegistry(scheduler.store, [worker])
+    scheduler.registry.set_job_role(worker.id, role)
+    monkeypatch.setattr(cluster, "enqueue_optimization", lambda *args, **kwargs: pytest.fail("parent job created"))
+
+    body = cluster.SubmitBody(scenario_id="scenario", worker_id=worker.id,
+                              request=cluster.RunOptimizationBody(execution_profile=profile))
+    with pytest.raises(HTTPException, match="job role") as error:
+        cluster._submit_once(scheduler, body, {})
+    assert error.value.status_code == 409
+    assert scheduler.store.rows() == []
 
 
 def test_automatic_placement_obeys_parent_job_role(scheduler, monkeypatch):
