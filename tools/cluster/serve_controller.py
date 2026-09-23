@@ -24,9 +24,12 @@ def configure(settings_path: Path) -> dict:
         raise ValueError("Build the frontend before starting the controller")
     if not Path(settings["config"]).is_file():
         raise ValueError("Worker configuration is missing")
+    scenarios = Path(settings.get("scenarios", Path(settings["outputs"]) / "scenarios")).resolve()
+    if "scenarios" in settings and not scenarios.is_dir():
+        raise ValueError("Configured existing scenario store is missing")
+    settings["scenarios"] = str(scenarios)
     os.environ.update(MC_CLUSTER_CONFIG=settings["config"], MC_CLUSTER_DIR=settings["queue"],
-                      MC_OUTPUTS_DIR=settings["outputs"],
-                      SCENARIO_STORE_PATH=str(Path(settings["outputs"]) / "scenarios"),
+                      MC_OUTPUTS_DIR=settings["outputs"], SCENARIO_STORE_PATH=str(scenarios),
                       BUILT_ROOT=str(Path(release) / "data" / "built"), DEFAULT_DATASET_ID="tokyu_full")
     os.chdir(release)
     sys.path.insert(0, release)

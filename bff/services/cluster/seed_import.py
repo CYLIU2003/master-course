@@ -23,6 +23,7 @@ class SeedWorker(BaseModel):
     ssh_host_key_fingerprint: str | None = None
     identity_verification: str = "unverified"
     workspace: str | None = None
+    repo: str | None = None
     python_executable: str | None = None
     capabilities_verification: str | None = None
 
@@ -64,6 +65,10 @@ def merge_private_seed(payload: dict, existing: ClusterConfig, *, self_node_id: 
             if entry.tailscale_node_id in nodes or (entry.transport == "ssh" and entry.tailscale_node_id == self_node_id):
                 raise ValueError("Duplicate local/remote Tailnet node identity")
             nodes.add(entry.tailscale_node_id)
+        # A remote seed must never inherit the controller's local repository
+        # path. This is a staging anchor; release.py replaces it with the
+        # verified immutable SHA path before jobs are enabled.
+        remote_repo = {"repo": entry.repo or "C:/mc-worker/cluster"} if entry.transport == "ssh" else {}
         proposed.append(Worker(id=entry.id, name=entry.name, transport=entry.transport,
             host=entry.host, tailscale_ip=entry.host if entry.transport == "ssh" else None,
             ssh_user=entry.ssh_user, ssh_port=entry.ssh_port, enabled=False,
@@ -71,7 +76,7 @@ def merge_private_seed(payload: dict, existing: ClusterConfig, *, self_node_id: 
             tailscale_node_id=entry.tailscale_node_id, ssh_host_key_fingerprint=entry.ssh_host_key_fingerprint,
             workspace=entry.workspace or "", python=entry.python_executable or "",
             reserved_system_ram_gb=2 if entry.transport == "local" else 1,
-            require_ac_power=True))
+            require_ac_power=True, **remote_repo))
     result = list(existing.workers)
     current = {worker.id: worker for worker in existing.workers}
     for incoming in proposed:

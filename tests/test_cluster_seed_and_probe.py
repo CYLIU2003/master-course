@@ -21,6 +21,7 @@ def test_T01_T02_import_exact_inventory_but_never_trust_seed_readiness():
         assert (worker.host, worker.ssh_user, worker.name) == (incoming["host"], incoming["ssh_user"], incoming["name"])
     assert all(not w.enabled and not w.gurobi and not w.identity_verified and w.slots == 1 for w in config.workers)
     assert all(w.monitoring_enabled for w in config.workers)
+    assert all(w.repo == "C:/mc-worker/cluster" for w in config.workers[1:])
 
 
 def test_T01_duplicate_local_node_ip_and_worker_ids_rejected():
