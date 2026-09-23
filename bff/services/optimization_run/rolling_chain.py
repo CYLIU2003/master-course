@@ -27,7 +27,7 @@ from src.optimization.common.initial_soc_policy import (
     initial_soc_input_metadata,
 )
 from src.optimization.common.fleet_contract import SCENARIO_FLEET_CONTRACT_SCHEMA_VERSION
-from src.optimization.common.date_series import dated_capacity_factors
+from src.optimization.common.date_series import content_hash, dated_capacity_factors
 from src.optimization.common.input_fingerprints import (
     INPUT_FINGERPRINT_SCHEMA,
     canonical_trip_input_hash,
@@ -68,14 +68,42 @@ def _prepare_actual_pv_execution_file(problem: Any, run_dir: Path, *, repo_root:
         raise ValueError('Actual-PV execution source must cover the exact prepared depot set')
     asset = problem.depot_energy_assets[depot]
     factors = dated_capacity_factors({'pv_capacity_factor_by_date': document['profiles']}, dates, step)
+    overnight = None
+    if problem.metadata.get('bev_soc_deadline_mode') == 'next_morning_operational_max':
+        from src.optimization.common.next_morning import resolve_next_morning_contract
+
+        overnight = resolve_next_morning_contract(
+            {'service_dates': dates,
+             'terminal_overnight_contract': problem.metadata.get('terminal_overnight_contract')},
+            timestep_min=step,
+        )
+        factors = tuple(factors) + overnight['next_day_actual_pv_factors']
+    if len(factors) != len(problem.price_slots):
+        raise ValueError('Historical PV does not cover the exact paid energy horizon')
     values = [round(asset.pv_capacity_kw * factor * step / 60 * asset.pv_supply_scale, 6)
               if asset.pv_enabled else 0.0 for factor in factors]
+    source_sha = (content_hash({
+        'seven_day_source_sha256': document['source_sha256'],
+        'overnight_source_sha256': problem.metadata['terminal_overnight_contract'][
+            'next_day_actual_pv_source_sha256'],
+        'overnight_row_sha256': problem.metadata['terminal_overnight_contract'][
+            'next_day_actual_pv_sha256'],
+    }) if overnight is not None else document['source_sha256'])
     payload = {'schema_version': 'historical_pv_execution_v1', 'unit': 'kWh',
-               'source_sha256': document['source_sha256'], 'capacity_factor_source_sha256': digest,
+               'source_sha256': source_sha, 'capacity_factor_source_sha256': digest,
                'service_dates': dates, 'timestep_minutes': step,
                'depot_profiles': {depot: values},
                'pv_capacity_kw': asset.pv_capacity_kw, 'pv_supply_scale': asset.pv_supply_scale,
                'data_kind': 'historical_estimated_actuals_not_forecasts'}
+    if overnight is not None:
+        payload['overnight_actual_pv'] = {
+            'date': overnight['next_service_date'],
+            'source_sha256': problem.metadata['terminal_overnight_contract'][
+                'next_day_actual_pv_source_sha256'],
+            'row_sha256': problem.metadata['terminal_overnight_contract'][
+                'next_day_actual_pv_sha256'],
+            'slot_count': overnight['extra_slots'],
+        }
     output = Path(run_dir) / 'pv_actuals_for_execution.json'
     _write_json(output, payload)
     return str(output)

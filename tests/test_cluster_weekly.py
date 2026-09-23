@@ -50,8 +50,9 @@ def test_seven_day_actuals_survive_transfer_without_changing_forecasts(tmp_path,
     assert canonical(config) == before
     assert base64.b64decode(bundle["prepared_base64"]) == prepared
     problem = SimpleNamespace(metadata={"date_series_contract": config["date_series_contract"], "service_dates": config["service_dates"]},
-                              scenario=SimpleNamespace(timestep_min=15),
-                              depot_energy_assets={"tsurumaki": SimpleNamespace(pv_capacity_kw=100, pv_supply_scale=1, pv_enabled=True)})
+                                  scenario=SimpleNamespace(timestep_min=15),
+                                  price_slots=tuple(range(7 * 96)),
+                                  depot_energy_assets={"tsurumaki": SimpleNamespace(pv_capacity_kw=100, pv_supply_scale=1, pv_enabled=True)})
     local = _prepare_actual_pv_execution_file(problem, tmp_path / "local-output", repo_root=tmp_path)
     monkeypatch.setenv("MC_EXECUTION_INPUTS_ROOT", str(root))
     remote = _prepare_actual_pv_execution_file(problem, tmp_path / "worker-output")

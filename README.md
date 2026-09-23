@@ -6,6 +6,8 @@
 
 2026-09-23: 「分散計算」の機器管理で、物理コア数・論理スレッド数・メモリ容量・利用可能メモリ・ストレージ空き・CPU性能の各項目を選び、大小順に並べ替えられます。CPU性能は[PassMarkの公開CPU Mark一覧](https://www.cpubenchmark.net/cpu-list/all)から2026-09-23に確認した型番平均の固定値で、端末実測や複数CPU構成の合計性能ではありません。未照合の型番は「未確認」で末尾に表示し、実際のジョブ割当条件は変更しません。[分散計算の使い方](docs/DISTRIBUTED_COMPUTE.md)。
 
+2026-09-23: 渋24の月別12週と最終翌朝SOCを含む診断は、固定版で `python tools/research/shibu24_monthly_campaign.py run --settings <固定controller設定.json> --output <新規campaign出力>` を一度起動すると、入力照合・厳格Prepare・永続batch投入・回収監査までスクリプトが進めます。進捗は同スクリプトの `status --output <campaign出力>` と `campaign.log` で確認できます。通常監視にAIは不要です。全件回収は研究採用・統合最適性の証明ではありません。条件と制限は [渋24月別翌朝診断](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md) を参照してください。
+
 2026-09-23: 渋24の2025年各月1代表週について、実便7日間を保ったまま、最終日帰庫後から翌朝の最初の出庫前まで充電・PV・買電・料金を計上する診断入力を追加しました。`python tools/research/shibu24_monthly.py check` は12週の入力原本・ハッシュ・翌朝ダイヤ/PVを読むだけで求解しません。`prepare` はcleanな固定Git版から各週を新規Prepareします。SOC目標は各車両の運用上限であり、最後の翌朝は運行便を増やさず電力計算だけ延ばします。実行前の条件と研究上の制約は [渋24月別診断](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md) を参照してください。旧渋21～23の月別結果とは別実験です。
 
 2026-09-23: 分散計算画面はGurobi対応とGurobi不要の計算対応を分けて表示し、後者だけに対応する子機も「計算可能」一覧へ含めます。実際の割当時には空きRAM・CPU負荷・電源条件を再確認します。`LAPTOP-BOLC6VIT` はWindows Update中に空きRAMが不足するため、更新終了後の再確認まで渋24実便ジョブを割り当てません。

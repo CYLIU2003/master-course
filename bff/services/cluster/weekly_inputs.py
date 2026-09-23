@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 
 from .contracts import digest
 from src.optimization.common.date_series import consecutive_service_dates
+from src.optimization.common.next_morning import resolve_next_morning_contract
 
 
 def execution_path(value: str) -> PurePosixPath:
@@ -77,10 +78,18 @@ def horizon_summary(scenario: dict, prepared: dict | None = None, kwargs: dict |
     dates = (consecutive_service_dates(config.get("service_date"), days, config.get("service_dates"))
              if days > 1 or config.get("service_date") or config.get("service_dates") else [])
     controls = kwargs or {}
+    step = int(config.get("timestep_min") or 15)
+    extra_slots = 0
+    if config.get("bev_soc_deadline_mode") == "next_morning_operational_max":
+        extra_slots = resolve_next_morning_contract(config, timestep_min=step)["extra_slots"]
+    energy_minutes = days * 1440 + extra_slots * step
+    execution_minutes = int(controls.get("rolling_execution_minutes") or 60)
     return {"scenario_name": scenario.get("meta", {}).get("name", ""),
             "scenario_id": scenario.get("meta", {}).get("id"), "planning_days": days,
             "service_dates": dates, "horizon_hours": days * 24,
-            "expected_rolling_windows": days * 24 if controls.get("run_hourly_rolling", True) else 0,
+            "energy_horizon_minutes": energy_minutes,
+            "expected_rolling_windows": ((energy_minutes + execution_minutes - 1) // execution_minutes
+                                         if controls.get("run_hourly_rolling", True) else 0),
             "trip_count": (prepared or {}).get("trip_count", len((prepared or {}).get("trips", []))),
             "pv_information_mode": (config.get("date_series_contract") or {}).get("pv_information_mode"),
             "input_mode": config.get("multi_day_input_mode"),

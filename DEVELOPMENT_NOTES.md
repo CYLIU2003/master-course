@@ -10650,3 +10650,13 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 自己検査で、従来の独立SOC検査が7日目24時で停止し、Stage 2が各翌朝のSOC目標を拘束しないことを発見。Stage 2のdaily-return分岐は一般のduty walkを飛ばしていたため日別便を別途抽出した。小規模2日実Gurobiでは修正前、Stage 2がOPTIMALでも初日翌朝SOC76.8286/80 kWhで独立検査不合格、修正後は両翌朝目標と物理検査が通過。最終夜間充電を含む手作業候補では日別台帳が範囲外として停止することも再現し、延長区間の充電と費用を最終営業日に配賦して総額を一致させた。
 - 変更はBEV SOC期限と計画の電力期間・日別費用配賦を変えるため、旧固定SHAの費用・可行性と直接比較しない。物理受電設備値、正式fleet承認、地理代理距離、2026ダイヤ×2025気象、実規模求解、追加夜間のrolling実行、独立レビューは未解決。研究採用はBLOCKED。詳細は[実験契約](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md)。
 - 拡張回帰で既存Prepare入口テストが現在の共有資源・ライセンスguardに必要なjob mockを欠き、テスト用job IDが実SQLite予約と衝突した。対象テストだけ資源/ライセンスを分離し、Prepared経路そのものの検証を維持した。実ジョブの資源制限は変更していない。
+
+## 2026-09-23 渋24 Prepared入力の翌朝監査と実行前停止条件
+
+- 1月の1,478便を初回Prepareしたところ、`input_preparation_valid=true`だが`prepared_scope_audit.strict_coverage_precheck.checked=false`だった。理由は設備PV構築側が原本シナリオの`timetable_rows`だけを参照し、Prepared入力の`trips`を参照していなかったため、翌朝ダイヤが欠落したと誤判定されたこと。Prepared原本には7日分すべての便が存在することを確認した。
+- `ProblemBuilder`の翌朝契約検証で`timetable_rows`とPreparedの`trips`を同じ優先規則で扱うよう修正。Prepared形式での7日＋翌朝PV枠構築を回帰テスト化し、関連51件を通した。月別Prepareは、厳格接続、折返し感度、車両適合の各監査が実際に通過しなければ`BLOCKED_PREPARE`とする。表面上の有効フラグだけでは計算を開始しない。
+- 数理条件は前コミットの翌朝SOC目標・最終夜間電力期間と同じ。今回の修正はPrepared経由の実効入力と監査可能性を変えるため、旧Prepared ID/旧SHAの実験出力を新結果へ混ぜない。実データの再監査と単週求解、追加夜間のrolling実行、独立レビューは別ゲートとして残す。
+- 修正コードで初回1月原本を読取り専用再監査したところ、1,478便・60台、厳格接続`checked=true/infeasible=false`、回送接続・折返し感度ready、警告0を確認。下界19台は実行可能19台の証明ではない。再監査は約4分であり、12週Prepareの実行時間見積りに反映する。
+- rolling側のPV実測入力が旧672区間で止まることを発見。翌朝の実測Solcast行・原本SHAをovernight契約へ固定し、`_prepare_actual_pv_execution_file`が追加区間のkWhを作るよう修正。rolling窓終端は`len(price_slots)×timestep`へ変更し、最終翌朝までの有料電力期間と一致させる。52件の関連回帰は通過。実規模全時間窓の物理・会計照合は未実施。
+- 追加の自己検査で、有料期間7日＋5時間45分が旧60分rollingの割切り検査で拒否されることを発見。最終窓45分を15分境界上で許可し、完了期待窓数を切上げに変更。cluster summaryも運行168時間と有料電力期間・期待窓数を分けた。実規模の全窓求解は別ゲート。
+- 月別Prepared状態に入力原本SHAを記録し、再開・batch生成時に照合する。12週の厳格監査が揃うまで投入用batchを作らない。固定版設定のSHA一致、同一設定の12件、既存永続キューへの投入・再開、成果物hash監査、失敗保存を無人CLIへまとめた。AI定期監視・自動メールは追加しない。回収完了を研究採用へ昇格させない。
