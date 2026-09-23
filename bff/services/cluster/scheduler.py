@@ -211,6 +211,8 @@ class Scheduler:
         current = at or datetime.now(timezone.utc)
         result = []
         for row in rows:
+            if (row.get("result") or {}).get("cluster_admission") == "FENCED_BEFORE_LAUNCH":
+                continue
             delay = row["manifest"].get("gurobi_token_cooldown_seconds", 0)
             if (delay and row["manifest"]["requires_gurobi"]
                     and row["state"] in {"COMPLETED", "FAILED", "BLOCKED"}
@@ -251,6 +253,8 @@ class Scheduler:
             mode = row["mode"] or ("active" if worker.enabled else "disabled")
             if mode != "active":
                 raise ValueError("Worker is disabled or draining")
+            if kind == "license_test" and not worker.gurobi:
+                raise ValueError("License test requires administrator-verified Gurobi capability")
         state = git_state()
         if kind == "optimization" and state["dirty"]:
             raise ValueError("Distributed optimization requires a clean frozen commit")
@@ -425,9 +429,9 @@ class Scheduler:
             response = invoke(worker, {"operation": "collect", "id": job_id, "stream_artifacts": True}, directory / "collect")
             self.finish(row, response)
         except Exception as exc:
-            self.store.transition(job_id, "LOST", expected=RESERVED, error=str(exc))
-            self.licenses.mark_uncertain(job_id)
-            self.mirror(job_id, "running", "通信または結果検証に失敗。分散計算画面で照合してください。")
+            if self.store.transition(job_id, "LOST", expected=RESERVED, error=str(exc)):
+                self.licenses.mark_uncertain(job_id)
+                self.mirror(job_id, "running", "通信または結果検証に失敗。分散計算画面で照合してください。")
 
     def finish(self, row: dict, response: dict):
         if response.get("state") not in {"COMPLETED", "FAILED", "BLOCKED", "CANCELLED"}:
@@ -475,6 +479,27 @@ class Scheduler:
             row = self.store.get(job_id)
             if row["state"] != "LOST":
                 raise ValueError("Only LOST jobs need reconciliation")
+        manifest_hash = digest(canonical(row["manifest"]))
+        fence = invoke(self.worker(row["worker_id"]),
+                       {"operation": "fence-unstarted", "id": job_id, "manifest_sha256": manifest_hash},
+                       self.store.root / "jobs" / job_id / "fence", timeout=30)
+        if fence.get("id") != job_id or fence.get("manifest_sha256") != manifest_hash:
+            raise ValueError("Worker fence receipt belongs to a different attempt")
+        if fence.get("state") == "NOT_STARTED":
+            if not self.store.transition(job_id, "BLOCKED", expected={"LOST"},
+                                         error="Worker confirmed this attempt was fenced before launch",
+                                         result={"cluster_admission": "FENCED_BEFORE_LAUNCH",
+                                                 "worker_receipt": fence,
+                                                 "research_approval": "NOT_GRANTED_BY_CLUSTER"}):
+                raise ValueError("Attempt state changed during reconciliation")
+            self.licenses.finish(job_id, cooldown_seconds=0)
+            self.mirror(job_id, "failed", "子機で開始していないことを確認しました。再投入できます。")
+            return self.store.get(job_id)
+        if fence.get("state") == "UNCERTAIN":
+            self.store.defer_recovery(job_id, time.time())
+            return self.store.get(job_id)
+        if fence.get("state") != "EXISTS":
+            raise ValueError("Unknown worker fence state")
         response = invoke(self.worker(row["worker_id"]), {"operation": "collect", "id": job_id, "stream_artifacts": True},
                           self.store.root / "jobs" / job_id / "reconcile", timeout=30)
         if response.get("state") == "RUNNING":

@@ -47,6 +47,16 @@ def test_cluster_grant_and_staging_are_atomic(tmp_path):
     assert len([r for r in broker.snapshot() if r["state"] == "ACTIVE"]) == 1
 
 
+def test_legacy_fenced_attempt_does_not_consume_license_cooldown(tmp_path):
+    store = JobStore(tmp_path)
+    manifest = {"id": "legacy", "requires_gurobi": True, "gurobi_token_cooldown_seconds": 330}
+    store.add(manifest)
+    store.transition("legacy", "BLOCKED", expected={"QUEUED"},
+                     result={"cluster_admission": "FENCED_BEFORE_LAUNCH"})
+    broker = LicenseBroker(store, total=1, external=0)
+    assert broker.acquire("next", owner_kind="local")
+
+
 def test_managed_models_and_probe_reuse_one_env_and_dispose_before_release():
     calls = []
     class Env:

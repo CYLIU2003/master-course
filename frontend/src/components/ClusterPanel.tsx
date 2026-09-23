@@ -27,6 +27,8 @@ type ClusterJob = {
     };
   };
   result: {
+    archive_sha256?: string;
+    cluster_admission?: string;
     result?: {
       message?: string;
       metadata?: {
@@ -240,6 +242,9 @@ export default function ClusterPanel() {
                     {job.state === "COMPLETED" && (
                       <small>（研究採用を意味しません）</small>
                     )}
+                    {job.result?.cluster_admission === "FENCED_BEFORE_LAUNCH" && (
+                      <small>（子機で未開始と確認済み）</small>
+                    )}
                     {job.result?.result?.message && (
                       <p
                         className={
@@ -305,7 +310,7 @@ export default function ClusterPanel() {
                         新しいIDで再試行
                       </button>
                     )}
-                    {!!job.result && (
+                    {!!job.result?.archive_sha256 && (
                       <a
                         href={`/api/cluster/jobs/${job.id}/artifacts`}
                         download

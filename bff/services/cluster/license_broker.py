@@ -39,9 +39,12 @@ class LicenseBroker:
             leases = list(db.execute("SELECT id FROM license_reservations WHERE state!='RELEASED'"))
             known = {r[0] for r in db.execute("SELECT id FROM license_reservations")}
             legacy = 0
-            for job in db.execute("SELECT id,state,manifest,updated_at FROM jobs"):
+            for job in db.execute("SELECT id,state,manifest,result,updated_at FROM jobs"):
                 manifest = json.loads(job["manifest"])
                 if job["id"] in known or not manifest.get("requires_gurobi"):
+                    continue
+                result = json.loads(job["result"]) if job["result"] else {}
+                if result.get("cluster_admission") == "FENCED_BEFORE_LAUNCH":
                     continue
                 tail = float(manifest.get("gurobi_token_cooldown_seconds") or 0)
                 cooling = (job["state"] in {"COMPLETED", "FAILED", "BLOCKED"}

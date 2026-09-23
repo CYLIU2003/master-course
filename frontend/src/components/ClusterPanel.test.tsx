@@ -64,6 +64,23 @@ it("keeps a completed task's SOC rejection and solver usage visible", async () =
   expect(await screen.findByText("期末SOCの条件未達（診断結果）")).toBeTruthy();
   expect(screen.getByText("Gurobi Env 0回 / 求解 0回")).toBeTruthy();
   expect(screen.getByText("（研究採用を意味しません）")).toBeTruthy();
+  expect(screen.queryByRole("link", { name: "成果物ZIP" })).toBeNull();
+  client.clear();
+});
+
+it("marks a fenced attempt as never started without offering a nonexistent archive", async () => {
+  vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(
+    url.endsWith("/workers")
+      ? { workers: [], global_gurobi_slots: 2 }
+      : [{ id: "fenced", state: "BLOCKED", worker_id: "pc", created_at: "2026-09-23",
+           manifest: { kind: "optimization" },
+           result: { cluster_admission: "FENCED_BEFORE_LAUNCH" } }],
+  )))));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ClusterPanel /></QueryClientProvider>);
+  expect(await screen.findByText("（子機で未開始と確認済み）")).toBeTruthy();
+  expect(screen.queryByRole("link", { name: "成果物ZIP" })).toBeNull();
+  expect(screen.getByRole("button", { name: "新しいIDで再試行" })).toBeTruthy();
   client.clear();
 });
 

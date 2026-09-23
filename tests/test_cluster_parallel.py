@@ -92,6 +92,33 @@ def test_reserved_memory_including_lost_blocks_same_pc_overcommit(fleet, monkeyp
     assert fleet.store.get(second["id"])["state"] == "STAGING"
 
 
+def test_confirmed_no_launch_releases_worker_and_license_for_next_job(fleet, monkeypatch):
+    from bff.services.cluster.contracts import canonical, digest
+
+    fleet.config.global_gurobi_slots = 1
+    monkeypatch.setattr(fleet, "execute", lambda *args: None)
+    first = fleet.enqueue("optimization", {}, "a")
+    second = fleet.enqueue("optimization", {}, "b")
+    fleet.tick()
+    assert fleet.store.get(first["id"])["state"] == "STAGING"
+    fleet.store.transition(first["id"], "LOST", expected={"STAGING"})
+    manifest_hash = digest(canonical(first["manifest"]))
+    operations = []
+
+    def invoke_fence(worker, request, *args, **kwargs):
+        operations.append(request["operation"])
+        return {"id": first["id"], "state": "NOT_STARTED", "manifest_sha256": manifest_hash}
+
+    monkeypatch.setattr(module, "invoke", invoke_fence)
+    result = fleet.reconcile(first["id"])
+    assert result["state"] == "BLOCKED"
+    assert result["result"]["cluster_admission"] == "FENCED_BEFORE_LAUNCH"
+    assert operations == ["fence-unstarted"]
+    assert fleet.cooling_license_jobs(fleet.store.rows()) == []
+    fleet.tick()
+    assert fleet.store.get(second["id"])["state"] == "STAGING"
+
+
 def test_external_license_reservation_does_not_block_solver_free_work(fleet, monkeypatch):
     fleet.config.external_gurobi_slots = fleet.config.global_gurobi_slots
     monkeypatch.setattr(fleet, "execute", lambda *args: None)

@@ -103,6 +103,59 @@ def test_worker_job_role_rejects_incompatible_pinned_jobs(scheduler, monkeypatch
     assert scheduler.store.get(row["id"])["state"] == "QUEUED"
 
 
+def test_license_test_rejects_worker_without_verified_solver(scheduler):
+    with pytest.raises(ValueError, match="License test requires"):
+        scheduler.enqueue("license_test", {}, "local")
+    assert scheduler.store.rows() == []
+
+
+def test_worker_fences_unstarted_attempt_and_rejects_delayed_submit(tmp_path):
+    from bff.services.cluster.runner import handle
+
+    manifest = {"id": "attempt"}
+    manifest_hash = digest(canonical(manifest))
+    fence = {"operation": "fence-unstarted", "id": "attempt", "manifest_sha256": manifest_hash}
+    receipt = handle(fence, tmp_path)
+    assert receipt == {"id": "attempt", "state": "NOT_STARTED", "manifest_sha256": manifest_hash}
+    assert handle(fence, tmp_path) == receipt
+    with pytest.raises(ValueError, match="ATTEMPT_NOT_STARTED"):
+        handle({"operation": "submit", "id": "attempt", "manifest": manifest, "bundle": {}}, tmp_path)
+    assert not (tmp_path / "attempt").exists()
+
+
+def test_worker_fence_preserves_uncertain_and_existing_launches(tmp_path):
+    from bff.services.cluster.runner import handle, write_json
+
+    manifest = {"id": "attempt"}
+    manifest_hash = digest(canonical(manifest))
+    request = {"operation": "fence-unstarted", "id": "attempt", "manifest_sha256": manifest_hash}
+    launch = tmp_path / ".launch" / "attempt"
+    launch.mkdir(parents=True)
+    assert handle(request, tmp_path)["state"] == "UNCERTAIN"
+    assert not (launch / "abandoned.json").exists()
+    write_json(launch / "request.json", {"manifest": manifest, "bundle": {}})
+    assert handle(request, tmp_path)["state"] == "EXISTS"
+
+
+def test_delayed_submit_error_cannot_overwrite_confirmed_terminal_display(scheduler, monkeypatch):
+    row = scheduler.enqueue("diagnostic", {}, "local")
+    scheduler.store.transition(row["id"], "STAGING", expected={"QUEUED"}, worker_id="local")
+    mirrored = []
+    monkeypatch.setattr(scheduler, "mirror", lambda job_id, status, message: mirrored.append(status))
+
+    def invoke_with_late_error(worker, request, directory, **kwargs):
+        if request["operation"] == "probe":
+            return {"git": row["manifest"]["git"], "source_digest": row["manifest"]["source_digest"],
+                    "ram_gb": 16, "ram_free_gb": 16}
+        scheduler.store.transition(row["id"], "BLOCKED", expected={"RUNNING"})
+        raise RuntimeError("Late submit was rejected after reconciliation")
+
+    monkeypatch.setattr(module, "invoke", invoke_with_late_error)
+    scheduler.execute(row["id"], scheduler.config.workers[0])
+    assert scheduler.store.get(row["id"])["state"] == "BLOCKED"
+    assert mirrored == ["running"]
+
+
 @pytest.mark.parametrize("gurobi,role,profile", [
     (False, "alns_only", "existing_solver_v1"),
     (True, "gurobi_only", "alns_no_gurobi_v1"),
@@ -359,11 +412,13 @@ def test_reconciliation_retrieves_terminal_result_without_resubmitting(scheduler
     called = []
     def fake_invoke(worker, request, directory, **kwargs):
         called.append(request["operation"])
+        if request["operation"] == "fence-unstarted":
+            return {"id": row["id"], "state": "EXISTS", "manifest_sha256": digest(canonical(manifest))}
         return archive_result(tmp_path / "completed-worker", state)
     monkeypatch.setattr(module, "invoke", fake_invoke)
     result = scheduler.reconcile(row["id"])
     assert result["state"] == "COMPLETED"
-    assert called == ["collect"]
+    assert called == ["fence-unstarted", "collect"]
 
 
 def test_api_is_loopback_only_and_queue_cancel_is_atomic(scheduler, monkeypatch):

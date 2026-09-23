@@ -244,6 +244,12 @@ def submit_detached(request: dict, workspace: Path) -> dict:
     except FileExistsError:
         # A duplicate request may arrive before the first submit writes its receipt.
         # Never launch again while ownership is uncertain.
+        abandoned = launch / "abandoned.json"
+        if abandoned.exists():
+            receipt = json.loads(abandoned.read_bytes())
+            if receipt.get("manifest_sha256") != digest(canonical(request["manifest"])):
+                raise ValueError("IDEMPOTENCY_CONFLICT: abandoned attempt has different input")
+            raise ValueError("ATTEMPT_NOT_STARTED: worker fenced this attempt before launch")
         request_path = launch / "request.json"
         for _ in range(20):
             if request_path.exists():
@@ -282,6 +288,35 @@ def submit_detached(request: dict, workspace: Path) -> dict:
     return state
 
 
+def fence_unstarted_attempt(request: dict, workspace: Path) -> dict:
+    """Atomically rule out a delayed submit only if no launch owns this ID."""
+    job_id = segment(request["id"])
+    manifest_hash = request["manifest_sha256"]
+    launch = workspace / ".launch" / job_id
+    try:
+        launch.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        abandoned = launch / "abandoned.json"
+        if abandoned.exists():
+            receipt = json.loads(abandoned.read_bytes())
+            if receipt.get("manifest_sha256") != manifest_hash:
+                raise ValueError("IDEMPOTENCY_CONFLICT: fenced attempt has different manifest")
+            return receipt
+        request_path = launch / "request.json"
+        if not request_path.exists():
+            return {"id": job_id, "state": "UNCERTAIN", "manifest_sha256": manifest_hash}
+        original = json.loads(request_path.read_bytes())
+        if digest(canonical(original["manifest"])) != manifest_hash:
+            raise ValueError("IDEMPOTENCY_CONFLICT: launched attempt has different manifest")
+        return {"id": job_id, "state": "EXISTS", "manifest_sha256": manifest_hash}
+    if (workspace / job_id).exists():
+        # A nonstandard direct run may exist; do not assert non-execution.
+        return {"id": job_id, "state": "UNCERTAIN", "manifest_sha256": manifest_hash}
+    receipt = {"id": job_id, "state": "NOT_STARTED", "manifest_sha256": manifest_hash}
+    write_json(launch / "abandoned.json", receipt)
+    return receipt
+
+
 def worker_state(workspace: Path, job_id: str) -> dict:
     directory = workspace / job_id
     state_file = directory / "state.json"
@@ -299,6 +334,8 @@ def worker_state(workspace: Path, job_id: str) -> dict:
 
 def handle(request: dict, workspace: Path) -> dict:
     operation = request["operation"]
+    if operation == "fence-unstarted":
+        return fence_unstarted_attempt(request, workspace)
     if operation == "cancel":
         job_id = segment(request["id"])
         launch_request = workspace / ".launch" / job_id / "request.json"
