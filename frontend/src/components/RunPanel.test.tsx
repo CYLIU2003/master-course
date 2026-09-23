@@ -39,6 +39,8 @@ const configuration = {
 };
 const requests: { url: string; body: Record<string, unknown> }[] = [];
 let revision = "original";
+let executionProfile = "existing_solver_v1";
+let workerRows: Record<string, unknown>[] = [];
 beforeEach(() => {
   const saved = new Map<string, string>();
   vi.stubGlobal("localStorage", {
@@ -47,6 +49,8 @@ beforeEach(() => {
   });
   requests.length = 0;
   revision = "original";
+  executionProfile = "existing_solver_v1";
+  workerRows = [];
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string, options: RequestInit = {}) => {
@@ -56,10 +60,10 @@ beforeEach(() => {
       requests.push({ url, body });
       let payload: unknown = {};
       if (url.endsWith("/configuration"))
-        payload = { ...configuration, revision };
+        payload = { ...configuration, values: { ...configuration.values, executionProfile }, revision };
       else if (url === "/api/cluster/workers")
         payload = {
-          workers: [],
+          workers: workerRows,
           global_gurobi_slots: 1,
           reserved_gurobi_slots: 0,
         };
@@ -108,6 +112,27 @@ function mount(blocked = false) {
     </QueryClientProvider>,
   );
 }
+
+it.each([
+  ["existing_solver_v1", "solver", "alns"],
+  ["alns_no_gurobi_v1", "alns", "solver"],
+])("shows %s worker roles in the destination selector", async (profile, allowedId, blockedId) => {
+  executionProfile = profile;
+  workerRows = [
+    { id: "solver", name: "Solver", enabled: true, job_role: "gurobi_only",
+      can_run_no_gurobi: true, can_run_optimization: true },
+    { id: "alns", name: "ALNS", enabled: true, job_role: "alns_only",
+      can_run_no_gurobi: true, can_run_optimization: false },
+  ];
+  mount();
+  const select = screen.getByLabelText("計算の配布先") as HTMLSelectElement;
+  await waitFor(() => expect(select.querySelector(`option[value="${allowedId}"]`)).not.toBeNull());
+  expect((select.querySelector(`option[value="${allowedId}"]`) as HTMLOptionElement).disabled).toBe(false);
+  const blocked = select.querySelector(`option[value="${blockedId}"]`) as HTMLOptionElement;
+  expect(blocked.disabled).toBe(true);
+  expect(blocked.textContent).toContain("担当外");
+});
+
 async function prepare() {
   await waitFor(() =>
     expect(

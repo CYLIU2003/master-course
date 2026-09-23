@@ -15,6 +15,17 @@ import { FieldGrid } from "./Fields";
 import type { Configuration } from "./SettingsPanel";
 import type { ClusterWorkers } from "./ClusterPanel";
 
+function workerRoleAllowsProfile(worker: ClusterWorkers["workers"][number], noGurobi: boolean): boolean {
+  return noGurobi
+    ? worker.job_role === "both" || worker.job_role === "alns_only"
+    : worker.job_role === "both" || worker.job_role === "gurobi_only";
+}
+
+function workerAllowsProfile(worker: ClusterWorkers["workers"][number], noGurobi: boolean): boolean {
+  const ready = noGurobi ? worker.can_run_no_gurobi : worker.can_run_optimization;
+  return workerRoleAllowsProfile(worker, noGurobi) && ready === true;
+}
+
 export function executionControls(value: Row): Row {
   const names: Record<string, string> = {
     solverMode: "mode",
@@ -117,6 +128,9 @@ export default function RunPanel({
   }, [job.data?.status, client, id]);
   const value = settings.data?.values ?? {};
   const noGurobi = value.executionProfile === "alns_no_gurobi_v1";
+  const selectedWorker = workers.data?.workers.find((worker) => worker.id === destination);
+  const selectedWorkerAllowed = destination === "auto" || destination === "standalone" ||
+    (selectedWorker !== undefined && workerAllowsProfile(selectedWorker, noGurobi));
   useEffect(() => {
     if (noGurobi) {
       setFormal(false);
@@ -321,19 +335,16 @@ export default function RunPanel({
                     </option>
                     {workers.data?.workers
                       .filter((worker) => worker.enabled)
-                      .map((worker) => (
-                        <option
-                          key={worker.id}
-                          value={worker.id}
-                          disabled={!(noGurobi ? worker.can_run_no_gurobi : worker.can_run_optimization)}
-                        >
-                          {worker.name}（
-                          {(noGurobi ? worker.can_run_no_gurobi : worker.can_run_optimization)
-                            ? "計算可能"
-                            : "準備待ち"}
-                          ）
-                        </option>
-                      ))}
+                      .map((worker) => {
+                        const roleAllows = workerRoleAllowsProfile(worker, noGurobi);
+                        const ready = noGurobi ? worker.can_run_no_gurobi : worker.can_run_optimization;
+                        return (
+                          <option key={worker.id} value={worker.id}
+                            disabled={!workerAllowsProfile(worker, noGurobi)}>
+                            {worker.name}（{roleAllows ? (ready ? "計算可能" : "準備待ち") : "担当外"}）
+                          </option>
+                        );
+                      })}
                   </select>
                 </label>
               )}
@@ -410,6 +421,7 @@ export default function RunPanel({
                 className="primary"
                 disabled={
                   !prepared?.ready ||
+                  !selectedWorkerAllowed ||
                   (formal && planningDays > 1 && method !== "simulate")
                 }
               >
