@@ -10660,3 +10660,9 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - rolling側のPV実測入力が旧672区間で止まることを発見。翌朝の実測Solcast行・原本SHAをovernight契約へ固定し、`_prepare_actual_pv_execution_file`が追加区間のkWhを作るよう修正。rolling窓終端は`len(price_slots)×timestep`へ変更し、最終翌朝までの有料電力期間と一致させる。52件の関連回帰は通過。実規模全時間窓の物理・会計照合は未実施。
 - 追加の自己検査で、有料期間7日＋5時間45分が旧60分rollingの割切り検査で拒否されることを発見。最終窓45分を15分境界上で許可し、完了期待窓数を切上げに変更。cluster summaryも運行168時間と有料電力期間・期待窓数を分けた。実規模の全窓求解は別ゲート。
 - 月別Prepared状態に入力原本SHAを記録し、再開・batch生成時に照合する。12週の厳格監査が揃うまで投入用batchを作らない。固定版設定のSHA一致、同一設定の12件、既存永続キューへの投入・再開、成果物hash監査、失敗保存を無人CLIへまとめた。AI定期監視・自動メールは追加しない。回収完了を研究採用へ昇格させない。
+# 2026-09-24 渋24月別実験を分散管理新版へ統合
+
+- 基準は `codex/worker-sort-passmark-20260923` の `5aa61f7a`。その上へ翌朝SOC期限、電力期間、厳格Prepare、月別batch、自動回収監査を移し、旧分岐 `70f331b7` の12週Preparedを新SHAの成果へ流用しない。旧版は求解前で停止している。
+- 分散ジョブのLOST封止、ライセンス予約、役割別割当、端末情報・画面の修正を保持した。翌朝SOCと分散の関連回帰129件を通過。統合前の18台配置証拠は旧SHAに属するため、新固定版を改めて全端末へ配置・照合する。
+- `tools/cluster/verified_stage_config.py` は全端末の配置報告と追加の単体再試行報告を、Git SHA・source digest・runtime lock・dataset hashの原本と突き合わせる。未検証端末は監視のみで投入無効。変更が違う入力を上書きしない `stage_shibu24_monthly_inputs.py` と合わせ、途中失敗時に証拠を保持する。
+- 新版の12週Prepare・実便Rolling・原本監査は未実施。正式fleet承認、受電設備上限、距離根拠等も未解決で、研究採用はBLOCKED。新たな固定SHAの計算と独立検証が揃うまで月別費用や最適性は主張しない。
