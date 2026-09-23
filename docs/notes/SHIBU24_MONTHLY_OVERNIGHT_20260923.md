@@ -22,3 +22,11 @@
 `python tools/research/shibu24_monthly.py check` は12週の原本、週選択、祝日、翌日ダイヤ、8日分PVを読み取り検査するだけで、シナリオ作成・求解はしない。`prepare --output <new-directory> --limit 1` でclean固定Git版から単週を複製し、既存の厳格Prepareへ通す。成功してから全12週を同一SHA・同一共通設定で新規Prepareする。出力ディレクトリはcampaignごとに新規とし、同じ週・原本・prepared IDを照合して再開する。Prepare成功、day-ahead可行、独立物理、台帳照合、rolling実行、研究採用、最適性は別々の状態として記録する。
 
 Phase 3二段階のStage 1 gapはStage 1の目的に対する値であり、週間総費用の大域最適性を証明しない。最初の小規模native回帰では翌朝のSOC期限をStage 1/2双方へ課し、物理再計算と最終夜間充電費用の台帳一致を確認した。実規模1週・12週の通過、追加夜間のrolling実行、独立レビューはこれからである。
+
+2026-09-23の実データ1月Prepareでは、表面上の`input_preparation_valid=true`にもかかわらず、内部の厳格接続監査が`NEXT_MORNING_TIMETABLE_MISSING`で未実施だった。Prepared原本は`trips`に全1,478便を保持する一方、設備側の翌朝検証が`timetable_rows`だけを参照していたことが原因である。設備側も`trips`を検査する修正と回帰テストを追加した。月別スクリプトは、厳格接続・折返し感度・車両適合監査が実際に通過した場合だけ`PREPARED`と記録する。修正前のPrepared IDとキャンペーンは新しい固定版に流用しない。
+
+修正コードで初回1月原本を読取り専用で再監査した結果、厳格接続は`checked=true/infeasible=false`、回送接続と折返し感度はready、警告0件だった。緩和下界は19車両、登録60台である。この下界は実際に19台で運行できる証明ではない。修正版からの新規Prepare、実求解、翌朝までのrolling会計は引き続き別ゲートとする。
+
+rollingの実測PV生成は従来7日分だけだったため、翌朝の実測日射行とraw原本SHAを契約へ固定し、追加区間のPVを実行入力へ含めた。rolling窓の終端も運行日数ではなく有料電力区間数から求める。これはコードと小規模回帰の通過であり、実規模の全時間窓・会計・物理の受入は別途確認する。
+
+2026-09-23追記: 1月など翌朝05:45に終わる週は、60分rollingを173回行った後に45分の最終窓が必要となる。実行窓の長さを残り有料区間で切り、モデルの15分境界に一致する場合だけ最後の短縮を認めた。クラスタの予定窓数も同じ有料区間から計算する。実データ12週のPrepared入力が全件厳格監査を通過した後、`tools/research/shibu24_monthly.py batch`が原本SHAを再検査して12件の固定batchを作る。`tools/research/shibu24_monthly_campaign.py run --settings <fixed-controller-settings.json> --output <new-campaign-directory>`は既存Prepare・永続batch・成果物監査を順に呼び、失敗時は停止して記録を保持する。通常監視にAIを使わず、メールも自動送信しない。回収完了は研究採用や統合最適性を意味しない。

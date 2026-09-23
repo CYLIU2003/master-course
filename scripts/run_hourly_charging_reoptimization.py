@@ -1229,6 +1229,19 @@ class RollingChainRequest:
         )
 
 
+def rolling_step_minutes(current_min: int, end_min: int | None,
+                         requested_minutes: int, timestep_min: int) -> int:
+    """Use a shorter final step only when it ends on a priced model slot."""
+    if requested_minutes <= 0 or requested_minutes % timestep_min:
+        raise ValueError("Rolling execution interval must be a positive model-slot multiple")
+    if end_min is None:
+        return requested_minutes
+    remaining = end_min - current_min
+    if remaining <= 0 or remaining % timestep_min:
+        raise ValueError("Rolling horizon must end on a future model slot")
+    return min(requested_minutes, remaining)
+
+
 def run_rolling_chain(
     request: RollingChainRequest,
     *,
@@ -1447,17 +1460,18 @@ def run_rolling_chain(
                     f"[{current_time}, {end_time}]"
                 )
         end_min = expected_end_min
-        end_time = horizon_end_time
+        # The paid energy horizon may extend beyond the final service day.
+        end_time = _minute_label(expected_end_min)
+        horizon_end_time = end_time
     else:
         end_min = hhmm_to_min(str(end_time)) if end_time else None
         while end_min is not None and end_min <= current_min:
             end_min += 24 * 60
     if end_min is not None and end_min <= current_min:
         raise ValueError("--end-time must be later than --current-time")
-    if end_min is not None and (end_min - current_min) % int(request.execution_minutes) != 0:
+    if end_min is not None and (end_min - current_min) % int(problem.scenario.timestep_min) != 0:
         raise ValueError(
-            "The --current-time to --end-time interval must be divisible by "
-            "--execution-minutes"
+            "The --current-time to --end-time interval must end on a model slot boundary"
         )
     chain_start_min = current_min
     chain_start_time = _minute_label(chain_start_min)
@@ -1507,6 +1521,12 @@ def run_rolling_chain(
     chain_failure_reason: Optional[str] = None
     while True:
         current_label = _minute_label(current_min)
+        # The paid overnight horizon can end at 05:45 while normal rolling
+        # steps are 60 minutes. Execute the final 45 minutes as one last step.
+        step_execution_minutes = rolling_step_minutes(
+            current_min, end_min, int(request.execution_minutes),
+            int(problem.scenario.timestep_min),
+        )
         step_problem = problem
         pv_forecast_update_audit = None
         if pv_forecast_updates is not None:
@@ -1548,7 +1568,7 @@ def run_rolling_chain(
                         state.get("active_charge_session_vehicle_ids") or ()
                     )
                 ),
-                execution_minutes=int(request.execution_minutes),
+                execution_minutes=step_execution_minutes,
                 bess_terminal_policy=request.bess_terminal_policy,
                 lookahead_hours=request.lookahead_hours,
             )
@@ -1560,7 +1580,7 @@ def run_rolling_chain(
                 "service_date": service_date,
                 "step_index": step_index,
                 "current_time": current_label,
-                "execution_minutes": int(request.execution_minutes),
+                "execution_minutes": step_execution_minutes,
                 "feasible": False,
                 "solver_status": "execution_error",
                 "elapsed_seconds": elapsed,
@@ -1588,7 +1608,7 @@ def run_rolling_chain(
             "day_ahead_input_audit": str(input_audit_path),
             "step_index": step_index,
             "current_time": current_label,
-            "execution_minutes": int(request.execution_minutes),
+            "execution_minutes": step_execution_minutes,
             "lookahead": request.lookahead_hours or 'remaining_evaluation_period',
             "current_absolute_min": current_min,
             "current_day_index": (current_min - hhmm_to_min(horizon_start_time)) // 1440,
@@ -1655,7 +1675,7 @@ def run_rolling_chain(
             break
 
         start_slot = int(metadata.get("rolling_start_slot_index") or 0)
-        executed_slot_count = int(request.execution_minutes) // max(
+        executed_slot_count = step_execution_minutes // max(
             int(step_problem.scenario.timestep_min), 1
         )
         stop_slot = min(start_slot + executed_slot_count, len(step_problem.price_slots))
@@ -1696,7 +1716,7 @@ def run_rolling_chain(
                 break
         executed_segments.append((step_problem, result, start_slot, stop_slot))
 
-        next_min = current_min + int(request.execution_minutes)
+        next_min = current_min + step_execution_minutes
         should_continue = end_min is not None and next_min < end_min
         if end_min is not None and not should_continue:
             summary["state_handoff"] = "not_required_at_chain_end"
@@ -1706,7 +1726,7 @@ def run_rolling_chain(
                     step_problem,
                     result,
                     current_min=current_min,
-                    execution_minutes=int(request.execution_minutes),
+                    execution_minutes=step_execution_minutes,
                     prior_vehicle_fuel_l=dict(state.get("actual_vehicle_fuel_l") or {}),
                     prior_on_peak_kw_by_depot=dict(
                         state.get("observed_on_peak_kw_by_depot") or {}
@@ -1753,7 +1773,9 @@ def run_rolling_chain(
                 "cost_breakdown": None,
             }
             chain_failure_reason = chain_failure_reason or "executed_day_accounting_error"
-        expected_step_count = (end_min - chain_start_min) // int(request.execution_minutes)
+        expected_step_count = (
+            end_min - chain_start_min + int(request.execution_minutes) - 1
+        ) // int(request.execution_minutes)
         all_steps_feasible = bool(summaries) and all(
             bool(item.get("feasible")) for item in summaries
         )

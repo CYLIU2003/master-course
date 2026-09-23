@@ -5,6 +5,7 @@ import pytest
 
 from bff.services.run_preparation import _load_scope_frames
 from src.optimization.common.builder import ProblemBuilder
+from src.optimization.common.next_morning import PRICE_POLICY, SCHEMA
 from src.optimization.common.date_series import (
     DATE_SERIES_INPUT_MODE, consecutive_service_dates, content_hash, dated_capacity_factors,
     materialize_dated_timetable, validate_dated_timetable,
@@ -86,6 +87,58 @@ def test_builder_uses_exact_dated_trips_and_day_specific_pv_over_168_hours():
     friday=next(trip for trip in problem.trips if trip.day_index==0)
     saturday=next(trip for trip in problem.trips if trip.day_index==1)
     assert saturday.trip_id in problem.feasible_connections[friday.trip_id]
+
+
+def test_prepared_trip_rows_preserve_verified_next_morning_energy_horizon():
+    scenario = _dated_scenario()
+    config = scenario['simulation_config']
+    dates = config['service_dates']
+    next_date = consecutive_service_dates(dates[0], 8)[-1]
+    next_rows, _ = materialize_dated_timetable(
+        _templates(), service_dates=[next_date], holiday_dates=[],
+        source_provenance={'test_fixture': True},
+    )
+    # Prepared inputs carry canonical `trips` and no `timetable_rows` key.
+    next_rows = [{**row, 'day_index': 7} for row in next_rows]
+    from src.optimization.common.date_series import timetable_hash
+
+    next_pv = {'date': next_date, 'slot_minutes': 30,
+               'capacity_factor_by_slot': [0.0] * 48}
+    config.update(
+        bev_soc_deadline_mode='next_morning_operational_max',
+        final_overnight_mode='include',
+        soc_max=0.8,
+        bev_terminal_soc_policy='fixed_target',
+        final_soc_target_percent=80.0,
+        terminal_overnight_contract={
+            'schema_version': SCHEMA,
+            'service_dates': dates,
+            'next_service_date': next_date,
+            'next_day_timetable_rows': next_rows,
+            'next_day_timetable_rows_sha256': timetable_hash(next_rows),
+            'first_departure_minute_by_next_day': [
+                min(int(row['source_departure'][:2]) * 60
+                    + int(row['source_departure'][3:])
+                    for row in scenario['timetable_rows']
+                    if row['service_date'] == day)
+                for day in dates[1:]
+            ] + [480],
+            'next_day_pv_capacity_factor': next_pv,
+            'next_day_pv_sha256': content_hash(next_pv),
+            'next_day_actual_pv_capacity_factor': next_pv.copy(),
+            'next_day_actual_pv_sha256': content_hash(next_pv),
+            'next_day_actual_pv_source_sha256': ['a' * 64],
+            'price_calendar_policy': PRICE_POLICY,
+        },
+    )
+    canonical = deepcopy(scenario)
+    canonical['trips'] = canonical.pop('timetable_rows')
+    problem = ProblemBuilder().build_from_scenario(
+        canonical, depot_id='d1', service_id='WEEKDAY', planning_days=7,
+    )
+    assert len(problem.trips) == len(canonical['trips'])
+    assert len(problem.price_slots) == 336 + 16
+    assert len(problem.depot_energy_assets['d1'].pv_generation_kwh_by_slot) == 336 + 16
 
 
 def test_prepare_reads_sealed_dated_rows_without_loading_or_filtering_global_catalog(tmp_path):

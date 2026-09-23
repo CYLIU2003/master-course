@@ -491,7 +491,9 @@ class RollingReoptimizer:
             return problem
         if policy != "day_ahead_boundary_state":
             raise ValueError(f"Unsupported rolling-window terminal policy: {policy}")
-        end_min = horizon_start_min(problem)+problem.scenario.planning_days*1440
+        end_min = horizon_start_min(problem) + (
+            len(problem.price_slots) * problem.scenario.timestep_min
+        )
         window_end = min(end_min,current_min+lookahead_hours*60) if lookahead_hours is not None else end_min
         if window_end >= end_min:
             return problem

@@ -92,23 +92,37 @@ def resolve_next_morning_contract(
         for index in range(6):
             if first_minutes[index] != _first_departure(timetable_rows, dates[index + 1]):
                 raise ValueError("NEXT_MORNING_DAILY_DEADLINE_MISMATCH")
-    pv_row = contract.get("next_day_pv_capacity_factor")
-    if not isinstance(pv_row, Mapping) or pv_row.get("date") != next_date:
-        raise ValueError("NEXT_MORNING_PV_DATE_MISMATCH")
-    pv_step = pv_row.get("slot_minutes")
-    if isinstance(pv_step, bool) or pv_step != step:
-        raise ValueError("NEXT_MORNING_PV_STEP_MISMATCH")
-    factors = pv_row.get("capacity_factor_by_slot")
-    if not isinstance(factors, list) or len(factors) != 1440 // step or any(
-        isinstance(value, bool)
-        or not isinstance(value, (float, int))
-        or not math.isfinite(value)
-        or not 0 <= value <= 1
-        for value in factors
+    def verified_pv_factors(row_key: str, hash_key: str) -> list[float]:
+        row = contract.get(row_key)
+        if not isinstance(row, Mapping) or row.get("date") != next_date:
+            raise ValueError("NEXT_MORNING_PV_DATE_MISMATCH")
+        pv_step = row.get("slot_minutes")
+        if isinstance(pv_step, bool) or pv_step != step:
+            raise ValueError("NEXT_MORNING_PV_STEP_MISMATCH")
+        values = row.get("capacity_factor_by_slot")
+        if not isinstance(values, list) or len(values) != 1440 // step or any(
+            isinstance(value, bool)
+            or not isinstance(value, (float, int))
+            or not math.isfinite(value)
+            or not 0 <= value <= 1
+            for value in values
+        ):
+            raise ValueError("NEXT_MORNING_PV_INCOMPLETE")
+        if content_hash(row) != contract.get(hash_key):
+            raise ValueError("NEXT_MORNING_PV_HASH_MISMATCH")
+        return values
+
+    forecast_factors = verified_pv_factors("next_day_pv_capacity_factor", "next_day_pv_sha256")
+    actual_factors = verified_pv_factors(
+        "next_day_actual_pv_capacity_factor", "next_day_actual_pv_sha256"
+    )
+    source_hashes = contract.get("next_day_actual_pv_source_sha256")
+    if not isinstance(source_hashes, list) or not source_hashes or any(
+        not isinstance(value, str) or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+        for value in source_hashes
     ):
-        raise ValueError("NEXT_MORNING_PV_INCOMPLETE")
-    if content_hash(pv_row) != contract.get("next_day_pv_sha256"):
-        raise ValueError("NEXT_MORNING_PV_HASH_MISMATCH")
+        raise ValueError("NEXT_MORNING_ACTUAL_PV_SOURCE_MISSING")
     slots_per_day = 1440 // step
     extra_slots = first_minutes[-1] // step
     return {
@@ -117,7 +131,8 @@ def resolve_next_morning_contract(
             (index + 1) * slots_per_day + departure // step - 1
             for index, departure in enumerate(first_minutes)
         ],
-        "next_day_pv_factors": tuple(float(value) for value in factors[:extra_slots]),
+        "next_day_pv_factors": tuple(float(value) for value in forecast_factors[:extra_slots]),
+        "next_day_actual_pv_factors": tuple(float(value) for value in actual_factors[:extra_slots]),
         "next_service_date": next_date,
         "first_departure_minute_by_next_day": list(first_minutes),
     }

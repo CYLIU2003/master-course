@@ -1,6 +1,9 @@
 """A service week may end before its explicitly paid charging horizon."""
 
 from datetime import date, timedelta
+import hashlib
+import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -33,6 +36,11 @@ def _case():
         "first_departure_minute_by_next_day": [347] * 7,
         "next_day_pv_capacity_factor": pv,
         "next_day_pv_sha256": content_hash(pv),
+        "next_day_actual_pv_capacity_factor": {
+            **pv, "capacity_factor_by_slot": list(pv["capacity_factor_by_slot"])
+        },
+        "next_day_actual_pv_sha256": content_hash(pv),
+        "next_day_actual_pv_source_sha256": ["a" * 64],
         "price_calendar_policy": PRICE_POLICY,
     }
     config = {
@@ -52,6 +60,34 @@ def test_next_morning_extends_energy_slots_only_until_departure():
     assert result["extra_slots"] == 23  # 05:45 is the last completed slot before 05:47.
     assert result["target_slots"] == [118, 214, 310, 406, 502, 598, 694]
     assert len(result["next_day_pv_factors"]) == 23
+    assert len(result["next_day_actual_pv_factors"]) == 23
+
+
+def test_cluster_summary_counts_partial_final_overnight_window():
+    from bff.services.cluster.weekly_inputs import horizon_summary
+
+    config, _ = _case()
+    config["planning_days"] = 7
+    summary = horizon_summary({"simulation_config": config})
+    assert summary["horizon_hours"] == 168
+    assert summary["energy_horizon_minutes"] == 7 * 1440 + 23 * 15
+    assert summary["expected_rolling_windows"] == 174
+
+
+def test_rolling_execution_covers_every_paid_slot_with_short_last_step():
+    from scripts.run_hourly_charging_reoptimization import rolling_step_minutes
+
+    end = 7 * 1440 + 23 * 15
+    current = 0
+    windows = []
+    while current < end:
+        minutes = rolling_step_minutes(current, end, 60, 15)
+        windows.append(minutes)
+        current += minutes
+    assert current == end
+    assert len(windows) == 174
+    assert windows[-1] == 45
+    assert all(minutes == 60 for minutes in windows[:-1])
 
 
 def test_next_morning_rejects_changed_timetable_or_pv():
@@ -70,3 +106,45 @@ def test_next_morning_rejects_unpaid_final_night():
     config["final_overnight_mode"] = "exclude"
     with pytest.raises(ValueError, match="NEXT_MORNING_SOC_NOT_READY"):
         validate_bev_soc_timing_config(config)
+
+
+def test_historical_pv_replay_pays_for_final_overnight_slots(tmp_path):
+    from bff.services.optimization_run.rolling_chain import _prepare_actual_pv_execution_file
+
+    config, _ = _case()
+    dates = config["service_dates"]
+    actual_row = config["terminal_overnight_contract"]["next_day_actual_pv_capacity_factor"]
+    actual_row["capacity_factor_by_slot"][0] = 0.5
+    config["terminal_overnight_contract"]["next_day_actual_pv_sha256"] = content_hash(actual_row)
+    document = {
+        "schema_version": "historical_pv_capacity_factor_execution_v1",
+        "service_dates": dates, "timestep_minutes": 15,
+        "depot_id": "d1", "source_sha256": "b" * 64,
+        "profiles": [{"date": day, "slot_minutes": 15,
+                      "capacity_factor_by_slot": [0.0] * 96} for day in dates],
+    }
+    source = tmp_path / "seven.json"
+    source.write_text(json.dumps(document), encoding="utf-8")
+    problem = SimpleNamespace(
+        metadata={"service_dates": dates,
+                  "bev_soc_deadline_mode": "next_morning_operational_max",
+                  "terminal_overnight_contract": config["terminal_overnight_contract"],
+                  "date_series_contract": {
+                      "pv_information_mode": "training_only_forecast_proxy",
+                      "pv_execution_input": {
+                          "path": "seven.json",
+                          "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                      },
+                  }},
+        scenario=SimpleNamespace(timestep_min=15),
+        depot_energy_assets={"d1": SimpleNamespace(
+            pv_capacity_kw=10.0, pv_supply_scale=1.0, pv_enabled=True,
+        )},
+        price_slots=tuple(range(672 + 23)),
+    )
+    path = _prepare_actual_pv_execution_file(problem, tmp_path / "run", repo_root=tmp_path)
+    payload = json.loads(open(path, encoding="utf-8").read())
+    assert len(payload["depot_profiles"]["d1"]) == 695
+    assert payload["depot_profiles"]["d1"][672] == pytest.approx(1.25)
+    assert payload["overnight_actual_pv"]["slot_count"] == 23
+    assert payload["source_sha256"] != document["source_sha256"]

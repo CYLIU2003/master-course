@@ -102,6 +102,30 @@ def test_intermediate_day_ahead_bev_target_survives_bess_minimum_only_policy():
     assert evaluation_end.metadata["bev_terminal_soc_target_kwh_by_vehicle"]["bev-1"] == pytest.approx(80.0)
 
 
+def test_rolling_reference_stays_active_until_paid_next_morning_end():
+    problem = daily_problem()
+    depot, asset = next(iter(problem.depot_energy_assets.items()))
+    problem = replace(
+        problem,
+        price_slots=problem.price_slots + (replace(problem.price_slots[-1], slot_index=48),),
+        depot_energy_assets={depot: replace(
+            asset, pv_generation_kwh_by_slot=asset.pv_generation_kwh_by_slot + (0.0,)
+        )},
+        metadata={**problem.metadata, "rolling_window_terminal_policy": "day_ahead_boundary_state"},
+    )
+    plan = replace(
+        _fixed_plan(problem),
+        vehicle_soc_kwh_by_vehicle_slot={"bev-1": {48: 70.0}},
+        bess_soc_kwh_by_depot_slot={depot: {47: asset.bess_initial_soc_kwh}},
+    )
+    rolling = RollingReoptimizer()
+    frozen = rolling._freeze_bev_terminal_soc_targets(problem)
+    intermediate = rolling._apply_window_terminal_targets(frozen, plan, 24 * 60, 24)
+    assert intermediate.metadata["bev_terminal_soc_target_kwh_by_vehicle"]["bev-1"] == 70.0
+    final = rolling._apply_window_terminal_targets(frozen, plan, 25 * 60, 24)
+    assert final.metadata["bev_terminal_soc_target_kwh_by_vehicle"]["bev-1"] == 80.0
+
+
 def test_failed_hourly_solve_never_publishes_the_old_reference_energy_trace():
     from src.optimization.rolling.vehicle_execution import vehicle_positions_at
     pytest.importorskip("gurobipy")

@@ -1550,6 +1550,10 @@ class ProblemBuilder:
                 "planning_days": planning_days,
                 "bev_soc_deadline_mode": input_config.get("bev_soc_deadline_mode", "legacy_day_end"),
                 "final_overnight_mode": input_config.get("final_overnight_mode", "exclude"),
+                "terminal_overnight_contract": (
+                    input_config.get("terminal_overnight_contract")
+                    if next_morning is not None else None
+                ),
                 "post_return_target_slots": (
                     next_morning["target_slots"] if next_morning is not None else None
                 ),
@@ -1913,7 +1917,8 @@ class ProblemBuilder:
 
                     extension = resolve_next_morning_contract(
                         sim_cfg, timestep_min=timestep_min,
-                        timetable_rows=metadata_source.get("timetable_rows") or [],
+                        timetable_rows=(metadata_source.get("timetable_rows")
+                                        or metadata_source.get("trips") or []),
                     )
                     capacity_factor_series += extension["next_day_pv_factors"]
                 if len(capacity_factor_series)!=slot_count:
