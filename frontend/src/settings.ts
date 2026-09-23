@@ -66,14 +66,20 @@ export const settingGroups: {
       num("finalSocFloorPercent", "車両の期間末SOC下限（%）", 0, 100),
       num("finalSocTargetPercent", "車両の期間末SOC目標（%）", 0, 100),
       num("finalSocTargetTolerancePercent", "目標の許容幅（ポイント）", 0, 100),
-      select("bevSocDeadlineMode", "車両SOC目標の期限", [
-        ["legacy_day_end", "従来どおり当日末"],
-        ["next_morning_operational_max", "翌朝の出庫前に運用上限へ"],
-      ]),
-      select("finalOvernightMode", "最終日帰庫後の夜間を計算に含める", [
-        ["exclude", "含めない（期末残量を記録）"],
-        ["include", "含める（翌朝までの充電・受電・費用）"],
-      ]),
+      {
+        ...select("bevSocDeadlineMode", "車両SOC目標の期限", [
+          ["legacy_day_end", "従来どおり当日末"],
+          ["next_morning_operational_max", "翌朝の出庫前に運用上限へ（計算準備中）"],
+        ]),
+        hint: "翌朝条件は保存できますが、翌日分の入力と検証が揃うまで計算は受け付けません。",
+      },
+      {
+        ...select("finalOvernightMode", "最終日帰庫後の夜間を計算に含める", [
+          ["exclude", "含めない（従来の計算期間）"],
+          ["include", "含める（計算準備中）"],
+        ]),
+        hint: "含める場合は翌朝までの充電・受電・PV・費用を同じ計算に入れる予定です。",
+      },
       num("initialIceFuelPercent", "ICE初期燃料（%）", 0, 100),
       num("minIceFuelPercent", "ICE燃料下限（%）", 0, 100),
       num("maxIceFuelPercent", "ICE燃料上限（%）", 0, 100),
