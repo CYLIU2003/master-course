@@ -5,6 +5,7 @@
 - `LAPTOP-BOLC6VIT` と `LAPTOP-8JS4DQCD` は、固定 `0d056430` の環境照合と診断回収を確認済み。両機は `gurobi: false` で、APIの `can_run_no_gurobi=true` / `can_run_optimization=false` が正しい。旧WorkerNodes画面は後者だけを見て「準備待ち」と表示していたため、計算種別ごとの対応を表示し、フィルタにも前者を含めた。これはRAM等の投入時資源検査を免除しない。
 - `LAPTOP-BOLC6VIT` はWindows Updateの `TiWorker` 等が動作中で空きRAMが約1.8 GB。1 GBのジョブ要件と1 GBのOS用予約を同時に満たさない。更新完了後に再計測するまで実ジョブは投入しない。
 - フロントは `WorkerNodes.test.tsx` のGurobi不要ケースを追加し、対象4件とビルドで検証する。計算コード・solver条件・研究受理条件は変更しない。
+- 常駐controllerの実行中ジョブ0件を確認し、バックエンド固定版 `0d056430` を保ったまま、画面成果物を `output/cluster-deployment/frontend-shibu24-6f4f60e8` へ配置して再起動した。HTTP配信JSと配置ファイルのSHA-256一致、渋24分類2件を確認。固定版で224便・60車両・10充電器のPrepared IDと入力SHA-256が旧監査値と一致し、`real-shibu24-18-0d056430-batch.json` 18件の構文・SHA検査が通過した。ジョブ投入はまだ行っていない。
 
 ## 2026-09-23 SOC夜間選択画面の固定版18台配置
 
