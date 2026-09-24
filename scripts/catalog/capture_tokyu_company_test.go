@@ -3,12 +3,21 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
 
 func TestCachedCaptureChecksHashAndNeverPersistsKey(t *testing.T) {
 	output := t.TempDir()
@@ -58,5 +67,35 @@ func TestStopOperatorArrayAndDuplicateIDs(t *testing.T) {
 	}
 	if err := validateRows("odpt:BusstopPole", []row{record, record}); err == nil {
 		t.Fatal("duplicate ID was accepted")
+	}
+}
+
+func TestRejectedSecondaryKeyFallsBackOnceWithoutRepeatingItsRequests(t *testing.T) {
+	primaryRequests, secondaryRequests := 0, 0
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		key := request.URL.Query().Get("acl:consumerKey")
+		if key == "secondary-test-key" {
+			secondaryRequests++
+			return &http.Response{StatusCode: 403, Body: io.NopCloser(strings.NewReader("forbidden")), Header: make(http.Header)}, nil
+		}
+		if key != "primary-test-key" {
+			t.Fatal("unexpected credential")
+		}
+		primaryRequests++
+		stopID := request.URL.Query().Get("odpt:busstopPole")
+		body := fmt.Sprintf(`[{"owl:sameAs":"table-%s","odpt:operator":"%s","odpt:busstopPole":"%s"}]`, stopID, operator, stopID)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})}
+	tasks := make([]task, 4)
+	for index := range tasks {
+		tasks[index] = task{"odpt:BusstopPoleTimetable", "odpt:busstopPole", fmt.Sprintf("stop-%d", index)}
+	}
+	gates := []*requestGate{{interval: time.Millisecond}, {interval: time.Millisecond}}
+	sources, ids, err := runPartitioned(context.Background(), client, gates, t.TempDir(), []string{"primary-test-key", "secondary-test-key"}, tasks, 1)
+	if err != nil || len(sources) != 4 || len(ids) != 4 {
+		t.Fatalf("fallback capture: %v, sources=%d, IDs=%d", err, len(sources), len(ids))
+	}
+	if primaryRequests != 4 || secondaryRequests != 1 {
+		t.Fatalf("request counts primary=%d secondary=%d", primaryRequests, secondaryRequests)
 	}
 }

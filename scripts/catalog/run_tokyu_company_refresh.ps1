@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Output,
     [ValidateRange(1, 8)][int]$Workers = 2,
     [ValidateRange(250, 60000)][int]$IntervalMs = 1000,
-    [string]$Python
+    [string]$Python,
+    [switch]$PromptSecondaryKey
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,7 +19,7 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
     throw "Python interpreter not found: $pythonExe"
 }
 
-& (Join-Path $PSScriptRoot 'run_tokyu_company_capture.ps1') -Output $Output -Workers $Workers -IntervalMs $IntervalMs
+& (Join-Path $PSScriptRoot 'run_tokyu_company_capture.ps1') -Output $Output -Workers $Workers -IntervalMs $IntervalMs -PromptSecondaryKey:$PromptSecondaryKey
 Push-Location -LiteralPath $repoRoot
 try {
     & $pythonExe -m scripts.catalog.manual_tokyu_company_snapshot verify --output $Output

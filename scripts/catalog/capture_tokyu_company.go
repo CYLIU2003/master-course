@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -62,6 +63,15 @@ type requestGate struct {
 	mu       sync.Mutex
 	next     time.Time
 	interval time.Duration
+}
+
+type httpStatusError struct {
+	resource string
+	status   int
+}
+
+func (err httpStatusError) Error() string {
+	return fmt.Sprintf("ODPT %s returned HTTP %d", err.resource, err.status)
 }
 
 func (gate *requestGate) wait(ctx context.Context) error {
@@ -213,7 +223,7 @@ func readOrFetch(ctx context.Context, client *http.Client, gate *requestGate, ou
 				retryAfter := response.Header.Get("Retry-After")
 				response.Body.Close()
 				if response.StatusCode != 429 && response.StatusCode < 500 {
-					return meta, nil, fmt.Errorf("ODPT %s returned HTTP %d", resource, response.StatusCode)
+					return meta, nil, httpStatusError{resource: resource, status: response.StatusCode}
 				}
 				if attempt == 7 {
 					return meta, nil, fmt.Errorf("ODPT %s returned HTTP %d after retries", resource, response.StatusCode)
@@ -287,19 +297,39 @@ type result struct {
 	err    error
 }
 
-func runPartitioned(ctx context.Context, client *http.Client, gate *requestGate, output, key string, tasks []task, workers int) ([]source, map[string]bool, error) {
+func runPartitioned(ctx context.Context, client *http.Client, gates []*requestGate, output string, keys []string, tasks []task, workers int) ([]source, map[string]bool, error) {
+	if len(keys) == 0 || len(gates) != len(keys) {
+		return nil, nil, errors.New("credential and request gate count mismatch")
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	work := make(chan task)
 	results := make(chan result, workers)
 	var group sync.WaitGroup
+	var nextCredential uint64
+	var secondaryRejected atomic.Bool
 	for index := 0; index < workers; index++ {
 		group.Add(1)
 		go func() {
 			defer group.Done()
 			for item := range work {
 				query := map[string]string{"odpt:operator": operator, item.field: item.identifier}
-				meta, records, err := readOrFetch(ctx, client, gate, output, key, item.resource, query)
+				credential := int(atomic.AddUint64(&nextCredential, 1)-1) % len(keys)
+				if credential > 0 && secondaryRejected.Load() {
+					credential = 0
+				}
+				meta, records, err := readOrFetch(ctx, client, gates[credential], output, keys[credential], item.resource, query)
+				var statusErr httpStatusError
+				if credential > 0 && errors.As(err, &statusErr) && (statusErr.status == 401 || statusErr.status == 403) {
+					if secondaryRejected.CompareAndSwap(false, true) {
+						fmt.Fprintf(os.Stderr, "secondary ODPT credential rejected HTTP %d; continuing with primary credential only\n", statusErr.status)
+					}
+					credential = 0
+					meta, records, err = readOrFetch(ctx, client, gates[0], output, keys[0], item.resource, query)
+				}
+				if err != nil {
+					err = fmt.Errorf("credential slot %d: %w", credential+1, err)
+				}
 				ids := make([]string, 0, len(records))
 				if err == nil && len(records) >= 1000 {
 					err = fmt.Errorf("%s partition reached 1000 records; finer filter required: %s", item.resource, item.identifier)
@@ -373,6 +403,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "ODPT_CONSUMER_KEY is required in the child environment")
 		os.Exit(2)
 	}
+	keys := []string{key}
+	if secondary := os.Getenv("ODPT_CONSUMER_KEY_SECONDARY"); secondary != "" && secondary != key {
+		keys = append(keys, secondary)
+	}
 	output, err := filepath.Abs(*outputFlag)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "invalid output path")
@@ -388,6 +422,10 @@ func main() {
 	}
 	client := &http.Client{Timeout: 120 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect refused") }}
 	gate := &requestGate{interval: time.Duration(*intervalMS) * time.Millisecond}
+	gates := []*requestGate{gate}
+	if len(keys) == 2 {
+		gates = append(gates, &requestGate{interval: time.Duration(*intervalMS) * time.Millisecond})
+	}
 	ctx := context.Background()
 	if *probe {
 		baseQuery := map[string]string{"odpt:operator": operator}
@@ -465,7 +503,7 @@ func main() {
 	for _, id := range patternIDs {
 		tasks = append(tasks, task{"odpt:BusTimetable", "odpt:busroutePattern", id})
 	}
-	timetableSources, timetableIDs, err := runPartitioned(ctx, client, gate, output, key, tasks, *workers)
+	timetableSources, timetableIDs, err := runPartitioned(ctx, client, gates, output, keys, tasks, *workers)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -484,7 +522,7 @@ func main() {
 	for _, id := range stopIDs {
 		tasks = append(tasks, task{"odpt:BusstopPoleTimetable", "odpt:busstopPole", id})
 	}
-	stopSources, stopTimetableIDs, err := runPartitioned(ctx, client, gate, output, key, tasks, *workers)
+	stopSources, stopTimetableIDs, err := runPartitioned(ctx, client, gates, output, keys, tasks, *workers)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -52,12 +52,15 @@ controllerの配置先を変更した場合も、新しい設定で再登録し�
 東急バス全社の4種類（停留所時刻表・停留所・路線パターン・便時刻表）は、
 Go標準ライブラリの手動取得器で新しい保存先へ固定します。APIキーは
 PowerShellの非表示入力から子プロセス環境へ渡し、コマンド引数・原本manifest・
-Gitへ書きません。ODPTが1回の一覧取得で1,000件を返すことがあるため、
+Gitへ書きません。2件のキーを使う場合は `-PromptSecondaryKey` を付けて順に非表示入力します。
+キーごとに要求間隔と429待機を独立に管理し、既存原本はSHA照合して再利用します。
+追加キーが401/403で拒否された場合はそのキーへの分割要求を止め、同じ要求を既存キーで続けます。
+ODPTが1回の一覧取得で1,000件を返すことがあるため、
 便時刻表は路線パターン、停留所時刻表は停留所IDで分割し、分割の照合に失敗したら
 全社版として確定しません。429では待機し、途中の原本をSHAで照合して同じ先へ再開できます。
 
 ```powershell
-& scripts/catalog/run_tokyu_company_refresh.ps1 -Output data/external/odpt/tokyu_company_<日付> -Workers 2 -Python C:\master-course\.venv\Scripts\python.exe
+& scripts/catalog/run_tokyu_company_refresh.ps1 -Output data/external/odpt/tokyu_company_<日付> -Workers 2 -PromptSecondaryKey -Python C:\master-course\.venv\Scripts\python.exe
 ```
 
 段階ごとに止めて確認する場合は、同じ保存先で次を順に実行します。
