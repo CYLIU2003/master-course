@@ -7,6 +7,24 @@ import { FieldGrid } from "./Fields";
 import { ErrorBox } from "./common";
 import DataTable from "./DataTable";
 
+const periodPresets = [
+  { days: 1, label: "1日" },
+  { days: 7, label: "1週" },
+  { days: 14, label: "2週" },
+  { days: 21, label: "3週" },
+  { days: 28, label: "4週" },
+] as const;
+
+export function periodEnd(start: unknown, days: unknown): string | null {
+  if (typeof start !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return null;
+  const count = Number(days);
+  if (!Number.isInteger(count) || count < 1 || count > 56) return null;
+  const day = new Date(`${start}T00:00:00Z`);
+  if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== start) return null;
+  day.setUTCDate(day.getUTCDate() + count - 1);
+  return day.toISOString().slice(0, 10);
+}
+
 export type Configuration = { values: Row; revision: string };
 export type EditorProps = {
   id: string;
@@ -136,6 +154,24 @@ export default function SettingsPanel({ id, onSaved, onDirty }: EditorProps) {
             <section className="panel" key={group.id}>
               <h2>{group.label}</h2>
               <p className="subtle">{group.description}</p>
+              {group.id === "operation" && (
+                <div className="period-editor">
+                  <strong>一つのシナリオで計算期間を指定</strong>
+                  <div className="segmented" role="group" aria-label="計算期間のプリセット">
+                    {periodPresets.map(({ days, label }) => (
+                      <button key={days} type="button"
+                        className={Number(value.planningDays) === days ? "active" : ""}
+                        onClick={() => change("planningDays", days)}>{label}</button>
+                    ))}
+                  </div>
+                  <p className="subtle">
+                    {periodEnd(value.serviceDate, value.planningDays)
+                      ? `${String(value.serviceDate)} 〜 ${periodEnd(value.serviceDate, value.planningDays)}（${Number(value.planningDays)}日間）`
+                      : "開始日と1〜56日の対象日数を指定してください。"}
+                    保存後に入力準備すると、その期間のPrepared入力が別IDで記録されます。
+                  </p>
+                </div>
+              )}
               <FieldGrid
                 fields={group.fields}
                 value={value}

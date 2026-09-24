@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +11,7 @@ from fastapi import HTTPException
 
 from bff.routers.scenarios import UpdateQuickSetupBody, _builder_defaults, _normalize_depot_energy_assets_payload, update_quick_setup
 from bff.store import desktop_store, scenario_store
+from src.optimization.common.date_series import consecutive_service_dates
 
 
 
@@ -64,12 +64,14 @@ def save_configuration(scenario_id: str, changes: dict[str, Any], revision: str)
         changes = dict(changes)
         if "initialSoc" in changes:
             changes["initialSocPercent"] = float(changes["initialSoc"]) * 100.0
-        if {"serviceDate", "planningDays"} & changes.keys() and "serviceDates" not in changes:
-            start = date.fromisoformat(changes.get("serviceDate", values.get("serviceDate")))
-            days = int(changes.get("planningDays", values.get("planningDays", 1)))
-            if not 1 <= days <= 366:
-                raise ValueError("planningDays must be between 1 and 366")
-            changes["serviceDates"] = [(start + timedelta(days=index)).isoformat() for index in range(days)]
+        if {"serviceDate", "planningDays", "serviceDates"} & changes.keys():
+            start = changes.get("serviceDate", values.get("serviceDate"))
+            days = changes.get("planningDays", values.get("planningDays", 1))
+            if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= 366:
+                raise ValueError("planningDays must be an integer between 1 and 366")
+            dates = consecutive_service_dates(start, days, changes.get("serviceDates"))
+            changes["serviceDate"] = dates[0]
+            changes["serviceDates"] = dates
             if not changes.get("operationTimeWindowEnabled", values.get("operationTimeWindowEnabled", False)):
                 changes["planningHorizonHours"] = days * 24
         merged = {**values, **changes}

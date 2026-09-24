@@ -10707,3 +10707,10 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 12:07–12:11 JSTのローカル配置: 稼働中の固定 `906a4253` controllerのPython/API/求解コードは変更せず、`frontend/dist`のhash付き資産を追加し、旧indexを別ディレクトリへ退避して新indexへ切替。`campaign-progress.json`を固定 `e75a6839` の12週Prepare出力から公開。実ブラウザで進捗カード・週別状態を表示確認し、9/12→10/12への自動更新とローカルHTTPの応答を確認。Prepare自体は別worktreeで継続中、計算/監査は0/12。
 - `MasterCourseCampaignProgress` を現ユーザーのログオン時タスクとして登録し、状態 `Running`、publisherの状態変化ログとHTTP応答を確認。既存 `MasterCourseClusterMonitor` のログオン時設定が旧 `e301abbd` を参照していたため、タスク定義の原本XMLを退避した上で、現在稼働中と同じ `906a4253` 設定へ参照のみ更新した。コントローラーは再起動していない。次回ログオン後の自動再開実機試験は未実施。
 - publisherタスクを停止→再開始する局所復旧試験で状態 `Running`、公開JSONの更新時刻前進、HTTPのPrepare 10/12・計算0/12・監査0/12を確認。ログオン自動発火やPC再起動は未試験。
+
+## 2026-09-24 期間を月別ファイルからシナリオ設定へ分離する画面
+
+- `codex/flexible-scenario-horizon-20260924` で、一覧の既定表示を再利用シナリオにし、保存名が既知の月別代表週・日付別候補に一致する旧ファイルは別表示へ移した。原本・旧Prepared入力・実行履歴は削除せず、APIの既定 `period_kind=all` も維持する。名前による分類は表示専用で、正式な路線・日付の根拠には使わない。
+- 設定画面に1日、1/2/3/4週の選択と1〜56日入力、期間末表示を追加。保存時は共通の `consecutive_service_dates` 契約で日付列を生成・照合し、開始日や日数の変更で古い日付列が残ることを防ぐ。明示列の不一致を保存前に拒否する。既存の時刻表・車両・PV/BESS・solverの数理条件は変更しない。
+- この変更は一つの**可変なシナリオ設定**で期間を順次選ぶ段階。複数期間のPrepared入力を同時に新規投入するには、期間別の不変実行スナップショットを正本として全ローカル・分散経路で照合する追加設計が必要。現状は保存後に旧Prepared IDを拒否する既存の安全契約を保持する。特定の月別キャンペーン専用の翌朝契約やholdout予報を汎用期間へ自動流用しない。複数日正式研究実行のBLOCKEDも維持する。
+- 検証: `tests/test_desktop_editing.py` 31件、`frontend/src/components/Editors.test.tsx` 7件、TypeScript型検査が通過。期間・表示変更のみで正式求解や既存12週の再計算は未実施。稼働中controllerには未配置。

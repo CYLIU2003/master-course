@@ -21,6 +21,7 @@ from bff.store.output_paths import outputs_root, project_root
 MASTER_TABLES = frozenset({"routes", "depots", "vehicles", "stops", "chargers", "vehicle_templates"})
 ARTIFACT_TABLES = frozenset({"timetable_rows", "trips", "duties", "blocks"})
 SCENARIO_ROUTE_GROUPS = frozenset({"shibu24", "shibu21_24", "shibu21_23", "other"})
+SCENARIO_PERIOD_KINDS = frozenset({"all", "reusable", "dated_history"})
 RESULT_PATHS = (
     "status",
     "solver_status",
@@ -110,9 +111,21 @@ def scenario_route_group(name: str) -> str:
     return "other"
 
 
-def scenario_page(query: str, offset: int, limit: int, route_group: str = "all") -> dict[str, Any]:
+def scenario_period_kind(name: str) -> str:
+    """Classify legacy date-named copies for display; never infer solver scope."""
+    normalized = unicodedata.normalize("NFKC", name)
+    if (re.search(r"\d{4}年\d{1,2}月代表週\s+\d{4}-\d{2}-\d{2}", normalized)
+            or re.search(r"7日入力候補\s+\d{4}-\d{2}-\d{2}", normalized)):
+        return "dated_history"
+    return "reusable"
+
+
+def scenario_page(query: str, offset: int, limit: int, route_group: str = "all",
+                  period_kind: str = "all") -> dict[str, Any]:
     if route_group != "all" and route_group not in SCENARIO_ROUTE_GROUPS:
         raise ValueError("Unknown scenario route group")
+    if period_kind not in SCENARIO_PERIOD_KINDS:
+        raise ValueError("Unknown scenario period kind")
     items, errors = [], []
     for path in scenario_store.scenario_metadata_paths():
         try:
@@ -122,6 +135,7 @@ def scenario_page(query: str, offset: int, limit: int, route_group: str = "all")
                 meta.get("id")
                 and query.casefold() in str(meta.get("name") or "").casefold()
                 and (route_group == "all" or meta["routeGroup"] == route_group)
+                and (period_kind == "all" or scenario_period_kind(meta["name"]) == period_kind)
             ):
                 items.append(meta)
         except (OSError, ValueError, ijson.JSONError) as exc:

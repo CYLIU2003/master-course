@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import EnergyPanel from "./EnergyPanel";
-import SettingsPanel from "./SettingsPanel";
+import SettingsPanel, { periodEnd } from "./SettingsPanel";
 import DataWorkspace from "./DataWorkspace";
 import EntityManager from "./EntityManager";
 import { FieldGrid } from "./Fields";
@@ -137,6 +137,22 @@ it("saves only edited settings and keeps invalid JSON from being submitted", asy
     screen.getByRole("button", { name: "SOC・燃料" }).hasAttribute("disabled"),
   ).toBe(true);
   await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(true));
+});
+it("sets a multiweek period on the same scenario configuration", async () => {
+  mount(<SettingsPanel id="s" onSaved={vi.fn()} onDirty={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: "運行条件" }));
+  fireEvent.change(screen.getByLabelText("開始日"), {
+    target: { value: "2025-05-12" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "3週" }));
+  expect(screen.getByText(/2025-05-12 〜 2025-06-01/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
+  await waitFor(() => expect(calls.some((call) => call.method === "PUT")).toBe(true));
+  expect(calls.find((call) => call.method === "PUT")!.body.changes).toEqual({
+    serviceDate: "2025-05-12", planningDays: 21,
+  });
+  expect(periodEnd("2025-05-12", 21)).toBe("2025-06-01");
+  expect(periodEnd("2025-02-30", 7)).toBeNull();
 });
 it("keeps a reference draft until explicit save or reset", async () => {
   const dirty = vi.fn();

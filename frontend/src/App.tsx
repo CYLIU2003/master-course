@@ -67,6 +67,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [routeGroup, setRouteGroup] = useState<RouteGroup>("all");
+  const [periodKind, setPeriodKind] = useState<"reusable" | "dated_history">("reusable");
   const [name, setName] = useState("");
   const [dataset, setDataset] = useState("");
   const [seed, setSeed] = useState(42);
@@ -80,10 +81,10 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [search]);
   const list = useQuery({
-    queryKey: ["scenarios", query, offset, routeGroup],
+    queryKey: ["scenarios", query, offset, routeGroup, periodKind],
     queryFn: ({ signal }) =>
       api<Page<Scenario>>(
-        `/desktop/scenarios?q=${encodeURIComponent(query)}&offset=${offset}&limit=50&route_group=${routeGroup}`,
+        `/desktop/scenarios?q=${encodeURIComponent(query)}&offset=${offset}&limit=50&route_group=${routeGroup}&period_kind=${periodKind}`,
         { signal },
       ),
     placeholderData: keepPreviousData,
@@ -338,6 +339,17 @@ export default function App() {
               </form>
             )}
             <ErrorBox error={list.error} />
+            <div className="segmented" role="group" aria-label="シナリオの表示">
+              <button type="button" className={periodKind === "reusable" ? "active" : ""}
+                onClick={() => { setPeriodKind("reusable"); setOffset(0); }}>
+                再利用するシナリオ
+              </button>
+              <button type="button" className={periodKind === "dated_history" ? "active" : ""}
+                onClick={() => { setPeriodKind("dated_history"); setOffset(0); }}>
+                旧月別・日付別ファイル
+              </button>
+            </div>
+            <p className="subtle">月別の旧ファイルは履歴として保持します。新しい期間は同じシナリオの「運行・計算設定」で開始日と日数を変更します。</p>
             <div className="scenario-group-filter">
               <label htmlFor="scenario-route-group">路線で分類</label>
               <select

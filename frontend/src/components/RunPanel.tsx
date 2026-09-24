@@ -12,7 +12,7 @@ import {
 } from "../api";
 import { ErrorBox } from "./common";
 import { FieldGrid } from "./Fields";
-import type { Configuration } from "./SettingsPanel";
+import { periodEnd, type Configuration } from "./SettingsPanel";
 import type { ClusterWorkers } from "./ClusterPanel";
 
 function workerRoleAllowsProfile(worker: ClusterWorkers["workers"][number], noGurobi: boolean): boolean {
@@ -255,8 +255,8 @@ export default function RunPanel({
           <div>
             <small>期間</small>
             <strong>
-              {String(value.serviceDate ?? "未設定")} から{" "}
-              {String(value.planningDays ?? 1)} 日
+              {String(value.serviceDate ?? "未設定")} 〜{" "}
+              {periodEnd(value.serviceDate, value.planningDays) ?? "期間末未確定"}（{String(value.planningDays ?? 1)}日）
             </strong>
           </div>
           <div>

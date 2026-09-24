@@ -45,6 +45,40 @@ def test_configuration_preserves_scope_syncs_soc_and_dates(editable):
     assert error.value.status_code == 409
 
 
+@pytest.mark.parametrize("days", [1, 7, 21, 56])
+def test_same_scenario_supports_day_week_and_multiweek_periods(editable, days):
+    before = config.configuration(editable)
+    result = config.save_configuration(
+        editable, {"serviceDate": "2025-05-12", "planningDays": days}, before["revision"]
+    )
+    saved = scenario_store.get_field(editable, "simulation_config")
+    assert saved["service_dates"][0] == "2025-05-12"
+    assert len(saved["service_dates"]) == days
+    assert saved["planning_horizon_hours"] == days * 24
+    assert result["values"]["serviceDate"] == "2025-05-12"
+    assert result["values"]["planningDays"] == days
+    assert result["values"]["selectedRouteIds"] == before["values"]["selectedRouteIds"]
+
+
+def test_period_rejects_mismatched_explicit_dates_without_changing_scenario(editable):
+    before = config.configuration(editable)
+    with pytest.raises(ValueError, match="service_dates"):
+        config.save_configuration(editable, {
+            "serviceDate": "2025-05-12", "planningDays": 7,
+            "serviceDates": ["2025-05-12", "2025-05-14"],
+        }, before["revision"])
+    assert config.configuration(editable) == before
+
+
+def test_legacy_monthly_files_are_readable_in_history_without_deletion(editable):
+    scenario_store.create_scenario("渋24 2025年5月代表週 2025-05-12 翌朝SOC診断", "test", "mode_milp_only")
+    reusable = desktop_store.scenario_page("", 0, 50, period_kind="reusable")
+    history = desktop_store.scenario_page("", 0, 50, period_kind="dated_history")
+    assert editable in {row["id"] for row in reusable["items"]}
+    assert any("代表週" in row["name"] for row in history["items"])
+    assert not any("代表週" in row["name"] for row in reusable["items"])
+
+
 def test_bess_free_terminal_is_persisted_without_changing_bev(editable):
     before = config.configuration(editable)
     asset = {"depot_id": "d", "bess_enabled": True, "bess_energy_kwh": 100, "bess_power_kw": 10, "bess_initial_soc_kwh": 50, "bess_soc_min_kwh": 20, "bess_soc_max_kwh": 80, "bess_terminal_soc_min_kwh": 20, "bess_terminal_soc_target_kwh": 0, "bess_terminal_soc_policy": "minimum_only", "bess_balance_period": "evaluation_period"}

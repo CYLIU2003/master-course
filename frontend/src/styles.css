@@ -862,6 +862,19 @@ fieldset {
   border: 1px solid #86a98c;
   color: #254c3d;
 }
+.period-editor {
+  border: 1px solid #dce6d8;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 18px 0;
+  background: #f8fbf6;
+}
+.period-editor .segmented {
+  margin: 12px 0;
+}
+.period-editor .subtle {
+  margin-bottom: 0;
+}
 .save-bar {
   position: sticky;
   bottom: 16px;

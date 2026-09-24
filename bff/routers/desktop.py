@@ -120,8 +120,9 @@ def scenarios(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=250),
     route_group: Literal["all", "shibu24", "shibu21_24", "shibu21_23", "other"] = Query("all"),
+    period_kind: Literal["all", "reusable", "dated_history"] = Query("all"),
 ):
-    return desktop_store.scenario_page(q, offset, limit, route_group)
+    return desktop_store.scenario_page(q, offset, limit, route_group, period_kind)
 
 
 @router.get("/scenarios/{scenario_id}", response_model=ScenarioOverview)

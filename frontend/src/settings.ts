@@ -35,7 +35,8 @@ export const settingGroups: {
         ["SUN_HOL", "日曜・祝日"],
       ]),
       { key: "serviceDate", label: "開始日", kind: "date" },
-      num("planningDays", "対象日数", 1, 7),
+      { ...num("planningDays", "対象日数（1〜56日）", 1, 56), step: 1,
+        hint: "同じシナリオを再利用します。日付ごとの時刻表・PVは入力準備で検査します。" },
       {
         ...select("timeStepMin", "時間刻み（分）", ["5", "15", "30", "60"]),
         numericOptions: true,
