@@ -18,7 +18,7 @@ const periodPresets = [
 export function periodEnd(start: unknown, days: unknown): string | null {
   if (typeof start !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return null;
   const count = Number(days);
-  if (!Number.isInteger(count) || count < 1 || count > 56) return null;
+  if (!Number.isInteger(count) || count < 1 || count > 366) return null;
   const day = new Date(`${start}T00:00:00Z`);
   if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== start) return null;
   day.setUTCDate(day.getUTCDate() + count - 1);
@@ -167,7 +167,7 @@ export default function SettingsPanel({ id, onSaved, onDirty }: EditorProps) {
                   <p className="subtle">
                     {periodEnd(value.serviceDate, value.planningDays)
                       ? `${String(value.serviceDate)} 〜 ${periodEnd(value.serviceDate, value.planningDays)}（${Number(value.planningDays)}日間）`
-                      : "開始日と1〜56日の対象日数を指定してください。"}
+                      : "開始日と1〜366日の対象日数を指定してください。"}
                     保存後に入力準備すると、その期間のPrepared入力が別IDで記録されます。
                   </p>
                 </div>
