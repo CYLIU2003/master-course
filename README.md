@@ -4212,6 +4212,8 @@ AIを使わない配布・バッチ再開スクリプトを備えます。Python
 2026-09-24の旧固定版 `1eef2dc1` は1日を通過しましたが、May週はStage 1構築中にGurobiのメモリ不足で停止しました。旧成果物は診断履歴として保持し、新版の成功週とは混ぜません。新版では、72時間以上の初期解候補について各候補の大型Stage 2 MIPを事前生成せず、軽いSOC上界だけを記録します。この上界は可行性証明ではなく、本体の全制約と独立物理検証は従来どおり必須です。週次ジョブの空きRAM要件は最低20 GBとし、ローカル機のみの構成で不足が明らかな場合は投入前に停止します。20 GBは成功保証ではなく、失敗時はbatchの状態とGurobiのエラー種別を確認してください。
 `stage-state.json` は終端失敗を `FAILED`、通信などで同一試行の結末が確定しない状態を `STATE_UNKNOWN` と区別します。後者を新しい試行として自動再投入しません。
 
+実行終了または失敗時のメール通知は、計算版と別プロセスの `tools/research/watch_shibu24_terminal.py` を使います。監視中は保存済み状態だけを読み、AIやGmailを呼びません。全12週の回収・物理監査を確認した完了、明示失敗、または計算プロセスの異常終了で、一意な `event.json` と `email_payload.json` を保存して既存Codexタスクを一度だけ起こします。そのタスクが接続済みGmailの送信済み検索と `email_receipt.json` を確認してから、承認済み宛先へ1通送ります。通信状態不明は成功扱いせず、計算も再投入しません。`event.json` が `DISPATCH_UNCERTAIN` の場合は自動再通知しないので手動照合が必要です。PCとCodexの接続が利用できない間の送信は保証されません。
+
 使い方は、まずclean Git SHAの専用コントローラーを `tools/cluster/serve_controller.py --settings <settings.json>` で起動し、その設定と同じ出力先・releaseを指定して `python tools/research/shibu24_staged_campaign.py --settings <settings.json> --output <campaign-dir>` を実行します。同じ出力先で再実行すると同じbatch IDと状態を照合して再開します。`stage-state.json` は段階の進捗、各 `batch.log` は投入・回収履歴、`artifact-audit.json` は段階の成果物監査です。これは診断実行であり、完走しても修論用の研究採用や統合総費用の大域最適性を認めるものではありません。
 # 2026-09-23 実便版渋24・16台診断
 
