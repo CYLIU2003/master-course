@@ -12,7 +12,11 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 import time
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 
 from bff.services.cluster.runner import process_identity
 from bff.services.cluster.store import ControllerLock, display_text
