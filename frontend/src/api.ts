@@ -13,8 +13,9 @@ export type Job = components["schemas"]["JobReply"];
 export async function api<T>(
   path: string,
   options: RequestInit = {},
+  origin = "",
 ): Promise<T> {
-  const response = await fetch("/api" + path, {
+  const response = await fetch(origin + "/api" + path, {
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers },
   });
