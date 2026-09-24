@@ -34,7 +34,7 @@ from src.optimization.common.next_morning import PRICE_POLICY, SCHEMA, resolve_n
 SELECTION = ROOT / "output/monthly_fair_weeks_20260914/week_selection.json"
 FORECAST = ROOT / "output/monthly_fair_weeks_20260914/forecast_holdouts"
 PARENT_ID = "771d115b-75b0-49f7-a7f0-25f259a2cd21"
-FRAGMENT_TRANSITION_CUT_MODE = "explicit_root"
+FRAGMENT_TRANSITION_CUT_MODE = "lazy"
 
 
 def monthly_request(prepared_input_id: str) -> dict:

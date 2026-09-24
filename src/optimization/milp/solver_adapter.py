@@ -3894,7 +3894,7 @@ class _FragmentTransitionLazySeparator:
         cached = self._diagnostic_cache.get(cache_key)
         if cached is not None:
             return cached
-        feasible = fragment_transition_diagnostic(
+        diagnostic = fragment_transition_diagnostic(
             VehicleDuty(
                 duty_id=f"{vehicle_id}__end_probe",
                 vehicle_type=vehicle_type,
@@ -3911,7 +3911,11 @@ class _FragmentTransitionLazySeparator:
             allow_same_day_depot_cycles=(
                 self._allow_same_day_depot_cycles
             ),
-        ).feasible
+        )
+        # Distinct Stage 1 fragments are materialized as distinct duties.
+        # The canonical timeline returns home between duties even when a
+        # direct stop-to-stop connection would have been possible.
+        feasible = diagnostic.depot_reset_ok and not diagnostic.route_band_blocked
         self._diagnostic_cache[cache_key] = bool(feasible)
         return bool(feasible)
 
@@ -26201,7 +26205,7 @@ class GurobiMILPAdapter:
                     )
                     transition_feasible = transition_feasible_cache.get(cache_key)
                     if transition_feasible is None:
-                        transition_feasible = fragment_transition_diagnostic(
+                        diagnostic = fragment_transition_diagnostic(
                             VehicleDuty(
                                 duty_id=f"{vehicle_id}__end_probe",
                                 vehicle_type=vehicle_type,
@@ -26216,7 +26220,10 @@ class GurobiMILPAdapter:
                             dispatch_context=problem.dispatch_context,
                             fixed_route_band_mode=fixed_route_band_mode,
                             allow_same_day_depot_cycles=allow_same_day_depot_cycles,
-                        ).feasible
+                        )
+                        transition_feasible = (
+                            diagnostic.depot_reset_ok and not diagnostic.route_band_blocked
+                        )
                         transition_feasible_cache[cache_key] = transition_feasible
                     if transition_feasible:
                         continue
@@ -26285,7 +26292,7 @@ class GurobiMILPAdapter:
                     )
                     feasible = feasible_cache.get(cache_key)
                     if feasible is None:
-                        feasible = fragment_transition_diagnostic(
+                        diagnostic = fragment_transition_diagnostic(
                             VehicleDuty(
                                 duty_id=f"{vehicle_id}__end_probe",
                                 vehicle_type=vehicle_type,
@@ -26300,7 +26307,8 @@ class GurobiMILPAdapter:
                             dispatch_context=problem.dispatch_context,
                             fixed_route_band_mode=fixed_route_band_mode,
                             allow_same_day_depot_cycles=allow_same_day_depot_cycles,
-                        ).feasible
+                        )
+                        feasible = diagnostic.depot_reset_ok and not diagnostic.route_band_blocked
                         feasible_cache[cache_key] = feasible
                     if not feasible:
                         invalid_starts_by_end.setdefault(end_trip_id, []).append(
@@ -31097,7 +31105,7 @@ class GurobiMILPAdapter:
                     )
                     reset_feasible = reset_feasible_cache.get(cache_key)
                     if reset_feasible is None:
-                        reset_feasible = fragment_transition_diagnostic(
+                        diagnostic = fragment_transition_diagnostic(
                             VehicleDuty(
                                 duty_id=(
                                     f"{normalized_vehicle_id}__end_probe"
@@ -31118,7 +31126,10 @@ class GurobiMILPAdapter:
                             allow_same_day_depot_cycles=bool(
                                 allow_same_day_depot_cycles
                             ),
-                        ).feasible
+                        )
+                        reset_feasible = (
+                            diagnostic.depot_reset_ok and not diagnostic.route_band_blocked
+                        )
                         reset_feasible_cache[cache_key] = bool(reset_feasible)
                     if reset_feasible:
                         reset_arc_pairs_by_vehicle.setdefault(

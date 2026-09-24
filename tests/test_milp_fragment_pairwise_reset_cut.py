@@ -2,12 +2,82 @@ from __future__ import annotations
 
 import pytest
 
-from src.dispatch.models import DeadheadRule, DispatchContext, Trip, VehicleProfile
+from src.dispatch.models import DeadheadRule, DispatchContext, DutyLeg, Trip, VehicleDuty, VehicleProfile
 from src.gurobi_runtime import is_gurobi_available
 from src.optimization.common.builder import ProblemBuilder
 from src.optimization.common.problem import OptimizationConfig, OptimizationMode
 from src.optimization.milp.engine import MILPOptimizer
 from src.optimization.milp.solver_adapter import GurobiMILPAdapter
+from src.dispatch.route_band import fragment_transition_diagnostic
+
+
+def test_distinct_fragment_must_allow_depot_reset_even_if_direct_path_fits() -> None:
+    """An endpoint arc joins duties, which the physical timeline routes via home."""
+    context = DispatchContext(
+        service_date="2026-04-10",
+        trips=[
+            Trip(trip_id="first", route_id="r1", origin="A", destination="B",
+                 departure_time="08:00", arrival_time="08:10", distance_km=1.0,
+                 allowed_vehicle_types=("ICE",)),
+            Trip(trip_id="second", route_id="r1", origin="B", destination="C",
+                 departure_time="08:25", arrival_time="08:35", distance_km=1.0,
+                 allowed_vehicle_types=("ICE",)),
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 5),
+            ("DEPOT", "B"): DeadheadRule("DEPOT", "B", 15),
+            ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 15),
+        },
+        vehicle_profiles={"ICE": VehicleProfile(vehicle_type="ICE")},
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context, scenario_id="direct-only-fragment", vehicle_counts={"ICE": 1},
+        canonical_depot_id="DEPOT", allow_same_day_depot_cycles=True,
+        max_depot_cycles_per_vehicle_per_day=2,
+        max_fragments_per_vehicle_per_day=2,
+        max_start_fragments_per_vehicle=2, max_end_fragments_per_vehicle=2,
+        service_coverage_mode="strict",
+    )
+    vehicle = problem.vehicles[0]
+    trips = problem.trip_by_id()
+    diagnostic = fragment_transition_diagnostic(
+        VehicleDuty("first-duty", "ICE", (DutyLeg(trips["first"]),)),
+        VehicleDuty("second-duty", "ICE", (DutyLeg(trips["second"]),)),
+        home_depot_id="DEPOT", dispatch_context=problem.dispatch_context,
+        fixed_route_band_mode=False, allow_same_day_depot_cycles=True,
+    )
+    assert diagnostic.direct_ok is True
+    assert diagnostic.depot_reset_ok is False
+
+    class RecordingModel:
+        def __init__(self):
+            self.rows = []
+
+        def addConstr(self, expression):
+            self.rows.append(expression)
+
+    model = RecordingModel()
+    count = GurobiMILPAdapter()._add_fragment_pairwise_depot_reset_cuts(
+        model, trip_by_id=trips, vehicles=problem.vehicles,
+        assignment_trip_ids_by_vehicle={vehicle.vehicle_id: ["first", "second"]},
+        start_arc={(vehicle.vehicle_id, "second"): 1},
+        end_arc={(vehicle.vehicle_id, "first"): 1},
+        trip_day_index_by_trip_id={"first": 0, "second": 0},
+        problem=problem, allow_same_day_depot_cycles=True,
+        fixed_route_band_mode=False,
+    )
+    assert count == 1
+    assert model.rows == [False]
+    separator = GurobiMILPAdapter()._build_fragment_transition_lazy_separator(
+        grb=object(), problem=problem, trip_by_id=trips,
+        vehicles=problem.vehicles,
+        start_arc={(vehicle.vehicle_id, "second"): 1},
+        end_arc={(vehicle.vehicle_id, "first"): 1},
+        trip_day_index_by_trip_id={"first": 0, "second": 0},
+        allow_same_day_depot_cycles=True, fixed_route_band_mode=False,
+    )
+    assert separator._transition_feasible(vehicle.vehicle_id, "first", "second") is False
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")

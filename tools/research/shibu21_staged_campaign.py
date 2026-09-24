@@ -132,7 +132,7 @@ def day_request(prepared_input_id: str) -> dict:
             "run_hourly_rolling": False, "time_limit_seconds": 120,
             "stage1_time_limit_seconds": 600, "stage2_time_limit_seconds": 120,
             "mip_gap": .01, "timestep_min": 15,
-            "stage1_fragment_transition_cut_mode": "explicit_root"}
+            "stage1_fragment_transition_cut_mode": "lazy"}
 
 
 def one_task_spec(settings: dict, task: dict, batch_id: str) -> dict:
