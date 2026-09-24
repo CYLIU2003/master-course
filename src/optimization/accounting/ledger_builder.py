@@ -1387,7 +1387,12 @@ def _build_movement_event_ledger(
 ) -> List[MovementEventLedgerRow]:
     rows: List[MovementEventLedgerRow] = []
     seen_event_ids: set[str] = set()
-    allowed_types = {"startup", "connection", "terminal_return"}
+    # The continuous vehicle timeline names each physical deadhead leg. Keep
+    # the legacy duty names for older exports, but reject every other event.
+    allowed_types = {
+        "startup", "connection", "terminal_return",
+        "startup_deadhead", "connection_deadhead", "daily_return", "daily_startup",
+    }
     for source in movement_event_rows:
         event_id = str(source.get("event_id") or "").strip()
         event_type = str(source.get("event_type") or "").strip()

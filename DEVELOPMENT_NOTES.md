@@ -10749,3 +10749,10 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 設定画面に1日、1/2/3/4週の選択と既存API上限に合わせた1〜366日入力、期間末表示を追加。保存時は共通の `consecutive_service_dates` 契約で日付列を生成・照合し、開始日や日数の変更で古い日付列が残ることを防ぐ。明示列の不一致を保存前に拒否する。既存の時刻表・車両・PV/BESS・solverの数理条件は変更しない。
 - この変更は一つの**可変なシナリオ設定**で期間を順次選ぶ段階。複数期間のPrepared入力を同時に新規投入するには、期間別の不変実行スナップショットを正本として全ローカル・分散経路で照合する追加設計が必要。現状は保存後に旧Prepared IDを拒否する既存の安全契約を保持する。特定の月別キャンペーン専用の翌朝契約やholdout予報を汎用期間へ自動流用しない。複数日正式研究実行のBLOCKEDも維持する。
 - 検証: `tests/test_desktop_editing.py` 31件、`frontend/src/components/Editors.test.tsx` 7件、TypeScript型検査が通過。期間・表示変更のみで正式求解や既存12週の再計算は未実施。稼働中controllerには未配置。
+
+## 2026-09-24 渋24実便の1日→7日→月別12週の段階診断
+
+- 前固定版の5月12日・224便試行はGurobi求解後、連続車両タイムラインの `startup_deadhead` を会計台帳が未対応として拒否した。会計の許可イベントを、物理タイムラインが実際に出す `startup_deadhead`、`connection_deadhead`、`daily_return`、`daily_startup` に拡張。従来イベントも維持し、未知種別は拒否する。距離・燃料・CO2・費用係数の再計算式は変更しない。新SHAで新規Prepareし直すため、旧試行の求解値を採用・流用しない。
+- ODPT原本の再取得やジョブごとの再正規化を避け、検証済み `data/optimization/shibu24_20260911/source.sqlite3` を読取専用の固定入力にする。2025年の12代表週、休日、8日目翌朝のダイヤとSolcast/訓練期間のみの予報の事前照合を通過。2026年固定ダイヤと2025年気象、地理代理距離、正式fleet・受電設備上限未承認のため、出力は診断の範囲に留める。
+- 段階実行CLI `tools/research/shibu24_staged_campaign.py` を追加。同じclean SHA・DB hash・設定hashに束縛し、5月12日1日を物理監査後にMay 7日、その監査後に残り11カ月を投入する。各ジョブは既存の永続batch/attempt経路を使用。Mayの7日ジョブを12カ月のMayとして数え、同一Prepared ID・requestと一致しなければ停止する。各段階で回収ZIPのhash、成果物完全性、物理可行性を独立監査し、失敗時は状態とlogを保持して後続を止める。旧版の固定出力は混ぜない。
+- 回帰: 連続回送イベントの物理量保存と未知型拒否、段階ゲート、月別入力、batch・会計の関連59件、Python構文検査、frontend本番buildを通過。実規模の1日・7日・12カ月結果は新固定版の実行成果物で別途判定する。単機の新SHAで開始する時点では遠隔18台の同一版配置は未確認であり、全機での実行成功は主張しない。
