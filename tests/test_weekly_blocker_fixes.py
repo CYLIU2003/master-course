@@ -36,3 +36,31 @@ def test_full_soc_is_checked_before_outbound_energy_not_during_deadhead():
     soc_before = 314*.9
     assert soc_before == pytest.approx(282.6)
     assert soc_before-10 < soc_before
+
+
+def test_native_next_morning_target_precedes_daily_startup():
+    """Run only inside managed admission; two real service days, no SOC reset."""
+    from src.gurobi_session import current_session
+    if current_session() is None:
+        pytest.skip("Native regression requires shared license admission")
+    from dataclasses import replace
+    from test_daily_return_policy import daily_problem
+    from test_multiday_rolling_contract import _fixed_plan
+    from src.optimization.common.problem import OptimizationConfig
+    from src.optimization.common.feasibility import FeasibilityChecker
+    from src.optimization.rolling.reoptimizer import RollingReoptimizer
+
+    problem = daily_problem()
+    # Second-day startup is 31:30; the service departure is 32:00.
+    # Slot 31 used to require 80 kWh after 9 kWh of outbound travel.
+    vehicle = replace(problem.vehicles[0], maximum_soc_kwh=80.0)
+    problem = replace(problem, vehicles=(vehicle, *problem.vehicles[1:]), metadata={
+        **problem.metadata, "bev_soc_deadline_mode": "next_morning_operational_max",
+        "final_overnight_mode": "include", "bev_terminal_soc_policy": "fixed_target",
+        "final_soc_target_percent": 80, "post_return_target_slots": [31, 47]})
+    result = RollingReoptimizer().reoptimize_charging_hour(problem, _fixed_plan(problem),
+        OptimizationConfig(time_limit_sec=20, mip_gap=0, gurobi_threads=1), 0, lookahead_hours=48)
+    assert result.feasible, result.infeasibility_reasons
+    assert not FeasibilityChecker()._evaluate_soc(problem, result.plan)
+    assert result.plan.vehicle_soc_kwh_by_vehicle_slot["bev-1"][31] >= 80-1e-6
+    assert result.plan.vehicle_soc_kwh_by_vehicle_slot["bev-1"][32] <= 71+1e-6

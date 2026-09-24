@@ -10845,3 +10845,8 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 「仮・正式用」へ既存12週を登録。登録時点の準備8/12、検算0/12。投入・再起動・凍結親の変更なし。
 - 5月原本IISでslot600回送中の上限SOC要求を確認。固定配車SOC判定を出庫前へ一致させ、feedback再探索のseed排他保存衝突もiteration別保存で修正。数理効果と比較境界は SCENARIO_PERIOD_PLANS_20260925.md。
 - Python関連21件、期間画面2件、TypeScript/本番build通過。実規模再求解・実機worker配置・独立レビューは未実施。
+
+- 追加検証: 通信断と確定終端履歴を分離し、計算終了率も追加。親原本の変更なしでrun_instanceを通常一覧から除外。bindもtransaction内で日付照合。
+- 固定0964の共有brokerで native回帰2件を実施し通過（admission period-soc-regression-ad81104d-8acb-4a7f-8a58-0d16b5ba1d06、終了後330秒予約保持）。2日間の例で出庫前SOC上限と回送後の自然減少を確認。費用・上限値の改変なし。
+- 実画面に「仮・正式用」12行を確認。00:13頃の準備10/12、計算終了0/12、検算0/12。これは当時の取得値。常設監視は既存スクリプトのままで追加AI監視なし。
+- 別チャットで配置された011c0bd6の監視先切替・シナリオ絞込み・更新停止警告を統合。旧渋24だけの固定進捗パネルは共通画面から外し、各シナリオの期間別計画へ集約。フロント全47件通過。

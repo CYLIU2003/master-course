@@ -89,6 +89,8 @@ def _metadata(path: str, modified_ns: int, size: int) -> dict[str, Any]:
         for key in ("id", "name", "description", "status", "updatedAt", "operatorId")
     }
     result["routeGroup"] = scenario_route_group(str(meta["name"]))
+    result["runInstance"] = bool(meta.get("run_instance", False))
+    result["parentScenarioId"] = meta.get("base_scenario_id")
     return result
 
 
@@ -135,7 +137,8 @@ def scenario_page(query: str, offset: int, limit: int, route_group: str = "all",
                 meta.get("id")
                 and query.casefold() in str(meta.get("name") or "").casefold()
                 and (route_group == "all" or meta["routeGroup"] == route_group)
-                and (period_kind == "all" or scenario_period_kind(meta["name"]) == period_kind)
+                and (period_kind == "all" or
+                     ("dated_history" if meta.get("runInstance") else scenario_period_kind(meta["name"])) == period_kind)
             ):
                 items.append(meta)
         except (OSError, ValueError, ijson.JSONError) as exc:

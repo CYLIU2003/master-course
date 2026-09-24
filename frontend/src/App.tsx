@@ -378,7 +378,7 @@ export default function App() {
                 旧月別・日付別ファイル
               </button>
             </div>
-            <p className="subtle">月別の旧ファイルは履歴として保持します。新しい期間は同じシナリオの「運行・計算設定」で開始日と日数を変更します。</p>
+            <p className="subtle">月別の旧ファイルは履歴として保持します。新しい期間は同じシナリオの「期間別計画」へ追加します。</p>
             <p className="subtle">ここで新規作成・複製・名前変更ができます。削除はシナリオを開いて「管理」から確認します。</p>
             <div className="scenario-group-filter">
               <label htmlFor="scenario-route-group">路線で分類</label>

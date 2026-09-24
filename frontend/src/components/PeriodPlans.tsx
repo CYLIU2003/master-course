@@ -7,10 +7,11 @@ type Attempt = { id: string; state: string; prepared: boolean; verified: boolean
   observed_at?: string; stale?: boolean; job_id?: string; worker?: string; error?: string;
   source_git_sha?: string; placement?: unknown[]; failure_detail?: unknown };
 type Period = { id: string; label: string; start: string; days: number; end?: string; attempts?: Attempt[] };
-type Plan = { revision: number; periods: Period[]; progress: { prepared: number; verified: number } };
+type Plan = { revision: number; periods: Period[]; progress: { prepared: number; completed?: number; verified: number } };
 const labels: Record<string, string> = { RUNNING: "実行中", QUEUED: "待機中", FAILED: "エラー",
   COMPLETED: "計算終了（検算状況を確認）", VERIFIED: "検算完了", UNKNOWN: "状態不明",
-  NOT_STARTED: "未開始", PREPARING: "入力準備中" };
+  NOT_STARTED: "未開始", NOT_PREPARED: "入力準備待ち", PREPARING: "入力準備中",
+  STATE_UNKNOWN: "状態不明", PREPARE_OR_SUBMIT_FAILED: "入力準備・投入エラー", FAILED_OR_UNVERIFIED: "失敗または未検算" };
 
 export default function PeriodPlans({ id, onDirty }: { id: string; onDirty: (dirty: boolean) => void }) {
   const client = useQueryClient();
@@ -26,10 +27,10 @@ export default function PeriodPlans({ id, onDirty }: { id: string; onDirty: (dir
     onSuccess: (data) => { client.setQueryData(["periods", id], data); setDraft(null); onDirty(false); } });
   const edit = (periods: Period[]) => { if (draft === null) setRevision(query.data?.revision ?? 0); setDraft(periods); onDirty(true); };
   const periods = draft ?? query.data?.periods ?? [];
-  return <section className="card">
+  return <section className="panel">
     <h2>このシナリオの期間別計画</h2>
     <p>共通の車両・設備・路線をひとつのシナリオで管理し、各月の代表週などをここに登録します。各期間内のSOCは連続、期間同士は独立した実験です。</p>
-    <p>入力準備 {query.data?.progress.prepared ?? 0}% ／ 検算完了 {query.data?.progress.verified ?? 0}%（{periods.length}期間）。計画の登録だけでは計算を開始しません。</p>
+    <p>入力準備 {query.data?.progress.prepared ?? 0}% ／ 計算終了 {query.data?.progress.completed ?? 0}% ／ 検算完了 {query.data?.progress.verified ?? 0}%（{periods.length}期間）。計画の登録だけでは計算を開始しません。</p>
     {query.error && <ErrorBox error={query.error} />}
     {save.error && <ErrorBox error={save.error} />}
     <div className="toolbar">
@@ -42,7 +43,7 @@ export default function PeriodPlans({ id, onDirty }: { id: string; onDirty: (dir
       <button disabled={draft === null || save.isPending} onClick={() => { setDraft(null); onDirty(false); }}>編集を戻す</button>
     </div>
     <p>週次実行スクリプトへの出力は7日間の計画に対応しています。他の日数は登録できますが、対応する実行経路の確認が必要です。</p>
-    <table><thead><tr><th>期間名</th><th>対象期間</th><th>状態</th><th>詳細・履歴</th></tr></thead>
+    <div className="detail-table"><table><thead><tr><th>期間名</th><th>対象期間</th><th>状態</th><th>詳細・履歴</th></tr></thead>
       <tbody>{periods.map((period, index) => {
         const latest = period.attempts?.at(-1);
         return <tr key={period.id}><td><input aria-label={`期間名 ${index+1}`} value={period.label} onChange={e => edit(periods.map(p => p.id === period.id ? { ...p, label: e.target.value } : p))} /></td>
@@ -51,7 +52,7 @@ export default function PeriodPlans({ id, onDirty }: { id: string; onDirty: (dir
           <td><details><summary>実行記録 {period.attempts?.length ?? 0}件</summary>
             {period.attempts?.map(attempt => <pre key={attempt.id}>{JSON.stringify(attempt, null, 2)}</pre>)}
           </details>{!period.attempts?.length && <button onClick={() => edit(periods.filter(p => p.id !== period.id))}>計画から削除</button>}</td></tr>;
-      })}</tbody></table>
+      })}</tbody></table></div>
     {!periods.length && <p>まだ期間がありません。1つのシナリオに複数の週を追加できます。</p>}
   </section>;
 }

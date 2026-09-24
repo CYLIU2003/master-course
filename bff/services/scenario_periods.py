@@ -10,7 +10,9 @@ from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sqlite3
+import re
 from uuid import uuid4
+import zipfile
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -68,16 +70,31 @@ def _attempt(row: sqlite3.Row) -> dict:
         if case:
             result.update({k: case.get(k) for k in ("state", "prepared", "verified", "job_id", "worker", "error", "placement")})
             result["last_recorded_state"] = case["state"]
-            if age > 120 or snapshot.get("connection") != "CONNECTED":
+            terminal = case["state"] in {"COMPLETED", "FAILED", "CANCELLED", "BLOCKED", "VERIFIED"}
+            if not terminal and (age > 120 or age < -30 or snapshot.get("connection") != "CONNECTED"):
                 result["state"] = "UNKNOWN"
                 result["verified"] = False
+            job = result.get("job_id")
+            if result["state"] == "FAILED" and job and not result.get("error"):
+                # Read only a collected attempt's small state entry; never
+                # extract a ZIP or accept a browser-supplied path.
+                if isinstance(job, str) and re.fullmatch(r"[A-Za-z0-9-]{1,80}", job):
+                    archive = campaign / row["week"] / "state" / f"{job}.zip"
+                    if archive.is_file():
+                        with zipfile.ZipFile(archive) as bundle:
+                            entry = bundle.getinfo("state.json")
+                            if entry.file_size <= 1_000_000:
+                                state = json.loads(bundle.read(entry))
+                                if state.get("id") == job:
+                                    nested = state.get("result") or {}
+                                    result["error"] = nested.get("error") or nested.get("message")
         else:
             result["state"] = "NOT_STARTED"
         # Native failure details can be nested, whereas the parent error is null.
         failure = campaign / row["week"] / "operations" / "failure_detail.json"
         if failure.is_file():
             result["failure_detail"] = _read(failure)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile) as exc:
         result["error"] = f"Progress unavailable: {type(exc).__name__}"
     return result
 
@@ -93,9 +110,11 @@ def get_periods(scenario_id: str) -> dict:
         period["attempts"] = [_attempt(a) for a in attempts if a["period"] == period["id"]]
     count = len(periods)
     latest = [p["attempts"][-1] if p["attempts"] else {} for p in periods]
+    for attempt in latest:
+        attempt["completed"] = attempt.get("state") in {"COMPLETED", "VERIFIED"}
     return {"scenario_id": scenario_id, "revision": row["revision"] if row else 0, "periods": periods,
             "progress": {key: round(100 * sum(bool(a.get(key)) for a in latest)/count, 1) if count else 0
-                         for key in ("prepared", "verified")},
+                         for key in ("prepared", "completed", "verified")},
             "semantics": "independent_periods;continuous_state_within_each_period;not_a_continuous_year"}
 
 
@@ -120,14 +139,16 @@ def save_periods(scenario_id: str, edit: PeriodEdit) -> dict:
 
 def bind_campaign(scenario_id: str, period_id: str, campaign: Path) -> dict:
     """Local CLI only: attach evidence, never submit or alter an existing run."""
-    plan = get_periods(scenario_id)
-    period = next((p for p in plan["periods"] if p["id"] == period_id), None)
-    if period is None:
-        raise ValueError("Unknown period")
+    scenario_store.get_desktop_context(scenario_id)
     binding = _read(campaign / "binding.json")
-    if binding["parent"] != scenario_id or period["days"] != 7 or period["start"] not in binding["weeks"]:
-        raise ValueError("Campaign parent or dates do not match the period")
     with closing(_connection()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        plan = db.execute("SELECT periods FROM plans WHERE scenario=?", (scenario_id,)).fetchone()
+        period = next((p for p in json.loads(plan[0]) if p["id"] == period_id), None) if plan else None
+        if period is None:
+            raise ValueError("Unknown period")
+        if binding["parent"] != scenario_id or period["days"] != 7 or period["start"] not in binding["weeks"]:
+            raise ValueError("Campaign parent or dates do not match the period")
         db.execute("INSERT OR IGNORE INTO attempts VALUES(?,?,?,?,?)",
                    (scenario_id, period_id, str(uuid4()), str(campaign.resolve()), period["start"]))
     return get_periods(scenario_id)

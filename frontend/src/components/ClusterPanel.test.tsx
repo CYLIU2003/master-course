@@ -215,7 +215,7 @@ it("shows the weekly period and planned windows separately from research accepta
   );
   expect(await screen.findByText("週間診断")).toBeTruthy();
   expect(screen.getByText(/ローリング予定 168回/)).toBeTruthy();
-  expect(screen.getByText("診断用・週間研究採用は未対応")).toBeTruthy();
+  expect(screen.getByText("複数日・研究採用は未対応")).toBeTruthy();
   expect(screen.getByText("（研究採用を意味しません）")).toBeTruthy();
   expect(screen.getByText(/外部計算予約 1 \/ 合計 2/)).toBeTruthy();
 });

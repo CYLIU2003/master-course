@@ -65,7 +65,7 @@ def test_stale_or_offline_progress_is_unknown_not_success(plans):
     campaign = bind(plans)
     (campaign / "operations").mkdir()
     snapshot = {"observed_at_utc": (datetime.now(timezone.utc)-timedelta(minutes=10)).isoformat(),
-                "connection": "CONNECTED", "cases": [{"week": "2025-01-06", "state": "COMPLETED", "verified": True}]}
+                "connection": "CONNECTED", "cases": [{"week": "2025-01-06", "state": "RUNNING", "verified": False}]}
     (campaign / "operations/status.json").write_text(json.dumps(snapshot))
     result = store.bind_campaign("a", "jan", campaign)
     assert result["periods"][0]["attempts"][0]["state"] == "UNKNOWN"
@@ -77,3 +77,40 @@ def test_reject_duplicate_periods_and_invalid_dates(plans):
         store.PeriodEdit(revision=0, periods=[edit().periods[0], edit().periods[0]])
     with pytest.raises(ValueError):
         edit(start="2025-02-30")
+
+
+def test_recorded_terminal_outcome_survives_observer_exit(plans):
+    campaign = bind(plans)
+    (campaign / "operations").mkdir()
+    snapshot = {"observed_at_utc": "2025-01-01T00:00:00+00:00", "connection": "CONNECTED",
+                "cases": [{"week": "2025-01-06", "state": "FAILED", "verified": False}]}
+    (campaign / "operations/status.json").write_text(json.dumps(snapshot))
+    result = store.bind_campaign("a", "jan", campaign)
+    assert result["periods"][0]["attempts"][0]["state"] == "FAILED"
+    assert result["periods"][0]["attempts"][0]["stale"] is True
+
+
+def test_run_instances_are_hidden_from_reusable_scenario_list(plans, monkeypatch):
+    from bff.store import desktop_store
+    paths = []
+    for identity, name, extra in [("parent", "仮・正式用", {}), ("instance", "weekly run", {"run_instance": True, "base_scenario_id": "parent"})]:
+        path = plans / f"{identity}.json"
+        path.write_text(json.dumps({"meta": {"id": identity, "name": name, **extra}}))
+        paths.append(path)
+    monkeypatch.setattr(store.scenario_store, "scenario_metadata_paths", lambda: paths)
+    assert [p["id"] for p in desktop_store.scenario_page("", 0, 50, period_kind="reusable")["items"]] == ["parent"]
+    assert len(desktop_store.scenario_page("", 0, 50, period_kind="all")["items"]) == 2
+
+
+def test_http_validates_periods_and_revision_before_writing(plans):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from bff.routers.desktop import router
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        path = "/desktop/scenarios/a/periods"
+        assert client.get(path).json()["revision"] == 0
+        assert client.put(path, json=edit().model_dump(mode="json")).status_code == 200
+        assert client.put(path, json=edit().model_dump(mode="json")).status_code == 409
+        assert client.put(path, json={"revision": 1, "periods": [], "campaign": "C:/private"}).status_code == 422

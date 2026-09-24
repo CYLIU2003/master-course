@@ -4,7 +4,6 @@ import { api, post } from "../api";
 import { ErrorBox } from "./common";
 
 import WorkerNodes, { type ClusterWorkers } from "./WorkerNodes";
-import CampaignProgress from "./CampaignProgress";
 import BatchProgress from "./BatchProgress";
 export type { ClusterWorkers } from "./WorkerNodes";
 type ClusterJob = {
@@ -157,7 +156,6 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   return (
     <>
       <BatchProgress jobs={visibleJobs} />
-      <CampaignProgress />
       <section className="panel">
         <h2>分散計算</h2>
         {(window.location.protocol === "http:" ||
