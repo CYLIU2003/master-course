@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 import pytest
@@ -43,16 +44,33 @@ def test_campaign_case_design_is_one_week_and_preserves_source_hash() -> None:
     assert case["prepared_inputs_directory"] == "output/prepared_inputs"
 
 
+def test_campaign_without_manual_source_binding_stops_before_creating_output(tmp_path, monkeypatch):
+    from scripts.benchmarks import prepare_shibu21_24_seasonal_inputs as preparation
+    from scripts.benchmarks import run_shibu21_24_seasonal_diagnostic as diagnostic
+
+    monkeypatch.setattr(campaign, "ROOT", tmp_path)
+    monkeypatch.setattr(diagnostic, "git_state", lambda: {"sha": "frozen", "status_porcelain": ""})
+    monkeypatch.setattr(preparation, "build_source_candidate",
+                        lambda **_kwargs: pytest.fail("Campaign must not rebuild ODPT source"))
+    output = tmp_path / "campaign"
+    with pytest.raises(ValueError, match="manually frozen source candidate"):
+        campaign.run_campaign({"evaluation_weeks": ["2025-05-12"],
+                               "route_codes": ["渋21", "渋22", "渋23"]}, output)
+    assert not output.exists()
+
+
 def test_monthly_campaign_forwards_frozen_design_to_all_twelve_preparations(tmp_path, monkeypatch):
     from bff.services import date_series_inputs
     from scripts.benchmarks import prepare_shibu21_24_seasonal_inputs as preparation
     from scripts.benchmarks import run_shibu21_24_seasonal_diagnostic as diagnostic
     root = Path(__file__).resolve().parents[1]
     design = json.loads((root / "config/shibu21_23_monthly_2025_20260914.json").read_text(encoding="utf-8"))
+    design.update(source_candidate_directory="manual_source",
+                  source_candidate_manifest_sha256="a" * 64)
     before = deepcopy(design)
     monkeypatch.setattr(campaign, "ROOT", tmp_path)
     monkeypatch.setattr(diagnostic, "git_state", lambda: {"sha": "frozen", "status_porcelain": ""})
-    monkeypatch.setattr(preparation, "build_source_candidate", lambda **_: {})
+    monkeypatch.setattr(preparation, "load_source_candidate", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(date_series_inputs, "_verified_holiday_manifest", lambda *_: {
         "sha256": design["calendar_source_sha256"], "holiday_dates": design["selection_holiday_dates"]})
     prepared_weeks = []
@@ -90,7 +108,7 @@ def test_failed_case_record_is_explicitly_not_executed() -> None:
 
 
 @pytest.mark.parametrize("day_ahead_only", [False, True])
-def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, monkeypatch, day_ahead_only):
+def test_two_campaigns_reuse_the_same_manually_frozen_source(tmp_path, monkeypatch, day_ahead_only):
     from scripts.benchmarks import prepare_shibu21_24_seasonal_inputs as preparation
     from scripts.benchmarks import run_shibu21_24_seasonal_diagnostic as diagnostic
     from test_shibu21_24_source_scopes import _write_three_route_source
@@ -104,10 +122,8 @@ def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, m
     legacy = tmp_path / "legacy_source"
     monkeypatch.setattr(preparation, "THREE_ROUTE_SOURCE_CANDIDATE_DIR", legacy)
     preparation.build_source_candidate(route_codes=preparation.THREE_ROUTE_CODES)
-    # Poison the old audit location so this test cannot pass by accidentally
-    # reading a previous campaign's otherwise identical input.
-    (legacy / "timetable_rows.json").write_text("[]")
     snapshot = {p.name: p.read_bytes() for p in legacy.iterdir()}
+    manifest_sha = hashlib.sha256((legacy / "manifest.json").read_bytes()).hexdigest()
     monkeypatch.setattr(diagnostic, "git_state", lambda: {"sha": "frozen", "status_porcelain": ""})
     sources = []
 
@@ -130,6 +146,8 @@ def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, m
 
     monkeypatch.setattr(diagnostic, "solve_week", solve)
     design = {"evaluation_weeks": ["2025-05-12"], "route_codes": list(preparation.THREE_ROUTE_CODES),
+              "source_candidate_directory": "legacy_source",
+              "source_candidate_manifest_sha256": manifest_sha,
               "route_source": "legacy_source/selected_routes.json",
               "route_source_fallback": "missing_catalog.json",
               "route_timetable_audit_source": "legacy_source/timetable_rows.json",
@@ -144,11 +162,11 @@ def test_two_campaigns_build_real_sources_without_collision_or_reuse(tmp_path, m
         assert all(row["trip_count"] == 1 for row in audit["timetable_evidence"].values())
         for filename in ("design.json", "cases/2025-05-12/design.json", "cases/2025-05-12/diagnostic/design.json"):
             effective = json.loads((tmp_path / profile / filename).read_text(encoding="utf-8"))
-            assert effective["route_timetable_audit_source"] == f"{profile}/source_candidate/timetable_rows.json"
+            assert effective["route_timetable_audit_source"] == "legacy_source/timetable_rows.json"
     assert solver_calls == ["2025-05-12", "2025-05-12"]
     assert design == original_design
     assert len(sources) == 2
-    assert sources[0]["source_directory"] != sources[1]["source_directory"]
+    assert sources[0]["source_directory"] == sources[1]["source_directory"] == "legacy_source"
     assert sources[0]["artifacts"] == sources[1]["artifacts"]
     for source in sources:
         copied = tmp_path / source["source_directory"] / "timetable_rows.json"
@@ -187,7 +205,7 @@ def test_campaign_stops_after_failure_without_preparing_later_weeks(tmp_path, mo
     monkeypatch.setattr(campaign, "ROOT", tmp_path)
     state = {"sha": "frozen", "status_porcelain": ""}
     monkeypatch.setattr(diagnostic, "git_state", lambda: dict(state))
-    monkeypatch.setattr(preparation, "build_source_candidate", lambda **_: {})
+    monkeypatch.setattr(preparation, "load_source_candidate", lambda *_args, **_kwargs: {})
     events = []
 
     def prepare(week, _output, _source, *, existing, validation_mode):
@@ -204,7 +222,8 @@ def test_campaign_stops_after_failure_without_preparing_later_weeks(tmp_path, mo
     monkeypatch.setattr(preparation, "prepare_week", prepare)
     monkeypatch.setattr(diagnostic, "run_diagnostic", solve)
     result = campaign.run_campaign(
-        {"evaluation_weeks": ["2025-02-03", "2025-05-12"], "route_codes": ["渋21", "渋22", "渋23"]},
+        {"evaluation_weeks": ["2025-02-03", "2025-05-12"], "route_codes": ["渋21", "渋22", "渋23"],
+         "source_candidate_directory": "manual_source", "source_candidate_manifest_sha256": "a" * 64},
         tmp_path / "campaign",
     )
     assert events == [("prepare", "2025-02-03"), ("solve", "2025-02-03")]
@@ -246,14 +265,15 @@ def test_source_drift_blocks_before_fresh_prepare(tmp_path, monkeypatch):
         return {"sha": "frozen", "status_porcelain": "" if len(reads) <= 2 else " M source.py"}
 
     monkeypatch.setattr(diagnostic, "git_state", state)
-    monkeypatch.setattr(preparation, "build_source_candidate", lambda **_: {})
+    monkeypatch.setattr(preparation, "load_source_candidate", lambda *_args, **_kwargs: {})
 
     def forbidden(*_args, **_kwargs):
         raise AssertionError("Prepare must not start after source drift")
 
     monkeypatch.setattr(preparation, "prepare_week", forbidden)
     result = campaign.run_campaign(
-        {"evaluation_weeks": ["2025-02-03"], "route_codes": ["渋21", "渋22", "渋23"]},
+        {"evaluation_weeks": ["2025-02-03"], "route_codes": ["渋21", "渋22", "渋23"],
+         "source_candidate_directory": "manual_source", "source_candidate_manifest_sha256": "a" * 64},
         tmp_path / "campaign",
     )
     assert result["status"] == "BLOCKED_SOURCE_STATE_DRIFT"

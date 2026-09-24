@@ -253,7 +253,7 @@ def run_campaign(
     # environment.  These existing runners pull the full pandas/Gurobi stack;
     # loading them is required only when an actual campaign is authorized.
     from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import (
-        build_source_candidate,
+        load_source_candidate,
         prepare_week,
     )
     from scripts.benchmarks.run_shibu21_24_seasonal_diagnostic import (
@@ -281,6 +281,14 @@ def run_campaign(
         raise RuntimeError("Cannot start campaign without a Git SHA")
     if source_state.get("status_porcelain"):
         raise RuntimeError("Campaign requires a clean Git worktree")
+    source_path = design.get("source_candidate_directory")
+    source_sha = design.get("source_candidate_manifest_sha256")
+    if not source_path or not source_sha:
+        raise ValueError("Campaign requires a manually frozen source candidate path and manifest SHA")
+    source_directory = ROOT / str(source_path)
+    source = load_source_candidate(
+        source_directory, route_codes=design["route_codes"], manifest_sha256=str(source_sha),
+    )
     if design.get("require_balanced_monthly_weeks"):
         from bff.services.date_series_inputs import _verified_holiday_manifest
         from scripts.benchmarks.monthly_week_contract import select_monthly_weeks
@@ -297,10 +305,10 @@ def run_campaign(
     inputs_root = output / "inputs"
     cases_root = output / "cases"
     input_manifests_directory = _root_relative(inputs_root)
-    bound_design = campaign_source_design(design, output / "source_candidate")
+    bound_design = campaign_source_design(design, source_directory)
     progress = {
         "schema_version": "exact_seasonal_campaign_progress_v1",
-        "status": "BUILDING_SOURCE_CANDIDATE", "base_git_sha": source_state["sha"],
+        "status": "SOURCE_SNAPSHOT_VERIFIED", "base_git_sha": source_state["sha"],
         "selected_weeks": list(weeks), "completed_weeks": [],
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
@@ -321,13 +329,8 @@ def run_campaign(
         },
     )
 
-    # A second fresh campaign in the same checkout must not collide with or
-    # overwrite the first campaign's immutable source capture.
-    source = build_source_candidate(
-        route_codes=design["route_codes"], output_directory=output / "source_candidate",
-    )
     if git_state() != source_state:
-        raise RuntimeError("Git SHA or dirty state changed while building source candidate")
+        raise RuntimeError("Git SHA or dirty state changed while verifying source candidate")
 
     summaries: list[dict] = []
     stopped = False
@@ -369,6 +372,9 @@ def run_campaign(
         try:
             if week_before != source_state:
                 raise RuntimeError("Git SHA or dirty state changed before Prepare")
+            load_source_candidate(
+                source_directory, route_codes=design["route_codes"], manifest_sha256=str(source_sha),
+            )
             started_prepare = time.perf_counter()
             progress.update(status="PREPARING_WEEK", active_week=week,
                             phase_started_at_utc=datetime.now(timezone.utc).isoformat())
@@ -399,6 +405,9 @@ def run_campaign(
             after_case = git_state()
             if after_case != source_state:
                 raise RuntimeError("Git SHA or dirty state changed during diagnostic case")
+            load_source_candidate(
+                source_directory, route_codes=design["route_codes"], manifest_sha256=str(source_sha),
+            )
 
             summary = {
                 "week": week,
@@ -458,6 +467,14 @@ def run_campaign(
         campaign_status = "DAY_AHEAD_ONLY_CAMPAIGN_COMPLETE"
     if final_state != source_state:
         campaign_status = "BLOCKED_SOURCE_STATE_DRIFT"
+    source_snapshot_error = None
+    try:
+        load_source_candidate(
+            source_directory, route_codes=design["route_codes"], manifest_sha256=str(source_sha),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        campaign_status = "BLOCKED_SOURCE_SNAPSHOT_DRIFT"
+        source_snapshot_error = f"{type(exc).__name__}: {exc}"
     campaign_summary = {
         "schema_version": "exact_seasonal_campaign_v1",
         "campaign_id": campaign_id,
@@ -465,6 +482,7 @@ def run_campaign(
         "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
         "formal_solve_executed": False,
         "source_design_sha256": source_design_sha256,
+        "source_snapshot_error": source_snapshot_error,
         "campaign_declared_weeks": list(declared_weeks),
         "selected_weeks": list(weeks),
         "bess_carryover_enabled": carry_bess,

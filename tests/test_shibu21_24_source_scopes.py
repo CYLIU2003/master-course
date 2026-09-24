@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -97,6 +98,28 @@ def test_three_route_scope_is_exact_and_does_not_read_route24(tmp_path, monkeypa
 def test_three_route_scope_rejects_any_route_outside_declared_set() -> None:
     with pytest.raises(ValueError, match="exact 渋21/渋22/渋23 scope"):
         inputs._validated_route_codes(("渋21", "渋22", "渋24"))
+
+
+def test_campaign_loads_only_declared_frozen_source_and_rejects_drift(tmp_path, monkeypatch):
+    raw = tmp_path / "raw"
+    _write_three_route_source(raw)
+    monkeypatch.setattr(inputs, "ROOT", tmp_path)
+    monkeypatch.setattr(inputs, "OLD_SOURCE_DIR", raw)
+    candidate = tmp_path / "candidate"
+    inputs.build_source_candidate(route_codes=inputs.THREE_ROUTE_CODES,
+                                  output_directory=candidate)
+    manifest_sha = hashlib.sha256((candidate / "manifest.json").read_bytes()).hexdigest()
+    monkeypatch.setattr(inputs, "OLD_SOURCE_DIR", tmp_path / "missing_raw_source")
+    loaded = inputs.load_source_candidate(
+        candidate, route_codes=inputs.THREE_ROUTE_CODES, manifest_sha256=manifest_sha)
+    assert loaded["source_directory"] == "candidate"
+    with pytest.raises(ValueError, match="manifest hash changed"):
+        inputs.load_source_candidate(candidate, route_codes=inputs.THREE_ROUTE_CODES,
+                                     manifest_sha256="0" * 64)
+    (candidate / "timetable_rows.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="artifact changed"):
+        inputs.load_source_candidate(candidate, route_codes=inputs.THREE_ROUTE_CODES,
+                                     manifest_sha256=manifest_sha)
 
 
 def test_custom_source_namespace_rejects_overwrite_and_escape(tmp_path, monkeypatch):

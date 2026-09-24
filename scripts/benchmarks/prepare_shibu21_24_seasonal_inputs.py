@@ -1,7 +1,9 @@
 """Prepare four-route dated inputs without changing the verified 3-route source.
 
 The Shibu24 API capture is joined to the existing fixed Shibu21-23 source in a
-new, diagnostic-only candidate. This command duplicates the untouched parent
+new, diagnostic-only candidate only with an explicit ``--build-source`` action.
+Prepare requires the path and SHA of that manually frozen candidate; it never
+rebuilds it. This command duplicates the untouched parent
 scenario for each week and materializes the seven-day timetable and
 forecast-only PV input. The default mode writes candidate canonical inputs in
 a separate namespace and never reports formal Prepare success. ``--validate``
@@ -321,6 +323,29 @@ def build_source_candidate(
             manifest["artifacts"][path.name] = {"sha256": sha256(path), "bytes": path.stat().st_size}
     write_json(source_directory / "manifest.json", manifest)
     return manifest
+
+
+def load_source_candidate(
+    source_directory: Path, *, route_codes: Sequence[str], manifest_sha256: str,
+) -> dict:
+    """Verify a manually built candidate without rebuilding or opening ODPT."""
+    directory = source_directory.resolve()
+    relative_directory = directory.relative_to(ROOT.resolve()).as_posix()
+    manifest_path = directory / "manifest.json"
+    if not manifest_sha256 or not manifest_path.is_file():
+        raise FileNotFoundError("A manually frozen source candidate and declared manifest SHA are required")
+    if sha256(manifest_path) != manifest_sha256.lower():
+        raise ValueError("Frozen source candidate manifest hash changed")
+    manifest = read_json(manifest_path)
+    if manifest.get("route_codes") != list(_validated_route_codes(route_codes)):
+        raise ValueError("Frozen source candidate route scope differs from the declared scope")
+    for name in ("selected_routes.json", "timetable_rows.json", "stop_sequences.json", "stops.json"):
+        artifact = (manifest.get("artifacts") or {}).get(name) or {}
+        path = directory / name
+        if (not path.is_file() or artifact.get("sha256") != sha256(path)
+                or artifact.get("bytes") != path.stat().st_size):
+            raise ValueError(f"Frozen source candidate artifact changed: {name}")
+    return {**manifest, "source_directory": relative_directory}
 
 
 def configure_doc(
@@ -683,6 +708,11 @@ def prepare_week(
 def main() -> None:
     parser = __import__("argparse").ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "output/shibu21_24_seasonal_inputs_20260911")
+    parser.add_argument("--build-source", action="store_true",
+                        help="Manually build a new immutable ODPT-derived source candidate, then exit")
+    parser.add_argument("--source-output", type=Path, default=SOURCE_CANDIDATE_DIR)
+    parser.add_argument("--source-manifest-sha256",
+                        help="Required manifest SHA of the manually built source for Prepare")
     parser.add_argument(
         "--validate",
         action="store_true",
@@ -693,11 +723,24 @@ def main() -> None:
     )
     args = parser.parse_args()
     args.output = args.output.resolve()
-    source = build_source_candidate()
+    args.source_output = args.source_output.resolve()
+    if args.build_source:
+        manifest = build_source_candidate(output_directory=args.source_output)
+        print(json.dumps({"status": manifest["status"],
+                          "source_directory": manifest["source_directory"],
+                          "manifest_sha256": sha256(args.source_output.resolve() / "manifest.json")},
+                         ensure_ascii=False))
+        return
+    if not args.source_manifest_sha256:
+        parser.error("Prepare requires --source-manifest-sha256 from the manual build")
+    source = load_source_candidate(
+        args.source_output, route_codes=DEFAULT_ROUTE_CODES,
+        manifest_sha256=args.source_manifest_sha256,
+    )
     args.output.mkdir(parents=True, exist_ok=True)
     summary = {"status": "INPUT_PREPARATION_IN_PROGRESS", "mode": "formal_prepare_validation" if args.validate else "diagnostic_candidate",
                "validation_mode": bool(args.validate), "cases": [], "failures": [], "formal_solve_executed": False,
-               "source_candidate_manifest_sha256": sha256(SOURCE_CANDIDATE_DIR / "manifest.json")}
+               "source_candidate_manifest_sha256": sha256(args.source_output / "manifest.json")}
     write_json(args.output / "summary.json", summary)
     for week in WEEKS:
         week_output = args.output / week
