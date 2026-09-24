@@ -14,12 +14,14 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from bff.services.cluster.contracts import git_state
 from bff.services.cluster.store import ControllerLock
+from bff.services.cluster.system_metrics import memory_metrics
 from bff.services.run_preparation import get_or_build_run_preparation
 from scripts.benchmarks.shibu24_optimization_store import DATABASE_DIR, load_database
 from tools.cluster.audit_batch import audit_batch
@@ -27,6 +29,7 @@ from tools.cluster.batch import canonical, digest, validate_batch
 
 DAY = "2025-05-12"
 WEEK_TASK = "month-2025-05"
+WEEK_MINIMUM_FREE_RAM_GB = 20.0
 
 
 def read(path: Path) -> dict:
@@ -148,6 +151,54 @@ def require_gate(report: dict, expected_tasks: int) -> None:
         raise ValueError(f"Independent physical-feasibility gate failed: {failed}")
 
 
+def batch_failure_detail(state_dir: Path) -> str:
+    """Return a bounded, non-secret terminal reason for a failed batch."""
+    state_path = state_dir / "batch-state.json"
+    if not state_path.is_file():
+        return "batch did not produce a state file"
+    rows = read(state_path).get("tasks") or {}
+    failures = []
+    for task_id, row in sorted(rows.items()):
+        if row.get("state") != "FAILED":
+            continue
+        reason = "worker failed"
+        archive = state_dir / str(row.get("artifacts") or "")
+        if archive.is_file():
+            try:
+                with zipfile.ZipFile(archive) as bundle:
+                    result = json.loads(bundle.read("state.json")).get("result") or {}
+                if not isinstance(result, dict):
+                    result = {}
+                failure = str(result.get("error") or "").strip().splitlines()
+                last_line = failure[-1] if failure else ""
+                if last_line.endswith("GurobiError: Out of memory"):
+                    reason = "GurobiError: Out of memory"
+                elif last_line.endswith("MemoryError"):
+                    reason = "MemoryError"
+                elif last_line.endswith("TimeoutError"):
+                    reason = "TimeoutError"
+            except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile):
+                reason = "worker failed; collected state unreadable"
+        failures.append(f"{task_id}: {reason}")
+    return "; ".join(failures) if failures else "batch unresolved; same attempt requires reconciliation"
+
+
+def require_week_capacity(settings: dict, minimum_ram_gb: float) -> None:
+    """Reject a known underprovisioned local-only week before job submission."""
+    workers = [row for row in read(Path(settings["config"])).get("workers", [])
+               if row.get("enabled", True)]
+    if not workers or any(row.get("transport") != "local" for row in workers):
+        return  # The controller performs per-worker admission for a cluster.
+    free_ram = memory_metrics().get("ram_free_gb")
+    reserve = max(float(row.get("reserved_system_ram_gb") or 0) for row in workers)
+    if free_ram is None or free_ram - reserve < minimum_ram_gb:
+        raise ValueError(
+            f"Insufficient local free RAM for the seven-day task: "
+            f"requires {minimum_ram_gb:g} GB after system reserve; "
+            f"observed {free_ram} GB before reserve. No job was submitted."
+        )
+
+
 def run_batch(spec: dict, directory: Path) -> dict:
     directory.mkdir(parents=True, exist_ok=True)
     manifest = directory / "batch.json"
@@ -161,7 +212,8 @@ def run_batch(spec: dict, directory: Path) -> dict:
         completed = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
                                    check=False)
     if completed.returncode:
-        raise ValueError(f"Batch failed or connection unresolved; see {directory / 'batch.log'}")
+        raise ValueError(f"Batch did not pass: {batch_failure_detail(state_dir)}; "
+                         f"see {directory / 'batch.log'}")
     report = audit_batch(spec, read(state_dir / "batch-state.json"), state_dir)
     write(directory / "artifact-audit.json", report)
     require_gate(report, len(spec["tasks"]))
@@ -206,11 +258,14 @@ def run(settings_path: Path, directory: Path, minimum_ram_gb: float) -> dict:
     state_path = directory / "stage-state.json"
     state = read(state_path) if state_path.exists() else {"schema_version": 1, "stages": {},
                                                           "research_approval": "NOT_GRANTED"}
+    week_minimum_ram_gb = max(minimum_ram_gb, WEEK_MINIMUM_FREE_RAM_GB)
     for stage in ("day", "week", "months"):
         if state["stages"].get(stage) == "PASSED":
             verify_passed_stage(directory, stage)
+    active_stage = None
     try:
         if state["stages"].get("day") != "PASSED":
+            active_stage = "day"
             state["stages"]["day"] = "PREPARING"
             write(state_path, state)
             day = prepare_day(directory)
@@ -224,6 +279,7 @@ def run(settings_path: Path, directory: Path, minimum_ram_gb: float) -> dict:
             state["stages"]["day"] = "PASSED"
             write(state_path, state)
         if state["stages"].get("week") != "PASSED":
+            active_stage = "week"
             state["stages"]["week"] = "PREPARING"
             write(state_path, state)
             prepared = monthly.prepare(directory / "monthly-inputs", limit=5)
@@ -238,15 +294,17 @@ def run(settings_path: Path, directory: Path, minimum_ram_gb: float) -> dict:
                        "time_limit_seconds": 120, "stage1_time_limit_seconds": 1800,
                        "stage2_time_limit_seconds": 120, "mip_gap": .01, "timestep_min": 15}
             task = {"task_id": WEEK_TASK, "submission": {
-                "scenario_id": may["scenario_id"], "minimum_ram_gb": minimum_ram_gb,
+                "scenario_id": may["scenario_id"], "minimum_ram_gb": week_minimum_ram_gb,
                 "request": request}}
             write(directory / "week-task.json", task)
+            require_week_capacity(settings, week_minimum_ram_gb)
             state["stages"]["week"] = "RUNNING"
             write(state_path, state)
             run_batch(one_task_spec(settings, task, "shibu24-stage-week-v1"), directory / "week")
             state["stages"]["week"] = "PASSED"
             write(state_path, state)
         if state["stages"].get("months") != "PASSED":
+            active_stage = "months"
             state["stages"]["months"] = "PREPARING"
             write(state_path, state)
             month_dir = directory / "monthly-inputs"
@@ -255,7 +313,7 @@ def run(settings_path: Path, directory: Path, minimum_ram_gb: float) -> dict:
             if not summary["all_prepared"]:
                 raise ValueError("All twelve monthly inputs must pass strict Prepare")
             monthly.create_batch(month_dir, settings_path, "shibu24-full-twelve-v1",
-                                 minimum_ram_gb=minimum_ram_gb)
+                                 minimum_ram_gb=week_minimum_ram_gb)
             full = read(month_dir / "batch.json")
             may_task = next(row for row in full["tasks"] if row["task_id"] == WEEK_TASK)
             if may_task != read(directory / "week-task.json"):
@@ -279,6 +337,16 @@ def run(settings_path: Path, directory: Path, minimum_ram_gb: float) -> dict:
             write(state_path, state)
     except Exception as exc:
         state["failure"] = {"type": type(exc).__name__, "message": str(exc)}
+        if active_stage and state["stages"].get(active_stage) != "PASSED":
+            batch_dir = directory / ("remaining-eleven" if active_stage == "months" else active_stage)
+            batch_state = batch_dir / "state" / "batch-state.json"
+            try:
+                summary = (read(batch_state).get("summary") or {}) if batch_state.is_file() else {}
+            except (OSError, ValueError):
+                summary = {}
+            state["stages"][active_stage] = (
+                "STATE_UNKNOWN" if summary.get("unresolved", 0) else "FAILED"
+            )
         write(state_path, state)
         raise
     state.pop("failure", None)

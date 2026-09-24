@@ -117,6 +117,28 @@ def test_inconclusive_native_screen_retains_unverified_candidate_for_main_milp(m
     assert selected["native_screen_status"] == "global_deadline_exhausted"
 
 
+def test_multi_day_seed_screen_does_not_build_a_full_mip_per_candidate(monkeypatch):
+    problem = _mixed_problem_with_high_and_lower_initial_soc_bevs()
+    problem = replace(problem, price_slots=tuple(
+        replace(problem.price_slots[0], slot_index=index) for index in range(192)
+    ), depot_energy_assets={})
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("multi-day MIP-start screening must not acquire Gurobi")
+    monkeypatch.setattr("src.optimization.milp.solver_adapter.is_gurobi_available", forbidden)
+    monkeypatch.setattr(GurobiMILPAdapter, "_solve_thesis_stage2_charging_dispatch", forbidden)
+
+    result = GurobiMILPAdapter()._finite_fuel_seed_energy_audit(
+        problem, problem.vehicles[1], problem.baseline_plan.duties,
+        config=OptimizationConfig(time_limit_sec=120, stage2_time_limit_sec=120),
+    )
+
+    assert result["accepted"] is True
+    assert result["screen_verdict"] == "OPTIMISTIC_BOUND_PASSED"
+    assert result["native_screen_status"] == "skipped_multi_day_resource_guard"
+    assert result["selection"] == "unverified_seed_retained_for_main_milp"
+    assert "not_shared_charger_feasibility" in result["semantics"]
+
+
 @pytest.mark.parametrize('native_logging', [False, True])
 def test_native_model_validates_the_finite_fuel_seed_with_original_resources(tmp_path, monkeypatch, native_logging):
     pytest.importorskip("gurobipy")

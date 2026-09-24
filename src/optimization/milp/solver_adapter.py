@@ -21911,7 +21911,18 @@ class GurobiMILPAdapter:
             "semantics": "optimistic_vehicle_local_soc_bound;not_shared_charger_feasibility",
         }
         audit["screen_verdict"] = "OPTIMISTIC_BOUND_PASSED" if audit["accepted"] else "OPTIMISTIC_BOUND_FAILED"
-        if not audit["accepted"] or config is None or not is_gurobi_available():
+        if not audit["accepted"] or config is None:
+            return audit
+        # This is only a MIP-start heuristic.  Building a full Stage 2 MIP for
+        # every candidate on a multi-day problem can create dozens of large
+        # native models before Stage 1 is even constructed.  Keep the local
+        # bound, label it as unverified, and let the unchanged main formulation
+        # decide feasibility.  The 72-hour threshold includes final overnight
+        # slots, so a one-day diagnostic can still use the native screen.
+        if len(slots) * int(problem.scenario.timestep_min) >= 72 * 60:
+            return {**audit, "native_screen_status": "skipped_multi_day_resource_guard",
+                    "selection": "unverified_seed_retained_for_main_milp"}
+        if not is_gurobi_available():
             return audit
         # Use the reachable charging formulation for taper and session timing.
         # This candidate-only check cannot restrict the main model or return a
