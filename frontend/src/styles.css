@@ -988,6 +988,64 @@ textarea:focus {
   margin-top: 10px;
   font-size: 15px;
 }
+.campaign-heading,
+.campaign-stages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.campaign-heading { margin: 14px 0; }
+.campaign-heading small { color: #5a6a60; }
+.campaign-status {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #edf2e8;
+  color: #365d45;
+  font-size: 12px;
+  font-weight: 700;
+}
+.campaign-status-error,
+.campaign-status-failed,
+.campaign-status-blocked,
+.campaign-status-blocked_prepare,
+.campaign-status-audit_failed {
+  background: #fbe9e5;
+  color: #953f30;
+}
+.campaign-status-lost,
+.campaign-status-paused {
+  background: #fff0d9;
+  color: #805a1d;
+}
+.campaign-stages { align-items: stretch; margin: 20px 0; }
+.campaign-stage {
+  flex: 1 1 175px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #dae5d8;
+  border-radius: 8px;
+  background: #f8fbf7;
+}
+.campaign-stage strong { font-size: 24px; color: #244a36; }
+.campaign-stage progress { width: 100%; accent-color: #4a865d; }
+.campaign-stage small { color: #5a6a60; }
+.campaign-weeks { max-height: 570px; }
+.campaign-weeks th,
+.campaign-weeks td { white-space: nowrap; }
+.campaign-weeks td:last-child { min-width: 330px; white-space: normal; }
+.campaign-details {
+  display: grid;
+  grid-template-columns: 95px minmax(180px, 1fr);
+  gap: 5px 8px;
+  margin: 10px 0;
+  white-space: normal;
+}
+.campaign-details dt { color: #546657; }
+.campaign-details dd { margin: 0; overflow-wrap: anywhere; }
 .detail-table {
   max-height: 420px;
   overflow: auto;

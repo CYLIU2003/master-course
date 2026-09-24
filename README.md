@@ -1,5 +1,25 @@
 # master-course
 
+## 渋24の月別進捗を画面で確認する
+
+「分散計算」画面は、渋24月別12週の入力準備・計算・成果物監査を別工程として表示します。
+完了した週数から割合を算出し、各週の状態、配布先、Prepared ID、ジョブ ID、
+成果物 hash、エラーを「詳細」で確認できます。実行中の1週について残り時間は
+推定しません。画面の更新が20秒以上止まった場合は古い値と明示します。
+
+固定版の計算コードを変更せずに表示するため、読み取り専用のpublisherを別プロセスで起動します。
+`<campaign>` は `binding.json` と各週の `state.json` がある出力ディレクトリ、
+`<frontend-dist>` は稼働中controller設定の `frontend` ディレクトリです。
+
+```powershell
+python tools/research/publish_campaign_progress.py --campaign <campaign> --output <frontend-dist>\campaign-progress.json --watch
+```
+
+publisherは5秒ごとに保存済み記録を読み、同一オリジンの静的JSONを原子的に更新します。
+Prepare、SSH配布、求解、メール送信は行いません。起動していない場合や読取りに
+失敗した場合、画面は「記録なし」または「更新停止」と表示します。
+割合100%は技術的な処理完了であり、研究採用や統合最適性を意味しません。
+
 渋24の月別計算では、ODPT取得原本を保管用として残し、最適化用には検証済みの
 SQLiteデータベースを使います。原本と加工済みJSONの照合は初回生成時だけ行います。
 新しい固定版の作業ディレクトリで、まず

@@ -10690,3 +10690,10 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 分散ジョブのLOST封止、ライセンス予約、役割別割当、端末情報・画面の修正を保持した。翌朝SOCと分散の関連回帰129件を通過。統合前の18台配置証拠は旧SHAに属するため、新固定版を改めて全端末へ配置・照合する。
 - `tools/cluster/verified_stage_config.py` は全端末の配置報告と追加の単体再試行報告を、Git SHA・source digest・runtime lock・dataset hashの原本と突き合わせる。未検証端末は監視のみで投入無効。変更が違う入力を上書きしない `stage_shibu24_monthly_inputs.py` と合わせ、途中失敗時に証拠を保持する。
 - 新版の12週Prepare・実便Rolling・原本監査は未実施。正式fleet承認、受電設備上限、距離根拠等も未解決で、研究採用はBLOCKED。新たな固定SHAの計算と独立検証が揃うまで月別費用や最適性は主張しない。
+## 2026-09-24 渋24月別12週の画面進捗
+
+- 理由: 既存の分散計算画面はPCと個別ジョブの状態を示すが、月別12週のPrepare、求解、成果物監査の全体進捗と週別の失敗原因が見えなかった。計算中の固定 `e75a6839` を変更せずに進捗を確認できるようにする。
+- `tools/research/publish_campaign_progress.py` を追加。campaignのbinding、週別state、batch-state、artifact-audit、campaign-stateを読み、完了件数だけから入力準備・計算・監査・全工程の割合を算出する。Windowsプロセスの生存確認は読取り専用CIM照会、公開ファイルの更新は一時ファイルからの原子的置換。SSH、求解、ジョブ再投入、AI呼出しは行わない。
+- 既存の「分散計算」画面に `CampaignProgress` を追加し、進捗率、状態、固定SHA、配布先、Prepared ID、ジョブID、成果物hash、エラー、翌朝範囲を表示。20秒以上古い記録や取得失敗は明示し、実行の停止と混同しない。監査前の計算完了と研究採用を分離する。
+- 回帰: publisherの完了件数計算、監査失敗、古い監査ファイルの未完了文言を新実行の失敗として扱わないこと、入力原本の不変・原子的公開を4件で検査。画面の成功/エラー詳細、異形式拒否と既存分散画面の計6件、TypeScript型検査・本番build通過。実キャンペーンの読み取り試行ではPrepare 7/12、計算0/12、監査0/12を確認（観測時点、継続変化する値）。
+- 限界: 進捗率は完了した週・工程の割合で、1週のソルバー内部探索率や残り時間ではない。publisherが止まると画面は古い値を示す。計算・監査・研究採用の成立をこのUI変更だけで保証しない。

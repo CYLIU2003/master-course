@@ -4,6 +4,7 @@ import { api, post } from "../api";
 import { ErrorBox } from "./common";
 
 import WorkerNodes, { type ClusterWorkers } from "./WorkerNodes";
+import CampaignProgress from "./CampaignProgress";
 export type { ClusterWorkers } from "./WorkerNodes";
 type ClusterJob = {
   id: string;
@@ -95,6 +96,7 @@ export default function ClusterPanel() {
   });
   return (
     <>
+      <CampaignProgress />
       <section className="panel">
         <h2>分散計算</h2>
         {(workers.isError ||
