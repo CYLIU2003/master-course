@@ -21,12 +21,9 @@ sys.path.insert(0, str(ROOT))
 from bff.services.cluster.contracts import git_state
 from bff.services.cluster.store import ControllerLock
 from bff.services.run_preparation import get_or_build_run_preparation
-from bff.store import output_paths, scenario_store
-from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import configure_doc, parent_hash
 from scripts.benchmarks.shibu24_optimization_store import DATABASE_DIR, load_database
 from tools.cluster.audit_batch import audit_batch
 from tools.cluster.batch import canonical, digest, validate_batch
-from tools.research import shibu24_monthly as monthly
 
 DAY = "2025-05-12"
 WEEK_TASK = "month-2025-05"
@@ -190,6 +187,12 @@ def run(settings_path: Path, directory: Path, minimum_ram_gb: float) -> dict:
     os.environ.update(MC_OUTPUTS_DIR=settings["outputs"],
                       SCENARIO_STORE_PATH=settings["scenarios"],
                       BUILT_ROOT=str(ROOT / "data/built"), DEFAULT_DATASET_ID="tokyu_full")
+    # scenario_store freezes its store path at import time. Load these modules
+    # only after binding this CLI process to the controller's isolated paths.
+    global output_paths, scenario_store, configure_doc, parent_hash, monthly
+    from bff.store import output_paths, scenario_store
+    from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import configure_doc, parent_hash
+    from tools.research import shibu24_monthly as monthly
     git = require_frozen(settings)
     preflight = monthly.check()
     binding = {"git_sha": git["sha"], "settings_sha256": monthly._sha(settings_path),

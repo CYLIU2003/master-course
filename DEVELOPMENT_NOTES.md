@@ -10756,3 +10756,4 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - ODPT原本の再取得やジョブごとの再正規化を避け、検証済み `data/optimization/shibu24_20260911/source.sqlite3` を読取専用の固定入力にする。2025年の12代表週、休日、8日目翌朝のダイヤとSolcast/訓練期間のみの予報の事前照合を通過。2026年固定ダイヤと2025年気象、地理代理距離、正式fleet・受電設備上限未承認のため、出力は診断の範囲に留める。
 - 段階実行CLI `tools/research/shibu24_staged_campaign.py` を追加。同じclean SHA・DB hash・設定hashに束縛し、5月12日1日を物理監査後にMay 7日、その監査後に残り11カ月を投入する。各ジョブは既存の永続batch/attempt経路を使用。Mayの7日ジョブを12カ月のMayとして数え、同一Prepared ID・requestと一致しなければ停止する。各段階で回収ZIPのhash、成果物完全性、物理可行性を独立監査し、失敗時は状態とlogを保持して後続を止める。旧版の固定出力は混ぜない。
 - 回帰: 連続回送イベントの物理量保存と未知型拒否、段階ゲート、月別入力、batch・会計の関連59件、Python構文検査、frontend本番buildを通過。実規模の1日・7日・12カ月結果は新固定版の実行成果物で別途判定する。単機の新SHAで開始する時点では遠隔18台の同一版配置は未確認であり、全機での実行成功は主張しない。
+- 初回の段階CLIはPrepare前に `scenario_store` が既定のroot出力先を固定してしまい、専用シナリオ保管先の親IDを見つけられず停止した。求解投入0件で専用コントローラーを停止し、設定環境を束縛した後に保存モジュールをimportする順序へ修正。既存旧シナリオや計算結果は変更していない。
