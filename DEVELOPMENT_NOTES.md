@@ -10866,3 +10866,7 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 開発ブランチはcodex/scenario-week-plans-20260924。C:/master-courseの別作業未コミット変更は保持し、専用worktreeでmainへfast-forwardする。稼働0964b783のコード・入力・attemptは変更しない。
 - native検証CLIの相対出力先を作業ディレクトリ変更前に絶対化し、呼出元の場所にかかわらず同じ証拠ディレクトリへ保存する。
 - 統合後フロント全52件、TypeScript型検査・本番ビルド通過。Python関連94件とnative2件は数理変更後に検証済み。独立レビューと新版の実規模7日間は未実施。
+
+- 管理画面8868をclean固定00dcc478へ配置。旧管理queue84件は全件終端であることを確認して管理プロセスだけ再起動。設定原本をoutput/scenario-period-integration-20260925/controller-before-periods.jsonへ保全。18台の登録とGurobi全2枠の外部予約を維持し、8890の計算・worker・予約には触れていない。配置後のHTTPと実画面で「仮・正式用」の12期間、準備100%・計算0%・検算0%、各状態を確認。
+- 00:29 JST前後の旧0964実行では1月が実行中、2月と5月はFAILED。2月もstage1_supplied_seed.jsonの排他保存衝突を原本から確認。修正済みコードを実行中workerへ上書きしておらず、新版実規模7日間は引き続き未確認。実行版00dcc478の管理機能配置と、0964の計算結果を混同しない。
+- 配置検証はoutput/scenario-period-integration-20260925/deployment-verification.json。READMEと操作ノートへ入口・版・確認範囲を追記。独立レビュー待ちを研究採用済みへ置き換えない。

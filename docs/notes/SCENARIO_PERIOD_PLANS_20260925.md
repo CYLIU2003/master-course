@@ -70,3 +70,13 @@ python tools/research/verify_weekly_soc.py --settings C:/master-course/output/we
 ```
 
 共有枠設定を勝手に増やさない。重複実行を避けるため別の空の出力先を使う。
+
+
+## 配置先と基準版
+
+管理画面 http://127.0.0.1:8868/ →「仮・正式用」→「期間別計画」。
+管理コードはclean固定00dcc478。計算中の8890 / 0964b783は継続し、実行中コードを差し替えていない。
+既存のログオン起動は同じsettingsパスを使い、参照release・frontendだけを新しい固定配置へ変更した。
+再ログオンによる自動再開は今回未試験。新しい計画の保存は投入操作ではない。
+開発基準はcodex/scenario-week-plans-20260924とmainを同じコミットへ同期する。
+C:/master-courseの別作業ブランチと未コミット変更は保全し、勝手にcheckoutしない。
