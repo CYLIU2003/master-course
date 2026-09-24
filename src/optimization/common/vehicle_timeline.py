@@ -164,6 +164,40 @@ def complete_home_slots(problem: Any, vehicle: Any, events: tuple[VehicleEvent, 
     return frozenset(slots)
 
 
+def fixed_path_soc_target_slots(problem: Any, events: tuple[VehicleEvent, ...]) -> dict[int, int]:
+    """End-of-slot SOC deadlines before the next morning's outbound movement.
+
+    A depot departure can precede the first service trip. Requiring the operating
+    maximum after consuming outbound energy makes a physically valid full bus
+    infeasible. Use the last complete charging slot before departure, never
+    extend the declared deadline. The final paid horizon remains unchanged.
+    """
+    deadlines = (problem.metadata or {}).get("post_return_target_slots")
+    if not isinstance(deadlines, (list, tuple)):
+        return {}
+    start = horizon_start_min(problem)
+    step = int(problem.scenario.timestep_min)
+    served = {(event.start_min-start)//1440 for event in events if event.event_type == "service_trip"}
+    result = {}
+    for day in served:
+        if not 0 <= day < len(deadlines):
+            raise ValueError("NEXT_MORNING_TARGET_SLOT_MISSING")
+        slot = int(deadlines[day])
+        next_services = [event for event in events if event.event_type == "service_trip"
+                         and (event.start_min-start)//1440 == day+1]
+        if next_services:
+            first = min(next_services, key=lambda event: event.start_min)
+            leave = first.start_min
+            for event in events:
+                if event.event_type in {"daily_startup", "startup_deadhead"} and event.end_min == first.start_min:
+                    leave = min(leave, event.start_min)
+            slot = min(slot, (leave-start)//step-1)
+        if slot < 0:
+            raise ValueError("NEXT_MORNING_NO_PREDEPARTURE_SLOT")
+        result[day] = slot
+    return result
+
+
 @dataclass(frozen=True)
 class FixedPathSlotLoads:
     energy_kwh: dict[tuple[str, int], float]

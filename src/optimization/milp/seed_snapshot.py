@@ -28,7 +28,14 @@ def write_stage1_seed_snapshot(problem, config, *, applied: bool, source: str, r
         "plan": serialized, "plan_sha256": hashlib.sha256(plan_bytes).hexdigest(),
         "semantics": "supplied_pre_solve_seed;not_first_solver_incumbent;not_physical_acceptance",
     }
-    path = Path(directory) / "stage1_supplied_seed.json"
+    iteration = int(problem.metadata.get("stage2_feedback_iteration", 0))
+    if iteration < 0:
+        raise ValueError("Invalid Stage 2 feedback iteration")
+    # Preserve the original supplied seed. A feasibility feedback solve has its
+    # own seed evidence; overwriting or skipping it would lose the actual input.
+    filename = "stage1_supplied_seed.json" if iteration == 0 else f"stage1_supplied_seed_feedback_{iteration:03d}.json"
+    path = Path(directory) / filename
+    payload["stage2_feedback_iteration"] = iteration
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("x", encoding="utf-8") as stream:
         json.dump(payload, stream, ensure_ascii=False, indent=2, allow_nan=False)

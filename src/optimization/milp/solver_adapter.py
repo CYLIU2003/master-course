@@ -17,7 +17,7 @@ from typing import Any, Callable, Collection, Dict, Iterable, Iterator, List, Li
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.dispatch.daily_return import checked_deadhead_minutes, connection_deadhead_minutes, requires_daily_return
-from src.optimization.common.vehicle_timeline import build_vehicle_timeline, connection_energy_events, fixed_path_slot_loads
+from src.optimization.common.vehicle_timeline import build_vehicle_timeline, connection_energy_events, fixed_path_slot_loads, fixed_path_soc_target_slots
 from src.dispatch.route_band import duty_route_band_ids, fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
@@ -22677,7 +22677,11 @@ class GurobiMILPAdapter:
                 )
             )
 
+        fixed_soc_deadlines = {}
         if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
+            if (problem.metadata or {}).get("bev_soc_deadline_mode") == "next_morning_operational_max":
+                fixed_soc_deadlines = {vid: fixed_path_soc_target_slots(problem, events)
+                                       for vid, events in build_vehicle_timeline(problem, stage1_plan).items()}
             timeline_loads = fixed_path_slot_loads(problem, stage1_plan, slot_indices)
             trip_load_by_vehicle_slot = timeline_loads.energy_kwh
             active_slot_by_vehicle = timeline_loads.service_active
@@ -22835,7 +22839,8 @@ class GurobiMILPAdapter:
                     for day_idx in range(int(problem.scenario.planning_days)):
                         if (vehicle_id, day_idx) not in final_trip_by_vehicle_day:
                             continue
-                        target_slot = post_return_target_slot_index(problem, day_idx)
+                        target_slot = fixed_soc_deadlines.get(vehicle_id, {}).get(
+                            day_idx, post_return_target_slot_index(problem, day_idx))
                         if target_slot not in slot_indices:
                             continue
                         target_soc_expr = _vehicle_soc_transition_kwh(

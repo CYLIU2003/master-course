@@ -714,7 +714,7 @@ class FeasibilityChecker:
         self, problem: CanonicalOptimizationProblem, plan: AssignmentPlan,
     ) -> List[str]:
         """Replay each vehicle once, across native duties and operating dates."""
-        from .vehicle_timeline import build_vehicle_timeline, complete_home_slots, fixed_path_slot_loads
+        from .vehicle_timeline import build_vehicle_timeline, complete_home_slots, fixed_path_slot_loads, fixed_path_soc_target_slots
         from .soc_helpers import is_electric_vehicle, vehicle_capacity_kwh
 
         errors: List[str] = []
@@ -757,12 +757,7 @@ class FeasibilityChecker:
                         departures.setdefault((event.start_min-start_min)//step, []).append(trips[event.trip_id])
                         served_days.add((event.start_min - start_min) // 1440)
                 target = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
-                target_slots = (problem.metadata or {}).get("post_return_target_slots")
-                daily_target_slots = {
-                    int(target_slots[day_idx]): day_idx
-                    for day_idx in served_days
-                    if isinstance(target_slots, (tuple, list)) and 0 <= day_idx < len(target_slots)
-                }
+                daily_target_slots = {slot: day for day, slot in fixed_path_soc_target_slots(problem, events).items()}
                 for slot in slots:
                     for trip in departures.get(slot, ()):
                         required = required_departure_soc_kwh(problem, vehicle, trip, cap_kwh=capacity,
