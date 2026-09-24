@@ -223,6 +223,21 @@ def test_portable_input_check_accepts_profiles_but_rejects_unstaged_files():
         validate_portable_paths({"weatherProxyForecastPath": "C:/weather.json"})
 
 
+def test_next_morning_timetable_source_path_is_provenance_only():
+    row = {"source_provenance": {"path": "C:/capture/original.json", "sha256": "a" * 64},
+           "source_departure": "06:00"}
+    contract = {"terminal_overnight_contract": {"next_day_timetable_rows": [row]}}
+    validate_portable_paths(contract)
+    with pytest.raises(ValueError, match="unstaged file"):
+        validate_portable_paths({"next_day_timetable_rows": [row]})
+    with pytest.raises(ValueError, match="unstaged file"):
+        validate_portable_paths({"terminal_overnight_contract": {"next_day_timetable_rows": [
+            {"source_provenance": {"path": "C:/capture/original.json", "sha256": "invalid"}}]}})
+    with pytest.raises(ValueError, match="unstaged file"):
+        validate_portable_paths({"terminal_overnight_contract": {"next_day_timetable_rows": [
+            {**row, "weather_path": "C:/unstaged/weather.json"}]}})
+
+
 def test_freezer_binds_snapshot_to_prepared_identity(scheduler, tmp_path, monkeypatch):
     from bff.store import output_paths, scenario_store
     from bff.services.run_preparation import _scenario_hash

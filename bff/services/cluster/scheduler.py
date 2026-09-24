@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -29,18 +30,26 @@ from .worker_monitor import WorkerMonitor
 log = logging.getLogger(__name__)
 
 
-def validate_portable_paths(value: object, staged_paths: set[str] | None = None):
-    """External file-backed weather inputs need explicit staging, never silent fallback."""
+def validate_portable_paths(value: object, staged_paths: set[str] | None = None,
+                            *, _context: tuple[str, ...] = ()):
+    """Reject executable file inputs unless staged; retain hashed timetable provenance."""
     if isinstance(value, dict):
         for key, item in value.items():
             if key == "pv_execution_input" and isinstance(item, dict) and item.get("path") in (staged_paths or set()):
                 continue
+            # The next-day timetable is already embedded in the frozen snapshot.
+            # Its ODPT source path is an audit label, never an input read on a worker.
+            if (key == "path"
+                    and _context[-3:] == ("terminal_overnight_contract", "next_day_timetable_rows", "source_provenance")
+                    and isinstance(value.get("sha256"), str)
+                    and re.fullmatch(r"[0-9a-f]{64}", value["sha256"])):
+                continue
             if isinstance(item, str) and item and ("path" in key.lower() or key.lower().endswith(("_file", "filename", "_csv"))):
                 raise ValueError(f"Distributed input contains unstaged file reference '{key}'; use embedded prepared data")
-            validate_portable_paths(item, staged_paths)
+            validate_portable_paths(item, staged_paths, _context=(*_context, key))
     elif isinstance(value, list):
         for item in value:
-            validate_portable_paths(item, staged_paths)
+            validate_portable_paths(item, staged_paths, _context=_context)
 
 
 def collect_artifacts(response: dict, manifest: dict, target: Path, archive_path: Path | None = None) -> dict:
