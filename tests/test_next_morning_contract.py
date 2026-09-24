@@ -3,6 +3,7 @@
 from datetime import date, timedelta
 import hashlib
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -82,6 +83,28 @@ def test_one_day_next_morning_uses_the_same_verified_deadline_contract():
     assert result["target_slots"] == [118]
     assert result["extra_slots"] == 23
     assert result["next_service_date"] == next_row["service_date"]
+
+
+def test_interactive_run_preserves_verified_paid_next_morning_soc_target():
+    from bff.routers.optimization import _apply_interactive_bev_terminal_soc_policy
+
+    config, rows = _case()
+    config.update(timestep_min=15, soc_max=0.8,
+                  bev_terminal_soc_policy="fixed_target",
+                  final_soc_target_percent=80.0,
+                  final_soc_target_tolerance_percent=0.0)
+    scenario = {"simulation_config": config, "timetable_rows": rows,
+                "scenario_overlay": {"charging_constraints": {
+                    "bev_terminal_soc_policy": "fixed_target",
+                    "final_soc_target_percent": 80.0}}}
+    original = deepcopy(scenario)
+
+    controls = _apply_interactive_bev_terminal_soc_policy(scenario)
+
+    assert scenario == original
+    assert controls["override_applied"] is False
+    assert controls["effective"]["bev_terminal_soc_policy"] == "fixed_target"
+    assert controls["effective"]["final_soc_target_percent"] == 80.0
 
 
 def test_cluster_summary_counts_partial_final_overnight_window():

@@ -656,6 +656,27 @@ def _apply_interactive_bev_terminal_soc_policy(
         },
     }
 
+    if simulation_config.get("bev_soc_deadline_mode") == "next_morning_operational_max":
+        # The verified paid overnight horizon has a different boundary from a
+        # representative-day comparison. Replacing its ceiling target with
+        # return_to_initial would contradict the frozen Prepared contract.
+        from src.optimization.common.next_morning import resolve_next_morning_contract
+
+        resolve_next_morning_contract(
+            simulation_config,
+            timestep_min=int(simulation_config["timestep_min"]),
+            timetable_rows=scenario.get("timetable_rows"),
+        )
+        return {
+            "policy_version": INTERACTIVE_TERMINAL_SOC_POLICY_VERSION,
+            "scope": "interactive_bff_run_optimization",
+            "enforced": False,
+            "requested": requested,
+            "effective": dict(requested["simulation_config"]),
+            "override_applied": False,
+            "reason": "Verified paid next-morning SOC deadline preserves the Prepared terminal policy.",
+        }
+
     # Set the policy in the source with builder precedence and clear legacy
     # fixed-target inputs.  ``None`` deliberately masks an inherited overlay
     # because ProblemBuilder's _first_present treats it as the explicit value.
