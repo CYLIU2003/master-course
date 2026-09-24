@@ -12,6 +12,7 @@ import ClusterPanel from "./ClusterPanel";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  sessionStorage.removeItem("ev-cluster-monitor-port");
 });
 
 it("keeps a completed task's SOC rejection and solver usage visible", async () => {
@@ -299,7 +300,7 @@ it("switches to another local controller's queue without enabling remote actions
     ),
   );
   vi.stubGlobal("fetch", fetch);
-  render(
+  const { rerender } = render(
     <QueryClientProvider client={client}>
       <ClusterPanel scenarioId="scenario-a" />
     </QueryClientProvider>,
@@ -316,5 +317,15 @@ it("switches to another local controller's queue without enabling remote actions
       String(url).startsWith("http://localhost:8890/api/cluster/jobs"),
     ),
   ).toBe(true);
+  expect(sessionStorage.getItem("ev-cluster-monitor-port")).toBe("8890");
+  rerender(
+    <QueryClientProvider client={client}>
+      <ClusterPanel key="next-scenario" scenarioId="scenario-b" />
+    </QueryClientProvider>,
+  );
+  expect(
+    (screen.getByLabelText("監視先ポート（このPC）") as HTMLInputElement).value,
+  ).toBe("8890");
+  expect(screen.getByText("Remote Scenario")).toBeTruthy();
   client.clear();
 });

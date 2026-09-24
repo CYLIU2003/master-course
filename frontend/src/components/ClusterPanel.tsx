@@ -44,13 +44,20 @@ type ClusterJob = {
   created_at: string;
 };
 
+const monitorPortKey = "ev-cluster-monitor-port";
+
+function isValidMonitorPort(value: string): boolean {
+  const port = Number(value);
+  return !value || (Number.isInteger(port) && port >= 1 && port <= 65535);
+}
+
 export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   const client = useQueryClient();
-  const [monitorPort, setMonitorPort] = useState(window.location.port);
-  const parsedPort = Number(monitorPort);
-  const validPort =
-    !monitorPort ||
-    (Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535);
+  const [monitorPort, setMonitorPort] = useState(() => {
+    const saved = sessionStorage.getItem(monitorPortKey);
+    return saved && isValidMonitorPort(saved) ? saved : window.location.port;
+  });
+  const validPort = isValidMonitorPort(monitorPort);
   const monitorOrigin =
     validPort && monitorPort && monitorPort !== window.location.port
       ? `${window.location.protocol}//${window.location.hostname}:${monitorPort}`
@@ -67,7 +74,7 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   }, []);
   const [selected, setSelected] = useState("");
   const [jobScope, setJobScope] = useState<"scenario" | "all">(
-    scenarioId ? "scenario" : "all",
+    scenarioId && !remoteMonitor ? "scenario" : "all",
   );
   const [probe, setProbe] = useState<unknown>(null);
   const workers = useQuery({
@@ -149,10 +156,14 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
               max={65535}
               value={monitorPort}
               onChange={(event) => {
-                setMonitorPort(event.target.value);
+                const value = event.target.value;
+                setMonitorPort(value);
                 setSelected("");
                 setProbe(null);
-                if (event.target.value !== window.location.port) setJobScope("all");
+                if (value !== window.location.port) setJobScope("all");
+                if (isValidMonitorPort(value) && value !== window.location.port)
+                  sessionStorage.setItem(monitorPortKey, value);
+                else sessionStorage.removeItem(monitorPortKey);
               }}
             />
           </label>
