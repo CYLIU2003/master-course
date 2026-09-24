@@ -7,6 +7,7 @@ request, SOC reset, pruning, fallback, or automatic model change is introduced.
 from __future__ import annotations
 
 import argparse
+import hashlib
 from contextlib import closing
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -198,7 +199,7 @@ def run(settings_path: Path, directory: Path, parent: str, weeks: list[str], wor
             # Both machines run identical controls; actual free RAM is checked
             # by the scheduler. The parent reserves OS and application headroom.
             worker = workers[index % len(workers)]
-            spec = {"schema_version": 1, "batch_id": f"weekly-{expected['sha'][:8]}-{week}",
+            spec = {"schema_version": 1, "batch_id": f"weekly-{expected['sha'][:8]}-{hashlib.sha256(parent.encode()).hexdigest()[:12]}-{week}",
                     "controller_url": f"http://127.0.0.1:{settings['port']}", "git_sha": expected["sha"],
                     "tasks": [{"task_id": week, "submission": {"scenario_id": prepared["scenario_id"],
                                "worker_id": worker, "minimum_ram_gb": 18., "request": prepared["request"]}}]}
@@ -252,9 +253,15 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--parent", default=PARENT)
     parser.add_argument("--weeks", nargs="+", default=list(WEEKS))
+    parser.add_argument("--period-plan", type=Path, help="Frozen scenario_periods export; determines parent and weeks")
     parser.add_argument("--workers", nargs="+", default=["desktop-6ae0mir", "local"],
                         help="Explicit verified worker IDs, assigned in order")
     args = parser.parse_args()
+    if args.period_plan:
+        plan = read(args.period_plan)
+        if plan.get("schema_version") != "scenario_week_plan_v1" or not plan.get("weeks"):
+            parser.error("Invalid exported period plan")
+        args.parent, args.weeks = plan["scenario_id"], plan["weeks"]
     if args.command == "freeze":
         if not args.source:
             parser.error("freeze requires an explicit --source")

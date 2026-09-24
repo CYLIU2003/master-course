@@ -10830,3 +10830,11 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
   親機の現在使用可能RAMはOS予約控除後16.65GB/要求18GBで待機。要件を緩めて投入しない。
 - 数理式・SOC・費用・時間予算・求解条件への変更なし。凍結版へhot patchしない。
   新版7日完走、全18台大規模求解、メール自動送信、独立レビューは未確認。
+
+## 2026-09-25: シナリオの複数期間と5月停止原因
+
+- 最新435bcb3aを基にroot21a4a277を統合。翌朝1～7日対応・オフラインDB・12月別週・AIなしoperatorを保持し、古い原本直読へ戻さない。
+- SQLite transaction/revisionで親シナリオの期間一覧を保存。実行済み日付の変更拒否、CLIだけのcampaign登録、120秒stale表示、HTTP/API/画面/週次plan出力を追加。
+- 「仮・正式用」へ既存12週を登録。登録時点の準備8/12、検算0/12。投入・再起動・凍結親の変更なし。
+- 5月原本IISでslot600回送中の上限SOC要求を確認。固定配車SOC判定を出庫前へ一致させ、feedback再探索のseed排他保存衝突もiteration別保存で修正。数理効果と比較境界は SCENARIO_PERIOD_PLANS_20260925.md。
+- Python関連21件、期間画面2件、TypeScript/本番build通過。実規模再求解・実機worker配置・独立レビューは未実施。

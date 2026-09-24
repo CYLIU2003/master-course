@@ -45,6 +45,7 @@ const pages = [
   ["energy", "PV・BESS設備", BatteryCharging],
   ["weather", "気象・PVデータ", CloudSun],
   ["data", "データを確認", Database],
+  ["periods", "期間別計画", CalendarDays],
   ["run", "実行", Activity],
   ["cluster", "分散計算", Layers3],
   ["results", "グラフ・費用明細", Gauge],

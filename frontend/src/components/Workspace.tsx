@@ -13,6 +13,7 @@ import {
 import { ErrorBox } from "./common";
 import Results from "./Results";
 import RunPanel from "./RunPanel";
+import PeriodPlans from "./PeriodPlans";
 import SettingsPanel from "./SettingsPanel";
 import EntityManager from "./EntityManager";
 import EnergyPanel from "./EnergyPanel";
@@ -51,6 +52,7 @@ export default function Workspace({
   useEffect(() => {
     onDirty(locked);
   }, [locked, onDirty]);
+  const periodsDirty = useCallback((value: boolean) => setDirty(previous => ({ ...previous, periods: value })), []);
   const settingsDirty = useCallback(
     (value: boolean) =>
       setDirty((previous) => ({ ...previous, settings: value })),
@@ -272,6 +274,7 @@ export default function Workspace({
               />
             </div>
           )}
+          {visited.has("periods") && <div hidden={page !== "periods"}><PeriodPlans id={id} onDirty={periodsDirty} /></div>}
           {visited.has("run") && (
             <div hidden={page !== "run"}>
               <RunPanel

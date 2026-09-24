@@ -12,6 +12,26 @@ from bff.store import desktop_store, scenario_store
 
 router = APIRouter(prefix="/desktop", tags=["desktop"])
 
+from bff.services.scenario_periods import PeriodEdit, get_periods, save_periods
+
+
+@router.get("/scenarios/{scenario_id}/periods")
+def scenario_periods(scenario_id: str):
+    try:
+        return get_periods(scenario_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+
+
+@router.put("/scenarios/{scenario_id}/periods")
+def edit_scenario_periods(scenario_id: str, body: PeriodEdit):
+    try:
+        return save_periods(scenario_id, body)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
 
 @router.get("/scenarios/{scenario_id}/simulation-summary", response_model=ResultSummary)
 def simulation_summary(scenario_id: str):
