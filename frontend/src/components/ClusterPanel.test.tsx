@@ -12,6 +12,7 @@ import ClusterPanel from "./ClusterPanel";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  sessionStorage.removeItem("ev-cluster-monitor-port");
 });
 
 it("keeps a completed task's SOC rejection and solver usage visible", async () => {
@@ -431,5 +432,46 @@ it("switches to another local controller's queue without enabling remote actions
     (screen.getByLabelText("監視先ポート（このPC）") as HTMLInputElement).value,
   ).toBe("8890");
   expect(screen.getByText("Remote Scenario")).toBeTruthy();
+  client.clear();
+});
+
+it("shows the full batch denominator only in the all-scenarios view", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const job = (id: string, scenarioId: string, state: string) => ({
+    id,
+    state,
+    worker_id: null,
+    error: null,
+    created_at: "2026-09-25",
+    manifest: {
+      kind: "optimization",
+      batch_id: "shared-batch",
+      task_id: id,
+      batch_task_count: 2,
+      summary: {
+        scenario_id: scenarioId,
+        scenario_name: scenarioId,
+        planning_days: 1,
+        horizon_hours: 24,
+        service_dates: ["2026-09-25"],
+        expected_rolling_windows: 24,
+        research_status: "SEPARATE_ACCEPTANCE_REQUIRED",
+      },
+    },
+  });
+  const jobs = [job("task-a", "scenario-a", "COMPLETED"), job("task-b", "scenario-b", "QUEUED")];
+  vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(
+    url.endsWith("/workers") ? { workers: [], global_gurobi_slots: 2 } : jobs,
+  )))));
+  render(
+    <QueryClientProvider client={client}>
+      <ClusterPanel scenarioId="scenario-a" />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("scenario-a")).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "分散バッチの進捗" })).toBeNull();
+  fireEvent.change(screen.getByLabelText("表示するジョブ"), { target: { value: "all" } });
+  expect(screen.getByRole("heading", { name: "分散バッチの進捗" })).toBeTruthy();
+  expect(screen.getByText(/shared-batch · 50% · 回収確認 1\/2/)).toBeTruthy();
   client.clear();
 });

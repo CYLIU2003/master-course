@@ -155,7 +155,7 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   );
   return (
     <>
-      <BatchProgress jobs={visibleJobs} />
+      {jobScope === "all" && <BatchProgress jobs={jobs.data ?? []} />}
       <section className="panel">
         <h2>分散計算</h2>
         {(window.location.protocol === "http:" ||
