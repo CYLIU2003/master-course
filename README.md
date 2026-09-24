@@ -20,6 +20,17 @@ Prepare、SSH配布、求解、メール送信は行いません。起動して�
 失敗した場合、画面は「記録なし」または「更新停止」と表示します。
 割合100%は技術的な処理完了であり、研究採用や統合最適性を意味しません。
 
+Windowsでログオン時にも自動再開する場合は、現在のcampaignと稼働中controllerの
+設定を指定してタスクを登録します。登録前に `-CheckOnly` でパスを検査できます。
+タスク名は `MasterCourseCampaignProgress` です。別campaignへ切り替える場合、
+実行中のタスクを明示的に止めた後、同じコマンドで再登録します。
+controllerの配置先を変更した場合も、新しい設定で再登録して公開先を揃えます。
+
+```powershell
+& tools/research/install_campaign_progress_task.ps1 -Campaign <campaign> -ControllerSettings <controller-settings.json> -CheckOnly
+& tools/research/install_campaign_progress_task.ps1 -Campaign <campaign> -ControllerSettings <controller-settings.json>
+```
+
 渋24の月別計算では、ODPT取得原本を保管用として残し、最適化用には検証済みの
 SQLiteデータベースを使います。原本と加工済みJSONの照合は初回生成時だけ行います。
 新しい固定版の作業ディレクトリで、まず

@@ -10697,3 +10697,7 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 既存の「分散計算」画面に `CampaignProgress` を追加し、進捗率、状態、固定SHA、配布先、Prepared ID、ジョブID、成果物hash、エラー、翌朝範囲を表示。20秒以上古い記録や取得失敗は明示し、実行の停止と混同しない。監査前の計算完了と研究採用を分離する。
 - 回帰: publisherの完了件数計算、監査失敗、古い監査ファイルの未完了文言を新実行の失敗として扱わないこと、入力原本の不変・原子的公開を4件で検査。画面の成功/エラー詳細、異形式拒否と既存分散画面の計6件、TypeScript型検査・本番build通過。実キャンペーンの読み取り試行ではPrepare 7/12、計算0/12、監査0/12を確認（観測時点、継続変化する値）。
 - 限界: 進捗率は完了した週・工程の割合で、1週のソルバー内部探索率や残り時間ではない。publisherが止まると画面は古い値を示す。計算・監査・研究採用の成立をこのUI変更だけで保証しない。
+- Windows常駐用 `install_campaign_progress_task.ps1` を追加。publisherのSHA付きコピーをローカル出力に置き、現ユーザーのログオン時起動タスクとして登録する。`-CheckOnly` で入力・設定・frontend実体を読取り検査し、登録済みタスクが異なるcampaignを実行中なら黙って上書きしない。publisherのイベントは状態変化時だけローカルログへ追記する。
+- 12:07–12:11 JSTのローカル配置: 稼働中の固定 `906a4253` controllerのPython/API/求解コードは変更せず、`frontend/dist`のhash付き資産を追加し、旧indexを別ディレクトリへ退避して新indexへ切替。`campaign-progress.json`を固定 `e75a6839` の12週Prepare出力から公開。実ブラウザで進捗カード・週別状態を表示確認し、9/12→10/12への自動更新とローカルHTTPの応答を確認。Prepare自体は別worktreeで継続中、計算/監査は0/12。
+- `MasterCourseCampaignProgress` を現ユーザーのログオン時タスクとして登録し、状態 `Running`、publisherの状態変化ログとHTTP応答を確認。既存 `MasterCourseClusterMonitor` のログオン時設定が旧 `e301abbd` を参照していたため、タスク定義の原本XMLを退避した上で、現在稼働中と同じ `906a4253` 設定へ参照のみ更新した。コントローラーは再起動していない。次回ログオン後の自動再開実機試験は未実施。
+- publisherタスクを停止→再開始する局所復旧試験で状態 `Running`、公開JSONの更新時刻前進、HTTPのPrepare 10/12・計算0/12・監査0/12を確認。ログオン自動発火やPC再起動は未試験。

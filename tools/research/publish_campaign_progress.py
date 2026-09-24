@@ -207,19 +207,30 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--interval-seconds", type=int, default=5)
+    parser.add_argument("--event-log", type=Path)
     args = parser.parse_args()
     if not 2 <= args.interval_seconds <= 60:
         parser.error("--interval-seconds must be within [2, 60]")
+    previous_event: str | None = None
     while True:
         try:
             progress = publish(args.campaign.resolve(), args.output.resolve())
-            print(json.dumps({"status": progress["status"],
-                              "prepared": progress["stages"]["prepare"]["completed"],
-                              "total": progress["stages"]["prepare"]["total"]}), flush=True)
+            event = json.dumps({"status": progress["status"],
+                                "prepared": progress["stages"]["prepare"]["completed"],
+                                "solved": progress["stages"]["solve"]["completed"],
+                                "audited": progress["stages"]["audit"]["completed"],
+                                "total": progress["stages"]["prepare"]["total"]})
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            print(f"Progress publication failed: {type(exc).__name__}: {_safe_message(exc)}", flush=True)
+            event = f"Progress publication failed: {type(exc).__name__}: {_safe_message(exc)}"
             if not args.watch:
                 raise
+        if event != previous_event or not args.watch:
+            print(event, flush=True)
+            if args.event_log:
+                args.event_log.parent.mkdir(parents=True, exist_ok=True)
+                with args.event_log.open("a", encoding="utf-8") as stream:
+                    stream.write(datetime.now(timezone.utc).isoformat() + " " + event + "\n")
+            previous_event = event
         if not args.watch:
             return
         time.sleep(args.interval_seconds)
