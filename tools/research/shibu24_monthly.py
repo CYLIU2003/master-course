@@ -84,35 +84,36 @@ def _clock_minutes(value: str) -> int:
 def _overnight_contract(doc: dict, templates: list[dict]) -> dict:
     config = doc["simulation_config"]
     dates = list(config["service_dates"])
+    day_count = len(dates)
     next_date = (date.fromisoformat(dates[-1]) + timedelta(days=1)).isoformat()
-    eight_dates = dates + [next_date]
-    holiday = _verified_holiday_manifest(ROOT, eight_dates, config.get("holiday_source_id"))
-    eight_rows, _ = materialize_dated_timetable(
-        templates, service_dates=eight_dates,
+    extended_dates = dates + [next_date]
+    holiday = _verified_holiday_manifest(ROOT, extended_dates, config.get("holiday_source_id"))
+    extended_rows, _ = materialize_dated_timetable(
+        templates, service_dates=extended_dates,
         holiday_dates=list(holiday["holiday_dates"]),
         source_provenance=config["date_series_contract"]["source_provenance"],
     )
-    if timetable_hash(eight_rows[:len(doc["timetable_rows"])]) != timetable_hash(doc["timetable_rows"]):
-        raise ValueError("Seven service days changed while deriving the following morning")
-    next_rows = [row for row in eight_rows if row["service_date"] == next_date]
+    if timetable_hash(extended_rows[:len(doc["timetable_rows"])]) != timetable_hash(doc["timetable_rows"]):
+        raise ValueError("Service days changed while deriving the following morning")
+    next_rows = [row for row in extended_rows if row["service_date"] == next_date]
     first_departures = [
-        min(_clock_minutes(row["source_departure"]) for row in eight_rows
+        min(_clock_minutes(row["source_departure"]) for row in extended_rows
             if row["service_date"] == day)
-        for day in eight_dates[1:]
+        for day in extended_dates[1:]
     ]
     asset = next(row for row in config["depot_energy_assets"] if row["depot_id"] == "tsurumaki")
     step = int(config["timestep_min"])
     performance_ratio = float(asset.get("performance_ratio") or .85)
     predicted, forecast_audit = _date_forecast_rows(
-        ROOT, eight_dates, step, performance_ratio
+        ROOT, extended_dates, step, performance_ratio
     )
-    if predicted[:7] != asset["pv_capacity_factor_by_date"]:
-        raise ValueError("Next-morning model differs from the frozen seven-day forecast")
+    if predicted[:day_count] != asset["pv_capacity_factor_by_date"]:
+        raise ValueError("Next-morning model differs from the frozen service-day forecast")
     actual, actual_sources = _date_pv_rows(
         ROOT / "data/external/solcast_raw/tsurumaki_2025_2026",
-        eight_dates, step, performance_ratio,
+        extended_dates, step, performance_ratio,
     )
-    if not actual_sources or len(actual) != 8:
+    if not actual_sources or len(actual) != day_count + 1:
         raise ValueError("The final next morning has no verified Solcast source")
     contract = {
         "schema_version": SCHEMA,
@@ -121,10 +122,10 @@ def _overnight_contract(doc: dict, templates: list[dict]) -> dict:
         "next_day_timetable_rows": next_rows,
         "next_day_timetable_rows_sha256": timetable_hash(next_rows),
         "first_departure_minute_by_next_day": first_departures,
-        "next_day_pv_capacity_factor": predicted[7],
-        "next_day_pv_sha256": content_hash(predicted[7]),
-        "next_day_actual_pv_capacity_factor": actual[7],
-        "next_day_actual_pv_sha256": content_hash(actual[7]),
+        "next_day_pv_capacity_factor": predicted[day_count],
+        "next_day_pv_sha256": content_hash(predicted[day_count]),
+        "next_day_actual_pv_capacity_factor": actual[day_count],
+        "next_day_actual_pv_sha256": content_hash(actual[day_count]),
         "price_calendar_policy": PRICE_POLICY,
         "next_day_actual_pv_source_sha256": [row["sha256"] for row in actual_sources],
         "weather_claim": "training_only_climatology_proxy_for_planning",
@@ -151,7 +152,8 @@ def _overnight_contract(doc: dict, templates: list[dict]) -> dict:
         terminal_overnight_contract_sha256=content_hash(contract),
     )
     resolve_next_morning_contract(config, timestep_min=step, timetable_rows=doc["timetable_rows"])
-    validate_balanced_week(doc["timetable_rows"], config["date_series_contract"], week=dates[0])
+    if day_count == 7:
+        validate_balanced_week(doc["timetable_rows"], config["date_series_contract"], week=dates[0])
     return {"next_service_date": next_date, "extra_slots": first_departures[-1] // step,
             "forecast_model_sha256": forecast_audit.get("model_sha256"),
             "next_day_pv_sha256": contract["next_day_pv_sha256"],

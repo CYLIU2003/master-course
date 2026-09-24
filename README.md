@@ -88,6 +88,13 @@ C:\master-course\.venv\Scripts\python.exe -m scripts.catalog.manual_tokyu_compan
 `audit_shibu24_source.py`、`shibu24_optimization_store.py build/verify` の順です。
 新しい渋24DBは `data/optimization/shibu24_20260924/` で、旧DBへ上書きしません。
 
+実便のお試し計算は `tools/cluster/real_shibu24_batch.py` で新しい診断シナリオを
+Prepared入力へ固定し、`tools/cluster/batch.py run` へ渡します。1日の場合も
+翌朝最初の出庫前までの充電・受電・費用を含め、BEVの目標は運用SOC上限です。
+既存のBESS・帰庫条件を保つため、計算profileはGurobiを使うPhase 3二段階診断です。
+Gurobi不要ALNSはこのBESS・日次帰庫条件を満たせず、投入前に拒否されます。
+ここで得た可行解は統合総費用の大域最適性や研究採用を意味しません。
+
 渋24の時刻表スナップショット更新は**手動操作のみ**です。ジョブ作成・月別
 `check` / `prepare`・求解はODPTへアクセスせず、原本取得・正規化・DB再生成を
 開始しません。既存の固定時刻表を対象日へ展開するPrepare処理は続けます。

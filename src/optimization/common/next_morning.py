@@ -1,6 +1,6 @@
-"""Verified energy-horizon extension for a seven-day bus service week.
+"""Verified energy-horizon extension for a dated bus service period.
 
-The eighth morning has no service trips in the optimization. Its timetable is
+The following morning has no service trips in the optimization. Its timetable is
 evidence for the charging deadline; PV and the declared tariff cover every
 additional energy slot. A slot ending after the first departure is excluded.
 """
@@ -55,12 +55,13 @@ def resolve_next_morning_contract(
     if not isinstance(contract, Mapping) or contract.get("schema_version") != SCHEMA:
         raise ValueError("NEXT_MORNING_CONTRACT_MISSING")
     dates = config.get("service_dates")
-    if not isinstance(dates, list) or len(dates) != 7:
-        raise ValueError("NEXT_MORNING_REQUIRES_SEVEN_SERVICE_DATES")
+    if not isinstance(dates, list) or not 1 <= len(dates) <= 7:
+        raise ValueError("NEXT_MORNING_REQUIRES_ONE_TO_SEVEN_SERVICE_DATES")
+    day_count = len(dates)
     try:
         first = date.fromisoformat(str(dates[0]))
-        expected_dates = [(first + timedelta(days=index)).isoformat() for index in range(7)]
-        next_date = (first + timedelta(days=7)).isoformat()
+        expected_dates = [(first + timedelta(days=index)).isoformat() for index in range(day_count)]
+        next_date = (first + timedelta(days=day_count)).isoformat()
     except (TypeError, ValueError) as exc:
         raise ValueError("NEXT_MORNING_INVALID_SERVICE_DATES") from exc
     if list(dates) != expected_dates or contract.get("service_dates") != expected_dates:
@@ -74,14 +75,14 @@ def resolve_next_morning_contract(
         raise ValueError("NEXT_MORNING_INVALID_TIMESTEP")
     next_rows = contract.get("next_day_timetable_rows")
     if not isinstance(next_rows, list) or not next_rows or any(
-        row.get("service_date") != next_date or row.get("day_index") != 7
+        row.get("service_date") != next_date or row.get("day_index") != day_count
         for row in next_rows if isinstance(row, Mapping)
     ) or any(not isinstance(row, Mapping) for row in next_rows):
         raise ValueError("NEXT_MORNING_NEXT_TIMETABLE_INVALID")
     if timetable_hash(next_rows) != contract.get("next_day_timetable_rows_sha256"):
         raise ValueError("NEXT_MORNING_NEXT_TIMETABLE_HASH_MISMATCH")
     first_minutes = contract.get("first_departure_minute_by_next_day")
-    if not isinstance(first_minutes, list) or len(first_minutes) != 7 or any(
+    if not isinstance(first_minutes, list) or len(first_minutes) != day_count or any(
         isinstance(value, bool) or not isinstance(value, int) or not step <= value < 1440
         for value in first_minutes
     ):
@@ -89,7 +90,7 @@ def resolve_next_morning_contract(
     if first_minutes[-1] != _first_departure(next_rows, next_date):
         raise ValueError("NEXT_MORNING_FINAL_DEADLINE_MISMATCH")
     if timetable_rows is not None:
-        for index in range(6):
+        for index in range(day_count - 1):
             if first_minutes[index] != _first_departure(timetable_rows, dates[index + 1]):
                 raise ValueError("NEXT_MORNING_DAILY_DEADLINE_MISMATCH")
     def verified_pv_factors(row_key: str, hash_key: str) -> list[float]:

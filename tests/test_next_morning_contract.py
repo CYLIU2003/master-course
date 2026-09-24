@@ -63,6 +63,27 @@ def test_next_morning_extends_energy_slots_only_until_departure():
     assert len(result["next_day_actual_pv_factors"]) == 23
 
 
+def test_one_day_next_morning_uses_the_same_verified_deadline_contract():
+    config, rows = _case()
+    next_row = rows[1]
+    contract = config["terminal_overnight_contract"]
+    config["service_dates"] = config["service_dates"][:1]
+    contract["service_dates"] = config["service_dates"]
+    contract["next_service_date"] = next_row["service_date"]
+    contract["next_day_timetable_rows"] = [next_row]
+    contract["next_day_timetable_rows_sha256"] = timetable_hash([next_row])
+    contract["first_departure_minute_by_next_day"] = [347]
+    for key in ("next_day_pv_capacity_factor", "next_day_actual_pv_capacity_factor"):
+        contract[key]["date"] = next_row["service_date"]
+    contract["next_day_pv_sha256"] = content_hash(contract["next_day_pv_capacity_factor"])
+    contract["next_day_actual_pv_sha256"] = content_hash(contract["next_day_actual_pv_capacity_factor"])
+
+    result = resolve_next_morning_contract(config, timestep_min=15, timetable_rows=rows[:1])
+    assert result["target_slots"] == [118]
+    assert result["extra_slots"] == 23
+    assert result["next_service_date"] == next_row["service_date"]
+
+
 def test_cluster_summary_counts_partial_final_overnight_window():
     from bff.services.cluster.weekly_inputs import horizon_summary
 
