@@ -34,6 +34,23 @@ from src.optimization.common.next_morning import PRICE_POLICY, SCHEMA, resolve_n
 SELECTION = ROOT / "output/monthly_fair_weeks_20260914/week_selection.json"
 FORECAST = ROOT / "output/monthly_fair_weeks_20260914/forecast_holdouts"
 PARENT_ID = "771d115b-75b0-49f7-a7f0-25f259a2cd21"
+FRAGMENT_TRANSITION_CUT_MODE = "explicit_root"
+
+
+def monthly_request(prepared_input_id: str) -> dict:
+    """Use one immutable solver request for the week gate and all twelve months."""
+    return {
+        "execution_profile": "existing_solver_v1", "mode": "mode_milp_only",
+        "prepared_input_id": prepared_input_id,
+        "rebuild_dispatch": False, "use_existing_duties": False,
+        "research_run": False, "random_seed": 42, "gurobi_threads": 4,
+        "run_profile": "day_ahead_and_hourly_rolling",
+        "run_hourly_rolling": True, "rolling_execution_minutes": 60,
+        "time_limit_seconds": 120, "stage1_time_limit_seconds": 1800,
+        "stage2_time_limit_seconds": 120, "mip_gap": 0.01,
+        "timestep_min": 15,
+        "stage1_fragment_transition_cut_mode": FRAGMENT_TRANSITION_CUT_MODE,
+    }
 
 
 def _read(path: Path) -> dict | list:
@@ -328,18 +345,7 @@ def create_batch(output: Path, settings_path: Path, batch_id: str,
         path = prepared_root / state["scenario_id"] / f"{state['prepared_input_id']}.json"
         if not path.is_file() or _sha(path) != state.get("prepared_input_sha256"):
             raise ValueError(f"Prepared input changed for {week}")
-        request = {
-            "execution_profile": "existing_solver_v1", "mode": "mode_milp_only",
-            "prepared_input_id": state["prepared_input_id"],
-            "rebuild_dispatch": False, "use_existing_duties": False,
-            "research_run": False, "random_seed": 42, "gurobi_threads": 4,
-            "run_profile": "day_ahead_and_hourly_rolling",
-            "run_hourly_rolling": True, "rolling_execution_minutes": 60,
-            "time_limit_seconds": 120,
-            "stage1_time_limit_seconds": 1800,
-            "stage2_time_limit_seconds": 120,
-            "mip_gap": 0.01, "timestep_min": 15,
-        }
+        request = monthly_request(state["prepared_input_id"])
         tasks.append({"task_id": f"month-{week[:7]}", "submission": {
             "scenario_id": state["scenario_id"],
             "minimum_ram_gb": minimum_ram_gb, "request": request,

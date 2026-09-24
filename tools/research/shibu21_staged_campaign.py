@@ -94,7 +94,7 @@ def prepare_day(directory: Path) -> dict:
     doc["simulation_config"].update(
         execution_profile="existing_solver_v1", solver_mode="mode_milp_only",
         time_limit_seconds=120, stage1_time_limit_seconds=600,
-        stage2_time_limit_seconds=120, gurobi_threads=2, mip_gap=.01,
+        stage2_time_limit_seconds=120, gurobi_threads=4, mip_gap=.01,
     )
     doc.setdefault("scenario_overlay", {}).setdefault("solver_config", {})["mode"] = "mode_milp_only"
     scenario_store._invalidate_dispatch_artifacts(doc)
@@ -128,10 +128,11 @@ def day_request(prepared_input_id: str) -> dict:
     return {"execution_profile": "existing_solver_v1", "mode": "mode_milp_only",
             "prepared_input_id": prepared_input_id, "rebuild_dispatch": False,
             "use_existing_duties": False, "research_run": False, "random_seed": 42,
-            "gurobi_threads": 2, "run_profile": "day_ahead_exploratory",
+            "gurobi_threads": 4, "run_profile": "day_ahead_exploratory",
             "run_hourly_rolling": False, "time_limit_seconds": 120,
             "stage1_time_limit_seconds": 600, "stage2_time_limit_seconds": 120,
-            "mip_gap": .01, "timestep_min": 15}
+            "mip_gap": .01, "timestep_min": 15,
+            "stage1_fragment_transition_cut_mode": "explicit_root"}
 
 
 def one_task_spec(settings: dict, task: dict, batch_id: str) -> dict:
@@ -286,13 +287,7 @@ def run(settings_path: Path, directory: Path, minimum_ram_gb: float) -> dict:
             may = next(row for row in prepared["cases"] if row["week"] == DAY)
             if may["status"] != "PREPARED":
                 raise ValueError("May representative week did not pass strict Prepare")
-            request = {"execution_profile": "existing_solver_v1", "mode": "mode_milp_only",
-                       "prepared_input_id": may["prepared_input_id"], "rebuild_dispatch": False,
-                       "use_existing_duties": False, "research_run": False, "random_seed": 42,
-                       "gurobi_threads": 4, "run_profile": "day_ahead_and_hourly_rolling",
-                       "run_hourly_rolling": True, "rolling_execution_minutes": 60,
-                       "time_limit_seconds": 120, "stage1_time_limit_seconds": 1800,
-                       "stage2_time_limit_seconds": 120, "mip_gap": .01, "timestep_min": 15}
+            request = monthly.monthly_request(may["prepared_input_id"])
             task = {"task_id": WEEK_TASK, "submission": {
                 "scenario_id": may["scenario_id"], "minimum_ram_gb": week_minimum_ram_gb,
                 "request": request}}
