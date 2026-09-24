@@ -33,8 +33,13 @@ from tools.research.weekly_collection import collect_week
 
 DATABASE = ROOT / "data/optimization/shibu21_23_frozen_20260924"
 PARENT = "771d115b-75b0-49f7-a7f0-25f259a2cd21"
-# The established four-season design's months, using its balanced monthly dates.
-WEEKS = ("2025-05-12", "2025-11-10", "2025-02-03", "2025-08-04")
+# One preselected continuous week in EVERY calendar month. Seasons are only a
+# reporting group; selecting four seasons must not silently remove eight months.
+WEEKS = (
+    "2025-01-06", "2025-02-03", "2025-03-03", "2025-04-07",
+    "2025-05-12", "2025-06-02", "2025-07-07", "2025-08-04",
+    "2025-09-01", "2025-10-06", "2025-11-10", "2025-12-01",
+)
 
 
 def freeze_database(source: Path, destination: Path = DATABASE) -> dict:
