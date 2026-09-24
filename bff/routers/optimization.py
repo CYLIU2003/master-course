@@ -11405,6 +11405,7 @@ def _configure_assignment_energy_diagnostics(
     phase_token: str,
     output_dir: str | Path,
     research_run: bool,
+    prepared_config: Mapping[str, Any] | None = None,
 ) -> None:
     """Attach candidate diagnostics without broadening Phase-3 feedback.
 
@@ -11424,6 +11425,20 @@ def _configure_assignment_energy_diagnostics(
         )
     if phase_token != "phase3_two_stage":
         return
+    # The weekly benchmark already uses these equivalent compact expressions.
+    # Carry only explicitly frozen booleans through the BFF/cluster path; never
+    # infer them from a UI label or silently drop them and build the dense model.
+    for control in (
+        "stage1_exact_depot_connection_factors",
+        "stage1_sparse_charge_window_support",
+        "stage1_native_log_enabled",
+        "stage2_native_log_enabled",
+    ):
+        if control in (prepared_config or {}):
+            value = prepared_config[control]
+            if not isinstance(value, bool):
+                raise ValueError(f"{control} must be a boolean in Prepared input")
+            metadata[control] = value
     metadata["stage2_feedback_max_iterations"] = (
         2 if research_run else 1
     )
@@ -11937,6 +11952,7 @@ def _run_optimization(
                 phase_token=phase_token,
                 output_dir=output_dir,
                 research_run=bool(research_run),
+                prepared_config=prepared_payload.get("simulation_config") or {},
             )
             run_input_provenance = persist_run_input_provenance(
                 run_dir=Path(output_dir),
