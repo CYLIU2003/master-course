@@ -26,6 +26,8 @@ def main() -> int:
     parser.add_argument("--settings", required=True, type=Path, help="Active controller's shared queue/settings")
     parser.add_argument("--output", required=True, type=Path, help="New evidence directory")
     args = parser.parse_args()
+    args.output = args.output.resolve()
+    args.settings = args.settings.resolve()
     before = git_state(ROOT)
     if before["dirty"]:
         parser.error("Freeze a clean commit before the native check")
