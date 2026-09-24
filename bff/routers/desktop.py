@@ -9,6 +9,7 @@ from bff.desktop_models import (
 )
 
 from bff.store import desktop_store, scenario_store
+from bff.services import local_db_catalog
 
 router = APIRouter(prefix="/desktop", tags=["desktop"])
 
@@ -31,6 +32,22 @@ def edit_scenario_periods(scenario_id: str, body: PeriodEdit):
         raise HTTPException(404, "Scenario not found") from exc
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/route-catalog/full")
+def full_route_catalog():
+    try:
+        return local_db_catalog.full_route_catalog()
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.get("/route-catalog/odpt")
+def odpt_route_catalog():
+    try:
+        return desktop_store.odpt_route_catalog()
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @router.get("/scenarios/{scenario_id}/simulation-summary", response_model=ResultSummary)
@@ -163,6 +180,16 @@ def overview(scenario_id: str):
         raise HTTPException(422, str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/scenarios/{scenario_id}/route-catalog")
+def route_catalog(scenario_id: str):
+    try:
+        return desktop_store.route_catalog(scenario_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Scenario not found") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/scenarios/{scenario_id}/tables/{name}", response_model=DesktopPage)

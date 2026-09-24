@@ -8,9 +8,11 @@ remote data at runtime.
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 from collections import Counter, defaultdict
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -29,7 +31,6 @@ DB_PATH = Path(os.environ.get("TOKYU_DB_PATH", str(_DEFAULT_DB_PATH)))
 OPERATOR_ID = "odpt.Operator:TokyuBus"
 DEFAULT_ALLOWED_VEHICLE_TYPES = ("BEV", "ICE")
 DEFAULT_DISTANCE_KM = 0.0
-DEFAULT_KM_PER_STOP_HOP = 0.6
 _DEPOT_KEYWORDS = ("営業所", "操車所", "操車場", "車庫")
 
 
@@ -129,35 +130,23 @@ def _query_dicts(conn: sqlite3.Connection, sql: str, params: Sequence[Any] | Non
     return _rows_to_dicts(conn.execute(sql, params or []))
 
 
-def _straight_line_distance_km(record: dict[str, Any]) -> float:
-    required = [
-        record.get("origin_lat"),
-        record.get("origin_lon"),
-        record.get("destination_lat"),
-        record.get("destination_lon"),
-    ]
-    if any(value is None for value in required):
-        return DEFAULT_DISTANCE_KM
-    return round(
-        haversine_km(
-            _safe_float(record.get("origin_lat")),
-            _safe_float(record.get("origin_lon")),
-            _safe_float(record.get("destination_lat")),
-            _safe_float(record.get("destination_lon")),
-        ),
-        4,
-    )
-
-
-def _estimate_pattern_distance_km(record: dict[str, Any]) -> float:
-    straight_km = _straight_line_distance_km(record)
-    if straight_km > 0.0:
-        # Apply a modest detour factor so route length is not underestimated.
-        return round(straight_km * 1.2, 4)
-    stop_count = _safe_int(record.get("stop_count"), 0)
-    if stop_count > 1:
-        return round((stop_count - 1) * DEFAULT_KM_PER_STOP_HOP, 4)
-    return DEFAULT_DISTANCE_KM
+def _pattern_distance_km(stops: Sequence[dict[str, Any]]) -> float | None:
+    """Sum adjacent stop chords, matching the prepared trip distance proxy."""
+    if len(stops) < 2:
+        return None
+    distance = 0.0
+    for origin, destination in zip(stops, stops[1:]):
+        try:
+            lat1, lon1 = float(origin["lat"]), float(origin["lon"])
+            lat2, lon2 = float(destination["lat"]), float(destination["lon"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not all(math.isfinite(value) for value in (lat1, lon1, lat2, lon2)):
+            return None
+        if not all(-90 <= value <= 90 for value in (lat1, lat2)) or not all(-180 <= value <= 180 for value in (lon1, lon2)):
+            return None
+        distance += haversine_km(lat1, lon1, lat2, lon2)
+    return round(distance, 6) if distance > 0.0 else None
 
 
 def _attach_depot_scope(
@@ -300,16 +289,17 @@ def _calendar_count_key(calendar_type: str) -> str:
     }.get(calendar_type, "tripCountWeekday")
 
 
-def _load_pattern_stop_names(
+def _load_pattern_stop_details(
     conn: sqlite3.Connection,
     pattern_ids: Sequence[str],
-) -> dict[str, list[str]]:
+) -> dict[str, list[dict[str, Any]]]:
     if not pattern_ids:
         return {}
     placeholders = ",".join("?" for _ in pattern_ids)
     rows = conn.execute(
         f"""
-        SELECT ps.pattern_id, ps.seq, COALESCE(s.title_ja, ps.stop_id) AS stop_name
+        SELECT ps.pattern_id, ps.seq, ps.stop_id,
+               COALESCE(s.title_ja, ps.stop_id) AS stop_name, s.lat, s.lon
         FROM pattern_stops ps
         LEFT JOIN stops s ON s.stop_id = ps.stop_id
         WHERE ps.pattern_id IN ({placeholders})
@@ -317,9 +307,12 @@ def _load_pattern_stop_names(
         """,
         list(pattern_ids),
     ).fetchall()
-    grouped: dict[str, list[str]] = defaultdict(list)
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        grouped[str(row[0])].append(str(row[2] or ""))
+        grouped[str(row[0])].append({
+            "seq": row[1], "stopId": row[2], "name": row[3],
+            "lat": row[4], "lon": row[5],
+        })
     return grouped
 
 
@@ -444,23 +437,26 @@ def _load_route_pattern_records(
     sql += " ORDER BY rp.route_family, rp.pattern_id"
     rows = _query_dicts(conn, sql, params)
     pattern_ids = [str(row.get("pattern_id") or "") for row in rows if row.get("pattern_id")]
-    stop_names = _load_pattern_stop_names(conn, pattern_ids)
+    pattern_stops = _load_pattern_stop_details(conn, pattern_ids)
     trip_counts = _load_pattern_trip_counts(conn, pattern_ids)
-    route_records = [
-        {
-            "id": str(row.get("pattern_id") or ""),
+    route_records = []
+    for row in rows:
+        pattern_id = str(row.get("pattern_id") or "")
+        stops = pattern_stops.get(pattern_id, [])
+        distance = _pattern_distance_km(stops)
+        route_records.append({
+            "id": pattern_id,
             "name": str(row.get("title_ja") or row.get("route_code") or ""),
             "routeCode": str(row.get("route_code") or row.get("route_family") or ""),
             "routeLabel": str(row.get("title_ja") or row.get("route_code") or ""),
             "startStop": str(row.get("origin_name") or ""),
             "endStop": str(row.get("destination_name") or ""),
-            "stopSequence": stop_names.get(str(row.get("pattern_id") or ""), []),
-            "tripCount": sum(trip_counts.get(str(row.get("pattern_id") or ""), {}).values()),
-            "distanceKm": _estimate_pattern_distance_km(row),
+            "stopSequence": [stop["name"] for stop in stops],
+            "tripCount": sum(trip_counts.get(pattern_id, {}).values()),
+            "distanceKm": distance,
+            "distanceSource": "adjacent_stop_haversine" if distance is not None else "unresolved_stop_coordinates",
             "source": "local_sqlite",
-        }
-        for row in rows
-    ]
+        })
     metadata = derive_route_family_metadata(route_records)
     max_stop_count_by_family: dict[str, int] = defaultdict(int)
     for row in rows:
@@ -492,6 +488,8 @@ def _load_route_pattern_records(
                 "routeCode": route_code,
                 "titleJa": str(row.get("title_ja") or route_code),
                 "direction": str(row.get("direction") or "unknown"),
+                "canonicalDirection": metadata.get(pattern_id).canonical_direction if pattern_id in metadata else "unknown",
+                "classificationConfidence": metadata.get(pattern_id).classification_confidence if pattern_id in metadata else 0.0,
                 "origin": str(row.get("origin_name") or ""),
                 "destination": str(row.get("destination_name") or ""),
                 "stopCount": _safe_int(row.get("stop_count"), 0),
@@ -693,6 +691,51 @@ def get_pattern_stops(pattern_id: str) -> list[dict[str, Any]]:
             """,
             (pattern_id,),
         )
+
+
+def full_route_catalog() -> dict[str, Any]:
+    """Read-only full GTFS snapshot for browsing beyond a scenario's scope."""
+    path = _REPO_ROOT / "data" / "tokyu_gtfs.sqlite"
+    if not path.is_file():
+        raise FileNotFoundError(f"Full Tokyu GTFS catalog not found: {path}")
+    # The shipped GTFS snapshot is immutable; avoid WAL sidecars in the workspace.
+    with closing(sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)) as conn:
+        conn.row_factory = sqlite3.Row
+        depots = _query_dicts(conn, "SELECT depot_id, title_ja FROM depots ORDER BY depot_id")
+        patterns = _load_route_pattern_records(conn)
+        ids = [str(row["patternId"]) for row in patterns]
+        stops = _load_pattern_stop_details(conn, ids)
+        depot_map = _load_pattern_depot_map(conn, ids)
+        counts = _load_pattern_trip_counts(conn, ids)
+        built = conn.execute("SELECT value FROM pipeline_meta WHERE key='built_at'").fetchone()
+    routes = []
+    for row in patterns:
+        pattern_id = str(row["patternId"])
+        pattern_stops = stops.get(pattern_id, [])
+        distance = _pattern_distance_km(pattern_stops)
+        routes.append({
+            "id": pattern_id,
+            "name": str(row.get("titleJa") or row.get("routeCode") or pattern_id),
+            "routeCode": str(row.get("routeCode") or row.get("routeFamilyId") or ""),
+            "routeVariantType": str(row.get("routeVariantType") or "unknown"),
+            "direction": str(row.get("canonicalDirection") or "unknown"),
+            "classificationConfidence": row.get("classificationConfidence"),
+            "startStop": pattern_stops[0]["name"] if pattern_stops else "",
+            "endStop": pattern_stops[-1]["name"] if pattern_stops else "",
+            "depotIds": depot_map.get(pattern_id, []),
+            "stopCount": len(pattern_stops),
+            "stops": [{"id": stop["stopId"], "name": stop["name"], "lat": stop["lat"], "lon": stop["lon"]} for stop in pattern_stops],
+            "distanceKm": distance,
+            "distanceSource": "adjacent_stop_haversine" if distance is not None else "unresolved_stop_coordinates",
+            "tripCount": sum(counts.get(pattern_id, {}).values()),
+            "tripCountsByDayType": counts.get(pattern_id, {}),
+            "source": "GTFS snapshot",
+        })
+    return {
+        "depots": [{"id": str(row["depot_id"]), "name": str(row.get("title_ja") or row["depot_id"])} for row in depots],
+        "routes": routes,
+        "builtAt": built[0] if built else None,
+    }
 
 
 def list_stops(operator_id: str | None = None) -> list[dict[str, Any]]:

@@ -10871,3 +10871,9 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 管理画面8868をclean固定00dcc478へ配置。旧管理queue84件は全件終端であることを確認して管理プロセスだけ再起動。設定原本をoutput/scenario-period-integration-20260925/controller-before-periods.jsonへ保全。18台の登録とGurobi全2枠の外部予約を維持し、8890の計算・worker・予約には触れていない。配置後のHTTPと実画面で「仮・正式用」の12期間、準備100%・計算0%・検算0%、各状態を確認。
 - 00:29 JST前後の旧0964実行では1月が実行中、2月と5月はFAILED。2月もstage1_supplied_seed.jsonの排他保存衝突を原本から確認。修正済みコードを実行中workerへ上書きしておらず、新版実規模7日間は引き続き未確認。実行版00dcc478の管理機能配置と、0964の計算結果を混同しない。
 - 配置検証はoutput/scenario-period-integration-20260925/deployment-verification.json。READMEと操作ノートへ入口・版・確認範囲を追記。独立レビュー待ちを研究採用済みへ置き換えない。
+
+## 2026-09-25 他チャット統合レビュー
+
+- 9a2c8f91で未コミットの路線ブラウザー・資料日付付き参考所管を保存し、最新mainの期間管理・監視・SOC修正へ統合。元ファイルとpatchはoutput/chat-integration-20260925に保全。既存READMEの12か月計画を維持し、古い4季節のみの進捗へ戻さない。
+- 出典と限界は[路線カタログ点検](docs/notes/ROUTE_CATALOG_AUDIT_20260925.md)に集約。新表示はシナリオやPreparedの距離・所管を書き換えない。
+- 未追跡の旧verified_stage_config.pyは原本を保全し、mainのmanifest・probe・dataset検証を持つ新版を維持。Solcast取得原本はローカルに残し、このコード統合で公開しない。

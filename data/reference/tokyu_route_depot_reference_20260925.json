@@ -1,0 +1,102 @@
+{
+  "capturedAt": "2026-09-25",
+  "purpose": "display_only_official_depot_reference",
+  "sourceSnapshotId": "20260311T044200Z",
+  "groups": [
+    {
+      "depotId": "tsurumaki",
+      "routeCodes": ["都立01"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/03_tsurumaki.pdf",
+      "sourceDate": "2025-12-01"
+    },
+    {
+      "depotId": "seta",
+      "routeCodes": ["園01", "多摩01", "自02", "玉21", "砧06"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/04_seta.pdf",
+      "sourceDate": "2023-04-01"
+    },
+    {
+      "depotId": "meguro",
+      "routeCodes": ["さんま"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/05_meguro.pdf",
+      "sourceDate": "2025-12-01"
+    },
+    {
+      "depotId": "ebara",
+      "routeCodes": ["しなバス"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/06_ebara.pdf",
+      "sourceDate": "2026-07-01"
+    },
+    {
+      "depotId": "ikegami",
+      "routeCodes": ["たまちゃん"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/07_ikegami.pdf",
+      "sourceDate": "2025-12-01"
+    },
+    {
+      "depotId": "takatsu",
+      "routeCodes": ["渋12", "溝03", "玉06", "鷺11", "鷺12"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/08_takatsu.pdf",
+      "sourceDate": "2025-12-01"
+    },
+    {
+      "depotId": "nippa",
+      "routeCodes": ["日51", "城01"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/09_nippa.pdf",
+      "sourceDate": "2026-04-01"
+    },
+    {
+      "depotId": "aobadai",
+      "routeCodes": ["十91", "南61", "緑山61", "緑山62", "青81", "青82", "青83"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/10_aobadai.pdf",
+      "sourceDate": "2024-04-01"
+    },
+    {
+      "depotId": "nijigaoka",
+      "routeCodes": ["あ71", "た26", "鷺31"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/11_nijigaoka.pdf",
+      "sourceDate": "2023-09-01"
+    },
+    {
+      "depotId": "higashiyamata",
+      "routeCodes": ["杉06", "杉09"],
+      "sourceUrl": "https://www.tokyubus.co.jp/route/routemap/pdf/12_higashiyamata.pdf",
+      "sourceDate": "2024-04-01"
+    },
+    {
+      "depotId": "nijigaoka",
+      "routeCodes": ["あ25"],
+      "sourceUrl": "https://www.tokyubus.co.jp/news/003822.html",
+      "sourceDate": "2026-08-14"
+    },
+    {
+      "depotId": "nijigaoka",
+      "routeCodes": ["柿33"],
+      "sourceUrl": "https://www.tokyubus.co.jp/news/003408.html",
+      "sourceDate": "2025-02-01"
+    },
+    {
+      "depotId": "nippa",
+      "routeCodes": ["日52"],
+      "sourceUrl": "https://www.tokyubus.co.jp/news/003822.html",
+      "sourceDate": "2026-08-14"
+    }
+  ],
+  "unresolvedEvidence": [
+    {
+      "routeCode": "梶01",
+      "reason": "2025年12月の高津営業所路線図と2026年8月の虹が丘営業所のお知らせの両方に掲載。便ごとの所管は未確認。",
+      "sourceUrls": [
+        "https://www.tokyubus.co.jp/route/routemap/pdf/08_takatsu.pdf",
+        "https://www.tokyubus.co.jp/news/003822.html"
+      ]
+    }
+  ],
+  "serviceNotices": [
+    {
+      "routeCode": "新横81",
+      "message": "2026年3月31日をもって運行終了。保存済みODPTスナップショットは終了前の2026年3月取得。",
+      "sourceUrl": "https://www.tokyubus.co.jp/news/003717.html"
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import { ErrorBox } from "./common";
 import type { EditorProps } from "./SettingsPanel";
 import DataTable from "./DataTable";
 import VehicleBulkEditor from "./VehicleBulkEditor";
+import RouteBrowser from "./RouteBrowser";
 
 export default function EntityManager({
   id,
@@ -22,6 +23,8 @@ export default function EntityManager({
   const [changed, setChanged] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [deleting, setDeleting] = useState(false);
+  const [routeSource, setRouteSource] = useState<"odpt" | "full" | "scenario">("odpt");
+  const [routeError, setRouteError] = useState<Error | null>(null);
   useEffect(() => {
     if (editing)
       editor.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
@@ -118,12 +121,13 @@ export default function EntityManager({
                 : "路線と運行パターン"}
           </h2>
           <p className="subtle">
-            一覧から対象を選び、必要な項目を編集できます。
+            {kind === "routes" ? "営業所・系統から運行パターンを確認し、シナリオ内の路線を編集できます。" : "一覧から対象を選び、必要な項目を編集できます。"}
           </p>
         </div>
         <button
           disabled={changed}
-          onClick={() =>
+          onClick={() => {
+            if (kind === "routes") setRouteSource("scenario");
             open({
               ...(kind === "vehicles"
                 ? {
@@ -132,11 +136,11 @@ export default function EntityManager({
                     depotId: String(depots.data?.items[0]?.id ?? ""),
                   }
                 : { enabled: true }),
-            })
-          }
+            });
+          }}
         >
           <Plus size={16} />
-          追加
+          {kind === "routes" ? "シナリオへ追加" : "追加"}
         </button>
       </div>
       {kind === "vehicles" && (
@@ -156,7 +160,22 @@ export default function EntityManager({
           ))}
         </div>
       )}
-      <DataTable
+      {kind === "routes" && <div className="segmented">
+        <button type="button" disabled={changed} className={routeSource === "odpt" ? "active" : ""} onClick={() => setRouteSource("odpt")}>ODPT全域</button>
+        <button type="button" disabled={changed} className={routeSource === "full" ? "active" : ""} onClick={() => setRouteSource("full")}>GTFS参考</button>
+        <button type="button" disabled={changed} className={routeSource === "scenario" ? "active" : ""} onClick={() => setRouteSource("scenario")}>このシナリオの路線・編集</button>
+      </div>}
+      {kind === "routes" && <ErrorBox error={routeError} />}
+      {kind === "routes" ? <RouteBrowser id={id} source={routeSource} onEdit={routeSource === "scenario" ? async (routeId) => {
+        if (changed) return;
+        try {
+          setRouteError(null);
+          const row = await api<Row>(`/scenarios/${id}/routes/${encodeURIComponent(routeId)}`);
+          open(row);
+        } catch (error) {
+          setRouteError(error instanceof Error ? error : new Error(String(error)));
+        }
+      } : undefined} /> : <DataTable
         key={collection}
         id={id}
         fixed={collection}
@@ -167,7 +186,7 @@ export default function EntityManager({
         onEdit={(row) => {
           if (!changed) open(row);
         }}
-      />
+      />}
       {kind === "vehicles" && !templates && selected.length > 0 && (
         <VehicleBulkEditor
           id={id}
