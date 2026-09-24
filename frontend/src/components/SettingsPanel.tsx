@@ -5,7 +5,7 @@ import { api, put, strings, type Json, type Row } from "../api";
 import { settingGroups } from "../settings";
 import { FieldGrid } from "./Fields";
 import { ErrorBox } from "./common";
-import DataTable from "./DataTable";
+import RouteBrowser from "./RouteBrowser";
 
 export type Configuration = { values: Row; revision: string };
 export type EditorProps = {
@@ -118,17 +118,14 @@ export default function SettingsPanel({ id, onSaved, onDirty }: EditorProps) {
                 {strings(value.selectedDepotIds).length} 営業所 /{" "}
                 {strings(value.selectedRouteIds).length} 路線パターンを選択中
               </p>
-              <DataTable
+              <RouteBrowser
                 id={id}
-                fixed="depots"
-                selected={strings(value.selectedDepotIds)}
-                onSelection={(ids) => change("selectedDepotIds", ids)}
-              />
-              <DataTable
-                id={id}
-                fixed="routes"
-                selected={strings(value.selectedRouteIds)}
-                onSelection={(ids) => change("selectedRouteIds", ids)}
+                selectedDepots={strings(value.selectedDepotIds)}
+                selectedRoutes={strings(value.selectedRouteIds)}
+                onScopeChange={(depots, routes) => {
+                  change("selectedDepotIds", depots);
+                  change("selectedRouteIds", routes);
+                }}
               />
             </section>
           )}

@@ -553,6 +553,22 @@ fieldset {
   overflow: hidden;
   margin: 14px 0;
 }
+.route-browser { background: #fff; border: 1px solid #e0e6d9; border-radius: 8px; padding: 18px; margin: 14px 0; }
+.route-depot-list { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 16px 0; }
+.route-depot-list label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.route-depot-list small, .route-detail small { color: #78876f; }
+.route-depot { margin-top: 18px; }
+.route-depot > summary { padding: 10px 6px; cursor: pointer; font-weight: 600; }
+.route-family, .route-pattern { border-top: 1px solid #e5eadf; }
+.route-family { margin-left: 12px; }
+.route-pattern { margin-left: 22px; }
+.route-family summary, .route-pattern summary { padding: 10px 6px; cursor: pointer; font-size: 13px; }
+.route-family summary input, .route-pattern summary input { margin-right: 8px; }
+.route-pattern summary span { float: right; margin-left: 12px; }
+.route-detail { padding: 5px 14px 14px; font-size: 12px; }
+.route-detail ol { max-height: 260px; overflow: auto; padding-left: 24px; }
+.route-detail li { padding: 3px 0; }
+.route-warning { color: #8b4a1c; background: #fff7ed; padding: 10px; border-radius: 6px; }
 .table-toolbar {
   display: flex;
   justify-content: space-between;

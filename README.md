@@ -1,4 +1,40 @@
+
+## 2026-09-24 訂正：各月1週間、計12週が実験対象
+
+四季4週を最終対象にしたのはagentの取り違え。ユーザーの実験単位は2025年1〜12月の各月で事前選定した連続7日間。
+既存の12代表週を維持し、月ごとの運行・充電、週次費用、PV・電力利用の違いを比較する。
+四季は結果を説明するための分類に限り、ケース数を4へ減らさない。
+1〜12月の週開始日は1/6, 2/3, 3/3, 4/7, 5/12, 6/2, 7/7, 8/4, 9/1, 10/6, 11/10, 12/1。
+
+既存2・5・8・11月のattemptを重複投入せず、残る8月分を同じ0964b783、同じ親シナリオ・solver設定で
+`campaign_monthly_remaining_0964b783`へ追加。全12週の対応は
+`C:/master-course/output/weekly_seasonal_20260924/monthly-experiment.json` と `MONTHLY_EXPERIMENT.md` に記録。
+既存bindingと計算コードは変更しない。未完了／失敗は再利用成功と数えない。
+
+将来版のweekly_campaign.WEEKSも12週へ修正。既定値・全12月・既存日付・週内曜日構成の回帰を追加。
+時刻表カレンダーや祝日の既存Prepare検査はそのまま。週次の数理条件・費用定義には変更なし。
+
 # master-course
+
+路線閲覧では営業所を選んでから所管系統・運行パターン・停留所列を開けます。ODPT全域を主表示、GTFSを参考表示とします。ODPTに所管がない一部パターンは東急バスの営業所別路線図などを出典・日付付きの参考所管として表示し、残りは「所管未確認」に残します。収録範囲と未解決事項は[路線カタログ点検](docs/notes/ROUTE_CATALOG_AUDIT_20260925.md)に記録しています。表示用距離は隣接停留所の直線距離和で、研究用の準備済み入力は変更しません。
+
+## 2026-09-24 週次・経済性・季節比較の現在地
+
+渋21〜23の旧固定版 `7cb46894` の12代表週を原本照合し、週次・日別費用、
+7日間需給、全車両の運用・SOC、季節比較へ再集計しました。
+[日本語結果報告](C:/master-course/output/weekly_seasonal_20260924/results/weekly_seasonal_report.md)
+と [比較図](C:/master-course/output/weekly_seasonal_20260924/results/seasonal_cost_energy.png)を参照してください。
+各週1,704便、費用約415.4万〜487.4万円/週。旧BEV終端条件の検算済み解による条件付き評価で、
+新版の翌朝SOC条件や統合最適性の証明とは区別しています。
+
+新版はブランチ `codex/weekly-seasonal-results-20260924`、固定 `0964b783`。
+春・秋・冬・夏の既存4代表週を、親機と32GB DESKTOP-6AE0MIRへ順次配分するスクリプトを起動しました。
+状態は `output/weekly_seasonal_20260924/campaign_0964b783/state.json`、
+投入後のジョブ詳細は [週次計算画面](http://127.0.0.1:8890)で確認します。
+元の全PC監視8868は維持し、計算用2枠を外部予約して二重投入を防ぎます。
+自動メール通知用observerの起動は自動承認審査に拒否され、現時点では未有効です。
+
+2026-09-24: 弦巻営業所のSolcast履歴は2022〜2024年の33/36か月・96,384件を検証済みです。本日は2023年9月分2,880件を既存契約内の1リクエストで取得し、月内連続性・地点・PT15M・7項目・request/raw SHAを照合しました。残りは2023年10〜12月です。取得状態は `output/seven_day_extension_20260910/training_history_acquisition_status.json` に記録しています。全36か月が揃うまで新しい3年学習モデルは生成せず、既存の2024年学習結果や凍結済み月別比較は変更しません。
 
 2026-09-23: 固定版の月別Prepareが完了したら、`python tools/research/stage_shibu24_monthly_inputs.py --campaign <出力> --source-worktree <固定worktree> --settings <固定controller設定.json>` で12件のPrepared原本と実測PV入力をハッシュ照合してコントローラーへ配置できます。同じファイルなら再実行でき、内容が違えば上書きせず停止します。これは求解や研究採用を行いません。
 
@@ -3961,3 +3997,20 @@ AIを使わない配布・バッチ再開スクリプトを備えます。Python
 # 2026-09-23 実便版渋24・16台診断
 
 公式ODPT保存原本の渋24全6パターン・平日224便を、従来の渋21〜23シナリオの車両・充電器・費用・PV/BESS設定を引き継いで1日診断する入口を `tools/cluster/real_shibu24_batch.py` に追加しました。新しい分散画面は設定した既存シナリオ保管先から従来シナリオを表示・Prepare・実行できます。実行条件と研究上の限界は [実便版渋24の16台診断](docs/notes/SHIBU24_REAL_CLUSTER_20260923.md) を参照してください。旧架空4便の結果を実便の結果として扱いません。
+
+## 2026-09-24 23:14 JST: AIなしの操作・回収入口
+
+[操作用CMD一式](output/weekly_seasonal_20260924/operator/) と
+[運転状況](output/weekly_seasonal_20260924/campaign_0964b783/operations/STATUS.md) を追加。
+初めは01_CHECK / 02_STATUSを開く。起動、同じ設定での再開、既存attemptだけの回収、30秒監視を分離した。
+実装は `C:/master-course-worktrees/weekly-operator-20260924` の3c3f066c、求解固定版0964b783は変更していない。
+5月の親機側進捗保存WinError 5を修正し、終了した回収clientの代わりに同一attemptを確認するスクリプトが稼働。
+通常監視・代理回収はAIを呼ばない。メール単独認証は未設定で、自動送信済みとはしない。
+[手順書](C:/master-course-worktrees/weekly-operator-20260924/docs/notes/WEEKLY_OPERATOR_RUNBOOK_20260924.md)。
+
+## 2026-09-24: 学内発表用シナリオ名
+
+月別12代表週の元シナリオ771d115b-75b0-49f7-a7f0-25f259a2cd21の表示名を「仮・正式用」へ変更。
+既存scenario_store.update_scenarioを使用し、name/meta.name/更新日時以外の内容不変を照合。
+実行用private storeのparent_hashも既存bindingと一致。実行中入力・費用・SOC・研究判定を変更していない。
+証拠: output/weekly_seasonal_20260924/scenario_display_name/receipt.json と frozen_parent_check.json。

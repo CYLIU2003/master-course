@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import re
 import sqlite3
 import unicodedata
@@ -17,6 +18,7 @@ import ijson
 from bff.store import scenario_store, trip_store
 from bff.store.desktop_json import LegacyResultReader
 from bff.store.output_paths import outputs_root, project_root
+from src.geo import haversine_km
 
 MASTER_TABLES = frozenset({"routes", "depots", "vehicles", "stops", "chargers", "vehicle_templates"})
 ARTIFACT_TABLES = frozenset({"timetable_rows", "trips", "duties", "blocks"})
@@ -149,6 +151,183 @@ def collection(scenario_id: str, name: str) -> Any:
         if row is not None:
             return json.loads(row[0])
     return meta.get(name)
+
+
+@lru_cache(maxsize=2)
+def _catalog_stop_index(path: str, modified_ns: int) -> dict[str, dict[str, Any]]:
+    del modified_ns
+    with open(path, encoding="utf-8") as source:
+        return {
+            str(stop["id"]): stop
+            for line in source
+            if (stop := json.loads(line)).get("id")
+        }
+
+
+def _display_stop_catalog() -> dict[str, dict[str, Any]]:
+    path = project_root() / "data" / "catalog-fast" / "normalized" / "stops.jsonl"
+    if not path.is_file():
+        return {}
+    return _catalog_stop_index(str(path), path.stat().st_mtime_ns)
+
+
+def _project_route_catalog(
+    depots: list[dict[str, Any]],
+    routes: list[dict[str, Any]],
+    stops: list[dict[str, Any]],
+    assignments: list[dict[str, Any]],
+    *,
+    source_label: str,
+    supplemental_stops: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    depot_names = {str(row["id"]): str(row.get("name") or row["id"]) for row in depots if row.get("id")}
+    assigned = {str(row["routeId"]): str(row["depotId"]) for row in assignments if row.get("routeId") and row.get("depotId")}
+    stop_by_id = {str(row["id"]): row for row in stops if row.get("id")}
+    items: list[dict[str, Any]] = []
+    for route in routes:
+        route_id = str(route.get("id") or "")
+        if not route_id:
+            continue
+        depot_ids = [str(value) for value in route.get("depotIds", []) if str(value) in depot_names] if isinstance(route.get("depotIds"), list) else []
+        primary = assigned.get(route_id) or str(route.get("depotId") or route.get("depot_id") or "")
+        if primary in depot_names and primary not in depot_ids:
+            depot_ids.insert(0, primary)
+        stop_ids = route.get("stopSequence")
+        if not isinstance(stop_ids, list):
+            stop_ids = []
+        stop_details = []
+        distance = 0.0
+        complete = len(stop_ids) >= 2
+        previous = None
+        used_supplement = False
+        for stop_id in stop_ids:
+            stop = stop_by_id.get(str(stop_id), {})
+            lat, lon = stop.get("lat"), stop.get("lon")
+            coordinate_source = source_label
+            if (lat is None or lon is None) and str(stop_id).startswith("odpt.BusstopPole:") and str(route.get("source") or "").lower() in {"odpt", "gtfs"}:
+                supplement = supplemental_stops.get(str(stop_id), {})
+                if supplement.get("lat") is not None and supplement.get("lon") is not None:
+                    stop = supplement
+                    lat, lon = stop["lat"], stop["lon"]
+                    coordinate_source = "catalog_fast_display_only"
+                    used_supplement = True
+            coordinate = None
+            try:
+                if lat is not None and lon is not None:
+                    coordinate = (float(lat), float(lon))
+                    if not (math.isfinite(coordinate[0]) and math.isfinite(coordinate[1]) and -90 <= coordinate[0] <= 90 and -180 <= coordinate[1] <= 180):
+                        coordinate = None
+            except (TypeError, ValueError):
+                pass
+            if coordinate is None:
+                complete = False
+            if previous is not None:
+                if coordinate is None or previous is False:
+                    complete = False
+                else:
+                    distance += haversine_km(*previous, *coordinate)
+            previous = coordinate if coordinate is not None else False
+            stop_details.append({
+                "id": str(stop_id), "name": str(stop.get("name") or stop_id),
+                "lat": coordinate[0] if coordinate else None,
+                "lon": coordinate[1] if coordinate else None,
+                "coordinateSource": coordinate_source if coordinate else "unresolved",
+            })
+        items.append({
+            "id": route_id,
+            "name": str(route.get("name") or route.get("routeLabel") or route_id),
+            "routeCode": str(route.get("routeFamilyCode") or route.get("routeCode") or ""),
+            "routeVariantType": str(route.get("routeVariantTypeManual") or route.get("routeVariantType") or "unknown"),
+            "direction": str(route.get("canonicalDirectionManual") or route.get("canonicalDirection") or route.get("direction") or "unknown"),
+            "startStop": str(route.get("startStop") or (stop_details[0]["name"] if stop_details else "")),
+            "endStop": str(route.get("endStop") or (stop_details[-1]["name"] if stop_details else "")),
+            "depotIds": depot_ids,
+            "stopCount": len(stop_details),
+            "stops": stop_details,
+            "distanceKm": round(distance, 6) if complete and distance > 0 else None,
+            "storedDistanceKm": route.get("distanceKm"),
+            "distanceSource": ("catalog_fast_stop_sequence_haversine_display_only" if used_supplement else f"{source_label}_stop_sequence_haversine") if complete and distance > 0 else "unresolved_stop_coordinates",
+            "tripCount": route.get("tripCount"),
+            "tripCountsByDayType": route.get("tripCountsByDayType"),
+            "firstDepartureByDayType": route.get("firstDepartureByDayType"),
+            "lastArrivalByDayType": route.get("lastArrivalByDayType"),
+            "odptPatternId": route.get("odptPatternId"),
+            "classificationConfidence": route.get("classificationConfidence"),
+            "classificationSource": route.get("classificationSource"),
+            "source": route.get("source"),
+        })
+    return {
+        "depots": [{"id": depot_id, "name": name} for depot_id, name in depot_names.items()],
+        "routes": items,
+    }
+
+
+def route_catalog(scenario_id: str) -> dict[str, Any]:
+    """Read-only scenario pattern projection; never changes prepared inputs."""
+    return _project_route_catalog(
+        collection(scenario_id, "depots") or [],
+        collection(scenario_id, "routes") or [],
+        collection(scenario_id, "stops") or [],
+        collection(scenario_id, "route_depot_assignments") or [],
+        source_label="scenario",
+        supplemental_stops=_display_stop_catalog(),
+    )
+
+
+def odpt_route_catalog() -> dict[str, Any]:
+    """Browse the frozen ODPT catalog independently of scenario scope."""
+    root = project_root()
+    routes_path = root / "data" / "catalog-fast" / "tokyu_bus_data" / "routes.jsonl"
+    depot_path = root / "data" / "seed" / "tokyu" / "depots.json"
+    summary_path = root / "data" / "catalog-fast" / "tokyu_bus_data" / "network_summary.json"
+    if not routes_path.is_file() or not depot_path.is_file():
+        raise FileNotFoundError("Frozen ODPT route catalog is unavailable")
+    with routes_path.open(encoding="utf-8") as source:
+        routes = [json.loads(line) for line in source if line.strip()]
+    with depot_path.open(encoding="utf-8") as source:
+        depots = json.load(source)["depots"]
+    stops = _display_stop_catalog()
+    result = _project_route_catalog(
+        depots, routes, list(stops.values()), [],
+        source_label="odpt_catalog",
+        supplemental_stops={},
+    )
+    if summary_path.is_file():
+        with summary_path.open(encoding="utf-8") as source:
+            summary = json.load(source)
+        result["builtAt"] = summary.get("generatedAt")
+        result["sourceSnapshotId"] = summary.get("sourceSnapshotId")
+    reference_path = root / "data" / "reference" / "tokyu_route_depot_reference_20260925.json"
+    if reference_path.is_file():
+        with reference_path.open(encoding="utf-8") as source:
+            reference = json.load(source)
+        if result.get("sourceSnapshotId") != reference["sourceSnapshotId"]:
+            result["officialReferenceStatus"] = "snapshot_mismatch"
+            return result
+        depot_ids = {depot["id"] for depot in result["depots"]}
+        by_code: dict[str, dict[str, str]] = {}
+        for group in reference["groups"]:
+            if group["depotId"] not in depot_ids:
+                raise ValueError(f"Unknown official reference depot: {group['depotId']}")
+            for code in group["routeCodes"]:
+                if code in by_code:
+                    raise ValueError(f"Duplicate official reference route code: {code}")
+                by_code[code] = {
+                    "depotId": group["depotId"],
+                    "sourceUrl": group["sourceUrl"],
+                    "sourceDate": group["sourceDate"],
+                }
+        unresolved_by_code = {row["routeCode"]: row for row in reference.get("unresolvedEvidence", [])}
+        notice_by_code = {row["routeCode"]: row for row in reference.get("serviceNotices", [])}
+        for route in result["routes"]:
+            if not route["depotIds"] and route["routeCode"] in by_code:
+                route["officialDepotReference"] = by_code[route["routeCode"]]
+            if route["routeCode"] in unresolved_by_code:
+                route["officialDepotAmbiguity"] = unresolved_by_code[route["routeCode"]]
+            if route["routeCode"] in notice_by_code:
+                route["officialServiceNotice"] = notice_by_code[route["routeCode"]]
+        result["officialReferenceCapturedAt"] = reference["capturedAt"]
+    return result
 
 
 def _indexed_timetable_page(
