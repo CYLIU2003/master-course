@@ -26,10 +26,10 @@ from bff.services.run_preparation import get_or_build_run_preparation
 from bff.store import output_paths, scenario_store
 from scripts.benchmarks.monthly_week_contract import select_monthly_weeks, validate_balanced_week
 from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import configure_doc, parent_hash
+from scripts.benchmarks.shibu24_optimization_store import DATABASE_DIR, load_database
 from src.optimization.common.date_series import content_hash, materialize_dated_timetable, timetable_hash
 from src.optimization.common.next_morning import PRICE_POLICY, SCHEMA, resolve_next_morning_contract
 
-SOURCE = ROOT / "output/shibu21_24_seasonal_20260911/shibu24_source_audit"
 SELECTION = ROOT / "output/monthly_fair_weeks_20260914/week_selection.json"
 FORECAST = ROOT / "output/monthly_fair_weeks_20260914/forecast_holdouts"
 PARENT_ID = "771d115b-75b0-49f7-a7f0-25f259a2cd21"
@@ -51,16 +51,9 @@ def _write(path: Path, value: dict) -> None:
 
 
 def _source_and_design() -> tuple[dict, dict, list[str]]:
-    source_manifest = _read(SOURCE / "manifest.json")
-    if source_manifest.get("status") != "SOURCE_CAPTURE_VALIDATED_BROWSER_COMPARISON_PENDING":
+    database_manifest, _ = load_database(DATABASE_DIR)
+    if database_manifest.get("source_status") != "SOURCE_CAPTURE_VALIDATED_BROWSER_COMPARISON_PENDING":
         raise ValueError("Unexpected Shibu24 source audit status")
-    for name in ("selected_routes.json", "timetable_rows.json", "stop_sequences.json", "stops.json"):
-        if _sha(SOURCE / name) != source_manifest["artifacts"][name]["sha256"]:
-            raise ValueError(f"Shibu24 source hash changed: {name}")
-    for source in source_manifest["capture_manifest"]["sources"]:
-        original = Path(source["path"])
-        if not original.is_file() or _sha(original) != source["sha256"]:
-            raise ValueError("Original Shibu24 ODPT capture changed or is missing")
     forecast_manifest = _read(FORECAST / "manifest.json")
     design = deepcopy(forecast_manifest["design"])
     selection = _read(SELECTION)
@@ -72,10 +65,13 @@ def _source_and_design() -> tuple[dict, dict, list[str]]:
     if design["parent_scenario_id"] != PARENT_ID:
         raise ValueError("Forecast design parent scenario changed")
     source = {
-        "source_directory": SOURCE.relative_to(ROOT).as_posix(),
+        "optimization_database": DATABASE_DIR.relative_to(ROOT).as_posix(),
+        "optimization_database_sha256": database_manifest["database_sha256"],
+        "optimization_manifest_sha256": _sha(DATABASE_DIR / "manifest.json"),
+        "source_manifest_sha256": database_manifest["source_manifest_sha256"],
         "source_id": "tsurumaki_shibu24_odpt_20260911_diagnostic_v1",
         "route_codes": ["渋24"],
-        "distance_semantics": source_manifest["source_validation"]["distance_semantics"],
+        "distance_semantics": database_manifest["distance_semantics"],
     }
     return source, design, weeks
 
@@ -164,7 +160,8 @@ def _overnight_contract(doc: dict, templates: list[dict]) -> dict:
 
 def check() -> dict:
     source, design, weeks = _source_and_design()
-    templates = _read(SOURCE / "timetable_rows.json")
+    _, tables = load_database(DATABASE_DIR)
+    templates = tables["timetable_rows"]
     results = []
     for week in weeks:
         dates = [(date.fromisoformat(week) + timedelta(days=index)).isoformat() for index in range(8)]
@@ -187,7 +184,9 @@ def check() -> dict:
             "actual_pv_days": len(actual), "forecast_pv_days": len(forecast),
             "actual_source_count": len(actual_sources)})
     return {"schema_version": "shibu24_monthly_preflight_v1", "status": "INPUTS_AVAILABLE_DIAGNOSTIC",
-            "year": 2025, "source_manifest_sha256": _sha(SOURCE / "manifest.json"),
+            "year": 2025, "source_manifest_sha256": source["source_manifest_sha256"],
+            "optimization_database_sha256": source["optimization_database_sha256"],
+            "optimization_manifest_sha256": source["optimization_manifest_sha256"],
             "forecast_manifest_sha256": _sha(FORECAST / "manifest.json"),
             "week_selection_sha256": _sha(SELECTION), "weeks": results,
             "source_limit": "browser comparison pending; geographic distance proxy",
@@ -197,6 +196,8 @@ def check() -> dict:
 def prepare(output: Path, *, limit: int) -> dict:
     preflight = check()
     source, design, weeks = _source_and_design()
+    _, source_tables = load_database(DATABASE_DIR)
+    templates = source_tables["timetable_rows"]
     state = git_state(ROOT)
     if state["dirty"]:
         raise ValueError("Monthly Prepare requires a clean frozen Git worktree")
@@ -230,7 +231,7 @@ def prepare(output: Path, *, limit: int) -> dict:
             _write(path, state)
         doc = scenario_store._load(state["scenario_id"], skip_graph_arcs=True)
         doc = configure_doc(doc, week, source, design=design)
-        extension = _overnight_contract(doc, _read(SOURCE / "timetable_rows.json"))
+        extension = _overnight_contract(doc, templates)
         scenario_store._invalidate_dispatch_artifacts(doc)
         scenario_store._normalize_dispatch_scope(doc)
         scenario_store._save(doc)

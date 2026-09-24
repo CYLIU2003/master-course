@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-09-24 渋24のODPT原本と最適化入力を分離
+
+- 月別 `check` がODPT取得原本の存在とSHAを毎回検査し、`configure_doc` が加工済みJSONを直接読んでいた。求解器自体はPreparedを使っていたが、月別の実行入口と出典保管の境界が曖昧だったため、旧 `906a4253` の0件停止と、後続 `c470e132` のPrepare途中停止は保持したまま変更した。旧成果物を新固定版に流用しない。
+- `shibu24_optimization_store.py build` を原本・加工済みJSONに触れる唯一の渋24月別ETL入口とし、SHA・参照整合・operator・距離を確認してSQLiteを一度だけ生成する。`load_database` は読取専用・DB SHA・SQLite integrity・4表の件数と内容hashを確認し、原本欠損でもDBから同じ行を返す。月別 `check` / `prepare` / 翌朝時刻表はこのDBへ切り替え、DB SHAと元manifest SHAをPrepared出典へ記録する。車両・SOC・目的係数・ダイヤ行・研究判定は緩めない。
+- 実データDBは経路6、テンプレート便582、停留所列18,474、停留所68件。月別12週の事前確認は通過。データ経路を変えたため新しいclean SHAから12週すべてを新規Prepareし、実機配布・求解・独立監査は別ゲートとする。
+- 原本・加工済みJSONへの `Path.open` を遮断した実データ `check` も12週通過した。関連テストには非有限距離の拒否を追加。初回テストの旧3路線1件失敗は隔離worktreeに `data/derived/timetables` がなかったためで、既存原本への読取専用junctionを置いて再実行し通過した。テスト用の参照変更はGitへ含めない。
+
 ## 2026-09-24 渋24翌朝時刻表の出典パスと配布入力を区別
 
 - 固定 `906a4253` の新規12週はPreparedの完全シナリオ照合・SHA転送を通過し、18台すべての配布照合も通過した。しかし最初の1月投入がHTTP 409で停止し、求解ジョブは0件だった。`terminal_overnight_contract.next_day_timetable_rows[].source_provenance.path` が埋込済み時刻表のODPT出典であるにもかかわらず、分散配布の外部ファイル入力検査で未配布の実行入力として拒否されていた。

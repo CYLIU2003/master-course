@@ -35,6 +35,7 @@ data/*.db
 
 # Research app built datasets (regenerable)
 data/built/
+data/optimization/
 
 # tokyubus-gtfs pipeline data (generated, large)
 data/tokyubus/raw/

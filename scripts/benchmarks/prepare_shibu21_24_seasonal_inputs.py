@@ -334,6 +334,26 @@ def configure_doc(
     source_directory = ROOT / str(
         source.get("source_directory") or SOURCE_CANDIDATE_DIR.relative_to(ROOT)
     )
+    optimization_database = source.get("optimization_database")
+    if optimization_database:
+        from scripts.benchmarks.shibu24_optimization_store import load_database
+
+        database_manifest, database_rows = load_database(ROOT / str(optimization_database))
+        if (database_manifest["source_manifest_sha256"] !=
+                source.get("source_manifest_sha256") or
+                database_manifest["database_sha256"] != source.get("optimization_database_sha256") or
+                sha256(ROOT / str(optimization_database) / "manifest.json") !=
+                source.get("optimization_manifest_sha256")):
+            raise ValueError("Shibu24 optimization database differs from the audited source binding")
+        source_manifest_sha256 = database_manifest["source_manifest_sha256"]
+
+        def source_rows(name: str) -> list[dict]:
+            return database_rows[name]
+    else:
+        source_manifest_sha256 = sha256(source_directory / "manifest.json")
+
+        def source_rows(name: str) -> list[dict]:
+            return read_json(source_directory / f"{name}.json")
     source_id = str(source.get("source_id") or SOURCE_ID)
     source_route_codes = list(source.get("route_codes") or DEFAULT_ROUTE_CODES)
     cfg = doc["simulation_config"]
@@ -350,20 +370,23 @@ def configure_doc(
                 "final_soc_target_percent": None, "final_soc_target_tolerance_percent": 0.0}
     cfg.update(terminal)
     doc.setdefault("scenario_overlay", {}).setdefault("charging_constraints", {}).update(terminal)
-    selected_routes = read_json(source_directory / "selected_routes.json")
+    selected_routes = source_rows("selected_routes")
     selected_ids = [row["id"] for row in selected_routes]
     doc["dispatch_scope"]["routeSelection"].update(includeRouteIds=selected_ids, excludeRouteIds=[])
     doc["dispatch_scope"]["serviceSelection"] = {"serviceIds": ["WEEKDAY", "SAT", "SUN_HOL"]}
     dates = consecutive_service_dates(start_date, planning_days, [])
     holiday_manifest = _verified_holiday_manifest(ROOT, dates, cfg.get("holiday_source_id"))
-    templates = [row for row in read_json(source_directory / "timetable_rows.json")
+    templates = [row for row in source_rows("timetable_rows")
                  if row["route_id"] in set(selected_ids)]
     rows, contract = materialize_dated_timetable(
         templates, service_dates=dates, holiday_dates=list(holiday_manifest["holiday_dates"]),
         source_provenance={"source_id": source_id,
-                           "source_candidate_manifest_sha256": sha256(source_directory / "manifest.json"),
+                           "source_candidate_manifest_sha256": source_manifest_sha256,
                            "holiday_source_sha256": holiday_manifest["sha256"],
-                           "distance_semantics": source["distance_semantics"]},
+                           "distance_semantics": source["distance_semantics"],
+                           **({"optimization_database_sha256": database_manifest["database_sha256"],
+                               "optimization_manifest_sha256": source["optimization_manifest_sha256"]}
+                              if optimization_database else {})},
     )
     doc["timetable_rows"] = rows
     doc["routes"] = [deepcopy(row) for row in selected_routes]
@@ -379,7 +402,7 @@ def configure_doc(
         route["tripCountsByDayType"] = {day: sum(row["service_id"] == day for row in route_templates)
                                          for day in ("WEEKDAY", "SAT", "SUN_HOL")}
     template_sequences = defaultdict(list)
-    for row in read_json(source_directory / "stop_sequences.json"):
+    for row in source_rows("stop_sequences"):
         template_sequences[row["trip_id"]].append(row)
     doc["stop_timetables"] = []
     for trip in rows:
@@ -392,7 +415,7 @@ def configure_doc(
                     stop_row[key] = offset_clock(stop_row[key], trip["day_index"] * 1440)
             doc["stop_timetables"].append(stop_row)
     used_stops = {row["stop_id"] for row in doc["stop_timetables"]}
-    all_stops = {row["id"]: row for row in read_json(source_directory / "stops.json")}
+    all_stops = {row["id"]: row for row in source_rows("stops")}
     doc["stops"] = [deepcopy(all_stops[stop_id]) for stop_id in sorted(used_stops)]
     assets = cfg.get("depot_energy_assets") or []
     if isinstance(assets, dict):
@@ -448,11 +471,14 @@ def configure_doc(
     doc["dispatch_scope"]["serviceId"] = rows[0]["service_id"]
     cfg["day_type"] = rows[0]["service_id"]
     source_metadata = {
-        "source_id": source_id, "source_manifest_sha256": sha256(source_directory / "manifest.json"),
+        "source_id": source_id, "source_manifest_sha256": source_manifest_sha256,
         "route_codes": source_route_codes,
         "distance_semantics": source["distance_semantics"],
         "diagnostic_only": True,
     }
+    if optimization_database:
+        source_metadata["optimization_database_sha256"] = database_manifest["database_sha256"]
+        source_metadata["optimization_manifest_sha256"] = source["optimization_manifest_sha256"]
     doc["meta"]["route_scope_source_candidate"] = source_metadata
     if tuple(source_route_codes) == DEFAULT_ROUTE_CODES:
         doc["meta"]["four_route_source_candidate"] = deepcopy(source_metadata)

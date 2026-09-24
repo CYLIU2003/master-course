@@ -2,6 +2,21 @@
 
 2026-09-23時点の実験契約。これは診断入力と求解経路の実装記録であり、12週の結果や研究採用の宣言ではない。
 
+## ODPT原本と最適化用DBの境界（2026-09-24更新）
+
+`output/shibu21_24_seasonal_20260911/odpt_shibu24_20260901/` の取得原本と
+`shibu24_source_audit/` の加工済みJSON・manifestは保管・再構築用とする。
+`python scripts/benchmarks/shibu24_optimization_store.py build` は原本SHAと
+加工済み4表のSHA、operator、正の距離、便・停留所参照を検査し、
+`data/optimization/shibu24_20260911/source.sqlite3` とmanifestを一度だけ作る。
+既存DBは上書きせず、変更する場合は新しい出力先と新しい実験版を使う。
+月別 `check` と `prepare` はDBを読取専用で開き、DB全体と各表のhash・件数を
+照合する。ODPT原本や加工済みJSONは実行時に開かない。元の取得原本の
+パス・SHAは出典メタデータとして保持し、欠損しても既に凍結済みのDBから
+計算入力を再現できる。DBのSHAは各Preparedシナリオの出典に含める。
+これはデータ経路の分離であり、ダイヤの2025年実績性、道路距離、正式fleet、
+設備上限、研究採用を新たに証明するものではない。
+
 ## 比較対象と入力
 
 - 2025年1～12月から各月1つ、月曜～日曜で平日ダイヤ5日・土休日ダイヤ2日となる7日間を、凍結済み `output/monthly_fair_weeks_20260914/week_selection.json` の規則で選ぶ。週は1/6、2/3、3/3、4/7、5/12、6/2、7/7、8/4、9/1、10/6、11/10、12/1開始。
@@ -19,7 +34,7 @@
 
 ## 実行・検証ゲート
 
-`python tools/research/shibu24_monthly.py check` は12週の原本、週選択、祝日、翌日ダイヤ、8日分PVを読み取り検査するだけで、シナリオ作成・求解はしない。`prepare --output <new-directory> --limit 1` でclean固定Git版から単週を複製し、既存の厳格Prepareへ通す。成功してから全12週を同一SHA・同一共通設定で新規Prepareする。出力ディレクトリはcampaignごとに新規とし、同じ週・原本・prepared IDを照合して再開する。Prepare成功、day-ahead可行、独立物理、台帳照合、rolling実行、研究採用、最適性は別々の状態として記録する。
+`python tools/research/shibu24_monthly.py check` は凍結済み最適化DB、週選択、祝日、翌日ダイヤ、8日分PVを読み取り検査するだけで、シナリオ作成・求解はしない。`prepare --output <new-directory> --limit 1` でclean固定Git版から単週を複製し、既存の厳格Prepareへ通す。成功してから全12週を同一SHA・同一共通設定で新規Prepareする。出力ディレクトリはcampaignごとに新規とし、同じ週・原本・prepared IDを照合して再開する。Prepare成功、day-ahead可行、独立物理、台帳照合、rolling実行、研究採用、最適性は別々の状態として記録する。
 
 Phase 3二段階のStage 1 gapはStage 1の目的に対する値であり、週間総費用の大域最適性を証明しない。最初の小規模native回帰では翌朝のSOC期限をStage 1/2双方へ課し、物理再計算と最終夜間充電費用の台帳一致を確認した。実規模1週・12週の通過、追加夜間のrolling実行、独立レビューはこれからである。
 
