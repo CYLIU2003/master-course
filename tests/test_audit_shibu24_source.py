@@ -1,15 +1,27 @@
 from __future__ import annotations
 
 from scripts.audits.audit_shibu24_source import (
+    audit,
     build_candidate,
     normalize_route_code,
     parse_time,
     route_stop_polyline_distance_km,
 )
+import pytest
 
 
 def test_normalize_route_code_uses_nfkc_and_removes_whitespace() -> None:
     assert normalize_route_code(" 渋２４ ") == "渋24"
+
+
+def test_source_audit_does_not_overwrite_existing_snapshot(tmp_path) -> None:
+    output = tmp_path / "existing_snapshot"
+    output.mkdir()
+    (output / "manifest.json").write_text("original", encoding="utf-8")
+    with pytest.raises(FileExistsError, match="immutable"):
+        audit(tmp_path / "unused", tmp_path / "unused.json", tmp_path / "unused.jsonl",
+              tmp_path / "unused_old.json", output)
+    assert (output / "manifest.json").read_text(encoding="utf-8") == "original"
 
 
 def test_route_stop_polyline_distance_requires_every_adjacent_segment() -> None:

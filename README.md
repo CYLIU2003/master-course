@@ -47,15 +47,24 @@ controllerの配置先を変更した場合も、新しい設定で再登録し�
 & tools/research/install_campaign_progress_task.ps1 -Campaign <campaign> -ControllerSettings <controller-settings.json>
 ```
 
-渋24の月別計算では、ODPT取得原本を保管用として残し、最適化用には検証済みの
-SQLiteデータベースを使います。原本と加工済みJSONの照合は初回生成時だけ行います。
-新しい固定版の作業ディレクトリで、まず
-`python scripts/benchmarks/shibu24_optimization_store.py build` を1回実行し、
-`python scripts/benchmarks/shibu24_optimization_store.py verify` と
-`python tools/research/shibu24_monthly.py check` で確認してください。
-DBとmanifestは `data/optimization/shibu24_20260911/` に固定され、月別Prepareは
-このDBがない場合やhashが変わった場合に停止します。原本とDBの役割、再生成、
-比較上の制約は[渋24月別実験契約](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md)に記録しています。
+## ODPT時刻表は手動更新する
+
+渋24の時刻表スナップショット更新は**手動操作のみ**です。ジョブ作成・月別
+`check` / `prepare`・求解はODPTへアクセスせず、原本取得・正規化・DB再生成を
+開始しません。既存の固定時刻表を対象日へ展開するPrepare処理は続けます。
+取得原本と加工済みJSONは保管・再構築用、最適化には検証済みSQLiteを使います。
+現行の固定DBは `data/optimization/shibu24_20260911/` です。
+
+```powershell
+python scripts/benchmarks/shibu24_optimization_store.py verify
+python tools/research/shibu24_monthly.py check
+```
+
+どちらかが失敗したらジョブを作らず、原本やDBを自動更新しません。新ダイヤを使うときは
+別の取得先・監査先・DB先を指定して手動で取得→監査→DB化し、SHAと便数を確認します。
+新DBを採用する実験は入力結合を明示的に変え、新しいclean Git固定版から全週を
+Prepareし直します。旧DBの週と混ぜません。具体的な手順と比較上の制約は
+[渋24月別実験契約](docs/notes/SHIBU24_MONTHLY_OVERNIGHT_20260923.md)に記録しています。
 
 2026-09-24: 分散計算の一時SSH切断は同じattempt IDで1回だけ再試行し、通信結果が不明な試行は予約を保持して照合します。失敗workerは接続probe成功まで割当から外します。固定 `prepared_input_id` は完全なscenario/scopeと照合し、古ければjobを作らず停止します。今回見つかったshallow読込の不具合修正は隔離worktreeのみで、現行controllerには未配置です。現行12週campaignはjob作成前に停止しており、修正を使う場合は新しいclean SHAとPrepareが必要です。[分散計算の復旧と状態](docs/DISTRIBUTED_COMPUTE.md)。
 

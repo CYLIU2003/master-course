@@ -330,11 +330,15 @@ def configure_doc(
     """Materialize a declared dated case from the immutable candidate source."""
     if isinstance(planning_days, bool) or not isinstance(planning_days, int) or not 1 <= planning_days <= 7:
         raise ValueError("planning_days must be an integer in [1, 7]")
+    source_id = str(source.get("source_id") or SOURCE_ID)
+    source_route_codes = list(source.get("route_codes") or DEFAULT_ROUTE_CODES)
+    optimization_database = source.get("optimization_database")
+    if (source_route_codes == ["渋24"] or source_id.startswith("tsurumaki_shibu24")) and not optimization_database:
+        raise ValueError("Shibu24 Prepare requires a manually frozen optimization database")
     bess_controls = seasonal_bess_controls(design)
     source_directory = ROOT / str(
         source.get("source_directory") or SOURCE_CANDIDATE_DIR.relative_to(ROOT)
     )
-    optimization_database = source.get("optimization_database")
     if optimization_database:
         from scripts.benchmarks.shibu24_optimization_store import load_database
 
@@ -354,8 +358,6 @@ def configure_doc(
 
         def source_rows(name: str) -> list[dict]:
             return read_json(source_directory / f"{name}.json")
-    source_id = str(source.get("source_id") or SOURCE_ID)
-    source_route_codes = list(source.get("route_codes") or DEFAULT_ROUTE_CODES)
     cfg = doc["simulation_config"]
     cfg.update(multi_day_input_mode=DATE_SERIES_INPUT_MODE, service_date=start_date,
                service_dates=[], planning_days=planning_days, planning_horizon_hours=24 * planning_days,
