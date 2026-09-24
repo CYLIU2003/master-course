@@ -6,6 +6,7 @@ import { settingGroups } from "../settings";
 import { FieldGrid } from "./Fields";
 import { ErrorBox } from "./common";
 import DataTable from "./DataTable";
+import RouteScopeSelector from "./RouteScopeSelector";
 
 const periodPresets = [
   { days: 1, label: "1日" },
@@ -142,12 +143,8 @@ export default function SettingsPanel({ id, onSaved, onDirty }: EditorProps) {
                 selected={strings(value.selectedDepotIds)}
                 onSelection={(ids) => change("selectedDepotIds", ids)}
               />
-              <DataTable
-                id={id}
-                fixed="routes"
-                selected={strings(value.selectedRouteIds)}
-                onSelection={(ids) => change("selectedRouteIds", ids)}
-              />
+              <RouteScopeSelector id={id} selected={strings(value.selectedRouteIds)}
+                onSelection={(ids) => change("selectedRouteIds", ids)} />
             </section>
           )}
           {groups.map((group) => (

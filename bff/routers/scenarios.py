@@ -3027,6 +3027,9 @@ def create_scenario(body: CreateScenarioBody) -> Dict[str, Any]:
             random_seed=body.randomSeed,
         )
     except KeyError:
+        # A rejected dataset must not leave an empty draft masquerading as a
+        # newly created scenario in the management list.
+        store.delete_scenario(meta["id"])
         raise HTTPException(status_code=404, detail=f"Dataset '{body.datasetId}' not found")
     return store.apply_dataset_bootstrap(meta["id"], bootstrap)
 

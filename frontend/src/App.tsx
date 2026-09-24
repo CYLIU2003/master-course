@@ -24,7 +24,7 @@ import {
   Settings2,
   X,
 } from "lucide-react";
-import { api, post, type Page, type Scenario } from "./api";
+import { api, post, put, type Page, type Scenario } from "./api";
 import { ErrorBox, Pager } from "./components/common";
 import Workspace from "./components/Workspace";
 import ClusterPanel from "./components/ClusterPanel";
@@ -69,9 +69,13 @@ export default function App() {
   const [routeGroup, setRouteGroup] = useState<RouteGroup>("all");
   const [periodKind, setPeriodKind] = useState<"reusable" | "dated_history">("reusable");
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [dataset, setDataset] = useState("");
   const [seed, setSeed] = useState(42);
   const [creating, setCreating] = useState(false);
+  const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
   const client = useQueryClient();
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -113,6 +117,7 @@ export default function App() {
     mutationFn: () =>
       post<Scenario>("/scenarios", {
         name: name.trim(),
+        description: description.trim(),
         randomSeed: seed,
         ...(dataset.trim() ? { datasetId: dataset.trim() } : {}),
       }),
@@ -121,6 +126,23 @@ export default function App() {
       select(row.id);
       setCreating(false);
       setName("");
+      setDescription("");
+    },
+  });
+  const manage = useMutation({
+    mutationFn: ({ action, scenario }: { action: "save" | "duplicate"; scenario: Scenario }) =>
+      action === "duplicate"
+        ? post<Scenario>(`/scenarios/${scenario.id}/duplicate`, {})
+        : put<Scenario>(`/scenarios/${scenario.id}`, {
+            name: editName.trim(), description: editDescription.trim(),
+          }),
+    onSuccess: (row, variables) => {
+      void client.invalidateQueries({ queryKey: ["scenarios"] });
+      if (variables.action === "duplicate") select(row.id);
+      else {
+        setEditingScenario(null);
+        void client.invalidateQueries({ queryKey: ["overview", row.id] });
+      }
     },
   });
   const title = pages.find(([key]) => key === page)?.[1] ?? "";
@@ -312,6 +334,11 @@ export default function App() {
                     />
                   </label>
                   <label>
+                    説明
+                    <input value={description} onChange={(e) => setDescription(e.target.value)}
+                      placeholder="比較条件や用途を記録" />
+                  </label>
+                  <label>
                     データセットID
                     <input
                       value={dataset}
@@ -339,6 +366,7 @@ export default function App() {
               </form>
             )}
             <ErrorBox error={list.error} />
+            <ErrorBox error={manage.error} />
             <div className="segmented" role="group" aria-label="シナリオの表示">
               <button type="button" className={periodKind === "reusable" ? "active" : ""}
                 onClick={() => { setPeriodKind("reusable"); setOffset(0); }}>
@@ -350,6 +378,7 @@ export default function App() {
               </button>
             </div>
             <p className="subtle">月別の旧ファイルは履歴として保持します。新しい期間は同じシナリオの「運行・計算設定」で開始日と日数を変更します。</p>
+            <p className="subtle">ここで新規作成・複製・名前変更ができます。削除はシナリオを開いて「管理」から確認します。</p>
             <div className="scenario-group-filter">
               <label htmlFor="scenario-route-group">路線で分類</label>
               <select
@@ -392,30 +421,37 @@ export default function App() {
                       {label} <small>{rows.length}件（このページ）</small>
                     </h3>
                     {rows.map((row) => (
-                      <button
-                        key={row.id}
-                        className={
-                          "scenario " + (selected === row.id ? "selected" : "")
-                        }
-                        disabled={list.isPlaceholderData}
-                        onClick={() => select(row.id)}
-                      >
-                        <div className="scenario-symbol">
-                          <Layers3 size={20} />
+                      <div key={row.id} className="scenario-card">
+                        <button className={"scenario " + (selected === row.id ? "selected" : "")}
+                          disabled={list.isPlaceholderData || manage.isPending}
+                          onClick={() => select(row.id)}>
+                          <div className="scenario-symbol"><Layers3 size={20} /></div>
+                          <span>{row.name}
+                            <small>識別ID: {row.id.slice(0, 8)}</small>
+                            <small>{row.description || "運行・充電・エネルギー計画"}</small>
+                          </span>
+                          <small>{row.updatedAt?.slice(0, 10)}<br />{row.status}</small>
+                        </button>
+                        <div className="scenario-card-actions">
+                          <button type="button" disabled={manage.isPending || list.isPlaceholderData}
+                            onClick={() => manage.mutate({ action: "duplicate", scenario: row })}>複製して新規作成</button>
+                          <button type="button" disabled={manage.isPending || list.isPlaceholderData}
+                            onClick={() => {
+                              setEditingScenario(row);
+                              setEditName(row.name);
+                              setEditDescription(row.description ?? "");
+                            }}>名前・説明を編集</button>
                         </div>
-                        <span>
-                          {row.name}
-                          <small>識別ID: {row.id.slice(0, 8)}</small>
-                          <small>
-                            {row.description || "運行・充電・エネルギー計画"}
-                          </small>
-                        </span>
-                        <small>
-                          {row.updatedAt?.slice(0, 10)}
-                          <br />
-                          {row.status}
-                        </small>
-                      </button>
+                        {editingScenario?.id === row.id && <form className="scenario-card-edit"
+                          onSubmit={(event) => { event.preventDefault(); manage.mutate({ action: "save", scenario: row }); }}>
+                          <label>シナリオ名<input required maxLength={160} value={editName}
+                            onChange={(event) => setEditName(event.target.value)} /></label>
+                          <label>説明<input value={editDescription}
+                            onChange={(event) => setEditDescription(event.target.value)} /></label>
+                          <button type="submit" className="primary" disabled={manage.isPending || !editName.trim()}>保存</button>
+                          <button type="button" onClick={() => setEditingScenario(null)}>取り消す</button>
+                        </form>}
+                      </div>
                     ))}
                   </section>
                 );

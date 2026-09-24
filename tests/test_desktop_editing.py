@@ -45,6 +45,38 @@ def test_configuration_preserves_scope_syncs_soc_and_dates(editable):
     assert error.value.status_code == 409
 
 
+def test_route_pattern_selection_keeps_exact_ids_and_invalidates_prepared_scope(editable):
+    from bff.services.run_preparation import _scenario_hash
+
+    scenario_store.set_field(editable, "routes", [
+        {"id": "r-a", "name": "渋24往路", "routeCode": "渋24", "depotId": "d", "enabled": True},
+        {"id": "r-b", "name": "渋24復路", "routeCode": "渋24", "depotId": "d", "enabled": True},
+        {"id": "r-c", "name": "東98", "routeCode": "東98", "depotId": "d", "enabled": True},
+    ])
+    scenario_store.set_dispatch_scope(editable, {"routeSelection": {
+        "mode": "include", "includeRouteIds": ["r-a", "r-b", "r-c"]}})
+    before = config.configuration(editable)
+    previous_hash = _scenario_hash(scenario_store.get_scenario_document_shallow(editable))
+
+    result = config.save_configuration(editable, {"selectedRouteIds": ["r-a", "r-c"]}, before["revision"])
+
+    assert result["values"]["selectedRouteIds"] == ["r-a", "r-c"]
+    assert scenario_store.get_dispatch_scope(editable)["effectiveRouteIds"] == ["r-a", "r-c"]
+    assert _scenario_hash(scenario_store.get_scenario_document_shallow(editable)) != previous_hash
+
+
+def test_rejected_dataset_creation_does_not_leave_an_empty_scenario(tmp_path, monkeypatch):
+    monkeypatch.setattr(scenario_store, "_STORE_DIR", tmp_path / "scenarios")
+    monkeypatch.setattr(scenarios.research_catalog, "bootstrap_scenario",
+                        lambda **_: (_ for _ in ()).throw(KeyError("missing")))
+
+    with pytest.raises(HTTPException) as error:
+        scenarios.create_scenario(scenarios.CreateScenarioBody(name="invalid", datasetId="missing"))
+
+    assert error.value.status_code == 404
+    assert scenario_store.scenario_metadata_paths() == []
+
+
 @pytest.mark.parametrize("days", [1, 7, 21, 56])
 def test_same_scenario_supports_day_week_and_multiweek_periods(editable, days):
     before = config.configuration(editable)

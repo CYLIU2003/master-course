@@ -138,6 +138,7 @@ export default function Workspace({
             }
           >
             <Settings2 size={16} />
+            管理
           </button>
           <button aria-label="最新情報を取得" disabled={locked} onClick={saved}>
             <RefreshCw size={16} />
