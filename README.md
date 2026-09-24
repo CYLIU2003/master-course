@@ -49,6 +49,34 @@ controllerの配置先を変更した場合も、新しい設定で再登録し�
 
 ## ODPT時刻表は手動更新する
 
+東急バス全社の4種類（停留所時刻表・停留所・路線パターン・便時刻表）は、
+Go標準ライブラリの手動取得器で新しい保存先へ固定します。APIキーは
+PowerShellの非表示入力から子プロセス環境へ渡し、コマンド引数・原本manifest・
+Gitへ書きません。ODPTが1回の一覧取得で1,000件を返すことがあるため、
+便時刻表は路線パターン、停留所時刻表は停留所IDで分割し、分割の照合に失敗したら
+全社版として確定しません。429では待機し、途中の原本をSHAで照合して同じ先へ再開できます。
+
+```powershell
+& scripts/catalog/run_tokyu_company_refresh.ps1 -Output data/external/odpt/tokyu_company_<日付> -Workers 2 -Python C:\master-course\.venv\Scripts\python.exe
+```
+
+段階ごとに止めて確認する場合は、同じ保存先で次を順に実行します。
+
+```powershell
+& scripts/catalog/run_tokyu_company_capture.ps1 -Output data/external/odpt/tokyu_company_<日付> -Workers 2
+C:\master-course\.venv\Scripts\python.exe -m scripts.catalog.manual_tokyu_company_snapshot verify --output data/external/odpt/tokyu_company_<日付>
+C:\master-course\.venv\Scripts\python.exe -m scripts.catalog.manual_tokyu_company_snapshot build --output data/external/odpt/tokyu_company_<日付>
+```
+
+`capture_manifest.json` ができるまで原本は未確定です。`build` はネットワークを使わず、
+4種類の原本SHA・件数・事業者・分割条件を照合してから別のSQLiteを作ります。
+`build_manifest.json` のDB SHAと既存 `local_db_catalog` による読取スモークを確認し、
+使うプロセスだけ `TOKYU_DB_PATH` にそのSQLiteの絶対パスを指定します。
+既存の渋24固定DB・Prepared入力・実行中controllerは自動で切り替わりません。
+この全社DBは時刻表カタログであり、営業所・実車両・道路距離・電費・充電設備を
+確定した正式シナリオではありません。距離代理値を使う画面上の便抽出を、
+研究採用可能な最適化入力と読み替えないでください。
+
 渋24の時刻表スナップショット更新は**手動操作のみ**です。ジョブ作成・月別
 `check` / `prepare`・求解はODPTへアクセスせず、原本取得・正規化・DB再生成を
 開始しません。既存の固定時刻表を対象日へ展開するPrepare処理は続けます。
