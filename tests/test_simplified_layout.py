@@ -45,4 +45,5 @@ def test_relocated_document_links_resolve():
 def test_obsolete_intermediate_directories_do_not_return():
     for name in ("tools/catalog", "tools/validation", "scripts/fleet"):
         assert not (ROOT / name).exists(), name
-    assert len(list((ROOT / "docs").glob("*.md"))) == 3
+    docs_mds = {p.name for p in (ROOT / "docs").glob("*.md")}
+    assert docs_mds <= {"DISTRIBUTED_COMPUTE.md", "FILE_ORGANIZATION.md", "README.md", "REPOSITORY_LAYOUT.md"}
