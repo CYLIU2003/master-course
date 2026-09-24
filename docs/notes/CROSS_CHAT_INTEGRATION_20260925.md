@@ -26,3 +26,12 @@ P1（修正済み）: 表示用距離の刷新で既存DB取込が呼ぶ_straigh
 - GitHub Actionsはworkflow_dispatchのみ。自動CIや有料サービスを有効化しない。
 
 mainは開発・正式版コードの共通基準。研究結果の正式採用、最適性、実営業所への設備適合の承認とは別である。
+
+
+## 管理画面への反映
+
+clean固定b0b216f4を8868の管理サービスへ配置した。既存管理queueは全件終端であることを確認し、設定原本を保全して管理サービスのみ再起動。全2求解枠の外部予約を維持し、8890の稼働中計算は変更していない。
+
+保存済みODPT表示資料3件とGTFS DBを新配置へコピーしてSHAを照合。外部APIから再取得していない。APIでODPT764パターン、GTFS618パターン、仮・正式用12期間を確認し、実画面で弦巻の系統一覧と期間別計画を確認。検証記録はoutput/chat-integration-20260925/http-verification.jsonおよびcatalog-deployment-hashes.json。
+
+C:/master-courseのcodex/research-gates-20260923、codex/scenario-week-plans-20260924、mainを同じ統合履歴へfast-forward。ローカル取得原本3件は未追跡のまま保全し、開発コードの取りこぼしと区別する。管理実行版b0b216f4と、それ以後の配置記録だけの文書コミットを区別する。

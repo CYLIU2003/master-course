@@ -10881,3 +10881,5 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 統合回帰で発見したP1を2件修正。営業所追加で以前に解除した路線を復活させず、不明な選択IDも黙って削除しない。ブラウザー刷新で消えていた_straight_line_distance_kmを既存DB取込経路用に保持し、手動ODPT→SQLiteのNameErrorを解消。表示用距離と既存取込の意味を分離する。
 
 - 修正後Python関連70件、フロント全57件、型検査・本番ビルド通過。自己レビューのP1は2件とも修正済み、未解決P0/P1の指摘なし（対象差分の範囲）。独立レビュー・新版実規模求解は別途未確認。[統合記録](docs/notes/CROSS_CHAT_INTEGRATION_20260925.md)。
+
+- b0b216f4を8868へ配置し、読取APIでODPT764・GTFS618・期間12件、実画面で営業所別系統と期間計画の併存を確認。入力資料4件SHA一致。稼働8890は不変。両作業ブランチとmainを同じ基準へ同期する。
