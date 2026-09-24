@@ -4213,6 +4213,7 @@ AIを使わない配布・バッチ再開スクリプトを備えます。Python
 `stage-state.json` は終端失敗を `FAILED`、通信などで同一試行の結末が確定しない状態を `STATE_UNKNOWN` と区別します。後者を新しい試行として自動再投入しません。
 
 実行終了または失敗時のメール通知は、計算版と別プロセスの `tools/research/watch_shibu24_terminal.py` を使います。監視中は保存済み状態だけを読み、AIやGmailを呼びません。全12週の回収・物理監査を確認した完了、明示失敗、または計算プロセスの異常終了で、一意な `event.json` と `email_payload.json` を保存して既存Codexタスクを一度だけ起こします。そのタスクが接続済みGmailの送信済み検索と `email_receipt.json` を確認してから、承認済み宛先へ1通送ります。通信状態不明は成功扱いせず、計算も再投入しません。`event.json` が `DISPATCH_UNCERTAIN` の場合は自動再通知しないので手動照合が必要です。PCとCodexの接続が利用できない間の送信は保証されません。
+現在の段階試験には固定計算版の `C:\master-course-worktrees\shibu24-memory-fix-20260924\output\staged_campaign_v3\terminal_observer\config.json` を結び付け、Windowsログオン時タスク `MasterCourseShibu24TerminalMail` でも再開します。通知状態は同ディレクトリの `event.json` と `email_receipt.json` で確認できます。`event.json` の `QUEUED` はCodexへの依頼受理であり、メール送信済みを意味しません。
 
 使い方は、まずclean Git SHAの専用コントローラーを `tools/cluster/serve_controller.py --settings <settings.json>` で起動し、その設定と同じ出力先・releaseを指定して `python tools/research/shibu24_staged_campaign.py --settings <settings.json> --output <campaign-dir>` を実行します。同じ出力先で再実行すると同じbatch IDと状態を照合して再開します。`stage-state.json` は段階の進捗、各 `batch.log` は投入・回収履歴、`artifact-audit.json` は段階の成果物監査です。これは診断実行であり、完走しても修論用の研究採用や統合総費用の大域最適性を認めるものではありません。
 # 2026-09-23 実便版渋24・16台診断
