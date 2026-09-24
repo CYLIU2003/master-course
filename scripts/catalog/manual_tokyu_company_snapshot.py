@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import unicodedata
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -178,22 +179,35 @@ def build(output: Path) -> dict:
             catalog.insert_timetable(connection, row, pattern_map)
         connection.execute("ALTER TABLE stop_timetables ADD COLUMN source_id TEXT")
         connection.execute("ALTER TABLE stop_timetables ADD COLUMN busroute_ids_json TEXT")
+        connection.execute("ALTER TABLE stop_timetables ADD COLUMN bus_directions_json TEXT")
         for row in resources[RESOURCES[3]]:
             route_ids = row.get("odpt:busroute") or []
             if isinstance(route_ids, str):
                 route_ids = [route_ids]
+            directions = row.get("odpt:busDirection") or []
+            if isinstance(directions, str):
+                directions = [directions]
+            if not isinstance(directions, list) or not directions or any(
+                not isinstance(direction, str) or not direction for direction in directions
+            ):
+                raise ValueError(f"Stop timetable has invalid bus directions: {row['owl:sameAs']}")
             if not route_ids or not row.get("odpt:busstopPole"):
                 raise ValueError(f"Stop timetable lacks route/stop: {row['owl:sameAs']}")
+            # The ODPT field can name several directions. A single legacy
+            # direction must not be invented when the source is ambiguous.
+            legacy_direction = directions[0] if len(directions) == 1 else ""
+            directions_json = json.dumps(directions, ensure_ascii=False)
+            route_ids_json = json.dumps(route_ids, ensure_ascii=False)
             for item in row.get("odpt:busstopPoleTimetableObject") or []:
                 departure = item.get("odpt:departureTime")
                 minute = catalog.hhmm_to_min(departure)
                 if minute is None:
                     raise ValueError(f"Stop timetable has invalid departure time: {row['owl:sameAs']}")
                 connection.execute(
-                    "INSERT INTO stop_timetables(stop_id, pattern_id, calendar_type, direction, departure_hhmm, dep_min, note, source_id, busroute_ids_json) VALUES (?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO stop_timetables(stop_id, pattern_id, calendar_type, direction, departure_hhmm, dep_min, note, source_id, busroute_ids_json, bus_directions_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (row["odpt:busstopPole"], "", catalog.calendar_label(row.get("odpt:calendar") or ""),
-                     row.get("odpt:busDirection") or "", departure, minute,
-                     str(item.get("odpt:note") or ""), row["owl:sameAs"], json.dumps(route_ids, ensure_ascii=False)),
+                     legacy_direction, departure, minute,
+                     str(item.get("odpt:note") or ""), row["owl:sameAs"], route_ids_json, directions_json),
                 )
         connection.executemany(
             "INSERT INTO pipeline_meta(key, value) VALUES (?, ?)",
@@ -201,7 +215,8 @@ def build(output: Path) -> dict:
              ("capture_manifest_sha256", hashlib.sha256((output / MANIFEST).read_bytes()).hexdigest()),
              ("operator_id", OPERATOR),
              ("synthetic_stop_timetable_entries", "0"),
-             ("stop_timetable_pattern_mapping", "unavailable_in_odpt_source; use busroute_ids_json")),
+             ("stop_timetable_pattern_mapping", "unavailable_in_odpt_source; use busroute_ids_json"),
+             ("stop_timetable_direction_mapping", "multi_value_source_preserved_in_bus_directions_json")),
         )
         connection.commit()
         counts = {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -244,17 +259,66 @@ def build(output: Path) -> dict:
     return result
 
 
+def export_shibu24_capture(output: Path, destination: Path) -> dict:
+    """Link the verified company snapshot to the existing Shibu24 audit path."""
+    manifest, resources = _read_verified_capture(output)
+    build_manifest_path = output / BUILD_MANIFEST
+    build_manifest = json.loads(build_manifest_path.read_text(encoding="utf-8"))
+    database_path = output / DATABASE
+    if (build_manifest.get("capture_manifest_sha256") != hashlib.sha256((output / MANIFEST).read_bytes()).hexdigest()
+            or build_manifest.get("database_sha256") != hashlib.sha256(database_path.read_bytes()).hexdigest()):
+        raise ValueError("Frozen company catalog does not match its capture and database hashes")
+    patterns = [row for row in resources[RESOURCES[0]]
+                if ".Shibu24." in str(row["owl:sameAs"])
+                and "渋24" in unicodedata.normalize("NFKC", str(row.get("dc:title") or ""))]
+    pattern_ids = {row["owl:sameAs"] for row in patterns}
+    if not patterns or len(pattern_ids) != len(patterns):
+        raise ValueError("No distinct Shibu24 patterns in the frozen company snapshot")
+    sources = [source for source in manifest["sources"]
+               if (source["resource"] in (RESOURCES[0], RESOURCES[1])
+                   or (source["resource"] == RESOURCES[2]
+                       and source["request"]["query"].get("odpt:busroutePattern") in pattern_ids))]
+    selected_partitions = [source for source in sources if source["resource"] == RESOURCES[2]]
+    if len(selected_partitions) != len(pattern_ids):
+        raise ValueError("Incomplete Shibu24 timetable partitions")
+    source_rows = resources[RESOURCES[2]]
+    timetable_count = sum(1 for row in source_rows if row.get("odpt:busroutePattern") in pattern_ids)
+    if timetable_count != sum(source["record_count"] for source in selected_partitions):
+        raise ValueError("Shibu24 timetable count differs from selected source partitions")
+    adapted = [{**source, "path": str((output / Path(source["path"]).name).resolve())}
+               for source in sources]
+    payload = {
+        "schema_version": "shibu24_capture_from_tokyu_company_v1",
+        "route_code": "渋24",
+        "captured_at_utc": manifest["captured_at_utc"],
+        "company_capture_manifest_sha256": hashlib.sha256((output / MANIFEST).read_bytes()).hexdigest(),
+        "company_database_sha256": build_manifest["database_sha256"],
+        "pattern_count": len(patterns),
+        "timetable_count": timetable_count,
+        "sources": adapted,
+    }
+    destination.mkdir(parents=True, exist_ok=False)
+    _write_new_json(destination / "shibu24_capture_manifest.json", payload)
+    return {"status": "SHIBU24_CAPTURE_EXPORTED", "pattern_count": len(patterns),
+            "timetable_count": timetable_count, "output": str(destination)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "verify"))
+    parser.add_argument("command", choices=("build", "verify", "export-shibu24"))
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--destination", type=Path)
     args = parser.parse_args()
     output = args.output.resolve()
-    if args.command == "build":
+    if args.command == "export-shibu24":
+        if args.destination is None:
+            parser.error("--destination is required for export-shibu24")
+        result = export_shibu24_capture(output, args.destination.resolve())
+    elif args.command == "build":
         result = build(output)
     else:
         result = _read_verified_capture(output)[0]
-    print(json.dumps({"status": result["status"], "output": str(output)}, ensure_ascii=False))
+    print(json.dumps({"status": result["status"], "output": result.get("output", str(output))}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

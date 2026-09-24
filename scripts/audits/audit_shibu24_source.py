@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
+from datetime import date
 import hashlib
 import json
 import math
@@ -150,7 +151,8 @@ def load_route_catalog(route_catalog: Path, old_selected: Path) -> tuple[dict[st
 
 
 def build_candidate(patterns: list[dict], timetables: list[dict], stops: dict[str, dict],
-                    routes: dict[str, dict], provenance: dict[str, dict]) -> dict:
+                    routes: dict[str, dict], provenance: dict[str, dict],
+                    *, source_label: str = "odpt_current_20260901") -> dict:
     pattern_by_id = {row["owl:sameAs"]: row for row in patterns}
     if set(pattern_by_id) != set(routes):
         raise ValueError("Official Shibu24 patterns and normalized route catalog do not match exactly")
@@ -209,7 +211,7 @@ def build_candidate(patterns: list[dict], timetables: list[dict], stops: dict[st
             "distance_source": "trip_stop_sequence_polyline_haversine",
             "distance_stop_count": len(stop_ids), "distance_segment_count": segment_count,
             "allowed_vehicle_types": ["BEV", "ICE"], "odptPatternId": pattern_id,
-            "odptTimetableId": trip_id, "source": "odpt_current_20260901",
+            "odptTimetableId": trip_id, "source": source_label,
             "source_provenance": provenance[trip_id],
             "browser_verification": "BROWSER_COMPARISON_PENDING",
         })
@@ -253,6 +255,7 @@ def audit(capture_dir: Path, stop_source: Path, route_catalog: Path, old_selecte
     if output.exists():
         raise FileExistsError(f"Shibu24 source audit is immutable; choose a new output directory: {output}")
     capture_manifest, patterns, timetables, provenance = load_capture(capture_dir)
+    capture_date = date.fromisoformat(str(capture_manifest.get("captured_at_utc") or "2026-09-01")[:10])
     stops, stop_provenance = load_stops(stop_source)
     routes, route_comparison = load_route_catalog(route_catalog, old_selected)
     route_comparison["official_capture_pattern_ids"] = sorted(row["owl:sameAs"] for row in patterns)
@@ -262,7 +265,8 @@ def audit(capture_dir: Path, stop_source: Path, route_catalog: Path, old_selecte
     route_comparison["catalog_patterns_missing_from_official_capture"] = sorted(
         set(routes) - set(route_comparison["official_capture_pattern_ids"])
     )
-    candidate = build_candidate(patterns, timetables, stops, routes, provenance)
+    candidate = build_candidate(patterns, timetables, stops, routes, provenance,
+                                source_label=f"odpt_current_{capture_date:%Y%m%d}")
     output.mkdir(parents=True)
     for name in ("timetable_rows", "stop_sequences", "stops", "selected_routes"):
         write_json(output / f"{name}.json", candidate[name])
@@ -273,6 +277,7 @@ def audit(capture_dir: Path, stop_source: Path, route_catalog: Path, old_selecte
         "official_operator": OPERATOR_ID, "local_operator_id": LOCAL_OPERATOR_ID,
         "pattern_count": len(patterns), "timetable_count": len(timetables),
         "source_dc_dates": sorted({row.get("dc:date") for row in patterns + timetables}),
+        "capture_timestamp_utc": capture_manifest.get("captured_at_utc"),
         "capture_manifest_sha256": sha256(capture_dir / "shibu24_capture_manifest.json"),
         "stop_source": stop_provenance, "route_id_comparison": route_comparison,
         "service_counts": candidate["service_counts"],
@@ -282,7 +287,7 @@ def audit(capture_dir: Path, stop_source: Path, route_catalog: Path, old_selecte
         "operator_unknown_count": candidate["operator_unknown_count"],
         "distance_semantics": "Sum of adjacent official stop-coordinate haversine segments; geographic proxy, not measured road-network distance.",
         "limits": [
-            "Official API data is current scheduled service dated 2026-09-01, not historical 2025 actual operations.",
+            f"Official API data was captured on {capture_date.isoformat()} as current scheduled service, not historical 2025 actual operations.",
             "The route24 browser full-stop comparison has not been captured; this candidate must not be used by the verified date-series loader.",
             "This audit validates source shape and provenance only; solver, rolling, physical, accounting, and research gates remain unrun.",
         ],

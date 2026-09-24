@@ -2,6 +2,8 @@
 
 ## 2026-09-24 東急バス全社ODPT 4系統のGo手動取得と固定DB化
 
+- 取得を完走し、全社747路線パターン・3,045停留所・33,484便時刻表・11,964停留所時刻表を原本SHAとマスタ参照集合で照合した。新しい全社DBは便33,484件、便停留所584,645件、停留所時刻表明細534,841件、停留所参照欠損0件、SQLite integrity=ok。DB SHAは `bcbdc9841710d1de9b3e0fcf3a1c79c6fe9efec8364e8fd9117b08b6da572a1d`。停留所時刻表の `odpt:busDirection` は全11,964件で配列、うち複数値は4,122件だった。単一方向に偽装せず `bus_directions_json` へ全値を保存し、単一値のみ既存 `direction` 列へ投影する修正後にDB生成した。
+- 固定全社原本から渋24の6パターン・582便のみを出典ハッシュ付きで抽出し、既存の厳格な渋24出典監査へ接続した。平日224・土曜188・日祝170便、停留所68件、時刻表停留所18,474件の新しい最適化用DBを `data/optimization/shibu24_20260924/` に生成・検証。DB SHAは `e905bbe19b76fa4e64318c621dc29775e394bed9f945c5ff633c5a1e80bdb71b`。新取得日を出典IDへ反映し、旧2026-09-01の出典名を流用しない。旧固定DB、旧Prepared、実行中controllerは変更していない。
 - 指定された `BusstopPoleTimetable` / `BusstopPole` / `BusroutePattern` / `BusTimetable` の全社取得を新規の明示操作へ分離した。最初の単純な事業者別GETは停留所時刻表がちょうど1,000件で止まり、停留所のoperatorは配列だった。全社取得成功とは扱わず、その原本は未確定の診断資料として保持した。
 - 取得はGo標準ライブラリの `capture_tokyu_company.go` と非表示キー入力の `run_tokyu_company_capture.ps1` に限定。路線パターンごとの便時刻表、停留所IDごとの停留所時刻表を分割取得し、ID・operator・問い合わせフィルタ・原本SHAと一覧先頭ページとの包含を検査する。停留所マスタが列挙する時刻表ID集合との完全一致も要求する。分割が1,000件へ達した場合は欠落防止のため停止。429は待機・再試行し、途中原本は同じ要求とSHAが一致した時だけ再利用する。キーをCLI引数・manifest・ログへ出さない。
 - Python `manual_tokyu_company_snapshot.py` はネットワークを一切使わず、固定原本から新規SQLiteを組み立てる。旧全社DB構築器と既存BFF読取器の `route_code` 列の差を新DBで補正し、停留所時刻表のODPT系統IDを `busroute_ids_json` と出典IDに残す。ODPTにない路線パターン対応は捏造しない。旧シナリオ・渋24固定DB・Prepared・solver入力は変更しない。

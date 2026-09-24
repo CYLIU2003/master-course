@@ -80,6 +80,14 @@ C:\master-course\.venv\Scripts\python.exe -m scripts.catalog.manual_tokyu_compan
 確定した正式シナリオではありません。距離代理値を使う画面上の便抽出を、
 研究採用可能な最適化入力と読み替えないでください。
 
+2026-09-24の手動取得は全社747パターン・33,484便・3,045停留所・停留所時刻表
+11,964件を原本照合し、新しい全社DBを生成しました。渋24のお試し計算は、
+その固定原本から渋24の6パターン・582便を切り出した監査済み入力を、
+別の `source.sqlite3` へ固定して使います。再取得なしで作り直す場合は、
+`manual_tokyu_company_snapshot.py export-shibu24`、
+`audit_shibu24_source.py`、`shibu24_optimization_store.py build/verify` の順です。
+新しい渋24DBは `data/optimization/shibu24_20260924/` で、旧DBへ上書きしません。
+
 渋24の時刻表スナップショット更新は**手動操作のみ**です。ジョブ作成・月別
 `check` / `prepare`・求解はODPTへアクセスせず、原本取得・正規化・DB再生成を
 開始しません。既存の固定時刻表を対象日へ展開するPrepare処理は続けます。

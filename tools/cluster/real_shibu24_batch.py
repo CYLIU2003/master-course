@@ -1,4 +1,4 @@
-"""Prepare a genuine Shibu24 weekday diagnostic for one job on every worker.
+"""Prepare a genuine Shibu24 weekday diagnostic for declared workers.
 
 The captured ODPT timetable and the existing Shibu21-23 scenario supply the
 inputs. This command writes a batch; batch.py owns execution and collection.
@@ -19,10 +19,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 SOURCE = ROOT / "output/shibu21_24_seasonal_20260911/shibu24_source_audit"
+DATABASE = ROOT / "data/optimization/shibu24_20260911"
 
 
-def validated_source(source_dir: Path) -> tuple[dict, dict]:
+def validated_source(source_dir: Path, database_dir: Path = DATABASE) -> tuple[dict, dict]:
     from scripts.audits.audit_shibu24_source import sha256
+    from scripts.benchmarks.shibu24_optimization_store import load_database
 
     manifest = json.loads((source_dir / "manifest.json").read_text(encoding="utf-8"))
     if manifest.get("status") != "SOURCE_CAPTURE_VALIDATED_BROWSER_COMPARISON_PENDING":
@@ -44,14 +46,28 @@ def validated_source(source_dir: Path) -> tuple[dict, dict]:
             not row.get("distance_source") or float(row.get("distance_km") or 0) <= 0
             for row in rows)):
         raise ValueError("Official Shibu24 source no longer has the audited route/trip contract")
+    database_dir = database_dir.resolve()
+    database_relative = database_dir.relative_to(ROOT.resolve()).as_posix()
+    database_manifest, database_rows = load_database(database_dir)
+    source_sha = sha256(source_dir / "manifest.json")
+    if (database_manifest.get("source_manifest_sha256") != source_sha or
+        database_rows["timetable_rows"] != rows or
+        database_rows["selected_routes"] != routes):
+        raise ValueError("Shibu24 optimization database differs from the frozen audited source")
+    capture_date = str(manifest["capture_manifest"].get("captured_at_utc") or "2026-09-01")[:10].replace("-", "")
     source = {
         "source_directory": str(source_dir.resolve()),
-        "source_id": "tsurumaki_shibu24_odpt_20260901_diagnostic_v1",
+        "source_id": f"tsurumaki_shibu24_odpt_{capture_date}_diagnostic_v1",
+        "optimization_database": database_relative,
+        "optimization_database_sha256": database_manifest["database_sha256"],
+        "optimization_manifest_sha256": sha256(database_dir / "manifest.json"),
+        "source_manifest_sha256": source_sha,
         "route_codes": ["渋24"],
         "distance_semantics": manifest["source_validation"]["distance_semantics"],
     }
     return source, {"route_count": len(routes), "template_count": len(rows),
-                    "service_counts": expected, "source_manifest_sha256": sha256(source_dir / "manifest.json")}
+                    "service_counts": expected, "source_manifest_sha256": source_sha,
+                    "optimization_database_sha256": database_manifest["database_sha256"]}
 
 
 def main() -> None:
@@ -61,6 +77,8 @@ def main() -> None:
     parser.add_argument("--batch-id", required=True)
     parser.add_argument("--service-date", default="2025-05-12")
     parser.add_argument("--source-dir", type=Path, default=SOURCE)
+    parser.add_argument("--database-dir", type=Path, default=DATABASE)
+    parser.add_argument("--worker-id", action="append", help="Run a focused trial on named enabled workers")
     args = parser.parse_args()
     settings = json.loads(args.settings.read_text(encoding="utf-8"))
     for key in ("release", "config", "queue", "outputs", "scenarios"):
@@ -90,11 +108,20 @@ def main() -> None:
         raise ValueError("Batch already exists; resume it with batch.py")
     if Path(settings["scenarios"]).resolve() != output_paths.scenarios_root().resolve():
         raise ValueError("Scenario store differs from controller's configured legacy store")
-    source, source_audit = validated_source(args.source_dir.resolve())
+    source, source_audit = validated_source(args.source_dir.resolve(), args.database_dir.resolve())
     config = read_config()
-    workers = [worker for worker in config.workers if worker.enabled]
-    if len(workers) != 16 or len({worker.id for worker in workers}) != 16:
-        raise ValueError("This diagnostic requires 16 distinct enabled workers")
+    enabled = [worker for worker in config.workers if worker.enabled]
+    if args.worker_id:
+        requested = set(args.worker_id)
+        if len(requested) != len(args.worker_id):
+            raise ValueError("Duplicate requested worker ID")
+        workers = [worker for worker in enabled if worker.id in requested]
+        if {worker.id for worker in workers} != requested:
+            raise ValueError("A requested worker is missing or disabled")
+    else:
+        workers = enabled
+        if len(workers) != 16 or len({worker.id for worker in workers}) != 16:
+            raise ValueError("The default diagnostic requires 16 distinct enabled workers")
     parent = scenario_store._load(PARENT_SCENARIO_ID, skip_graph_arcs=True)
     before = parent_hash(parent)
     created = scenario_store.duplicate_scenario(
