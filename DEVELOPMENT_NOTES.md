@@ -10877,3 +10877,7 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 9a2c8f91で未コミットの路線ブラウザー・資料日付付き参考所管を保存し、最新mainの期間管理・監視・SOC修正へ統合。元ファイルとpatchはoutput/chat-integration-20260925に保全。既存READMEの12か月計画を維持し、古い4季節のみの進捗へ戻さない。
 - 出典と限界は[路線カタログ点検](docs/notes/ROUTE_CATALOG_AUDIT_20260925.md)に集約。新表示はシナリオやPreparedの距離・所管を書き換えない。
 - 未追跡の旧verified_stage_config.pyは原本を保全し、mainのmanifest・probe・dataset検証を持つ新版を維持。Solcast取得原本はローカルに残し、このコード統合で公開しない。
+
+- 統合回帰で発見したP1を2件修正。営業所追加で以前に解除した路線を復活させず、不明な選択IDも黙って削除しない。ブラウザー刷新で消えていた_straight_line_distance_kmを既存DB取込経路用に保持し、手動ODPT→SQLiteのNameErrorを解消。表示用距離と既存取込の意味を分離する。
+
+- 修正後Python関連70件、フロント全57件、型検査・本番ビルド通過。自己レビューのP1は2件とも修正済み、未解決P0/P1の指摘なし（対象差分の範囲）。独立レビュー・新版実規模求解は別途未確認。[統合記録](docs/notes/CROSS_CHAT_INTEGRATION_20260925.md)。

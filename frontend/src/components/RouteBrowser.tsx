@@ -64,12 +64,15 @@ export default function RouteBrowser({ id, source = "scenario", selectedDepots, 
       setBrowseDepots(nextDepots);
       return;
     }
-    const visibleIds = new Set(
-      catalog?.routes.filter((route) => nextDepots.some((id) => belongsToDepot(route, id))).map((route) => route.id) ?? [],
-    );
+    // Only this depot changes. Keep earlier route exclusions and unknown IDs
+    // visible for correction instead of silently rewriting the selected scope.
+    const addedIds = catalog?.routes.filter((route) => belongsToDepot(route, depotId)).map((route) => route.id) ?? [];
+    const removedIds = new Set(catalog?.routes.filter((route) =>
+      belongsToDepot(route, depotId) && !nextDepots.some((id) => belongsToDepot(route, id)),
+    ).map((route) => route.id) ?? []);
     const nextRoutes = checked
-      ? [...new Set([...checkedRoutes, ...visibleIds])]
-      : checkedRoutes.filter((id) => visibleIds.has(id));
+      ? [...new Set([...checkedRoutes, ...addedIds])]
+      : checkedRoutes.filter((id) => !removedIds.has(id));
     onScopeChange(nextDepots, nextRoutes);
   }
 

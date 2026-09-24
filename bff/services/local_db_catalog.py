@@ -130,6 +130,27 @@ def _query_dicts(conn: sqlite3.Connection, sql: str, params: Sequence[Any] | Non
     return _rows_to_dicts(conn.execute(sql, params or []))
 
 
+def _straight_line_distance_km(record: dict[str, Any]) -> float:
+    # Preserve the existing trip-extraction contract; browser proxies are separate.
+    required = [
+        record.get("origin_lat"),
+        record.get("origin_lon"),
+        record.get("destination_lat"),
+        record.get("destination_lon"),
+    ]
+    if any(value is None for value in required):
+        return DEFAULT_DISTANCE_KM
+    return round(
+        haversine_km(
+            _safe_float(record.get("origin_lat")),
+            _safe_float(record.get("origin_lon")),
+            _safe_float(record.get("destination_lat")),
+            _safe_float(record.get("destination_lon")),
+        ),
+        4,
+    )
+
+
 def _pattern_distance_km(stops: Sequence[dict[str, Any]]) -> float | None:
     """Sum adjacent stop chords, matching the prepared trip distance proxy."""
     if len(stops) < 2:

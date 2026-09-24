@@ -81,3 +81,26 @@ it("shows a sourced depot reference only after that depot is checked", async () 
   expect(screen.getByRole("link", { name: "東急バス公式資料" }).getAttribute("href")).toContain("09_nippa.pdf");
   expect(screen.getByText(/ODPT保存所管: 未割当/)).toBeTruthy();
 });
+
+
+it("preserves earlier exclusions and unknown route IDs when another depot changes", async () => {
+  const routes = [
+    { id: "a1", depotIds: ["a"] }, { id: "a2", depotIds: ["a"] },
+    { id: "b1", depotIds: ["b"] },
+  ].map((r) => ({ ...r, name: r.id, routeCode: r.id, routeVariantType: "main", direction: "unknown", distanceKm: null, stops: [], stopCount: 0 }));
+  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+    depots: [{ id: "a", name: "Depot A" }, { id: "b", name: "Depot B" }], routes,
+  })))));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const change = vi.fn();
+  const renderBrowser = (depots: string[], selected: string[]) =>
+    <QueryClientProvider client={client}><RouteBrowser id="s" selectedDepots={depots} selectedRoutes={selected} onScopeChange={change} /></QueryClientProvider>;
+  const view = render(renderBrowser(["a"], ["a1", "unknown-id"]));
+  await screen.findByText("Depot B");
+  fireEvent.click(screen.getByLabelText(/Depot B\s*1パターン/));
+  expect(change).toHaveBeenLastCalledWith(["a", "b"], ["a1", "unknown-id", "b1"]);
+  view.rerender(renderBrowser(["a", "b"], ["a1", "unknown-id", "b1"]));
+  fireEvent.click(screen.getByLabelText(/Depot B\s*1パターン/));
+  expect(change).toHaveBeenLastCalledWith(["a"], ["a1", "unknown-id"]);
+  client.clear();
+});
