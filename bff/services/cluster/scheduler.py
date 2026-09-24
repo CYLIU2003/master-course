@@ -287,7 +287,8 @@ class Scheduler:
                 existing_tasks.add(old.get("task_id"))
                 if old.get("batch_task_count") != batch_task_count:
                     raise ValueError("Batch task count changed after first submission")
-                if old.get("task_id") == task_id and old.get("logical_job_id", old["id"]) != retry_root:
+                if (old.get("task_id") == task_id and old.get("id") != job_id
+                        and old.get("logical_job_id", old["id"]) != retry_root):
                     raise ValueError("Batch task already owns a different attempt")
             if task_id not in existing_tasks and len(existing_tasks) >= batch_task_count:
                 raise ValueError("Batch has already reached its declared task count")

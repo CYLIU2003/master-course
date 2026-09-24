@@ -54,6 +54,9 @@ def test_real_subprocess_roundtrip_and_restart_history(scheduler):
 
 def test_batch_membership_is_frozen_and_retry_keeps_the_declared_denominator(scheduler):
     first = scheduler.enqueue("diagnostic", {}, batch_id="research-run", task_id="case-a", batch_task_count=2)
+    repeated = scheduler.enqueue("diagnostic", {}, job_id=first["id"],
+                                 batch_id="research-run", task_id="case-a", batch_task_count=2)
+    assert repeated["id"] == first["id"]
     second = scheduler.enqueue("diagnostic", {}, batch_id="research-run", task_id="case-b", batch_task_count=2)
     assert first["manifest"]["batch_task_count"] == second["manifest"]["batch_task_count"] == 2
     with pytest.raises(ValueError, match="different attempt"):
