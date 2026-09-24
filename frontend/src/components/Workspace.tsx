@@ -284,7 +284,7 @@ export default function Workspace({
           )}
           {page === "results" && <ResultDetails id={id} data={data} />}
           {page === "compare" && <ComparePanel data={data} />}
-          {page === "cluster" && <ClusterPanel />}
+          {page === "cluster" && <ClusterPanel scenarioId={id} />}
         </>
       )}
     </div>

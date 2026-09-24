@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import CampaignProgress from "./CampaignProgress";
 
@@ -43,6 +43,7 @@ it("shows completed-week percentages and an actionable failed-week detail", asyn
   });
 
   expect(await screen.findByText("要対応")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "月別キャンペーンの進捗" })).toBeTruthy();
   expect(screen.getByRole("progressbar", { name: "入力準備の進捗" }).getAttribute("value")).toBe("2");
   expect(screen.getByRole("progressbar", { name: "計算の進捗" }).getAttribute("value")).toBe("1");
   expect(screen.getByText("成果物監査エラー")).toBeTruthy();
@@ -50,6 +51,55 @@ it("shows completed-week percentages and an actionable failed-week detail", asyn
   expect(screen.getByText("Expected digest differs")).toBeTruthy();
   expect(screen.getByText("SHA_MISMATCH")).toBeTruthy();
   expect(screen.getByText(/研究採用・大域最適性の証明にはなりません/)).toBeTruthy();
+  client.clear();
+});
+
+it("hides a campaign absent from the selected controller", async () => {
+  const fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 404 })));
+  vi.stubGlobal("fetch", fetch);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <CampaignProgress origin="http://localhost:8890" />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+    "http://localhost:8890/campaign-progress.json",
+    { cache: "no-store" },
+  ));
+  await waitFor(() =>
+    expect(screen.queryByRole("heading", { name: "月別キャンペーンの進捗" })).toBeNull(),
+  );
+  client.clear();
+});
+
+it("hides progress from a different fixed source revision", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+    schema_version: "monthly_campaign_progress_v1",
+    campaign: "old-campaign",
+    generated_at_utc: new Date().toISOString(),
+    git_sha: "older-sha",
+    status: "WAITING",
+    prepare_process: "STOPPED",
+    failed_count: 0,
+    stages: {
+      overall: { completed: 0, total: 3, percent: 0 },
+      prepare: { completed: 0, total: 1, percent: 0 },
+      solve: { completed: 0, total: 1, percent: 0 },
+      audit: { completed: 0, total: 1, percent: 0 },
+    },
+    weeks: [{ week: "2025-01-06", status: "WAITING", status_label: "待機中", prepared: false, audit_verified: false }],
+    recent_log: [],
+    recent_errors: [],
+  })))));
+  render(
+    <QueryClientProvider client={client}>
+      <CampaignProgress controllerSha="current-sha" />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(client.getQueryData(["monthly-campaign-progress", ""])).toBeTruthy());
+  expect(screen.queryByText("old-campaign")).toBeNull();
   client.clear();
 });
 

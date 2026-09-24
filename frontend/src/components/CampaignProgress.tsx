@@ -91,8 +91,9 @@ function isProgress(value: unknown): value is Progress {
   );
 }
 
-async function readCampaignProgress(): Promise<Progress> {
-  const response = await fetch("/campaign-progress.json", { cache: "no-store" });
+async function readCampaignProgress(origin: string): Promise<Progress | null> {
+  const response = await fetch(`${origin}/campaign-progress.json`, { cache: "no-store" });
+  if (response.status === 404) return null;
   if (!response.ok) throw new Error(`進捗記録を取得できません (HTTP ${response.status})`);
   const payload: unknown = await response.json();
   if (!isProgress(payload)) throw new Error("進捗記録の形式が一致しません");
@@ -110,25 +111,35 @@ function StageCard({ label, stage }: { label: string; stage: Stage }) {
   );
 }
 
-export default function CampaignProgress() {
+export default function CampaignProgress({
+  origin = "",
+  controllerSha,
+}: {
+  origin?: string;
+  controllerSha?: string;
+}) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(timer);
   }, []);
   const progress = useQuery({
-    queryKey: ["monthly-campaign-progress"],
-    queryFn: readCampaignProgress,
+    queryKey: ["monthly-campaign-progress", origin],
+    queryFn: () => readCampaignProgress(origin),
     retry: false,
     refetchInterval: 5000,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
   const data = progress.data;
   const generated = data ? Date.parse(data.generated_at_utc) : NaN;
   const stale = !Number.isFinite(generated) || now - generated > 20_000;
+  if (progress.isSuccess && !data) return null;
+  if (data?.git_sha && controllerSha && data.git_sha !== controllerSha) return null;
 
   return (
     <section className="panel campaign-progress">
-      <h2>渋24・月別12週の進捗</h2>
+      <h2>月別キャンペーンの進捗</h2>
       <p className="subtle">
         各割合は完了した週・工程の件数です。実行中の1週について残り時間や内部探索の進捗率は推定しません。
       </p>

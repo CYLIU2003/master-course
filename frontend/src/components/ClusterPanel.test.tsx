@@ -12,6 +12,7 @@ import ClusterPanel from "./ClusterPanel";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  sessionStorage.removeItem("ev-cluster-monitor-port");
 });
 
 it("keeps a completed task's SOC rejection and solver usage visible", async () => {
@@ -69,37 +70,15 @@ it("keeps a completed task's SOC rejection and solver usage visible", async () =
 });
 
 it("marks a fenced attempt as never started without offering a nonexistent archive", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string) =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify(
-            url.endsWith("/workers")
-              ? { workers: [], global_gurobi_slots: 2 }
-              : [
-                  {
-                    id: "fenced",
-                    state: "BLOCKED",
-                    worker_id: "pc",
-                    created_at: "2026-09-23",
-                    manifest: { kind: "optimization" },
-                    result: { cluster_admission: "FENCED_BEFORE_LAUNCH" },
-                  },
-                ],
-          ),
-        ),
-      ),
-    ),
-  );
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <ClusterPanel />
-    </QueryClientProvider>,
-  );
+  vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(
+    url.endsWith("/workers")
+      ? { workers: [], global_gurobi_slots: 2 }
+      : [{ id: "fenced", state: "BLOCKED", worker_id: "pc", created_at: "2026-09-23",
+           manifest: { kind: "optimization" },
+           result: { cluster_admission: "FENCED_BEFORE_LAUNCH" } }],
+  )))));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ClusterPanel /></QueryClientProvider>);
   expect(await screen.findByText("（子機で未開始と確認済み）")).toBeTruthy();
   expect(screen.queryByRole("link", { name: "成果物ZIP" })).toBeNull();
   expect(screen.getByRole("button", { name: "新しいIDで再試行" })).toBeTruthy();
@@ -215,9 +194,140 @@ it("shows the weekly period and planned windows separately from research accepta
   );
   expect(await screen.findByText("週間診断")).toBeTruthy();
   expect(screen.getByText(/ローリング予定 168回/)).toBeTruthy();
-  expect(screen.getByText("診断用・週間研究採用は未対応")).toBeTruthy();
+  expect(screen.getByText("複数日・研究採用は未対応")).toBeTruthy();
   expect(screen.getByText("（研究採用を意味しません）")).toBeTruthy();
   expect(screen.getByText(/外部計算予約 1 \/ 合計 2/)).toBeTruthy();
+});
+
+it("shows the selected scenario's live jobs and can switch to all jobs", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const job = (id: string, scenarioId: string, name: string, state: string) => ({
+    id,
+    state,
+    worker_id: null,
+    created_at: "2026-09-24",
+    manifest: {
+      kind: "optimization",
+      summary: {
+        scenario_id: scenarioId,
+        scenario_name: name,
+        planning_days: 1,
+        horizon_hours: 24,
+        service_dates: ["2026-09-24"],
+        expected_rolling_windows: 24,
+        research_status: "SEPARATE_ACCEPTANCE_REQUIRED",
+      },
+    },
+  });
+  const first = job("job-first", "scenario-a", "Scenario A", "QUEUED");
+  const second = job("job-second", "scenario-b", "Scenario B", "RUNNING");
+  client.setQueryData(["cluster-jobs"], [first, second]);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url.endsWith("/workers")
+              ? { workers: [], global_gurobi_slots: 2 }
+              : [first, second],
+          ),
+        ),
+      ),
+    ),
+  );
+  render(
+    <QueryClientProvider client={client}>
+      <ClusterPanel scenarioId="scenario-a" />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("Scenario A")).toBeTruthy();
+  expect(screen.queryByText("Scenario B")).toBeNull();
+  client.setQueryData(["cluster-jobs"], [
+    { ...first, state: "RUNNING" },
+    second,
+  ]);
+  await waitFor(() => expect(screen.getByText("RUNNING")).toBeTruthy());
+  fireEvent.change(screen.getByLabelText("表示するジョブ"), {
+    target: { value: "all" },
+  });
+  expect(screen.getByText("Scenario B")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("表示するジョブ"), {
+    target: { value: "scenario" },
+  });
+  expect(screen.queryByText("Scenario B")).toBeNull();
+  client.clear();
+});
+
+it("switches to another local controller's queue without enabling remote actions", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const fetch = vi.fn((url: string) =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify(
+          url.endsWith("/workers")
+            ? { workers: [], global_gurobi_slots: 2 }
+            : [
+                {
+                  id: url.startsWith("http") ? "remote-job" : "local-job",
+                  state: "QUEUED",
+                  worker_id: null,
+                  created_at: "2026-09-24",
+                  manifest: {
+                    kind: "optimization",
+                    summary: {
+                      scenario_id: url.startsWith("http")
+                        ? "scenario-b"
+                        : "scenario-a",
+                      scenario_name: url.startsWith("http")
+                        ? "Remote Scenario"
+                        : "Local Scenario",
+                      planning_days: 1,
+                      horizon_hours: 24,
+                      service_dates: ["2026-09-24"],
+                      expected_rolling_windows: 0,
+                      research_status: "SEPARATE_ACCEPTANCE_REQUIRED",
+                    },
+                  },
+                },
+              ],
+        ),
+      ),
+    ),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const { rerender } = render(
+    <QueryClientProvider client={client}>
+      <ClusterPanel scenarioId="scenario-a" />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("Local Scenario")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("監視先ポート（このPC）"), {
+    target: { value: "8890" },
+  });
+  expect(await screen.findByText("Remote Scenario")).toBeTruthy();
+  expect(screen.queryByText("Local Scenario")).toBeNull();
+  expect(screen.getByRole("button", { name: "登録取消" }).hasAttribute("disabled")).toBe(true);
+  expect(
+    fetch.mock.calls.some(([url]) =>
+      String(url).startsWith("http://localhost:8890/api/cluster/jobs"),
+    ),
+  ).toBe(true);
+  expect(sessionStorage.getItem("ev-cluster-monitor-port")).toBe("8890");
+  rerender(
+    <QueryClientProvider client={client}>
+      <ClusterPanel key="next-scenario" scenarioId="scenario-b" />
+    </QueryClientProvider>,
+  );
+  expect(
+    (screen.getByLabelText("監視先ポート（このPC）") as HTMLInputElement).value,
+  ).toBe("8890");
+  expect(screen.getByText("Remote Scenario")).toBeTruthy();
+  client.clear();
 });
 
 it("shows reusable per-attempt checkpoints and marks disconnected values as last known", async () => {
