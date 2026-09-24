@@ -6,6 +6,7 @@
 - `acquire_shibu24_odpt.py` を手動の取得入口として追加し、既存の資格情報解決と原本SHA付き捕捉処理を再利用する。取得原本→`audit_shibu24_source.py`→`shibu24_optimization_store.py build` は明示CLIでのみ進める。監査済み出力への上書きを拒否する。Prepareやキャンペーンから取得CLIを呼ばない。
 - 現行DBや既存Prepared入力を改変しない。新ダイヤを採用する場合は別取得先・別DB・別clean SHA・全ケース新規Prepareを要する。2026公開ダイヤを2025年実績と扱わず、独立レビューと正式研究ゲートは別途必要。
 - ネットワーク取得は実行せず、手動取得CLIのモック試験と既存DBの読取専用検証を行った。取得・監査・DB・月別キャンペーンに関係するPythonテスト30件、渋24の12週 `check`、CLI `--help`、`git diff --check` が通過。実際の新ODPT取得と新スナップショットの実データ監査は、研究者が明示的に更新するときの別作業である。
+- 新版 `codex/flexible-scenario-horizon-20260924` には、既存固定DBと月別週選択・予測スナップショットの同一バイト列を隔離worktreeから配置し、各ファイルのSHA一致を確認した。新版でも12週 `check` は `INPUTS_AVAILABLE_DIAGNOSTIC`。これらはGit管理外のローカル入力であり、別PCや別cloneには自動同梱されない。正式実行前に同じ原本・manifest・hashを各実行環境へ配置して再照合する。
 
 ## 2026-09-24 分散ジョブ進捗を全シナリオ共通機能へ
 
