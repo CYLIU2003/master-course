@@ -6,6 +6,7 @@ import json
 import pytest
 
 from scripts.benchmarks.shibu24_optimization_store import build_database, load_database
+from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import configure_doc
 
 
 def _write_json(path, value):
@@ -91,3 +92,17 @@ def test_nonfinite_distance_is_not_accepted_as_optimization_input(tmp_path):
     _write_json(manifest_path, manifest)
     with pytest.raises(ValueError, match="operator or distance"):
         build_database(source, tmp_path / "optimization")
+
+
+def test_shibu24_prepare_rejects_missing_frozen_database_before_source_read(monkeypatch):
+    def unexpected_source_read(*_args, **_kwargs):
+        raise AssertionError("Prepare must not read an ODPT-derived JSON fallback")
+
+    monkeypatch.setattr(
+        "scripts.benchmarks.prepare_shibu21_24_seasonal_inputs.read_json",
+        unexpected_source_read,
+    )
+    source = {"source_id": "tsurumaki_shibu24_odpt_test", "route_codes": ["渋24"],
+              "distance_semantics": "geographic_proxy"}
+    with pytest.raises(ValueError, match="manually frozen optimization database"):
+        configure_doc({}, "2025-01-06", source)

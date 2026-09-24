@@ -250,6 +250,8 @@ def write_json(path: Path, payload: object) -> None:
 
 def audit(capture_dir: Path, stop_source: Path, route_catalog: Path, old_selected: Path,
           output: Path) -> dict:
+    if output.exists():
+        raise FileExistsError(f"Shibu24 source audit is immutable; choose a new output directory: {output}")
     capture_manifest, patterns, timetables, provenance = load_capture(capture_dir)
     stops, stop_provenance = load_stops(stop_source)
     routes, route_comparison = load_route_catalog(route_catalog, old_selected)
@@ -261,7 +263,7 @@ def audit(capture_dir: Path, stop_source: Path, route_catalog: Path, old_selecte
         set(routes) - set(route_comparison["official_capture_pattern_ids"])
     )
     candidate = build_candidate(patterns, timetables, stops, routes, provenance)
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True)
     for name in ("timetable_rows", "stop_sequences", "stops", "selected_routes"):
         write_json(output / f"{name}.json", candidate[name])
     write_json(output / "route_id_comparison.json", route_comparison)

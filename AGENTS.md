@@ -22,6 +22,11 @@ priority over convenience or attractive output.
 - Never weaken or bypass
   `arrival + turnaround + deadhead <= next departure`.
 - Never silently rewrite, filter, regenerate, or re-derive `timetable_rows`.
+- ODPT timetable acquisition, source audit, and optimization-DB rebuild are
+  explicit researcher-triggered operations. Job submission, Prepare, and solve
+  must consume a verified, immutable timetable snapshot; they must not refresh
+  ODPT or rebuild that snapshot. A changed snapshot requires a new experiment
+  version and fresh Prepare for every compared case.
 - Never drop, invent, or replace `operator_id`; formal runs require zero
   `UNKNOWN` operators.
 - Never accept missing, zero, or invented route/trip distance as valid formal

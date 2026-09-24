@@ -147,8 +147,8 @@ def load_database(destination: Path = DATABASE_DIR) -> tuple[dict, dict[str, lis
     database_path = destination / "source.sqlite3"
     if not manifest_path.is_file() or not database_path.is_file():
         raise FileNotFoundError(
-            "Shibu24 optimization database is missing; run "
-            "python scripts/benchmarks/shibu24_optimization_store.py build once"
+            "Shibu24 optimization database is missing; a researcher must manually "
+            "audit the ODPT source and build a new frozen snapshot before Prepare"
         )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if (manifest.get("schema_version") != SCHEMA_VERSION or

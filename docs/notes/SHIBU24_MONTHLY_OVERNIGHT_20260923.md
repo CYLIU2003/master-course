@@ -4,6 +4,34 @@
 
 ## ODPT原本と最適化用DBの境界（2026-09-24更新）
 
+時刻表はジョブごとに取り直さない。ODPT取得、取得原本の監査、最適化用DB生成は
+研究者が明示的に実行する更新作業である。月別ジョブ・Prepare・求解からこの
+更新作業を呼び出さない。現行の固定DBを使う限り、通常は下記の `verify` と
+月別 `check` だけを行う。取得失敗、欠損、hash不一致時は停止し、古い原本へ
+黙って戻したり、自動再取得したりしない。
+
+新しい公開ダイヤを採用する時だけ、以下を**別の空の出力先**で手動実行する。
+ODPT認証は既存の安全な設定から読み、コマンド引数・ログ・Gitへ鍵を載せない。
+
+```powershell
+$captureDir = 'C:\master-course\output\odpt_shibu24_NEW_VERSION'
+$auditDir = 'C:\master-course\output\shibu24_source_audit_NEW_VERSION'
+$dbDir = 'C:\master-course\data\optimization\shibu24_NEW_VERSION'
+python scripts/audits/acquire_shibu24_odpt.py --output $captureDir
+$captureManifest = Get-Content (Join-Path $captureDir 'shibu24_capture_manifest.json') -Raw | ConvertFrom-Json
+python scripts/audits/audit_shibu24_source.py --capture-dir $captureDir --stop-source $captureManifest.stop_source_path --output $auditDir
+python scripts/benchmarks/shibu24_optimization_store.py build --source $auditDir --destination $dbDir
+python scripts/benchmarks/shibu24_optimization_store.py verify --destination $dbDir
+```
+
+監査は正規化路線カタログとの厳密なID照合を行う。公開側のパターンが変わって
+照合できない場合、カタログも別途手動更新・監査し、同じ取得原本と結び直す。
+成功しただけでは現行キャンペーンのDB指定は変更されない。新DBを研究比較へ
+採用する場合は、DBパスとSHAを明示的に固定した新しい実験版を作り、全ケースを
+新しいclean Git SHAからPrepareし直す。取得日・DB SHA・manifest SHA・便数・
+路線集合を記録し、旧DB版の週や結果と混ぜない。取得した現行公開ダイヤを
+2025年の実運行実績と呼ばない。
+
 `output/shibu21_24_seasonal_20260911/odpt_shibu24_20260901/` の取得原本と
 `shibu24_source_audit/` の加工済みJSON・manifestは保管・再構築用とする。
 `python scripts/benchmarks/shibu24_optimization_store.py build` は原本SHAと
