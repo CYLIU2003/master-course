@@ -29,7 +29,7 @@ from tools.cluster.batch import canonical, digest, validate_batch
 
 DAY = "2025-05-12"
 WEEK_TASK = "month-2025-05"
-WEEK_MINIMUM_FREE_RAM_GB = 20.0
+WEEK_MINIMUM_FREE_RAM_GB = 18.0
 
 
 def read(path: Path) -> dict:
