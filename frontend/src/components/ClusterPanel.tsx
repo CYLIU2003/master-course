@@ -31,6 +31,7 @@ type ClusterJob = {
     batch_task_count?: number;
     summary?: {
       scenario_name: string;
+      scenario_id?: string | null;
       planning_days: number;
       horizon_hours: number;
       service_dates: string[];
@@ -55,38 +56,74 @@ type ClusterJob = {
   created_at: string;
 };
 
-export default function ClusterPanel() {
+const monitorPortKey = "ev-cluster-monitor-port";
+
+function isValidMonitorPort(value: string): boolean {
+  const port = Number(value);
+  return !value || (Number.isInteger(port) && port >= 1 && port <= 65535);
+}
+
+export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   const client = useQueryClient();
+  const [monitorPort, setMonitorPort] = useState(() => {
+    const saved = sessionStorage.getItem(monitorPortKey);
+    return saved && isValidMonitorPort(saved) ? saved : window.location.port;
+  });
+  const validPort = isValidMonitorPort(monitorPort);
+  const monitorOrigin =
+    validPort && monitorPort && monitorPort !== window.location.port
+      ? `${window.location.protocol}//${window.location.hostname}:${monitorPort}`
+      : "";
+  const remoteMonitor = !!monitorOrigin;
+  const workersKey = remoteMonitor
+    ? ["cluster-workers", monitorOrigin]
+    : ["cluster-workers"];
+  const jobsKey = remoteMonitor ? ["cluster-jobs", monitorOrigin] : ["cluster-jobs"];
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(timer);
   }, []);
   const [selected, setSelected] = useState("");
+  const [jobScope, setJobScope] = useState<"scenario" | "all">(
+    scenarioId && !remoteMonitor ? "scenario" : "all",
+  );
   const [probe, setProbe] = useState<unknown>(null);
   const workers = useQuery({
-    queryKey: ["cluster-workers"],
-    queryFn: () => api<ClusterWorkers>("/cluster/workers"),
+    queryKey: workersKey,
+    queryFn: () =>
+      api<ClusterWorkers>("/cluster/workers", { cache: "no-store" }, monitorOrigin),
+    enabled: validPort,
     refetchInterval: 4000,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
   const jobs = useQuery({
-    queryKey: ["cluster-jobs"],
-    queryFn: () => api<ClusterJob[]>("/cluster/jobs"),
+    queryKey: jobsKey,
+    queryFn: () =>
+      api<ClusterJob[]>("/cluster/jobs", { cache: "no-store" }, monitorOrigin),
+    enabled: validPort,
     refetchInterval: 3000,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
   const importWorkers = useMutation({
     mutationFn: async (file: File) =>
       post("/cluster/workers/import", JSON.parse(await file.text())),
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["cluster-workers"] });
+      void client.invalidateQueries({ queryKey: workersKey });
     },
   });
   const detail = useQuery({
-    queryKey: ["cluster-job", selected],
+    queryKey: ["cluster-job", monitorOrigin, selected],
     queryFn: () =>
-      api<unknown>(`/cluster/jobs/${encodeURIComponent(selected)}`),
-    enabled: !!selected,
+      api<unknown>(`/cluster/jobs/${encodeURIComponent(selected)}`, {
+        cache: "no-store",
+      }, monitorOrigin),
+    enabled: !!selected && validPort,
     refetchInterval: 3000,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
   const action = useMutation({
     mutationFn: async ({
@@ -105,15 +142,57 @@ export default function ClusterPanel() {
       });
     },
   });
+  const visibleJobs =
+    scenarioId && jobScope === "scenario"
+      ? (jobs.data ?? []).filter(
+          (job) => job.manifest.summary?.scenario_id === scenarioId,
+        )
+      : (jobs.data ?? []);
+  const visibleSelected = visibleJobs.some((job) => job.id === selected);
+  const refreshStopped = [workers, jobs].some(
+    (query) =>
+      query.isError ||
+      (query.dataUpdatedAt > 0 && now - query.dataUpdatedAt > 15000),
+  );
   return (
     <>
-      <BatchProgress jobs={jobs.data ?? []} />
+      <BatchProgress jobs={visibleJobs} />
       <CampaignProgress />
       <section className="panel">
         <h2>分散計算</h2>
-        {(workers.isError ||
-          (workers.dataUpdatedAt > 0 &&
-            now - workers.dataUpdatedAt > 15000)) && (
+        {(window.location.protocol === "http:" ||
+          window.location.protocol === "https:") && (
+          <label>
+            監視先ポート（このPC）
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              value={monitorPort}
+              onChange={(event) => {
+                const value = event.target.value;
+                setMonitorPort(value);
+                setSelected("");
+                setProbe(null);
+                if (value !== window.location.port) setJobScope("all");
+                if (isValidMonitorPort(value) && value !== window.location.port)
+                  sessionStorage.setItem(monitorPortKey, value);
+                else sessionStorage.removeItem(monitorPortKey);
+              }}
+            />
+          </label>
+        )}
+        {!validPort && <p className="warning">1〜65535のポートを入力してください。</p>}
+        {remoteMonitor && (
+          <p className="notice">
+            別の監視先は閲覧専用です。操作は{" "}
+            <a href={`${monitorOrigin}/#cluster`} target="_blank" rel="noreferrer">
+              その監視画面
+            </a>
+            で行ってください。
+          </p>
+        )}
+        {refreshStopped && (
           <p className="warning">
             画面の状態更新が止まっています。これは従機の停止を意味しません。再接続すると保存済みの実行状態を確認できます。
           </p>
@@ -148,7 +227,7 @@ export default function ClusterPanel() {
           <input
             type="file"
             accept="application/json,.json"
-            disabled={importWorkers.isPending}
+            disabled={importWorkers.isPending || remoteMonitor}
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) importWorkers.mutate(file);
@@ -156,9 +235,10 @@ export default function ClusterPanel() {
             }}
           />
         </label>
+        <h3>全シナリオ共通の計算端末</h3>
         <WorkerNodes
           data={workers.data}
-          pending={action.isPending}
+          pending={action.isPending || remoteMonitor}
           onAction={(path) => action.mutate({ path })}
         />
         {probe != null && (
@@ -170,6 +250,27 @@ export default function ClusterPanel() {
       </section>
       <section className="panel">
         <h2>キューと実行履歴</h2>
+        <p className="subtle">
+          接続先: {remoteMonitor ? new URL(monitorOrigin).host : window.location.host || "ローカル"} · ジョブ最終更新:{" "}
+          {jobs.dataUpdatedAt
+            ? new Date(jobs.dataUpdatedAt).toLocaleTimeString("ja-JP")
+            : "取得中"}
+        </p>
+        {scenarioId && (
+          <label>
+            表示するジョブ
+            <select
+              value={jobScope}
+              onChange={(event) => {
+                setJobScope(event.target.value as "scenario" | "all");
+                setSelected("");
+              }}
+            >
+              <option value="scenario">選択中のシナリオ</option>
+              <option value="all">全シナリオ・診断</option>
+            </select>
+          </label>
+        )}
         <div className="run-summary">
           {[
             ["待機", ["QUEUED"]],
@@ -180,8 +281,7 @@ export default function ClusterPanel() {
             <div key={String(label)}>
               <small>{label}</small>
               <strong>
-                {jobs.data?.filter((job) => states.includes(job.state))
-                  .length ?? 0}
+                {visibleJobs.filter((job) => states.includes(job.state)).length}
               </strong>
             </div>
           ))}
@@ -194,7 +294,13 @@ export default function ClusterPanel() {
           ジョブの割合は子機が保存した処理工程の到達点です。求解器内部の探索率、残り時間、最適性gapではありません。
           通信断では最後に確認できた値として表示します。
         </p>
-        {!jobs.data?.length && <p>登録されたタスクはありません。</p>}
+        {jobs.isSuccess && !visibleJobs.length && (
+          <p>
+            {scenarioId && jobScope === "scenario"
+              ? "このシナリオの登録タスクはありません。"
+              : "登録されたタスクはありません。"}
+          </p>
+        )}
         <div className="detail-table">
           <table>
             <thead>
@@ -208,7 +314,7 @@ export default function ClusterPanel() {
               </tr>
             </thead>
             <tbody>
-              {[...(jobs.data ?? [])].reverse().map((job) => (
+              {[...visibleJobs].reverse().map((job) => (
                 <tr key={job.id}>
                   <td>
                     <button onClick={() => setSelected(job.id)}>
@@ -247,13 +353,16 @@ export default function ClusterPanel() {
                         ローリング予定{" "}
                         {job.manifest.summary.expected_rolling_windows}回<br />
                         <small>
-                          {job.manifest.summary.planning_days > 1
-                            ? "診断用・週間研究採用は未対応"
+                          {job.manifest.summary.research_status ===
+                          "MULTIDAY_RESEARCH_BLOCKED"
+                            ? "複数日・研究採用は未対応"
                             : "研究採用は別途判定"}
                         </small>
                       </>
                     ) : (
-                      "接続・成果物転送の診断"
+                      job.manifest.kind === "optimization"
+                        ? "シナリオ情報なし"
+                        : "接続・成果物転送の診断"
                     )}
                   </td>
                   <td>
@@ -324,7 +433,7 @@ export default function ClusterPanel() {
                   <td>
                     {["QUEUED", "RUNNING", "LOST"].includes(job.state) && (
                       <button
-                        disabled={action.isPending}
+                        disabled={action.isPending || remoteMonitor}
                         onClick={() =>
                           action.mutate({
                             path: `/cluster/jobs/${job.id}/cancel`,
@@ -338,7 +447,7 @@ export default function ClusterPanel() {
                     )}
                     {job.state === "LOST" && (
                       <button
-                        disabled={action.isPending}
+                        disabled={action.isPending || remoteMonitor}
                         onClick={() =>
                           action.mutate({
                             path: `/cluster/jobs/${job.id}/reconcile`,
@@ -350,7 +459,7 @@ export default function ClusterPanel() {
                     )}
                     {["FAILED", "BLOCKED", "CANCELLED"].includes(job.state) && (
                       <button
-                        disabled={action.isPending}
+                        disabled={action.isPending || remoteMonitor}
                         onClick={() =>
                           action.mutate({
                             path: `/cluster/jobs/${job.id}/retry`,
@@ -362,7 +471,7 @@ export default function ClusterPanel() {
                     )}
                     {!!job.result?.archive_sha256 && (
                       <a
-                        href={`/api/cluster/jobs/${job.id}/artifacts`}
+                        href={`${monitorOrigin}/api/cluster/jobs/${job.id}/artifacts`}
                         download
                       >
                         成果物ZIP
@@ -374,7 +483,7 @@ export default function ClusterPanel() {
             </tbody>
           </table>
         </div>
-        {selected && (
+        {selected && visibleSelected && (
           <details open>
             <summary>ジョブ詳細・状態遷移・成果物ハッシュ</summary>
             <pre>{JSON.stringify(detail.data, null, 2)}</pre>

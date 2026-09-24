@@ -443,7 +443,7 @@ export default function RunPanel({
             </p>
             {planningDays > 1 && (
               <p>
-                複数日は診断実行です（MULTIDAY_RESEARCH_BLOCKED）。正式研究実行は開始できません。現在の週間キャンペーン専用設定の再現を保証するものではありません。
+                複数日は診断実行です（MULTIDAY_RESEARCH_BLOCKED）。正式研究実行は開始できません。対象シナリオの準備済み入力と実行条件を確認してください。
               </p>
             )}
           </div>

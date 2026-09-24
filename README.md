@@ -176,6 +176,7 @@ Prepareし直します。旧DBの週と混ぜません。具体的な手順と�
 明示実行し、設計ファイルへ `source_candidate_directory` と
 `source_candidate_manifest_sha256` を固定してください。未指定・内容変更時は
 キャンペーン開始前または週の境界で停止します。旧設定ファイルは自動移行しません。
+2026-09-24: 分散計算画面は選択中シナリオのジョブを初期表示し、全件へ切り替えられます。別のローカルcontrollerで実行するジョブは「監視先ポート」（例: 8890）を指定して閲覧します。別監視先の操作は、その監視画面を開いて行います。
 
 2026-09-24: 分散計算の一時SSH切断は同じattempt IDで1回だけ再試行し、通信結果が不明な試行は予約を保持して照合します。失敗workerは接続probe成功まで割当から外します。固定 `prepared_input_id` は完全なscenario/scopeと照合し、古ければjobを作らず停止します。今回見つかったshallow読込の不具合修正は隔離worktreeのみで、現行controllerには未配置です。現行12週campaignはjob作成前に停止しており、修正を使う場合は新しいclean SHAとPrepareが必要です。[分散計算の復旧と状態](docs/DISTRIBUTED_COMPUTE.md)。
 
