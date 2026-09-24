@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import sqlite3
 import sys
@@ -15,21 +14,12 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.geo import haversine_km
+from bff.services.catalog_trip_distance import load_trip_paths, validate_catalog_trip_path
+from scripts.catalog.audit_optimizer_trip_paths import file_sha256
 
 DEFAULT_DB = REPO_ROOT / "data" / "tokyu_full.sqlite"
 DEFAULT_BUILT_ROOT = REPO_ROOT / "data" / "built"
 SEED_ROOT = REPO_ROOT / "data" / "seed" / "tokyu"
-
-
-def _load_module(module_name: str, relative_path: str) -> Any:
-    module_path = REPO_ROOT / relative_path
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load module from {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def _split_csv(value: str | None) -> list[str]:
@@ -68,26 +58,6 @@ def _resolve_depot_scope(dataset_id: str, depot_ids: list[str]) -> tuple[list[st
         return explicit_scope, definition
     definition_scope = _canonicalize_depot_ids(list(definition.get("included_depots") or []))
     return definition_scope, definition
-
-
-def _compute_distance_km(row: pd.Series) -> float:
-    values = [
-        row.get("origin_lat"),
-        row.get("origin_lon"),
-        row.get("destination_lat"),
-        row.get("destination_lon"),
-    ]
-    if any(pd.isna(value) for value in values):
-        return 0.0
-    return round(
-        haversine_km(
-            float(row["origin_lat"]),
-            float(row["origin_lon"]),
-            float(row["destination_lat"]),
-            float(row["destination_lon"]),
-        ),
-        4,
-    )
 
 
 def _canonical_service_id(value: Any) -> str:
@@ -375,65 +345,43 @@ def export_sqlite_to_built(
     built_root: Path,
     depot_ids: list[str],
 ) -> Path:
-    manifest_writer = _load_module("manifest_writer", "data-prep/lib/manifest_writer.py")
-    producer_version = _load_module("producer_version", "data-prep/lib/producer_version.py")
+    source_sha = file_sha256(db_path)
     resolved_depot_ids, definition = _resolve_depot_scope(dataset_id, depot_ids)
 
     built_dir = built_root / dataset_id
-    built_dir.mkdir(parents=True, exist_ok=True)
+    # A new projection changes distance semantics and must not replace a frozen
+    # dataset or invalidate existing Prepared/solver evidence in place.
+    built_dir.mkdir(parents=True, exist_ok=False)
 
-    conn = sqlite3.connect(db_path)
-    route_detail_map = _route_detail_map(conn, resolved_depot_ids)
+    conn = sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)
     route_where = ""
     params: list[Any] = []
     if resolved_depot_ids:
         placeholders = ",".join("?" for _ in resolved_depot_ids)
-        route_where = f"WHERE route_families.depot_id IN ({placeholders})"
-        params.extend(resolved_depot_ids)
-
-    routes_df = pd.read_sql_query(
-        f"""
-        SELECT
-            'tokyu:' || replace(route_families.depot_id, 'tokyu:depot:', '') || ':' || route_families.route_family AS id,
-            route_families.route_family AS routeCode,
-            route_families.route_family AS routeLabel,
-            coalesce(route_families.title_ja, route_families.route_family) AS name,
-            route_families.depot_id AS depotId,
-            depot.lat AS depotLat,
-            depot.lon AS depotLon,
-            'sqlite_export' AS source
-        FROM route_families
-        LEFT JOIN depots depot ON route_families.depot_id = depot.depot_id
-        {route_where}
-        ORDER BY route_family
-        """,
-        conn,
-        params=params,
-    )
+        route_where = f"WHERE rp.depot_id IN ({placeholders})"
+        params = list(resolved_depot_ids)
+    routes_df = pd.read_sql_query(f"""
+        SELECT rp.pattern_id AS id, rp.operator_id, rp.route_family AS routeCode,
+               rp.route_family AS routeLabel, rp.title_ja AS name, rp.depot_id AS depotId,
+               origin.title_ja AS startStop, dest.title_ja AS endStop,
+               rp.direction AS canonicalDirection, 'sqlite_export' AS source
+        FROM route_patterns rp
+        LEFT JOIN stops origin ON origin.stop_id=rp.origin_stop_id
+        LEFT JOIN stops dest ON dest.stop_id=rp.dest_stop_id
+        {route_where} ORDER BY rp.pattern_id
+    """, conn, params=params)
     if routes_df.empty:
         conn.close()
-        depot_scope = ", ".join(resolved_depot_ids) if resolved_depot_ids else "ALL"
-        raise RuntimeError(
-            f"No route_families were found in '{db_path}' for depot scope '{depot_scope}'. "
-            "The SQLite catalog is empty or the depot filter does not match any authoritative route-depot assignments."
-        )
-    routes_df["startStop"] = routes_df["routeCode"].map(
-        lambda route_code: (route_detail_map.get(str(route_code)) or {}).get("startStop", "")
-    )
-    routes_df["endStop"] = routes_df["routeCode"].map(
-        lambda route_code: (route_detail_map.get(str(route_code)) or {}).get("endStop", "")
-    )
+        raise RuntimeError("No route patterns match the explicitly requested depot scope")
+    # Preserve pattern identity: a route family may have different endpoints,
+    # directions, short turns and depot attribution. Never collapse those here.
+    pattern_paths: dict[str, list[str]] = {}
+    for pattern_id, stop_id in conn.execute(
+            "SELECT pattern_id, stop_id FROM pattern_stops ORDER BY pattern_id, seq"):
+        pattern_paths.setdefault(pattern_id, []).append(stop_id)
+    routes_df["stopSequence"] = routes_df["id"].map(lambda key: pattern_paths.get(key, []))
     routes_df["routeFamilyCode"] = routes_df["routeCode"]
-    routes_df["routeFamilyLabel"] = routes_df["name"]
-    routes_df["routeVariantType"] = routes_df["routeCode"].map(
-        lambda route_code: (route_detail_map.get(str(route_code)) or {}).get("routeVariantType")
-    )
-    routes_df["canonicalDirection"] = routes_df["routeCode"].map(
-        lambda route_code: (route_detail_map.get(str(route_code)) or {}).get("canonicalDirection")
-    )
-    routes_df["stopSequence"] = routes_df["routeCode"].map(
-        lambda route_code: list((route_detail_map.get(str(route_code)) or {}).get("stopSequence") or [])
-    )
+    routes_df["routeFamilyLabel"] = routes_df["routeLabel"]
 
     trip_where = "WHERE t.pattern_id = rp.pattern_id"
     trip_params: list[Any] = []
@@ -446,7 +394,9 @@ def export_sqlite_to_built(
         f"""
         SELECT
             t.trip_id,
-            'tokyu:' || replace(rp.depot_id, 'tokyu:depot:', '') || ':' || t.route_family AS route_id,
+            rp.operator_id,
+            t.stop_count,
+            rp.pattern_id AS route_id,
             t.calendar_type AS calendar_type,
             t.departure_hhmm AS departure,
             t.arrival_hhmm AS arrival,
@@ -477,7 +427,17 @@ def export_sqlite_to_built(
             f"No timetable_trips were found in '{db_path}' for depot scope '{depot_scope}'. "
             "Build the SQLite catalog successfully first; empty exports are rejected."
         )
-    trips_df["distance_km"] = trips_df.apply(_compute_distance_km, axis=1)
+    paths = load_trip_paths(conn, trips_df["trip_id"].tolist())
+    try:
+        evidence = [validate_catalog_trip_path(row, paths.get(row["trip_id"], []))
+                    for row in trips_df.to_dict(orient="records")]
+        if trips_df["operator_id"].isna().any() or trips_df["operator_id"].isin(["", "UNKNOWN"]).any():
+            raise ValueError("TRIP_OPERATOR_MISSING")
+    except (ValueError, TypeError, KeyError):
+        conn.close()
+        raise
+    for key in evidence[0]:
+        trips_df[key] = [item[key] for item in evidence]
     trips_df["allowed_vehicle_types"] = trips_df["allowed_vehicle_types"].apply(json.loads)
     trips_df["service_id"] = trips_df["calendar_type"].apply(_canonical_service_id)
     trips_df = trips_df.drop(columns=["calendar_type"])
@@ -492,6 +452,7 @@ def export_sqlite_to_built(
     timetables_df = trips_df[
         [
             "trip_id",
+            "operator_id",
             "route_id",
             "service_id",
             "origin",
@@ -505,28 +466,46 @@ def export_sqlite_to_built(
             "departure",
             "arrival",
             "distance_km",
+            "distance_source",
+            "distance_path_sha256",
             "allowed_vehicle_types",
             "source",
         ]
     ].copy()
     timetables_df.to_parquet(built_dir / "timetables.parquet", index=False)
 
+    # Preserve the complete trip path for Prepare, including short-turn and
+    # loop endpoints. Route-family representative paths are not substitutes.
+    pd.DataFrame([
+        {"trip_id": trip_id, "stop_id": row["stop_id"], "sequence": row["seq"],
+         "departure": row["departure_hhmm"], "arrival": row["arrival_hhmm"]}
+        for trip_id, rows in paths.items() for row in rows
+    ]).to_parquet(built_dir / "stop_times.parquet", index=False)
+
     _export_stops_artifact(conn, built_dir, resolved_depot_ids)
     _export_stop_timetables_artifact(conn, built_dir, resolved_depot_ids)
     conn.close()
 
-    dataset_version = date.today().isoformat()
-    manifest_writer.write_manifest(
-        built_dir=built_dir,
-        dataset_id=dataset_id,
-        dataset_version=dataset_version,
-        included_depots=list(definition.get("included_depots") or []),
-        included_routes=definition.get("included_routes") or "ALL",
-        seed_version_path=SEED_ROOT / "version.json",
-        producer_version=producer_version.get_producer_version(),
-        min_runtime_version=producer_version.get_min_runtime_version(),
-        source="sqlite_export",
-    )
+    if file_sha256(db_path) != source_sha:
+        raise ValueError("SOURCE_CHANGED_DURING_EXPORT")
+    manifest = {
+        "schema_version": "v1", "dataset_id": dataset_id,
+        "dataset_version": f"{date.today().isoformat()}:{source_sha[:16]}",
+        "producer_version": "export_tokyu_sqlite_to_built_trip_paths_v2",
+        "min_runtime_version": "0.1.0", "source": "sqlite_export",
+        "source_database": str(db_path.resolve()), "source_database_sha256": source_sha,
+        "included_depots": resolved_depot_ids,
+        "included_routes": definition.get("included_routes") or "ALL",
+        "distance_semantics": "adjacent_stop_haversine_polyline_not_road_network_distance",
+        "unassigned_route_count": int(routes_df["depotId"].fillna("").eq("").sum()),
+        "formal_research_ready": False,
+        "limitations": ["Depot attribution is preserved, not inferred for missing values.",
+                        "Road distances, fleet, energy and cost contracts need scenario validation.",
+                        "Stop timetable to pattern links absent in ODPT are not invented."],
+        "artifact_hashes": {path.name: file_sha256(path) for path in sorted(built_dir.glob("*.parquet"))},
+    }
+    (built_dir / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return built_dir
 
 

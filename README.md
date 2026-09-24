@@ -140,6 +140,21 @@ C:\master-course\.venv\Scripts\python.exe -m scripts.catalog.manual_tokyu_compan
 確定した正式シナリオではありません。距離代理値を使う画面上の便抽出を、
 研究採用可能な最適化入力と読み替えないでください。
 
+2026-09-25以降、SQLiteの最適化用便抽出とbuilt出力は、起終点だけでなく
+**便ごとの全停留所列**から地理的代理距離を作ります。循環便・区間便の起終点を
+代表パターンへ書き換えません。座標欠損や経路不整合は便IDと原因を返して停止します。
+AI・ネットワーク・ソルバーなしで次の検査と新規出力ができます（パスは実際の固定DBへ変更）。
+
+```powershell
+python -m scripts.catalog.audit_optimizer_trip_paths --database C:/data/tokyu_company.sqlite3 --output output/catalog-audit-new
+python -m scripts.catalog.export_tokyu_sqlite_to_built --db C:/data/tokyu_company.sqlite3 --dataset-id tokyu_company_trip_paths_new --built-root output/catalog-built-new
+```
+
+出力先は新規にしてください。元DB・既存Prepared・シナリオを自動更新しません。
+新出力は元pattern ID、operator、距離出典、便別停留所列、元DBと成果物のhashを保存します。
+営業所未割当や実設備値は推測で埋めず、使うシナリオで確認してから再Prepareします。
+[修正・実データ検証とブランチ整理](docs/notes/OPTIMIZER_INPUT_REPAIR_20260925.md)を参照してください。
+
 2026-09-24の手動取得は全社747パターン・33,484便・3,045停留所・停留所時刻表
 11,964件を原本照合し、新しい全社DBを生成しました。渋24のお試し計算は、
 その固定原本から渋24の6パターン・582便を切り出した監査済み入力を、

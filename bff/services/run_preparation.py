@@ -1119,11 +1119,14 @@ def _stop_coordinate_lookup(
         stop_id = _normalize_scope_text(
             stop.get("id") or stop.get("stop_id") or stop.get("stopId")
         )
-        lat = _safe_float_number(stop.get("lat") or stop.get("latitude"))
-        lon = _safe_float_number(
-            stop.get("lon") or stop.get("lng") or stop.get("longitude")
-        )
-        if stop_id and lat is not None and lon is not None:
+        lat_raw = next((stop[k] for k in ("lat", "latitude") if stop.get(k) is not None), None)
+        lon_raw = next((stop[k] for k in ("lon", "lng", "longitude") if stop.get(k) is not None), None)
+        try:
+            lat, lon = float(lat_raw), float(lon_raw)
+        except (TypeError, ValueError):
+            continue
+        if (stop_id and math.isfinite(lat) and math.isfinite(lon)
+                and -90 <= lat <= 90 and -180 <= lon <= 180):
             coordinates[stop_id] = (float(lat), float(lon))
     return coordinates
 
@@ -1144,6 +1147,9 @@ def _trip_stop_sequence_lookup(
         grouped.setdefault(trip_id, []).append((sequence, stop_id))
     result: dict[str, tuple[str, ...]] = {}
     for trip_id, entries in grouped.items():
+        sequence_numbers = sorted(sequence for sequence, _stop in entries)
+        if sequence_numbers != list(range(sequence_numbers[0], sequence_numbers[0] + len(entries))):
+            continue
         ordered: list[str] = []
         for _sequence, stop_id in sorted(entries):
             if not ordered or ordered[-1] != stop_id:
@@ -1211,11 +1217,17 @@ def _enrich_trip_distances_from_stop_sequences(
         existing = _safe_float_number(
             trip.get("distance_km") or trip.get("distanceKm")
         )
-        if existing is not None and existing > 0.0:
+        if existing is not None and math.isfinite(existing) and existing > 0.0:
             source_counts["trip.distance_km"] += 1
             continue
         trip_id = _normalize_scope_text(trip.get("trip_id") or trip.get("tripId"))
         stop_ids = sequence_by_trip.get(trip_id, ())
+        origin_id = trip.get("origin_stop_id")
+        destination_id = trip.get("destination_stop_id") or trip.get("dest_stop_id")
+        if stop_ids and ((origin_id and origin_id != stop_ids[0])
+                         or (destination_id and destination_id != stop_ids[-1])):
+            source_counts["unresolved"] += 1
+            continue
         distance_km, segment_count = _route_stop_polyline_distance_km(
             stop_ids,
             stop_coordinates,

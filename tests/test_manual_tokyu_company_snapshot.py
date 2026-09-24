@@ -101,6 +101,18 @@ def test_bad_raw_sha_cannot_build_a_database(tmp_path):
     assert not (tmp_path / snapshot.DATABASE).exists()
 
 
+def test_failed_reader_does_not_publish_an_immutable_database(tmp_path, monkeypatch):
+    _fixture(tmp_path)
+    def fail_reader(_path):
+        raise ValueError("TRIP_PATH_INCOMPLETE")
+    monkeypatch.setattr(snapshot, "_smoke_catalog_reader", fail_reader)
+    with pytest.raises(ValueError, match="TRIP_PATH_INCOMPLETE"):
+        snapshot.build(tmp_path)
+    assert not (tmp_path / snapshot.DATABASE).exists()
+    assert not (tmp_path / snapshot.BUILD_MANIFEST).exists()
+    assert (tmp_path / snapshot.MANIFEST).exists()
+
+
 def test_export_shibu24_capture_links_only_frozen_relevant_sources(tmp_path):
     frozen = tmp_path / "frozen"
     frozen.mkdir()

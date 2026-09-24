@@ -197,14 +197,19 @@ def milp_trips(
     route_family_list = _split_csv(route_families)
     depot_list = _split_csv(depot_ids)
     normalized_depots = db._normalize_depot_ids(depot_id, depot_list)
-    trips = db.build_milp_trips(
-        route_families=route_family_list,
-        depot_id=depot_id,
-        depot_ids=depot_list,
-        calendar_type=calendar_type,
-        min_dep_min=min_dep_min,
-        max_dep_min=max_dep_min,
-    )
+    try:
+        trips = db.build_milp_trips(
+            route_families=route_family_list,
+            depot_id=depot_id,
+            depot_ids=depot_list,
+            calendar_type=calendar_type,
+            min_dep_min=min_dep_min,
+            max_dep_min=max_dep_min,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={
+            "code": "OPTIMIZATION_CATALOG_INPUT_INVALID", "message": str(exc),
+        }) from exc
     return {
         "depot_id": normalized_depots[0] if normalized_depots else None,
         "depot_ids": normalized_depots,

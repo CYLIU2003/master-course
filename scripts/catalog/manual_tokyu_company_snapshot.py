@@ -7,6 +7,7 @@ manual step; neither command is called by Prepare or job submission.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -129,7 +130,7 @@ def _smoke_catalog_reader(database: Path) -> dict:
         health = local_db_catalog.health_check()
         if health.get("status") != "ok":
             raise ValueError(f"Optimization catalog reader failed: {health.get('status')}")
-        with local_db_catalog.get_conn() as connection:
+        with closing(local_db_catalog.get_conn()) as connection:
             sample = connection.execute(
                 "SELECT route_family, calendar_type FROM timetable_trips GROUP BY route_family, calendar_type ORDER BY COUNT(*) DESC LIMIT 1"
             ).fetchone()
@@ -237,8 +238,10 @@ def build(output: Path) -> dict:
                 path.unlink(missing_ok=True)
         raise
     connection.close()
+    # A failed strict reader check must not publish an immutable DB without its
+    # build manifest. Keep the temporary DB for diagnosis on failure.
+    reader_smoke = _smoke_catalog_reader(temporary_db)
     os.replace(temporary_db, db_path)
-    reader_smoke = _smoke_catalog_reader(db_path)
     result = {
         "schema_version": "tokyu_company_catalog_build_v1",
         "status": "BUILT_CATALOG_NOT_FORMAL_PREPARED_INPUT",

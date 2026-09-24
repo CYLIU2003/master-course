@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from pathlib import Path
 
 import pandas as pd
@@ -319,6 +321,19 @@ def test_trip_distance_requires_complete_stop_coordinate_coverage() -> None:
 
     assert trips[0]["distance_km"] == 0.0
     assert "distance_source" not in trips[0]
+    assert audit["source_counts"] == {"unresolved": 1}
+
+
+@pytest.mark.parametrize("lat", [None, "bad", float("nan"), float("inf"), 91])
+def test_trip_distance_does_not_coerce_invalid_coordinates_to_zero(lat):
+    trips = [{"trip_id": "trip-1", "distance_km": 0}]
+    audit = _enrich_trip_distances_from_stop_sequences(
+        trips, stops=[{"id": "a", "lat": 35, "lon": 139},
+                      {"id": "b", "lat": lat, "lon": 139.01}],
+        stop_sequences=[{"trip_id": "trip-1", "stop_id": "a", "sequence": 0},
+                        {"trip_id": "trip-1", "stop_id": "b", "sequence": 1}],
+    )
+    assert trips[0]["distance_km"] == 0
     assert audit["source_counts"] == {"unresolved": 1}
 
 

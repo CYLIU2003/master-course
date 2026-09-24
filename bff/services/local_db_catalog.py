@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from bff.services.route_family import derive_route_family_metadata
+from bff.services.catalog_trip_distance import load_trip_paths, validate_catalog_trip_path
 from src.dispatch.models import Trip
 from src.geo import haversine_km
 
@@ -128,27 +129,6 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
 
 def _query_dicts(conn: sqlite3.Connection, sql: str, params: Sequence[Any] | None = None) -> list[dict[str, Any]]:
     return _rows_to_dicts(conn.execute(sql, params or []))
-
-
-def _straight_line_distance_km(record: dict[str, Any]) -> float:
-    # Preserve the existing trip-extraction contract; browser proxies are separate.
-    required = [
-        record.get("origin_lat"),
-        record.get("origin_lon"),
-        record.get("destination_lat"),
-        record.get("destination_lon"),
-    ]
-    if any(value is None for value in required):
-        return DEFAULT_DISTANCE_KM
-    return round(
-        haversine_km(
-            _safe_float(record.get("origin_lat")),
-            _safe_float(record.get("origin_lon")),
-            _safe_float(record.get("destination_lat")),
-            _safe_float(record.get("destination_lon")),
-        ),
-        4,
-    )
 
 
 def _pattern_distance_km(stops: Sequence[dict[str, Any]]) -> float | None:
@@ -268,7 +248,7 @@ def health_check() -> dict[str, Any]:
             "message": "Tokyu catalog SQLite DB not found",
         }
     try:
-        with get_conn() as conn:
+        with closing(get_conn()) as conn:
             meta_rows = conn.execute("SELECT key, value FROM pipeline_meta").fetchall()
             meta = {str(row[0]): row[1] for row in meta_rows}
             counts = {
@@ -287,7 +267,7 @@ def health_check() -> dict[str, Any]:
 
 
 def list_operators() -> list[dict[str, Any]]:
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         return _query_dicts(conn, "SELECT * FROM operators ORDER BY operator_id")
 
 
@@ -298,7 +278,7 @@ def list_depots(operator_id: str | None = None) -> list[dict[str, Any]]:
         sql += " WHERE operator_id=?"
         params.append(operator_id)
     sql += " ORDER BY depot_id"
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         return _query_dicts(conn, sql, params)
 
 
@@ -556,7 +536,7 @@ def list_depot_route_summaries(
     normalized_depot_id = _normalize_depot_id(depot_id)
     if not normalized_depot_id:
         return []
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         pattern_records = _load_route_pattern_records(conn, depot_id=normalized_depot_id)
         family_rows = {
             str(row.get("route_family") or ""): row
@@ -622,7 +602,7 @@ def get_route_family_patterns(
     depot_id: str | None = None,
 ) -> list[dict[str, Any]]:
     normalized_depot_id = _normalize_depot_id(depot_id) if depot_id else None
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         return _load_route_pattern_records(
             conn,
             depot_id=normalized_depot_id,
@@ -634,7 +614,7 @@ def get_depot(depot_id: str) -> dict[str, Any] | None:
     normalized = _normalize_depot_id(depot_id)
     if normalized is None:
         return None
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         row = conn.execute("SELECT * FROM depots WHERE depot_id=?", (normalized,)).fetchone()
     return dict(row) if row else None
 
@@ -651,7 +631,7 @@ def list_route_families(
         params.append(operator_id)
     sql += " ORDER BY route_family"
     selected_depots = _normalize_depot_ids(depot_id, depot_ids)
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         records = _query_dicts(conn, sql, params)
         depot_map = _load_route_family_depot_map(conn, [str(item.get("route_family") or "") for item in records])
     scoped = _attach_depot_scope(records, "route_family", depot_map, selected_depots)
@@ -691,7 +671,7 @@ def list_route_patterns(
         params.append(route_family)
     sql += " ORDER BY route_family, direction, pattern_id"
     selected_depots = _normalize_depot_ids(depot_id, depot_ids)
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         records = _query_dicts(conn, sql, params)
         depot_map = _load_pattern_depot_map(conn, [str(item.get("pattern_id") or "") for item in records])
     scoped = _attach_depot_scope(records, "pattern_id", depot_map, selected_depots)
@@ -700,7 +680,7 @@ def list_route_patterns(
 
 
 def get_pattern_stops(pattern_id: str) -> list[dict[str, Any]]:
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         return _query_dicts(
             conn,
             """
@@ -766,12 +746,12 @@ def list_stops(operator_id: str | None = None) -> list[dict[str, Any]]:
         sql += " WHERE operator_id=?"
         params.append(operator_id)
     sql += " ORDER BY stop_id"
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         return _query_dicts(conn, sql, params)
 
 
 def get_stop(stop_id: str) -> dict[str, Any] | None:
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         row = conn.execute("SELECT * FROM stops WHERE stop_id=?", (stop_id,)).fetchone()
     return dict(row) if row else None
 
@@ -788,6 +768,7 @@ def get_timetable_trips(
         SELECT
             t.*,
             rp.route_code,
+            rp.operator_id,
             rp.depot_id AS primary_depot_id,
             origin_stop.title_ja AS origin_name,
             origin_stop.lat AS origin_lat,
@@ -814,7 +795,7 @@ def get_timetable_trips(
     sql += " ORDER BY t.dep_min, t.route_family, t.pattern_id, t.trip_id"
 
     selected_depots = _normalize_depot_ids(depot_id, depot_ids)
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         records = _query_dicts(conn, sql, params)
         depot_map = _load_pattern_depot_map(conn, [str(item.get("pattern_id") or "") for item in records])
     scoped = _attach_depot_scope(records, "pattern_id", depot_map, selected_depots)
@@ -859,7 +840,7 @@ def get_timetable_trips(
 
 
 def get_trip_stops(trip_id: str) -> list[dict[str, Any]]:
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         return _query_dicts(
             conn,
             """
@@ -915,7 +896,7 @@ def get_stop_timetable(
         sql += " AND pattern_id=?"
         params.append(pattern_id)
     sql += " ORDER BY dep_min"
-    with get_conn() as conn:
+    with closing(get_conn()) as conn:
         return _query_dicts(conn, sql, params)
 
 
@@ -926,6 +907,9 @@ def _stable_route_key(record: dict[str, Any]) -> str:
 
 
 def milp_trip_to_dispatch_trip(record: dict[str, Any]) -> Trip:
+    distance = float(record.get("distance_km") or 0)
+    if not math.isfinite(distance) or distance <= 0:
+        raise ValueError(f"TRIP_DISTANCE_INVALID: {record.get('trip_id')}")
     dep_min = _safe_int(record.get("dep_min"))
     arr_min = _safe_int(record.get("arr_min"), dep_min)
     if arr_min <= dep_min:
@@ -937,7 +921,7 @@ def milp_trip_to_dispatch_trip(record: dict[str, Any]) -> Trip:
         destination=str(record.get("destination") or record.get("dest_stop_id") or ""),
         departure_time=str(record.get("departure_time") or _minutes_to_hhmm(dep_min)),
         arrival_time=str(record.get("arrival_time") or _minutes_to_hhmm(arr_min)),
-        distance_km=float(record.get("distance_km") or DEFAULT_DISTANCE_KM),
+        distance_km=distance,
         allowed_vehicle_types=tuple(record.get("allowed_vehicle_types") or DEFAULT_ALLOWED_VEHICLE_TYPES),
     )
 
@@ -956,6 +940,12 @@ def build_milp_trips(
         depot_ids=depot_ids,
     )
     allowed_families = {str(item) for item in route_families or []}
+    trips = [item for item in trips
+             if (not allowed_families or str(item.get("route_family") or "") in allowed_families)
+             and item.get("dep_min") is not None
+             and min_dep_min <= int(item["dep_min"]) <= max_dep_min]
+    with closing(get_conn()) as connection:
+        paths = load_trip_paths(connection, [str(item["trip_id"]) for item in trips])
     result: list[dict[str, Any]] = []
     for item in trips:
         family = str(item.get("route_family") or "")
@@ -974,8 +964,13 @@ def build_milp_trips(
         if not (min_dep_min <= dep_min <= max_dep_min):
             continue
 
+        if not item.get("operator_id") or item["operator_id"] == "UNKNOWN":
+            raise ValueError(f"TRIP_OPERATOR_MISSING: {item.get('trip_id')}")
+        distance_evidence = validate_catalog_trip_path(item, paths.get(str(item["trip_id"]), []))
+
         record = {
             "trip_id": str(item.get("trip_id") or ""),
+            "operator_id": item["operator_id"],
             "route_id": _stable_route_key(item),
             "route_family": family,
             "pattern_id": str(item.get("pattern_id") or ""),
@@ -997,7 +992,7 @@ def build_milp_trips(
             "duration_min": arr_min - dep_min,
             "stop_count": _safe_int(item.get("stop_count"), 0),
             "allowed_vehicle_types": list(DEFAULT_ALLOWED_VEHICLE_TYPES),
-            "distance_km": _straight_line_distance_km(item),
+            **distance_evidence,
         }
         dispatch_trip = milp_trip_to_dispatch_trip(record)
         record["dispatch_trip"] = {
