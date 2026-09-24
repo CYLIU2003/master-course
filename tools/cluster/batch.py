@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from bff.services.cluster.contracts import canonical, digest, segment
 from bff.services.cluster.store import ControllerLock
+from tools.cluster.atomic_file import replace_bytes
 
 
 class Client:
@@ -59,9 +60,7 @@ class Client:
 
 
 def save(path: Path, value: dict):
-    temporary = path.with_suffix(".tmp")
-    temporary.write_bytes(canonical(value))
-    temporary.replace(path)
+    replace_bytes(path, canonical(value))
 
 
 def sanitized_rejection(exc: HTTPError) -> dict:

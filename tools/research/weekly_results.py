@@ -14,7 +14,6 @@ import json
 import math
 from pathlib import Path
 import sys
-from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -40,10 +39,8 @@ def sha(path: Path) -> str:
 
 
 def write_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + f".{uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    from tools.cluster.atomic_file import replace_bytes
+    replace_bytes(path, (json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8"))
 
 
 def write_csv(path: Path, rows: list[dict]) -> None:

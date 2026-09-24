@@ -4252,3 +4252,10 @@ AIを使わない配布・バッチ再開スクリプトを備えます。Python
 # 2026-09-23 実便版渋24・16台診断
 
 公式ODPT保存原本の渋24全6パターン・平日224便を、従来の渋21〜23シナリオの車両・充電器・費用・PV/BESS設定を引き継いで1日診断する入口を `tools/cluster/real_shibu24_batch.py` に追加しました。新しい分散画面は設定した既存シナリオ保管先から従来シナリオを表示・Prepare・実行できます。実行条件と研究上の限界は [実便版渋24の16台診断](docs/notes/SHIBU24_REAL_CLUSTER_20260923.md) を参照してください。旧架空4便の結果を実便の結果として扱いません。
+
+## AIなしの週次運転・回収（2026-09-24）
+
+`tools/research/weekly_operations.ps1` で check / controller / status / run / collect / watch を利用できます。
+固定計算版と操作ツールを分離し、同じbatch/attemptの再開・回収、RAM等の待機理由、準備/計算/検算率を表示します。
+Windowsの一時的な保存拒否は原本を残して再試行します。Gmail単独認証は未設定で、通知ファイルは未送信です。
+[操作手順と実機確認範囲](docs/notes/WEEKLY_OPERATOR_RUNBOOK_20260924.md) を参照してください。

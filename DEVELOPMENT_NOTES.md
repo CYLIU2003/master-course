@@ -10791,3 +10791,26 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - `weekly_campaign.py` はオフライン固定DBからPrepareし、週単位で親機/検証済みworkerへ投入、個別回収・監査・CSV/図化まで行う。未知状態を勝手に再投入しない。`weekly_terminal_observer.py` は通常AIなし、終端のみ一度通知。
 - 実機確認: 64GB DESKTOP-3PRU7QPは管理下license testがEnv起動失敗。32GB DESKTOP-6AE0MIRは同じ既存broker経由の実license testがCOMPLETED。64GBという理由だけで求解可能扱いしない。新しく資格情報を複製していない。
 - 検証: 予算・便充足・BFF制御継承・既存端点/接続因子の関連30件通過。observerの状態不明/PID再利用/重複通知の回帰も追加。実新版のPrepare/求解/回収結果は実行後に別記。独立レビューは未実施。
+
+## 2026-09-24: AIなしの週次運転入口とWindows保存拒否対策
+
+- 対象チャット「初期設定ZIPをTailscaleで送信」の最終懸念（配置時のSSH timeout、求解中切断）を確認。
+  現行0964b783には同attempt再試行/照合・枠保持があり、さらに操作・回収を人が継続できる入口を追加。
+- 実障害: 5月attempt a0679a14-3f67-5cc1-bbbd-bbc5475c32ff は子機でRUNNINGのまま、親のbatch保存が
+  WinError 5で停止。campaignはFAILED_OR_UNVERIFIEDと記録。これを求解失敗／OOMと扱わない。
+- tools/cluster/atomic_file.py: 排他所有者用の一意temporary＋PermissionError限定7回（待機合計1.55秒）置換。
+  永続拒否・ディスク不足では原本保持。batch.saveとweekly_results.write_jsonで再利用。
+- weekly_operator.py / weekly_operations.ps1: 固定設定チェック、controller起動、状況、同設定再開、既存結果回収、
+  AIを呼ばない30秒監視。batchの既存IDがない場合に推測してsubmitしない。生きたclientを二重起動しない。
+  稼働中campaignが既に回収失敗と記録したcaseだけ代理回収。元のstate/失敗監査とsolverコードは改変しない。
+- 原本回収はSHAと既存archive監査・物理/会計/便充足/翌朝込み区間検査に通して図表生成。
+  キャッシュはarchive/Prepared/collector/出力hashで照合。集計の再利用は新しいsolver成果を意味しない。
+- 通知はPENDING_MANUAL_SENDのEMLまで。PC単独OAuthは未設定。Codex queueやAI APIは使わない。
+- 検証: pytest test_weekly_operator, test_cluster_atomic_file, test_cluster_attempt_recovery, test_cluster_batch,
+  test_cluster_batch_audit, test_cluster_resource_policy, test_weekly_results_execution → 69 passed (2.47s)。
+  Windows CreateFileWでdelete sharingなしの実ロックを再現し、解除後の置換成功を確認。
+  SSH切断のケースはmock。稼働中端末を故意に切断する試験は未実施。
+- ライブ検証: check=PASS(0964b783)、run=ALREADY_ACTIVE(追加jobなし)、collect=同じ5月attempt RUNNING。
+  親機の現在使用可能RAMはOS予約控除後16.65GB/要求18GBで待機。要件を緩めて投入しない。
+- 数理式・SOC・費用・時間予算・求解条件への変更なし。凍結版へhot patchしない。
+  新版7日完走、全18台大規模求解、メール自動送信、独立レビューは未確認。
