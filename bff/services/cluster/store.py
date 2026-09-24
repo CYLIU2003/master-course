@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import os
+import re
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,16 @@ from .contracts import RESERVED
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def display_text(value: object, limit: int) -> str:
+    message = " ".join(str(value or "").split())
+    message = re.sub(r"(?i)\bbearer\s+\S+", "Bearer [REDACTED]", message)
+    message = re.sub(
+        r"(?i)\b(password|token|secret|credential|api[-_ ]?key|wls[-_ ]?key)\b\s*[:=]\s*[^\s,;]+",
+        r"\1=[REDACTED]", message,
+    )
+    return message[:limit]
 
 
 def worker_has_slot(db, worker_id: str, slots: int, *, cpu_threads: int = 0, cpu_count: int | None = None) -> bool:
@@ -69,6 +80,11 @@ class JobStore:
                     job_id TEXT PRIMARY KEY, failures INTEGER NOT NULL DEFAULT 0,
                     next_at REAL NOT NULL DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS job_progress (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(id),
+                    percent INTEGER NOT NULL CHECK(percent BETWEEN 0 AND 100),
+                    stage TEXT, message TEXT, observed_at TEXT NOT NULL
+                );
             """)
 
     @contextmanager
@@ -90,23 +106,73 @@ class JobStore:
 
     def rows(self) -> list[dict]:
         with self.connect() as db:
-            return [self.decode(row) for row in db.execute("SELECT * FROM jobs ORDER BY created_at")]
+            return [self.decode(row) for row in db.execute(
+                "SELECT jobs.*, job_progress.percent AS progress_percent, "
+                "job_progress.stage AS progress_stage, job_progress.message AS progress_message, "
+                "job_progress.observed_at AS progress_observed_at FROM jobs "
+                "LEFT JOIN job_progress ON job_progress.job_id=jobs.id ORDER BY jobs.created_at"
+            )]
 
     @staticmethod
     def decode(row) -> dict:
         value = dict(row)
         value["manifest"] = json.loads(value["manifest"])
         value["result"] = json.loads(value["result"]) if value["result"] else None
+        value["execution_progress"] = (
+            {"percent": value.pop("progress_percent"),
+             "stage": value.pop("progress_stage"),
+             "message": value.pop("progress_message"),
+             "observed_at": value.pop("progress_observed_at"),
+             "meaning": "pipeline_checkpoint_not_solver_gap"}
+            if value.get("progress_percent") is not None else None
+        )
+        for key in ("progress_percent", "progress_stage", "progress_message", "progress_observed_at"):
+            value.pop(key, None)
         return value
 
     def get(self, job_id: str) -> dict:
         with self.connect() as db:
-            row = db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+            row = db.execute(
+                "SELECT jobs.*, job_progress.percent AS progress_percent, "
+                "job_progress.stage AS progress_stage, job_progress.message AS progress_message, "
+                "job_progress.observed_at AS progress_observed_at FROM jobs "
+                "LEFT JOIN job_progress ON job_progress.job_id=jobs.id WHERE jobs.id=?", (job_id,)
+            ).fetchone()
             if row is None:
                 raise KeyError(job_id)
             value = self.decode(row)
             value["events"] = [dict(item) for item in db.execute("SELECT * FROM events WHERE job_id=? ORDER BY seq", (job_id,))]
             return value
+
+    def record_progress(self, job_id: str, receipt: dict) -> bool:
+        """Persist a bound worker checkpoint without reviving a terminal attempt."""
+        if receipt.get("id") != job_id:
+            return False
+        progress = receipt.get("execution_progress")
+        if not isinstance(progress, dict):
+            return False
+        percent = progress.get("percent")
+        if isinstance(percent, bool) or not isinstance(percent, int) or not 0 <= percent <= 100:
+            return False
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT state,manifest FROM jobs WHERE id=?", (job_id,)).fetchone()
+            if row is None or row["state"] not in RESERVED:
+                return False
+            from .contracts import canonical, digest
+            if receipt.get("manifest_sha256") != digest(canonical(json.loads(row["manifest"]))):
+                return False
+            previous = db.execute("SELECT percent FROM job_progress WHERE job_id=?", (job_id,)).fetchone()
+            if previous and percent < previous[0]:
+                return False
+            db.execute(
+                "INSERT INTO job_progress(job_id,percent,stage,message,observed_at) VALUES (?,?,?,?,?) "
+                "ON CONFLICT(job_id) DO UPDATE SET percent=excluded.percent,stage=excluded.stage,"
+                "message=excluded.message,observed_at=excluded.observed_at",
+                (job_id, percent, display_text(progress.get("stage"), 80),
+                 display_text(progress.get("message"), 300), now()),
+            )
+            return True
 
     def transition(self, job_id: str, state: str, *, expected: set[str], worker_id: str | None = None,
                    error: str | None = None, result: dict | None = None) -> bool:

@@ -69,15 +69,37 @@ it("keeps a completed task's SOC rejection and solver usage visible", async () =
 });
 
 it("marks a fenced attempt as never started without offering a nonexistent archive", async () => {
-  vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(
-    url.endsWith("/workers")
-      ? { workers: [], global_gurobi_slots: 2 }
-      : [{ id: "fenced", state: "BLOCKED", worker_id: "pc", created_at: "2026-09-23",
-           manifest: { kind: "optimization" },
-           result: { cluster_admission: "FENCED_BEFORE_LAUNCH" } }],
-  )))));
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><ClusterPanel /></QueryClientProvider>);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url.endsWith("/workers")
+              ? { workers: [], global_gurobi_slots: 2 }
+              : [
+                  {
+                    id: "fenced",
+                    state: "BLOCKED",
+                    worker_id: "pc",
+                    created_at: "2026-09-23",
+                    manifest: { kind: "optimization" },
+                    result: { cluster_admission: "FENCED_BEFORE_LAUNCH" },
+                  },
+                ],
+          ),
+        ),
+      ),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <ClusterPanel />
+    </QueryClientProvider>,
+  );
   expect(await screen.findByText("（子機で未開始と確認済み）")).toBeTruthy();
   expect(screen.queryByRole("link", { name: "成果物ZIP" })).toBeNull();
   expect(screen.getByRole("button", { name: "新しいIDで再試行" })).toBeTruthy();
@@ -196,4 +218,87 @@ it("shows the weekly period and planned windows separately from research accepta
   expect(screen.getByText("診断用・週間研究採用は未対応")).toBeTruthy();
   expect(screen.getByText("（研究採用を意味しません）")).toBeTruthy();
   expect(screen.getByText(/外部計算予約 1 \/ 合計 2/)).toBeTruthy();
+});
+
+it("shows reusable per-attempt checkpoints and marks disconnected values as last known", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url.endsWith("/workers")
+              ? { workers: [], global_gurobi_slots: 2 }
+              : [
+                  {
+                    id: "job-a",
+                    state: "RUNNING",
+                    worker_id: "pc-a",
+                    created_at: "2026-09-24",
+                    manifest: {
+                      kind: "optimization",
+                      summary: {
+                        scenario_name: "渋24",
+                        service_dates: [],
+                        planning_days: 1,
+                        horizon_hours: 24,
+                        expected_rolling_windows: 0,
+                      },
+                    },
+                    execution_progress: {
+                      percent: 55,
+                      stage: "solve",
+                      message: "Running optimizer",
+                      observed_at: "2026-09-24T01:00:00Z",
+                      meaning: "pipeline_checkpoint_not_solver_gap",
+                    },
+                  },
+                  {
+                    id: "job-b",
+                    state: "LOST",
+                    worker_id: "pc-b",
+                    created_at: "2026-09-24",
+                    manifest: {
+                      kind: "optimization",
+                      summary: {
+                        scenario_name: "渋21",
+                        service_dates: [],
+                        planning_days: 1,
+                        horizon_hours: 24,
+                        expected_rolling_windows: 0,
+                      },
+                    },
+                    execution_progress: {
+                      percent: 25,
+                      stage: "build_canonical",
+                      message: "Building problem",
+                      observed_at: "2026-09-24T00:00:00Z",
+                      meaning: "pipeline_checkpoint_not_solver_gap",
+                    },
+                  },
+                ],
+          ),
+        ),
+      ),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <ClusterPanel />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("渋24")).toBeTruthy();
+  expect(screen.getByText("渋21")).toBeTruthy();
+  expect(screen.getByText("55%")).toBeTruthy();
+  expect(screen.getByText("25%")).toBeTruthy();
+  expect(
+    screen.getByText(/最後に確認した値 · 2026-09-24T00:00:00Z/),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(/求解器内部の探索率、残り時間、最適性gapではありません/),
+  ).toBeTruthy();
+  client.clear();
 });

@@ -52,6 +52,40 @@ def test_real_subprocess_roundtrip_and_restart_history(scheduler):
     assert recovered.get(row["id"])["state"] == "COMPLETED"
 
 
+def test_batch_membership_is_frozen_and_retry_keeps_the_declared_denominator(scheduler):
+    first = scheduler.enqueue("diagnostic", {}, batch_id="research-run", task_id="case-a", batch_task_count=2)
+    second = scheduler.enqueue("diagnostic", {}, batch_id="research-run", task_id="case-b", batch_task_count=2)
+    assert first["manifest"]["batch_task_count"] == second["manifest"]["batch_task_count"] == 2
+    with pytest.raises(ValueError, match="different attempt"):
+        scheduler.enqueue("diagnostic", {}, batch_id="research-run", task_id="case-a", batch_task_count=2)
+    with pytest.raises(ValueError, match="task count changed"):
+        scheduler.enqueue("diagnostic", {}, batch_id="research-run", task_id="case-c", batch_task_count=3)
+    with pytest.raises(ValueError, match="reached its declared"):
+        scheduler.enqueue("diagnostic", {}, batch_id="research-run", task_id="case-c", batch_task_count=2)
+    scheduler.store.transition(first["id"], "FAILED", expected={"QUEUED"})
+    with pytest.raises(ValueError, match="cannot change"):
+        scheduler.enqueue("diagnostic", {}, retry_of=first["id"],
+                          batch_id="research-run", task_id="case-b", batch_task_count=2)
+    retry = scheduler.retry(first["id"])
+    assert retry["manifest"]["task_id"] == "case-a"
+    assert retry["manifest"]["batch_id"] == "research-run"
+    assert retry["manifest"]["attempt_number"] == 2
+
+
+def test_controller_persists_final_worker_checkpoint_before_terminal_transition(scheduler, monkeypatch):
+    row = scheduler.enqueue("diagnostic", {})
+    scheduler.store.transition(row["id"], "RUNNING", expected={"QUEUED"}, worker_id="local")
+    monkeypatch.setattr(module, "collect_artifacts", lambda *args: {"state": "COMPLETED"})
+    monkeypatch.setattr(scheduler, "mirror", lambda *args: None)
+    response = {"id": row["id"], "state": "COMPLETED",
+                "manifest_sha256": digest(canonical(row["manifest"])),
+                "execution_progress": {"percent": 100, "stage": "finalize", "message": "Done"}}
+    scheduler.finish(row, response)
+    saved = JobStore(scheduler.store.root).get(row["id"])
+    assert saved["state"] == "COMPLETED"
+    assert saved["execution_progress"]["percent"] == 100
+
+
 def test_scheduler_allocates_distinct_workers_and_retains_lost_slots(scheduler, monkeypatch):
     scheduler.config = ClusterConfig(global_gurobi_slots=1, workers=[
         Worker(id="a", name="A", gurobi=True, ram_gb=16),

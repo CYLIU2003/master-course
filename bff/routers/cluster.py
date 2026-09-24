@@ -45,6 +45,9 @@ class SubmitBody(BaseModel):
     idempotency_key: str | None = None
     expected_git_sha: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
     worker_id: str | None = None
+    batch_id: str | None = None
+    task_id: str | None = None
+    batch_task_count: int | None = Field(default=None, gt=0, le=10000)
     minimum_ram_gb: float = Field(default=16, gt=0, allow_inf_nan=False)
     request: RunOptimizationBody
 
@@ -163,6 +166,11 @@ def submit(body: SubmitBody, app_state: dict = Depends(require_built)):
 
 def _submit_once(scheduler, body: SubmitBody, app_state: dict):
     try:
+        if (body.batch_id is None) != (body.task_id is None) or (body.batch_id is None) != (body.batch_task_count is None):
+            raise ValueError("Batch ID, task ID, and declared task count must be supplied together")
+        if body.batch_id is not None:
+            segment(body.batch_id)
+            segment(body.task_id)
         submission_job_id = None
         if body.idempotency_key:
             from bff.services.cluster.submissions import claim_submission
@@ -200,7 +208,11 @@ def _submit_once(scheduler, body: SubmitBody, app_state: dict):
         def freeze(**submission):
             from bff.store import job_store
             try:
-                accepted = scheduler.freeze_optimization(body.worker_id, app_state, body.minimum_ram_gb, **submission)
+                accepted = scheduler.freeze_optimization(
+                    body.worker_id, app_state, body.minimum_ram_gb,
+                    batch_id=body.batch_id, task_id=body.task_id,
+                    batch_task_count=body.batch_task_count, **submission,
+                )
                 captured_id.append(submission["job_id"])
                 job_store.update_job(submission["job_id"], metadata={"cluster_job_id": submission["job_id"]},
                                      message="分散キューで待機中")

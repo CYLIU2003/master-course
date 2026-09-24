@@ -5,12 +5,20 @@ import { ErrorBox } from "./common";
 
 import WorkerNodes, { type ClusterWorkers } from "./WorkerNodes";
 import CampaignProgress from "./CampaignProgress";
+import BatchProgress from "./BatchProgress";
 export type { ClusterWorkers } from "./WorkerNodes";
 type ClusterJob = {
   id: string;
   state: string;
   worker_id: string | null;
   error: string | null;
+  execution_progress?: {
+    percent: number;
+    stage: string;
+    message: string;
+    observed_at: string;
+    meaning: "pipeline_checkpoint_not_solver_gap";
+  } | null;
   manifest: {
     kind: string;
     worker_id: string | null;
@@ -18,6 +26,9 @@ type ClusterJob = {
     logical_job_id?: string;
     attempt_number?: number;
     execution_profile?: string;
+    batch_id?: string;
+    task_id?: string;
+    batch_task_count?: number;
     summary?: {
       scenario_name: string;
       planning_days: number;
@@ -96,6 +107,7 @@ export default function ClusterPanel() {
   });
   return (
     <>
+      <BatchProgress jobs={jobs.data ?? []} />
       <CampaignProgress />
       <section className="panel">
         <h2>分散計算</h2>
@@ -178,6 +190,10 @@ export default function ClusterPanel() {
           QUEUED は利用可能な枠待ち、LOST は状態不明です。LOST
           は枠を保持します。「結果を照合」で子機の終了を確認してください。
         </p>
+        <p className="subtle">
+          ジョブの割合は子機が保存した処理工程の到達点です。求解器内部の探索率、残り時間、最適性gapではありません。
+          通信断では最後に確認できた値として表示します。
+        </p>
         {!jobs.data?.length && <p>登録されたタスクはありません。</p>}
         <div className="detail-table">
           <table>
@@ -187,6 +203,7 @@ export default function ClusterPanel() {
                 <th>配布先</th>
                 <th>対象期間・運用</th>
                 <th>状態</th>
+                <th>工程進捗</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -244,7 +261,8 @@ export default function ClusterPanel() {
                     {job.state === "COMPLETED" && (
                       <small>（研究採用を意味しません）</small>
                     )}
-                    {job.result?.cluster_admission === "FENCED_BEFORE_LAUNCH" && (
+                    {job.result?.cluster_admission ===
+                      "FENCED_BEFORE_LAUNCH" && (
                       <small>（子機で未開始と確認済み）</small>
                     )}
                     {job.result?.result?.message && (
@@ -272,6 +290,36 @@ export default function ClusterPanel() {
                       </small>
                     )}
                     {job.error && <p className="error">{job.error}</p>}
+                  </td>
+                  <td>
+                    {job.execution_progress ? (
+                      <>
+                        <strong>{job.execution_progress.percent}%</strong>
+                        <progress
+                          value={job.execution_progress.percent}
+                          max={100}
+                          aria-label={`${job.id}の処理工程進捗`}
+                        />
+                        <small>
+                          {job.execution_progress.stage || "工程未記録"}
+                        </small>
+                        {job.execution_progress.message && (
+                          <small>{job.execution_progress.message}</small>
+                        )}
+                        <small>
+                          {job.state === "LOST"
+                            ? "最後に確認した値 · "
+                            : "確認日時 · "}
+                          {job.execution_progress.observed_at}
+                        </small>
+                      </>
+                    ) : (
+                      <small>
+                        {job.state === "QUEUED"
+                          ? "0% · 実行待ち"
+                          : "子機から工程報告なし"}
+                      </small>
+                    )}
                   </td>
                   <td>
                     {["QUEUED", "RUNNING", "LOST"].includes(job.state) && (

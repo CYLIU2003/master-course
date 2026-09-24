@@ -167,6 +167,9 @@ def advance(spec: dict, state: dict, path: Path, client) -> dict:
             # The server persists this identity before preflight. A lost HTTP
             # response repeats this exact key, including after a CLI restart.
             submission["idempotency_key"] = spec["batch_id"] + "." + task["task_id"]
+            submission["batch_id"] = spec["batch_id"]
+            submission["task_id"] = task["task_id"]
+            submission["batch_task_count"] = len(spec["tasks"])
             accepted = client.request("/api/cluster/jobs", submission)
             item["job_id"] = accepted["job_id"]
             save(path, state)

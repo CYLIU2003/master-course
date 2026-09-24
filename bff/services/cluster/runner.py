@@ -14,6 +14,7 @@ import sys
 import subprocess
 import time
 import traceback
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -23,6 +24,11 @@ from .artifacts import archive_to_disk
 from .system_metrics import memory_metrics, cpu_percent, disk_free_gb, keep_awake, hardware_identity
 
 MAX_ARTIFACT_BYTES = 1024 * 1024 * 1024
+
+
+def local_progress_job_id(attempt_id: str) -> str:
+    """Map any valid cluster attempt segment to the local UUID job-store key."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, "master-course/cluster-attempt/" + segment(attempt_id)))
 
 
 def process_identity(pid: int) -> str | None:
@@ -194,7 +200,9 @@ def execute_optimization(manifest: dict, bundle: dict, directory: Path) -> dict:
     prepared_path = output / "prepared_inputs" / scenario_id / f"{prepared_id}.json"
     prepared_path.parent.mkdir(parents=True, exist_ok=True)
     prepared_path.write_bytes(base64.b64decode(bundle["prepared_base64"], validate=True))
-    job = job_store.create_job(execution_model="thread")
+    # The attempt ID is the durable join key between worker checkpoints and
+    # the controller queue. Worker output is already isolated per attempt.
+    job = job_store.create_job(execution_model="thread", job_id=local_progress_job_id(manifest["id"]))
     kwargs["job_id"] = job.job_id
     from bff.services.optimization_run.solver_policy import admitted_cluster_attempt
     with admitted_cluster_attempt(manifest):
@@ -329,6 +337,22 @@ def worker_state(workspace: Path, job_id: str) -> dict:
         if current is None or (previous not in {None, "unknown"} and current != "unknown" and previous != current):
             state.update(state="FAILED", error="Worker process exited without a terminal result", finished_at=now())
             write_json(state_file, state)
+    if state.get("state") in {"RUNNING", "COMPLETED", "FAILED", "CANCELLED"}:
+        local_job_id = local_progress_job_id(job_id)
+        progress_path = directory / "output" / "jobs" / f"{local_job_id}.json"
+        try:
+            if progress_path.is_file() and not progress_path.is_symlink():
+                checkpoint = json.loads(progress_path.read_text(encoding="utf-8"))
+                percent = checkpoint.get("progress")
+                if (checkpoint.get("job_id") == local_job_id and isinstance(percent, int)
+                        and not isinstance(percent, bool) and 0 <= percent <= 100):
+                    stage = str((checkpoint.get("metadata") or {}).get("stage") or "")[:80]
+                    message = str(checkpoint.get("message") or "")[:300]
+                    state["execution_progress"] = {"percent": percent, "stage": stage,
+                                                   "message": message}
+        except (OSError, UnicodeError, ValueError, TypeError):
+            # A display checkpoint never changes the authoritative attempt state.
+            pass
     return state
 
 

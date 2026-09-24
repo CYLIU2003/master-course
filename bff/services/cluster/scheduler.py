@@ -261,9 +261,36 @@ class Scheduler:
             return self.registry.view(worker, self.store.rows(), self.monitor.controller)
 
     def enqueue(self, kind: str, bundle: dict, worker_id: str | None = None, *, job_id: str | None = None,
-                minimum_ram_gb: float = 0, retry_of: str | None = None) -> dict:
+                minimum_ram_gb: float = 0, retry_of: str | None = None,
+                batch_id: str | None = None, task_id: str | None = None,
+                batch_task_count: int | None = None) -> dict:
         if kind not in {"optimization", "diagnostic", "license_test"}:
             raise ValueError("Unsupported cluster task kind")
+        if (batch_id is None) != (task_id is None) or (batch_id is None) != (batch_task_count is None):
+            raise ValueError("Batch ID, task ID, and declared task count must be supplied together")
+        if batch_id is not None:
+            segment(batch_id)
+            segment(task_id)
+            if isinstance(batch_task_count, bool) or not isinstance(batch_task_count, int) or not 0 < batch_task_count <= 10000:
+                raise ValueError("Invalid declared batch task count")
+            retry_root = None
+            if retry_of:
+                retry_manifest = self.store.get(retry_of)["manifest"]
+                if retry_manifest.get("batch_id") != batch_id or retry_manifest.get("task_id") != task_id:
+                    raise ValueError("Retry cannot change its batch task identity")
+                retry_root = retry_manifest.get("logical_job_id", retry_of)
+            existing_tasks = set()
+            for existing in self.store.rows():
+                old = existing["manifest"]
+                if old.get("batch_id") != batch_id:
+                    continue
+                existing_tasks.add(old.get("task_id"))
+                if old.get("batch_task_count") != batch_task_count:
+                    raise ValueError("Batch task count changed after first submission")
+                if old.get("task_id") == task_id and old.get("logical_job_id", old["id"]) != retry_root:
+                    raise ValueError("Batch task already owns a different attempt")
+            if task_id not in existing_tasks and len(existing_tasks) >= batch_task_count:
+                raise ValueError("Batch has already reached its declared task count")
         if worker_id is not None:
             worker = self.worker(worker_id)
             row = self.registry.get(worker.id)
@@ -285,6 +312,10 @@ class Scheduler:
         manifest["logical_job_id"] = (prior.get("logical_job_id", prior["id"]) if prior else manifest["id"])
         manifest["attempt_id"] = manifest["id"]
         manifest["attempt_number"] = int(prior.get("attempt_number", 1)) + 1 if prior else 1
+        if batch_id is not None:
+            manifest["batch_id"] = batch_id
+            manifest["task_id"] = task_id
+            manifest["batch_task_count"] = batch_task_count
         manifest["execution_profile"] = (bundle.get("kwargs") or {}).get("execution_profile", "existing_solver_v1")
         if manifest["requires_gurobi"]:
             manifest["gurobi_reservation_id"] = manifest["id"]
@@ -318,7 +349,10 @@ class Scheduler:
             pass
         return self.store.add(manifest)
 
-    def freeze_optimization(self, worker_id: str | None, app_state: dict, minimum_ram_gb: float, **submission) -> bool:
+    def freeze_optimization(self, worker_id: str | None, app_state: dict, minimum_ram_gb: float,
+                            *, batch_id: str | None = None, task_id: str | None = None,
+                            batch_task_count: int | None = None,
+                            **submission) -> bool:
         from bff.store import scenario_store
         from bff.services.run_preparation import _scenario_hash
         kwargs = dict(inspect.signature(submission["fn"]).bind(*submission["args"]).arguments)
@@ -357,7 +391,9 @@ class Scheduler:
         bundle = {"kwargs": kwargs, "scenario": scenario, "prepared_base64": base64.b64encode(prepared).decode("ascii"),
                   "execution_inputs": execution_inputs,
                   "dataset_path": dataset_path, "dataset_hashes": file_hashes(dataset)}
-        self.enqueue("optimization", bundle, worker_id, job_id=submission["job_id"], minimum_ram_gb=minimum_ram_gb)
+        self.enqueue("optimization", bundle, worker_id, job_id=submission["job_id"],
+                     minimum_ram_gb=minimum_ram_gb, batch_id=batch_id, task_id=task_id,
+                     batch_task_count=batch_task_count)
         return True
 
     def tick(self, job_ids: set[str] | None = None):
@@ -442,10 +478,12 @@ class Scheduler:
                 return
             self.mirror(job_id, "running", "別PCで実行中")
             response = self.invoke_worker(worker, {"operation": "submit", "id": job_id, "manifest": row["manifest"], "bundle": bundle}, directory, timeout=30)
+            self.store.record_progress(job_id, response)
             while response.get("state") == "RUNNING":
                 if self.stop_event.wait(3):
                     return  # The child continues; restart recovery retains its reservation as LOST.
                 response = self.invoke_worker(worker, {"operation": "status", "id": job_id}, directory / "status", timeout=20)
+                self.store.record_progress(job_id, response)
             response = self.invoke_worker(worker, {"operation": "collect", "id": job_id, "stream_artifacts": True}, directory / "collect")
             self.finish(row, response)
         except Exception as exc:
@@ -456,6 +494,7 @@ class Scheduler:
     def finish(self, row: dict, response: dict):
         if response.get("state") not in {"COMPLETED", "FAILED", "BLOCKED", "CANCELLED"}:
             raise ValueError("Worker has not confirmed a terminal state")
+        self.store.record_progress(row["id"], response)
         self.store.transition(row["id"], "COLLECTING", expected=RESERVED)
         directory = self.store.root / "jobs" / row["id"]
         archive_path = None
@@ -540,7 +579,9 @@ class Scheduler:
             if git_state() != original["git"] or source_digest() != original["source_digest"] or digest(canonical(bundle)) != original["bundle_sha256"]:
                 raise ValueError("Frozen code/input changed; submit a new job explicitly")
             return self.enqueue(original["kind"], bundle, original["worker_id"],
-                                minimum_ram_gb=original["minimum_ram_gb"], retry_of=job_id)
+                                minimum_ram_gb=original["minimum_ram_gb"], retry_of=job_id,
+                                batch_id=original.get("batch_id"), task_id=original.get("task_id"),
+                                batch_task_count=original.get("batch_task_count"))
 
 
 _instance: Scheduler | None = None

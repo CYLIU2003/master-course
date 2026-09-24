@@ -47,6 +47,9 @@ def test_twelve_cases_resume_after_lost_submission_response_without_duplicates(t
             self.jobs, self.dropped = {}, False
         def request(self, path, body=None):
             if body is not None:
+                assert body["batch_id"] == "test-batch"
+                assert body["task_id"] in {str(index) for index in range(12)}
+                assert body["batch_task_count"] == 12
                 key = body["idempotency_key"]
                 self.jobs.setdefault(key, str(len(self.jobs)))
                 if not self.dropped:
