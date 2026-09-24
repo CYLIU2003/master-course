@@ -461,7 +461,7 @@ def test_hourly_pv_forecast_update_rejects_non_finite_energy() -> None:
         )
 
 
-def test_executed_day_accounting_stitches_each_slot_once() -> None:
+def test_executed_day_accounting_stitches_each_slot_once(tmp_path) -> None:
     problem = _hourly_result_problem()
     day_ahead_plan = AssignmentPlan()
     first = SimpleNamespace(
@@ -487,12 +487,16 @@ def test_executed_day_accounting_stitches_each_slot_once() -> None:
         problem,
         day_ahead_plan,
         [(problem, first, 0, 1), (problem, second, 1, 2)],
+        evidence_dir=tmp_path,
     )
 
     assert accounting["eligible"] is True
     assert accounting["missing_slots"] == []
     assert accounting["duplicate_slots"] == []
     assert accounting["cost_breakdown"]["grid_import_kwh"] == pytest.approx(30.0)
+    exported = json.loads((tmp_path / "executed_plan.json").read_text(encoding="utf-8"))
+    assert exported["grid_to_bus_kwh_by_depot_slot"] == {"dep-1": {"0": 10.0, "1": 20.0}}
+    assert sum(day["total_cost_jpy"] for day in exported["daily_cost_ledger"]) == pytest.approx(accounting["cost_breakdown"]["total_cost"], abs=1e-6)
     assert accounting["bev_terminal_energy_balanced"] is True
     assert accounting["bess_terminal_energy_balanced"] is True
     assert accounting["bess_terminal_soc_by_depot"]["dep-1"] == {

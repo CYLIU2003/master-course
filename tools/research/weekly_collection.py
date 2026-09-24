@@ -23,7 +23,7 @@ def collect_week(prepared: dict, item: dict, directory: Path, audit: dict) -> di
         prefix = accounts[0].removesuffix("executed_day_accounting.json")
         accounting = json.loads(archive.read(accounts[0]))
         plan = json.loads(archive.read(prefix + "executed_plan.json"))
-        physical = json.loads(archive.read(prefix + "physical_validation.json"))
+        physical = json.loads(archive.read(prefix.removesuffix("rolling_hourly_chain/") + "physical_schedule_validation.json"))
         bundle = json.loads(archive.read("bundle.json"))
         inputs = json.loads(base64.b64decode(bundle["prepared_base64"]))
         # Preserve the worker's complete original output; all member paths and
@@ -32,7 +32,7 @@ def collect_week(prepared: dict, item: dict, directory: Path, audit: dict) -> di
         original.mkdir(exist_ok=True)
         archive.extractall(original)
     slots = 672 + int(prepared["overnight"]["extra_slots"])
-    if (not accounting["eligible"] or not physical["accepted"] or physical["violations"]
+    if (not accounting["eligible"] or not physical["accepted"] or physical["failed_checks"]
             or accounting["executed_slot_count"] != slots or accounting["missing_slots"] or accounting["duplicate_slots"]):
         raise ValueError("Weekly execution plus paid overnight coverage/physical/accounting did not pass")
     trips = {t["trip_id"]: t for t in inputs["trips"]}

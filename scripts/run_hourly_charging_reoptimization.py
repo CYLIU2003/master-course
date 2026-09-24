@@ -228,6 +228,8 @@ def _build_executed_day_accounting(
     problem: Any,
     day_ahead_plan: AssignmentPlan,
     executed_segments: list[tuple[Any, Any, int, int]],
+    *,
+    evidence_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Recalculate one day from executed prefixes, never from look-ahead totals.
 
@@ -340,7 +342,9 @@ def _build_executed_day_accounting(
         },
         **stitched_maps,
     )
-    breakdown = CostEvaluator().evaluate(accounting_problem, accounting_plan).to_dict()
+    evaluator = CostEvaluator()
+    evaluated_cost = evaluator.evaluate(accounting_problem, accounting_plan)
+    breakdown = evaluated_cost.to_dict()
     contract_overage_audit = _contract_overage_accounting_audit(
         accounting_problem, accounting_plan, breakdown
     )
@@ -452,6 +456,17 @@ def _build_executed_day_accounting(
     if unreplenished_kwh > 1.0e-6:
         rejection_reasons.append("unreplenished_drive_energy_remains")
     eligible = not rejection_reasons
+    if eligible and evidence_dir is not None:
+        # Reuse the exact accepted-prefix plan used for the canonical cost.
+        # Reporting must not add remaining-horizon plans or reset day states.
+        vehicle_ledger, daily_ledger = evaluator.build_plan_ledgers(
+            accounting_problem, accounting_plan, evaluated_cost
+        )
+        residual = abs(math.fsum(row.total_cost_jpy for row in daily_ledger) - breakdown["total_cost"])
+        if residual > 1e-6:
+            raise ValueError(f"Executed daily ledger mismatch: {residual}")
+        reporting_plan = replace(accounting_plan, vehicle_cost_ledger=vehicle_ledger, daily_cost_ledger=daily_ledger)
+        _write_json(Path(evidence_dir) / "executed_plan.json", ResultSerializer.serialize_plan(reporting_plan))
     return {
         "eligible": eligible,
         "reason": (
@@ -1764,6 +1779,7 @@ def run_rolling_chain(
                 problem,
                 day_ahead_plan,
                 executed_segments,
+                evidence_dir=output_dir,
             )
         except Exception as exc:
             executed_day_accounting = {
