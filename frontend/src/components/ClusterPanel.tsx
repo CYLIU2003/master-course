@@ -5,6 +5,7 @@ import { ErrorBox } from "./common";
 
 import WorkerNodes, { type ClusterWorkers } from "./WorkerNodes";
 import BatchProgress from "./BatchProgress";
+import CampaignProgress from "./CampaignProgress";
 export type { ClusterWorkers } from "./WorkerNodes";
 type ClusterJob = {
   id: string;
@@ -148,6 +149,9 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
         )
       : (jobs.data ?? []);
   const visibleSelected = visibleJobs.some((job) => job.id === selected);
+  const controllerSha = workers.data?.workers.find(
+    (worker) => worker.transport === "local",
+  )?.capability.git?.sha;
   const refreshStopped = [workers, jobs].some(
     (query) =>
       query.isError ||
@@ -155,7 +159,10 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   );
   return (
     <>
-      <BatchProgress jobs={visibleJobs} />
+      {jobScope === "all" && <BatchProgress jobs={jobs.data ?? []} />}
+      {jobScope === "all" && controllerSha && (
+        <CampaignProgress origin={monitorOrigin} controllerSha={controllerSha} />
+      )}
       <section className="panel">
         <h2>分散計算</h2>
         {(window.location.protocol === "http:" ||
