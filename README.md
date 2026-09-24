@@ -4213,6 +4213,12 @@ AIを使わない配布・バッチ再開スクリプトを備えます。Python
 `stage-state.json` は終端失敗を `FAILED`、通信などで同一試行の結末が確定しない状態を `STATE_UNKNOWN` と区別します。後者を新しい試行として自動再投入しません。
 
 使い方は、まずclean Git SHAの専用コントローラーを `tools/cluster/serve_controller.py --settings <settings.json>` で起動し、その設定と同じ出力先・releaseを指定して `python tools/research/shibu24_staged_campaign.py --settings <settings.json> --output <campaign-dir>` を実行します。同じ出力先で再実行すると同じbatch IDと状態を照合して再開します。`stage-state.json` は段階の進捗、各 `batch.log` は投入・回収履歴、`artifact-audit.json` は段階の成果物監査です。これは診断実行であり、完走しても修論用の研究採用や統合総費用の大域最適性を認めるものではありません。
+
+## 渋21だけの段階試験（2026-09-24）
+
+渋24の失敗した週は再投入しません。`scripts/benchmarks/shibu21_optimization_store.py` は、研究者が手動で固定した渋21〜23のODPT由来原本から、渋21だけの6路線パターン・曜日別計72便をハッシュ照合して独立SQLiteへ保存します。取得APIは呼びません。入力DBは保存後変更せず、`tools/research/shibu21_monthly.py check` で12代表週と翌朝の気象・ダイヤを事前検査します。
+
+新しいclean SHAと専用出力先で `tools/research/shibu21_staged_campaign.py --settings <settings.json> --output <campaign-dir>` を実行すると、5月12日1日→同週7日→残り11カ月の各1週の順で、Prepare、既存の分散batch、回収成果物のhash・物理監査を行います。前段が失敗・状態不明なら後続を投入しません。旧渋24、旧渋21〜23の成功値と混ぜず、2026年固定ダイヤ×2025年気象の診断として扱います。`stage-state.json` と各段階の `batch.log`・`artifact-audit.json` が状態と原因の正本です。正式fleet、設備の受電上限、道路実距離、統合総費用の最適性はこの試験だけでは確定しません。
 # 2026-09-23 実便版渋24・16台診断
 
 公式ODPT保存原本の渋24全6パターン・平日224便を、従来の渋21〜23シナリオの車両・充電器・費用・PV/BESS設定を引き継いで1日診断する入口を `tools/cluster/real_shibu24_batch.py` に追加しました。新しい分散画面は設定した既存シナリオ保管先から従来シナリオを表示・Prepare・実行できます。実行条件と研究上の限界は [実便版渋24の16台診断](docs/notes/SHIBU24_REAL_CLUSTER_20260923.md) を参照してください。旧架空4便の結果を実便の結果として扱いません。
