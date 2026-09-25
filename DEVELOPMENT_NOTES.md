@@ -10999,3 +10999,11 @@ PID再利用を拒否する経路を確認。独立レビュー・研究採用�
 証拠は `output/monthly_memory_restart_20260925/`。数理条件・時刻表・料金・SOC・
 BESS・月別代表週は変更しない。正式mainへ同期し、別clean SHAを配布して
 新キャンペーンを起動する。稼働コードは変更しない。配置と起動結果は後続記録へ追記。
+
+## 2026-09-25 本番投入前の連続日テスト
+
+月別867cf4aeの1月は、Stage1で作ったDutyの翌日接続に直行回送3分を保存し、Rolling復元側の帰庫経由8分と不一致で停止した。モデル・検算が使う connection_deadhead_minutes をDuty出力にも適用する。制約や検算許容差を緩めず、旧3分の記録は拒否を維持する。2月の32GB機でのGurobi Out of memoryは別問題で、今回の小規模テスト通過をその解決の証拠とはしない。
+
+ユーザーの最新指示により本番の新規割当をdrainし、未開始9件を取消、実行中3月は同じattemptへ取消要求。既存ログと失敗成果物は保持。tools/cluster/overnight_smoke.pyで明示的な架空データの1/2/7日テストをPrepareできるようにした。通常のbatch・共有ライセンス管理・32GB制限・Rolling・回収を通す。初期テストは2日8便・BEV1台とICE予備1台・充電器1台。PV/BESSなしの引継ぎ診断であり、本番の負荷・PV/BESS・翌朝延長の全検証ではない。
+
+回帰: test_exported_overnight_deadhead / test_overnight_smoke / test_reopt_alns_critical_fixes の23件通過（Gurobiを起動しない）。実機結果は実行後に別記。自己レビューで出力経路と検証経路の一致を確認、独立レビューは未実施。

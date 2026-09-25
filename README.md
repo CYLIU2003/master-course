@@ -4355,3 +4355,9 @@ Windowsの一時的な保存拒否は原本を残して再試行します。Gmai
 queueの終了照合とcooldownを引き継ぎます。メモリの一括解放や全PC再起動は行いません。
 報告の `UNVERIFIED` は確認未了です。再開時のGurobi投入先は搭載32GB以上に限定し、
 さらに空きRAM・固定版・ライセンス枠の検査を通過する必要があります。
+
+## 本番の前に小規模テストを実行する（2026-09-25）
+
+`tools/cluster/overnight_smoke.py --settings <controller-settings.json> --output <test-batch.json> --batch-id <unique-id> --days 2 --worker <worker-id>` で、通常経路を使う連続2日・8便の架空テスト入力を作れます。対象は親機が管理する32GB以上のGurobi対応PCです。既存ファイルへの上書きは拒否します。1日/7日も指定できますが、本番の時刻表を縮小・変更する機能ではありません。
+
+投入・再開は `tools/cluster/batch.py run <test-batch.json> --state-dir <test-state>`、回収物のhash照合は `tools/cluster/audit_batch.py <test-batch.json> --state-dir <test-state> --output <test-audit.json>`。プロセス終了と物理・Rolling・費用検証は別に確認します。2日テストは翌日引継ぎを確認し、本番12週のメモリ耐性や研究採用を保証しません。現在の12週は失敗原因を保持して新規割当を停止し、先にこのテストを行います。

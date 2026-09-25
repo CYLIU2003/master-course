@@ -30483,9 +30483,11 @@ class GurobiMILPAdapter:
                 continue
             deadhead = 0
             if prev_trip is not None:
-                deadhead = problem.dispatch_context.get_deadhead_min(
-                    getattr(prev_trip, "destination_stop_id", None) or prev_trip.destination,
-                    getattr(dispatch_trip, "origin_stop_id", None) or dispatch_trip.origin,
+                # Export the same via-depot overnight connection used by the
+                # model and the persisted-plan validator. Direct stop-to-stop
+                # time is only appropriate within the same service day.
+                deadhead = connection_deadhead_minutes(
+                    problem.dispatch_context, prev_trip, dispatch_trip,
                 )
             elif vehicle is not None:
                 deadhead = problem.dispatch_context.get_deadhead_min(
