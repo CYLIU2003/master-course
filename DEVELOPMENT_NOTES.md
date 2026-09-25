@@ -11021,3 +11021,9 @@ BFFの要求research_runをexecute_frontend_rolling_chain→RollingChainRequest�
 64400f92の2日テスト cb0652bb-5579-5938-976b-50fccf96ec62 は48/48時間、96区間、物理検証、回収hash照合が通過。ただしベースのdeployment-only fixtureがenable_other_cost=Falseで電力費も無効だったため、124.950736842kWhの系統→バス供給があるのに会計費用0。この結果を経済性検証合格とは扱わない。新版fixtureは明示cost_component_flagsで電力費だけ有効とし20円/kWhを検査する。元結果は保持。
 
 7日Prepareは平日だけのscopeと土休日を含む原本の不一致を正しく拒否。fixtureを既存canonical service IDのWEEKDAY/SAT/SUN_HOLに統一し、serviceSelectionに全対象を渡す。単一serviceIdはstore APIで集合を上書きするため送信から除外。Prepare側の拒否を弱めない。関連12件通過（store正規化の実経路も含む）。新しいclean版・新規Prepareで再試験する。
+
+### 2026-09-25 16:48 JST 7日実機で検出した100窓以上の成果物順序誤り
+
+b0226eceの7日25便は168窓/336区間・物理・会計が通過、392.0294736842121kWh、電力費/総費用7840.589473684241円。最終成果物検査がstep名を辞書順に並べ、167を最終と扱わず存在不要の終端handoffを要求してFAILED。旧attempt 6d1cffe7-2dc1-56ee-99c1-4322f6349599を保存し再ラベルしない。
+
+artifact_completenessを数値index順にし、index欠落/重複も明示拒否。物理・費用・モデルは変更なし。関連43件通過、24/48/101/168/175窓と欠落/重複を検査。追加verify_overnight_smokeは回収hashと物理・全便・会計をGurobiなしで検査する。旧2日費用無効結果を失格とし、旧7日計画内容は検算を通るがジョブ失敗判定は保持。設備正規化でPV enabledがTrueになるが発電/利用は0でBESSはFalse、PV/BESS効果の試験ではない。新clean版で最終保存まで再試験する。独立レビュー未実施。

@@ -1403,11 +1403,19 @@ def _rolling_step_artifacts(
 
     expected_step_count = int(summary.get("expected_step_count") or 0)
     step_count = int(summary.get("step_count") or 0)
-    step_dirs = sorted(
-        path
-        for path in (run_dir / "rolling_hourly_chain").glob("step_*")
-        if path.is_dir()
-    )
+    indexed_dirs: list[tuple[int, Path]] = []
+    for path in (run_dir / "rolling_hourly_chain").glob("step_*"):
+        if not path.is_dir():
+            continue
+        index_text = path.name.split("_", 2)[1]
+        if not index_text.isascii() or not index_text.isdecimal():
+            content_errors.append(f"Invalid rolling step directory: {path.name}")
+            continue
+        indexed_dirs.append((int(index_text), path))
+    indexed_dirs.sort(key=lambda item: item[0])
+    step_dirs = [path for _, path in indexed_dirs]
+    if [index for index, _ in indexed_dirs] != list(range(expected_step_count)):
+        content_errors.append("Rolling step indices must cover the expected range exactly once")
     if expected_step_count <= 0:
         content_errors.append(
             "rolling_chain_summary.expected_step_count must be positive"
@@ -1435,6 +1443,7 @@ def _rolling_step_artifacts(
             "hourly_solver_result.json",
             "hourly_summary.json",
         ]
+        # Sort numerically: lexical ordering puts step_100 before step_99.
         # The final slot has no successor handoff. Every earlier step must
         # persist its state transition for the next solve.
         if step_index < len(step_dirs) - 1:
