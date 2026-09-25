@@ -4381,3 +4381,7 @@ queueの終了照合とcooldownを引き継ぎます。メモリの一括解放�
 `tools/research/weekly_terminal_observer.py` は30秒ごとに既存campaignを確認します。`--controller http://127.0.0.1:<port> --worker <id>` を追加すると、異なる新しい計測で3回続けて空きRAMまたはcommit余地が4GiB未満になったときに一度だけ警告を引き継ぎます。キャッシュの繰返し・通信不明は低メモリ判定に数えません。`--repair-on-failure` は失敗時の通知に承認済み修正・再実行の指示を付けます。通常確認はAIを使いませんが、原因に応じたコード修正には通知先の担当者/agentが必要です。監視自体はジョブ終了・再投入・物理条件変更を行いません。元の必須引数は `--campaign <dir> --launch <pid/process_identity/git_shaのJSON> --thread <既存thread ID> --codex <CLI実行ファイル>`。terminal_observerの記録で重複を抑止し、受理不明の通知を無条件再送しません。
 
 毎時計画の `day_ahead_boundary_state` 方針では、保存した前日計画から車両/BESSのSOC時系列と充電セッションの継続情報も復元します。これらは予測計画の窓端参照であり、実行会計に前日計画の買電量等を転記するものではありません。必要な境界が欠ける場合は初期SOCで埋めず停止します。
+
+2026-09-25 18:28 JST：この修正の固定版 `08829662` を5台で照合し、計算controller（8891）へ配置しました。2月1週の再試行は `output/rolling_reference_fix_20260925/operation.local.json`、状態は同ディレクトリの `february_campaign/state.json` です。新規Prepare中で、週次完走ではありません。通常の投入・待機・回収・終端通知は既存スクリプトが担当します。18GiB要求と子機4GiBの余裕は維持し、不足時は待機します。管理画面の詳細進捗にも旧12件と今回の新試行を別々に配信しています。
+
+固定版の配布検査は、固定版自身の `tools/cluster/release.py` を指定し、登録済みcontroller用Pythonで実行してください。開発checkoutの同名スクリプトでは、そのcheckoutの `uv.lock` のバイト列を比較するため、改行形式が異なる固定版に対しruntime不一致となり得ます。照合条件を外したり、稼働済み固定版のファイルを書き換えて回避しないでください。

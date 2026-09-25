@@ -11070,3 +11070,15 @@ AIなしで適用するtools/cluster/configure_memory_headroom.pyを追加。--a
 関連44テスト通過（native実求解6件を明示除外）。その後JSONキーの整数復元と不正mapping検査を補強し対象6件を再確認。実1704便原本の読取再現では26台すべての24時間境界が保存値と一致、BESS minimum_onlyを維持、会計flowコピーなしでPASS。証拠 output/rolling_reference_fix_20260925/raw_reference_replay.json。再現は求解・研究完走の証明ではない。自己レビュー済み、独立レビュー未実施。
 
 イベントpayload hash照合、Gmail送信済み0件確認後、g2681320@tcu.ac.jpへ失敗メール1通送信。実message ID `1a0d7d76add8ea39`、送信済み再検索一致1件、email_receipt.json保存済み。旧attemptの終了とライセンスcooldownを維持して次の実行へ進む。
+
+### 2026-09-25 18:28 JST SOC参照修正版の配置と2月再試行
+
+修正commit `08829662483a77e93c19a66384e1defcb9701ed7` をmainとscenario-week-plansへfast-forward/push済み。新規clean clone `output/cluster-deployment/release-rolling-reference-20260925` に既存凍結入力62ファイルをhash照合して配置。ODPT再取得・物理条件変更なし。5台のGit/source/runtime/dataset照合通過、Gurobi Env起動0。stage-frozen-entry/report.jsonを保存。
+
+最初のstageは開発checkoutのentrypointがLFのuv.lockを参照し、固定checkout/全workerのCRLF lockとのruntime比較で拒否。実ライブラリ版は一致。固定版自身のentrypointを登録controller用Pythonで実行すると5/5通過。照合guard・原本・固定コードを変えず解決。失敗stage記録も保全。
+
+旧attempt終端と全queue（FAILED10/COMPLETED3/CANCELLED20、活動中0）を照合。8891を新settingsへ切替、同じ権威queueとライセンス予約を保持。32GB以上、共有2枠、子機4/親機6GiB余裕、64GB既知ライセンス不良機disabledを維持。安全な既存memory_maintenanceは5台点検・停止対象0。他アプリの強制終了なし。
+
+新campaign PID73404、固定版08829662、新規Prepare、2月2025-02-03だけを開始。操作設定 `output/rolling_reference_fix_20260925/operation.local.json`、launch/observer-launch-bindingにPID生成時刻を保存。終端observer PID23144は同じthreadへ成功/失敗一度だけを通知し、障害修正引継ぎとfresh3回のメモリ予兆通知を有効化。通常監視にAIを使わない。詳細進捗publisherを既存12件＋今回1件へ切替、8868の配信JSONで13件/エラー0、新SHAのPREPARINGを確認。親機/workerの既存試行を再ラベルしない。
+
+18:28時点はPrepare継続で新規求解未開始。対象32GB子機の空き物理21.34GiB、commit22.84GiBで要求22GiBの物理側を下回る。準備後も不足なら待機し、基準を下げない。ユーザーへ不要なアプリを閉じて約1GiB確保できるか通知済み。新週の完走・独立レビュー・研究採用は未達。
