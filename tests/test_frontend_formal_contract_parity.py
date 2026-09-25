@@ -4,6 +4,7 @@ from copy import deepcopy
 import json
 from pathlib import Path
 from types import SimpleNamespace
+import pytest
 
 from bff.routers.optimization import (
     _apply_interactive_bev_utilization_policy,
@@ -120,8 +121,9 @@ def test_frontend_contract_is_the_shared_scenario_fleet_contract() -> None:
     ][0]["source_record"]["id"] == "bev-a"
 
 
+@pytest.mark.parametrize("research_run", [True, False])
 def test_problem_builder_preserves_exact_fleet_contract_for_rolling(
-    tmp_path: Path,
+    tmp_path: Path, research_run: bool,
 ) -> None:
     scenario = _scenario()
     expected = resolve_scenario_fleet_contract(
@@ -130,11 +132,16 @@ def test_problem_builder_preserves_exact_fleet_contract_for_rolling(
         research_run=True,
     )
 
+    from bff.services.optimization_run.rolling_chain import bind_rolling_fleet_input
+    original = deepcopy(scenario)
+    input_scenario = scenario
+    scenario = bind_rolling_fleet_input(scenario, "depot-a")
+    assert input_scenario == original
     problem = ProblemBuilder().build_from_scenario(
         scenario,
         depot_id="depot-a",
         service_id="WEEKDAY",
-        config=OptimizationConfig(research_run=True),
+        config=OptimizationConfig(research_run=research_run),
     )
 
     contract = problem.metadata["scenario_fleet_contract"]
@@ -178,6 +185,14 @@ def test_problem_builder_preserves_exact_fleet_contract_for_rolling(
     )
     assert persisted_contract == expected.to_dict(include_source_records=True)
     assert audit["scenario_fleet_contract_hash"] == expected.fleet_contract_hash
+
+
+def test_rolling_rejects_stale_fleet_instead_of_replacing_frozen_evidence() -> None:
+    from bff.services.optimization_run.rolling_chain import bind_rolling_fleet_input
+    scenario = bind_rolling_fleet_input(_scenario(), "depot-a")
+    scenario["simulation_config"]["scenario_fleet_contract"]["fleet_contract_hash"] = "different"
+    with pytest.raises(ValueError, match="ROLLING_FLEET_CONTRACT_STALE"):
+        bind_rolling_fleet_input(scenario, "depot-a")
 
 
 def test_all_available_bev_policy_uses_canonical_powertrain_not_type_label() -> None:

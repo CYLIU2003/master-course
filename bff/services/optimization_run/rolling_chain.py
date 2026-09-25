@@ -44,6 +44,27 @@ from src.optimization.validation.physical_event_schedule import (
 DEFAULT_FRONTEND_RUN_PROFILE = "day_ahead_and_hourly_rolling"
 
 
+def bind_rolling_fleet_input(scenario: dict, depot_id: str | None) -> dict:
+    """Preserve exact input fleet evidence even for non-formal rolling evaluation."""
+    from src.optimization.common.fleet_contract import resolve_scenario_fleet_contract
+    contract = resolve_scenario_fleet_contract(
+        scenario, selected_depot_ids=(str(depot_id or "").strip(),), research_run=True,
+    )
+    payload = contract.to_dict(include_source_records=True)
+    simulation = dict(scenario.get("simulation_config") or {})
+    existing = simulation.get("scenario_fleet_contract")
+    if existing and existing != payload:
+        raise ValueError("ROLLING_FLEET_CONTRACT_STALE")
+    simulation.update(scenario_fleet_contract=payload,
+                      research_vehicle_inventory=dict(contract.inventory_by_powertrain),
+                      research_vehicle_ids=list(contract.active_vehicle_ids),
+                      research_vehicle_id_hash=contract.active_vehicle_id_hash,
+                      research_vehicle_parameter_hash=contract.vehicle_parameter_hash,
+                      research_vehicle_initial_state_hash=contract.initial_state_hash,
+                      research_fleet_contract_hash=contract.fleet_contract_hash)
+    return {**scenario, "simulation_config": simulation}
+
+
 def _prepare_actual_pv_execution_file(problem: Any, run_dir: Path, *, repo_root: Path | None = None) -> str | None:
     """Bind separate actual irradiance to the exact prepared PV equipment."""
     contract = dict(problem.metadata.get('date_series_contract') or {})

@@ -1,6 +1,13 @@
 
 
 
+## 2026-09-25 非正式の週次評価でもRolling車両台帳を求解前に引き継ぐ
+
+- 32GB/ライセンス制御の確認中、2月attempt e636fa0aは前日計画後に `Canonical problem is missing scenario_fleet_contract_v3` で停止した。weekly_campaignはresearch_run=FalseだがRollingは厳格な車両台帳を必要とし、従来の正式フラグ依存の生成経路を通らないことが原因。メモリ不足・同時枠超過とは別問題。
+- 実効run_hourly_rollingのBFF経路で、入力車両から厳格に解決した台帳をProblemBuilderへ渡す処理を追加。元シナリオの車両・時刻表・SOC・数理条件やresearch_runフラグを変更せず、不一致の既存台帳は上書きしない。不足パラメータは求解前に拒否する。推定値・既定値を正式宣言に置き換えない。
+- 正式/非正式双方のBuilder→Rolling保存の台帳/hash一致、元入力不変、古い台帳の拒否を含む46件通過。失敗attemptの未materialize bundleを直接厳格検査すると充電器互換宣言・初期燃料の不足を拒否した。この直接検査は実行時materialize後の検証や新しい週次完走ではない。
+- この修正はmainの次版用。凍結cf4beb97、実行中4月・5月、旧失敗の結果は変更・再ラベルしていない。2月の週次結果は未完了。新入力版・新規Prepareからの再計算は未実施で、12週完了とは報告しない。
+
 ## 2026-09-25 Gurobi搭載32GB制限・親機の単一ライセンス管理
 
 - 搭載RAMとOS利用可能/空きRAMを分離し、配置・preflight・worker・通常ローカル取得でGurobiの32GB以上を必須化。小さい要求RAMや固定PC指定では迂回しない。license_testも対象、Gurobi-freeは対象外。

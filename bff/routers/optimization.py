@@ -11899,6 +11899,9 @@ def _run_optimization(
                 executed_phase=phase_token,
                 diagnostic_mode=is_diagnostic_mode,
             )
+            if run_hourly_rolling:
+                from bff.services.optimization_run.rolling_chain import bind_rolling_fleet_input
+                scenario = bind_rolling_fleet_input(scenario, depot_id)
             problem = ProblemBuilder().build_from_scenario(
                 scenario,
                 depot_id=depot_id,
