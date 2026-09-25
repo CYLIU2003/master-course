@@ -28,6 +28,19 @@ from tools.research.weekly_results import read, sha, write_json
 TERMINAL = {"COMPLETED", "FAILED", "BLOCKED", "CANCELLED"}
 
 
+def job_error(row: dict) -> str | None:
+    """Read controller, worker and nested solver failures without losing the cause."""
+    for layer in (row, row.get("result") or {}, (row.get("result") or {}).get("result") or {}):
+        if layer.get("error"):
+            error = str(layer["error"])
+            # The full traceback stays in the immutable receipt. Put its cause,
+            # not the first file path, in bounded frontend/status messages.
+            if error.startswith("Traceback (most recent call last):"):
+                return next((line.strip() for line in reversed(error.splitlines()) if line.strip()), error)
+            return error
+    return None
+
+
 def load_operation(path: Path) -> tuple[dict, dict, Path]:
     operation = read(path)
     settings = read(Path(operation["settings"]))
@@ -87,7 +100,7 @@ def snapshot(operation: dict, settings: dict, campaign: Path, client=None) -> di
         item = {"week": week, "state": state, "last_recorded_state": saved.get("state"),
                 "job_id": saved.get("job_id"), "worker": (row or saved).get("worker_id"),
                 "prepared": (directory / "prepared.json").exists(),
-                "error": (row or saved).get("error") or recorded.get("cases", {}).get(week, {}).get("error"),
+                "error": job_error(row or saved) or recorded.get("cases", {}).get(week, {}).get("error"),
                 "directory": str(directory), "placement": []}
         if row and state == "QUEUED":
             manifest = row["manifest"]
@@ -137,7 +150,7 @@ def collect_existing(directory: Path, *, client=None) -> dict:
             row = client.request("/api/cluster/jobs/" + segment(item["job_id"]))
             if row.get("id") != item["job_id"]:
                 raise ValueError("Controller returned a different attempt")
-            item.update(state=row["state"], worker_id=row.get("worker_id"), error=row.get("error"))
+            item.update(state=row["state"], worker_id=row.get("worker_id"), error=job_error(row))
             save(path, state)
             if row["state"] not in TERMINAL:
                 return {"state": row["state"], "job_id": item["job_id"]}
@@ -150,7 +163,7 @@ def collect_existing(directory: Path, *, client=None) -> dict:
                 item.update(artifacts=archive.name, collected_sha256=expected)
                 save(path, state)
             if row["state"] != "COMPLETED":
-                return {"state": row["state"], "job_id": item["job_id"], "error": row.get("error")}
+                return {"state": row["state"], "job_id": item["job_id"], "error": job_error(row)}
         audit = audit_batch(spec, state, state_dir)
         write_json(directory / "operations/recovery-audit.json", audit)
         if audit["unverified"] or not all(t.get("physical_feasibility_claim_eligible") for t in audit["tasks"]):

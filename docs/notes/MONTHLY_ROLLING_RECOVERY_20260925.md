@@ -1,0 +1,21 @@
+# 月別12週のRolling引継ぎ復旧（2026-09-25）
+
+## 原因と修正
+
+旧固定版cf4beb97の1・3月はGUROBI_LICENSE_UNAVAILABLE、2・4月は前日計画後のscenario_fleet_contract_v3欠落で失敗した。稼働API・回収原本で確認。表示上だけの失敗ではない。
+
+materialize_scenario_from_prepared_inputで実際の12件を展開すると、充電器互換宣言とICE初期燃料が存在した。raw scenarioだけを調べた前回の不足疑義は、このPrepared入力には該当しない。12件すべてbind_rolling_fleet_inputが通過し、Preparedの前後hashは不変。証拠はoutput/monthly_recovery_20260925/materialized-fleet-preflight.json。
+
+既存afc7e910のBFF→Prepared展開→Rolling fleet入力bind→ProblemBuilder→前日求解→Rolling契約保存の修正に加え、weekly_campaignにもPrepare後・投入前の同じ検査を追加した。入力不足を数十分の求解後に発見することを防ぐ。研究採用フラグ、台帳値、時刻表、SOC、BESS、費用、選択12週は変更しない。
+
+weekly_operatorはworker.result.result.errorまで原因を引き継ぐ。表示用のTracebackは最終の原因行を使い、先頭360文字で原因が消える問題を防ぐ。全文は原本に保持する。
+
+## 運用
+
+旧controllerをdrain、未開始6件を通常APIで取消。既知不具合を含む実行中2件は通常のcancel要求。強制的な予約解放・プロセス強制終了・実行中コードへの注入は行わない。旧成果物と取消記録を保持。新しいclean SHAを別ディレクトリへstageし、同じ親機queueで旧実行の終了を確認後に切替える。解放待ち330秒は引き継ぐ。64GB機の未解決ライセンス失敗はdisabledを維持し、搭載32GB以上と空きRAMの両検査を使う。
+
+新実験は仮・正式用の同じ12代表週・同じ親シナリオから全件新規Prepareする。旧版と新結果を混ぜない。通常処理は既存weekly_campaign/weekly_operator/publish_execution_detailで継続し、AI常時監視を使わない。
+
+## 検証
+
+関連4ファイル70テスト通過。materialized入力への検査、欠落の事前拒否、nestedエラー原因、研究フラグtrue/false双方の車両契約保存、rolling orchestrationを含む。12件の実入力の事前検査通過は求解や週次物理・会計検算の完了を意味しない。自己レビューを実施し、独立レビューは未実施。展開・実行の最終記録は追記する。

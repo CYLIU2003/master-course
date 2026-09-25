@@ -9,6 +9,38 @@ from tools.research import weekly_operator as op
 from tools.research.weekly_results import write_json
 
 
+@pytest.mark.parametrize("row,expected", [
+    ({"error": "controller"}, "controller"),
+    ({"error": None, "result": {"error": "worker"}}, "worker"),
+    ({"error": None, "result": {"result": {"error": "missing fleet"}}}, "missing fleet"),
+    ({"result": None}, None),
+    ({"result": {"result": {"error": "Traceback (most recent call last):\n  File ignored\nValueError: actual cause\n"}}}, "ValueError: actual cause"),
+])
+def test_error_cause_survives_nested_execution_receipts(row, expected):
+    assert op.job_error(row) == expected
+
+
+def test_fleet_preflight_checks_materialized_input_not_raw_scenario(monkeypatch):
+    from tools.research import weekly_campaign as campaign
+    materialized = {"vehicles": [{"id": "v", "initialFuelL": 144}]}
+    source, payload = {"vehicles": [{"id": "v"}]}, {"primary_depot_id": "depot"}
+    def materialize(actual_source, actual_payload):
+        assert actual_source is source and actual_payload is payload
+        return materialized
+    def bind(actual, depot):
+        assert actual is materialized and depot == "depot"
+        return {"simulation_config": {"scenario_fleet_contract": {
+            "schema_version": "scenario_fleet_contract_v3", "fleet_contract_hash": "hash"}}}
+    monkeypatch.setattr(campaign, "materialize_scenario_from_prepared_input", materialize)
+    monkeypatch.setattr(campaign, "bind_rolling_fleet_input", bind)
+    assert campaign.validate_rolling_fleet(source, payload)["fleet_contract_hash"] == "hash"
+    def reject(*args):
+        raise ValueError("missing required vehicle state")
+    monkeypatch.setattr(campaign, "bind_rolling_fleet_input", reject)
+    with pytest.raises(ValueError, match="missing required"):
+        campaign.validate_rolling_fleet(source, payload)
+
+
 def fixture(tmp_path):
     operation = {"settings": str(tmp_path / "settings.json"), "campaign": str(tmp_path / "campaign"),
         "git_sha": "a" * 40, "parent": "parent", "weeks": ["2025-05-12"], "workers": ["local"]}

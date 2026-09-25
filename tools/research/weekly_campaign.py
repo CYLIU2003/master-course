@@ -22,7 +22,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from bff.services.cluster.contracts import git_state
 from bff.services.cluster.store import ControllerLock
-from bff.services.run_preparation import get_or_build_run_preparation
+from bff.services.run_preparation import get_or_build_run_preparation, materialize_scenario_from_prepared_input
+from bff.services.optimization_run.rolling_chain import bind_rolling_fleet_input
 from bff.store import output_paths, scenario_store
 from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import configure_doc, parent_hash
 from scripts.benchmarks.shibu24_optimization_store import ARTIFACTS, SCHEMA_VERSION, _rowset_sha, _validate_rows, load_database
@@ -108,6 +109,16 @@ def placement_worker(workers: list[str], index: int) -> str | None:
     return None if workers == ["auto"] else workers[index % len(workers)]
 
 
+def validate_rolling_fleet(scenario: dict, payload: dict) -> dict:
+    """Check the real Prepared fleet before paying for a day-ahead solve."""
+    materialized = materialize_scenario_from_prepared_input(scenario, payload)
+    bound = bind_rolling_fleet_input(materialized, payload.get("primary_depot_id"))
+    contract = bound["simulation_config"]["scenario_fleet_contract"]
+    return {"schema_version": contract["schema_version"],
+            "fleet_contract_hash": contract["fleet_contract_hash"],
+            "status": "INPUT_HANDOFF_VALIDATED_NOT_RESEARCH_APPROVAL"}
+
+
 def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_hash: str) -> dict:
     parent = scenario_store._load(parent_id, skip_graph_arcs=True)
     before = parent_hash(parent)
@@ -169,13 +180,15 @@ def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_has
             audit.get("formal_vehicle_trip_compatibility_ready")):
         raise ValueError(f"Prepare scope checks failed: {audit.get('warning_codes')}")
     payload = read(prepared.solver_input_path)
+    fleet_handoff = validate_rolling_fleet(doc, payload)
     if len(payload["trips"]) != len(doc["timetable_rows"]) or any(not t.get("operator_id") or
             str(t["operator_id"]).upper() == "UNKNOWN" or float(t.get("distance_km") or 0) <= 0 for t in payload["trips"]):
         raise ValueError("Prepared timetable coverage/operator/distance changed")
     result = {"week": week, "scenario_id": identity, "parent_id": parent_id, "parent_hash": before,
               "prepared_input_id": prepared.prepared_input_id, "prepared_path": str(prepared.solver_input_path),
               "prepared_sha256": sha(prepared.solver_input_path), "trips": len(payload["trips"]),
-              "overnight": extension, "source_git": git_state(ROOT), "request": request(prepared.prepared_input_id)}
+              "overnight": extension, "fleet_handoff": fleet_handoff,
+              "source_git": git_state(ROOT), "request": request(prepared.prepared_input_id)}
     write_json(path, result)
     return result
 

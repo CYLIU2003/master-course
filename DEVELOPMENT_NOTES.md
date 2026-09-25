@@ -1,3 +1,7 @@
+## 2026-09-25 月別Rolling停止原因と稼働系復旧
+
+2・4月の元失敗はscenario_fleet_contract_v3欠落。Prepared展開後の12台帳はすべて厳格検査通過し入力hash不変。weekly_campaign投入前検査、weekly_operatorのnestedエラー引継ぎを追加。70件通過。旧6件の未開始取消・2件の通常キャンセル要求で再発を止め、新しいclean releaseへ移行する。数理条件・費用・SOCは不変。詳細: docs/notes/MONTHLY_ROLLING_RECOVERY_20260925.md。研究完走・独立レビューは未達。
+
 
 
 
