@@ -39,6 +39,28 @@ def test_operation_rejects_changed_frozen_case_selection(tmp_path):
         op.load_operation(tmp_path / "operation.json")
 
 
+def test_auto_campaign_uses_scheduler_without_pinning_busy_parent(tmp_path):
+    from tools.research.weekly_campaign import placement_worker
+    from tools.cluster.batch import validate_batch
+    operation, settings, campaign, directory = fixture(tmp_path)
+    operation["workers"] = ["auto"]
+    spec = op.read(directory / "batch.json")
+    spec["tasks"][0]["submission"]["worker_id"] = placement_worker(["auto"], 0)
+    validate_batch(spec)
+    assert spec["tasks"][0]["submission"]["worker_id"] is None
+    assert spec["tasks"][0]["submission"]["minimum_ram_gb"] == 18
+    assert op.resume_command(operation, settings, campaign)[-2:] == ["--workers", "auto"]
+    # Existing pinned operations retain their meaning on restart.
+    assert placement_worker(["worker-a", "local"], 3) == "local"
+
+
+@pytest.mark.parametrize("workers", [[], ["auto", "local"], ["local", "auto"]])
+def test_ambiguous_placement_rejected_before_preparing_any_input(workers):
+    from tools.research.weekly_campaign import run
+    with pytest.raises(ValueError, match="auto alone"):
+        run(Path("missing-settings"), Path("unused"), "parent", ["2025-01-06"], workers)
+
+
 def test_disconnect_preserves_unknown_not_failed_or_zero_progress_completion(tmp_path):
     operation, settings, campaign, _ = fixture(tmp_path)
     class Offline:

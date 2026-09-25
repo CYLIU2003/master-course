@@ -31,7 +31,7 @@ def notify_once(directory: Path, launch: dict, outcome: tuple[str, dict], thread
     if (output / "event.json").exists() or (output / "email_receipt.json").exists():
         return
     status, state = outcome
-    subject = f"[master-course] 渋21〜23 四季の週次計算 {status} {launch['git_sha'][:8]}"
+    subject = f"[master-course] 渋21〜23 月別代表週の計算 {status} {launch['git_sha'][:8]}"
     body = (f"渋21〜23の週次計算: {status}\n固定SHA: {launch['git_sha']}\n"
             f"状態と成果物: {directory}\n" + json.dumps(state.get("cases", {}), ensure_ascii=False, indent=2) +
             "\n旧12週の再集計と新しい翌朝SOC条件は別成果です。統合最適性や正式研究採用を意味しません。\n")

@@ -101,6 +101,13 @@ def validate_budget(controls: dict) -> None:
         raise ValueError("Shared wall budget must leave model-build time beyond Stage1 and Stage2 allowances")
 
 
+def placement_worker(workers: list[str], index: int) -> str | None:
+    """Use the controller's verified resource policy, or explicit pinned workers."""
+    if not workers or ("auto" in workers and workers != ["auto"]):
+        raise ValueError("Use either auto alone or explicit verified worker IDs")
+    return None if workers == ["auto"] else workers[index % len(workers)]
+
+
 def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_hash: str) -> dict:
     parent = scenario_store._load(parent_id, skip_graph_arcs=True)
     before = parent_hash(parent)
@@ -174,6 +181,7 @@ def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_has
 
 
 def run(settings_path: Path, directory: Path, parent: str, weeks: list[str], workers: list[str]) -> dict:
+    placement_worker(workers, 0)  # Reject ambiguous placement before Prepare.
     settings = read(settings_path)
     expected = git_state(ROOT)
     if expected["dirty"] or expected["sha"] != settings["git_sha"] or git_state(Path(settings["release"])) != expected:
@@ -196,9 +204,9 @@ def run(settings_path: Path, directory: Path, parent: str, weeks: list[str], wor
             state["cases"][week] = {"state": "PREPARING"}
             write_json(directory / "state.json", state)
             prepared = prepare_week(week, case_dir, parent, frozen_parent_hash)
-            # Both machines run identical controls; actual free RAM is checked
-            # by the scheduler. The parent reserves OS and application headroom.
-            worker = workers[index % len(workers)]
+            # Auto uses the existing scheduler's verified release, free RAM,
+            # CPU and license checks; a busy parent does not strand half the weeks.
+            worker = placement_worker(workers, index)
             spec = {"schema_version": 1, "batch_id": f"weekly-{expected['sha'][:8]}-{hashlib.sha256(parent.encode()).hexdigest()[:12]}-{week}",
                     "controller_url": f"http://127.0.0.1:{settings['port']}", "git_sha": expected["sha"],
                     "tasks": [{"task_id": week, "submission": {"scenario_id": prepared["scenario_id"],
@@ -255,7 +263,7 @@ def main() -> None:
     parser.add_argument("--weeks", nargs="+", default=list(WEEKS))
     parser.add_argument("--period-plan", type=Path, help="Frozen scenario_periods export; determines parent and weeks")
     parser.add_argument("--workers", nargs="+", default=["desktop-6ae0mir", "local"],
-                        help="Explicit verified worker IDs, assigned in order")
+                        help="Verified worker IDs assigned in order, or auto for resource-aware placement")
     args = parser.parse_args()
     if args.period_plan:
         plan = read(args.period_plan)
