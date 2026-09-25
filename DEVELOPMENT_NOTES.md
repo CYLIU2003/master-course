@@ -10949,6 +10949,11 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 
 ## 配置・再開結果（15:20 JST時点）
 
+後続確認：1月14a2717b-e5f5-54ea-9317-0e3316c154d7はdesktop-6ae0mirでRUNNING、
+2月はPrepareへ進行。新規最適化のFAILED/BLOCKEDは0。Prepareのstderr出力は
+接続候補除外と折返し感度の診断記録で、求解エラーとは区別する。最新時刻と状態は
+activation.jsonに追記した。以後の通常処理はスクリプトへ委任する。
+
 固定計算版867cf4ae8e4a68bb3418027dc5fd48d1915c464dを5台でGit/source/runtime/dataset
 照合後に配置。旧queue・ライセンスauthority・cooldownを保持して8891を切替。
 「仮・正式用」の同じ12代表週で新規Prepareを開始。現在は1月準備中、計算完了0週。
