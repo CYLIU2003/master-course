@@ -1,0 +1,9 @@
+.execution-progress-list { display: grid; gap: 12px; min-width: 0; }
+.execution-progress-case { padding: 16px; border: 1px solid #94a3b844; border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
+.execution-progress-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.execution-progress-overview h3 { margin: 0 0 8px; }
+.execution-progress-overview p { margin: 6px 0; }
+.execution-progress-case details { margin-top: 12px; }
+.execution-progress-case summary { cursor: pointer; }
+.execution-progress-case pre { max-width: 100%; padding: 12px; overflow-x: auto; white-space: pre; font-size: 12px; background: #94a3b814; }
+.execution-progress-case progress { width: 100%; max-width: 260px; }

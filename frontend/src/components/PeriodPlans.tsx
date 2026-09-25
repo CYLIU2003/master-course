@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, put } from "../api";
 import { ErrorBox } from "./common";
+import ExecutionProgress from "./ExecutionProgress";
 
 type Attempt = { id: string; state: string; prepared: boolean; verified: boolean;
   observed_at?: string; stale?: boolean; job_id?: string; worker?: string; error?: string;
@@ -31,6 +32,7 @@ export default function PeriodPlans({ id, onDirty }: { id: string; onDirty: (dir
     <h2>このシナリオの期間別計画</h2>
     <p>共通の車両・設備・路線をひとつのシナリオで管理し、各月の代表週などをここに登録します。各期間内のSOCは連続、期間同士は独立した実験です。</p>
     <p>入力準備 {query.data?.progress.prepared ?? 0}% ／ 計算終了 {query.data?.progress.completed ?? 0}% ／ 検算完了 {query.data?.progress.verified ?? 0}%（{periods.length}期間）。計画の登録だけでは計算を開始しません。</p>
+    <ExecutionProgress scenarioId={id} />
     {query.error && <ErrorBox error={query.error} />}
     {save.error && <ErrorBox error={save.error} />}
     <div className="toolbar">

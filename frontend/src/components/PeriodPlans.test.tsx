@@ -5,7 +5,7 @@ import PeriodPlans from "./PeriodPlans";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function setup(periods: unknown[] = []) {
-  const fetch = vi.fn((_url: string, init?: RequestInit) => Promise.resolve(new Response(JSON.stringify({
+  const fetch = vi.fn((_url: string, init?: RequestInit) => _url.endsWith("execution-detail.json") ? Promise.resolve(new Response(null, { status: 404 })) : Promise.resolve(new Response(JSON.stringify({
     revision: init?.method === "PUT" ? 2 : 1, periods: init?.body ? JSON.parse(String(init.body)).periods : periods,
     progress: { prepared: 0, verified: 0 } }))));
   vi.stubGlobal("fetch", fetch);
@@ -23,7 +23,7 @@ it("adds several periods to one scenario without submitting compute jobs", async
   }
   fireEvent.click(screen.getByText("計画を保存"));
   await waitFor(() => expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(true));
-  expect(fetch.mock.calls.every(([url]) => url.includes("/desktop/scenarios/parent/periods"))).toBe(true);
+  expect(fetch.mock.calls.every(([url]) => url.includes("/desktop/scenarios/parent/periods") || url.endsWith("execution-detail.json"))).toBe(true);
 });
 it("shows failed attempts and their evidence without calling them successful", async () => {
   setup([{ id: "jan", label: "1月", start: "2025-01-06", days: 7, attempts: [

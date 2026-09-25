@@ -6,6 +6,7 @@ import { ErrorBox } from "./common";
 import WorkerNodes, { type ClusterWorkers } from "./WorkerNodes";
 import BatchProgress from "./BatchProgress";
 import CampaignProgress from "./CampaignProgress";
+import ExecutionProgress from "./ExecutionProgress";
 export type { ClusterWorkers } from "./WorkerNodes";
 type ClusterJob = {
   id: string;
@@ -160,6 +161,7 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   return (
     <>
       {jobScope === "all" && <BatchProgress jobs={jobs.data ?? []} />}
+      {jobScope === "all" && <ExecutionProgress origin={monitorOrigin} />}
       {jobScope === "all" && controllerSha && (
         <CampaignProgress origin={monitorOrigin} controllerSha={controllerSha} />
       )}
