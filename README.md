@@ -4312,3 +4312,5 @@ Windowsの一時的な保存拒否は原本を残して再試行します。Gmai
 
 「仮・正式用」1シナリオの12期間を維持し、渋21〜23・各月の連続7日間を新しい固定SHAで再Prepareします。ODPT取得・入力DB再構築は行いません。旧結果と新版の計算は別の出力先に保存します。
 `tools/research/weekly_campaign.py run --workers auto`（operation JSONでは `"workers": ["auto"]`）は、コントローラーに登録・配置確認されたPCの中から既存schedulerが空きRAM・CPU・ライセンス枠を確認して割り当てます。親機への固定割当による待機を避け、物理条件・18GB要求・同時枠は緩和しません。AIなしの再開・回収は既存 weekly_operations.ps1 を使います。実際の起動先・状態は `output/monthly_latest_20260925/` に保存します。
+
+新版の実行入口は `output/monthly_latest_20260925/operator/02_STATUS.cmd`、設定は `operation.local.json`。起動・通知・版の区別は [起動記録](docs/notes/MONTHLY_LATEST_LAUNCH_20260925.md) を参照してください。

@@ -10913,3 +10913,5 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 実行・検算・会計・最適性・研究採用は別。求解時間上限内の可行解は検算後に週次評価へ進めるが統合大域最適としない。正式研究採用/独立レビュー完了は宣言しない。
 - 通常の監視・回収・図表化は既存Python/PowerShellで実行。終端通知の表題を四季から月別代表週へ修正。配置・起動・試験の証拠はoutput/monthly_latest_20260925へ追記する。
 - 修正の関連検証：weekly_operator/weekly_blocker_fixes/cluster_resource_policy 33 passed, 1 skipped（既存native条件付きテスト）。6件の旧QUEUEDをAPIからCANCELLEDへ移し、旧全attemptが終端であることを確認。原本を保持。
+
+- 13:13 JST、新固定cf4beb97のcontroller（8891）と12週campaignを起動。4台の配置照合完了、元の1シナリオ12期間へ実行を紐付け。現在のPrepare/求解/検算は別々に記録する。旧待機は取消、旧worker割当は無効化。起動上の制約、環境バイト差の解消、AIなし操作と一度だけの終端通知は `docs/notes/MONTHLY_LATEST_LAUNCH_20260925.md` を参照。計算releaseは変更しない。
