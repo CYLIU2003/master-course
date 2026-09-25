@@ -4369,3 +4369,5 @@ queueの終了照合とcooldownを引き継ぎます。メモリの一括解放�
 テスト専用の非求解検算: `tools/cluster/verify_overnight_smoke.py <test-batch.json> --state-dir <test-state> --output <test-verification.json>`。回収hash・全便・毎時/区間数・物理検査・終端・20円/kWhの買電会計を照合し、未達なら終了コード1です。通常の監視や検算にAI/Gurobiを必要としません。テストの実発電はゼロ（設備正規化後はPV enabledになり得ます）、BESSは無効です。
 
 2026-09-25の実機確認: 固定`d5ccea1b`の7日25便テストがCOMPLETED。168時間/336区間、物理・終端・回収・買電会計を確認済みです。結果は `output/overnight_smoke_20260925/v4/verification.json`。本番12週は停止継続で、本番規模のメモリ問題はこの小規模合格と分けて扱います。
+
+メモリ不足の判定では搭載RAM・空き物理RAM・Windows追加commit容量を区別します。32GBでもcommit不足なら親機は投入を止めます。旧12週との差と修正は[週次メモリ調査](docs/notes/WEEKLY_MEMORY_REGRESSION_20260925.md)を参照。

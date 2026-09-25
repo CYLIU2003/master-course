@@ -27,3 +27,11 @@ def test_windows_installed_ram_is_distinct_from_os_usable_ram():
     installed = installed_ram_gb()
     usable = memory_metrics()["ram_gb"]
     assert installed is not None and installed >= usable
+
+
+def test_windows_commit_capacity_is_reported_separately():
+    if os.name != 'nt':
+        return
+    metrics = memory_metrics()
+    assert 0 <= metrics['commit_available_gb'] <= metrics['commit_limit_gb']
+    assert metrics['commit_limit_gb'] >= metrics['ram_gb']

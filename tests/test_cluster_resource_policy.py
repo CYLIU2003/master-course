@@ -93,3 +93,21 @@ def test_gurobi_requires_installed_32gb_separately_from_free_ram(installed, usab
 def test_32gb_does_not_override_free_ram_and_non_gurobi_can_use_16gb():
     assert not fit(capacity={"installed_ram_gb": 32, "ram_gb": 31.5, "ram_free_gb": 1}, requirement={"requires_gurobi": True})[1]["eligible"]
     assert fit(requirement={"requires_gurobi": False})[1]["eligible"]
+
+
+@pytest.mark.parametrize('commit', [None, 0, 6.8, float('nan'), float('inf')])
+def test_windows_free_ram_does_not_override_exhausted_or_unknown_commit(commit):
+    _, result = fit(capacity={'platform': 'Windows-11', 'installed_ram_gb': 32,
+                             'ram_gb': 31.7, 'ram_free_gb': 18.5, 'commit_available_gb': commit},
+                    requirement={'minimum_ram_gb': 18, 'requires_gurobi': True})
+    assert not result['eligible']
+    assert 'INSUFFICIENT_OR_UNKNOWN_COMMIT_CAPACITY' in result['reasons']
+
+
+def test_commit_reserves_other_attempts_and_system_headroom():
+    job = {'worker_id': 'a', 'state': 'LOST', 'manifest': {'minimum_ram_gb': 4}}
+    _, result = fit(capacity={'platform': 'Windows-11', 'commit_available_gb': 8.5},
+                    jobs=[job], slots=2, reserved_system_ram_gb=1)
+    assert 'INSUFFICIENT_OR_UNKNOWN_COMMIT_CAPACITY' in result['reasons']
+    assert fit(capacity={'platform': 'Windows-11', 'commit_available_gb': 9},
+               jobs=[job], slots=2, reserved_system_ram_gb=1)[1]['eligible']

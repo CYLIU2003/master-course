@@ -424,7 +424,11 @@ def handle(request: dict, workspace: Path) -> dict:
         ):
             check_cancelled()
             provenance = probe()
-            from .resource_policy import gurobi_ram_eligible
+            from .resource_policy import gurobi_ram_eligible, commit_capacity_error
+            commit_error = commit_capacity_error(provenance, max(manifest.get("minimum_ram_gb", 0),
+                (manifest.get("resource_requirements") or {}).get("minimum_ram_gb", 0)))
+            if commit_error:
+                raise ValueError(commit_error)
             if manifest.get("requires_gurobi") and not gurobi_ram_eligible(provenance):
                 raise ValueError("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
             if manifest.get("minimum_ram_gb", 0) > (provenance["ram_gb"] or 0):

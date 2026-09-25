@@ -81,6 +81,10 @@ def memory_metrics() -> dict:
         status.length = ctypes.sizeof(status)
         if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
             return {"ram_gb": round(status.total / 1024**3, 2), "ram_free_gb": round(status.available / 1024**3, 2),
+                    # MEMORYSTATUSEX page fields are commit capacity, not free disk
+                    # or physical RAM. They may also reflect a process/job quota.
+                    "commit_limit_gb": round(status.page_total / 1024**3, 2),
+                    "commit_available_gb": round(status.page_available / 1024**3, 2),
                     "installed_ram_gb": installed_ram_gb()}
     elif Path("/proc/meminfo").is_file():
         values = {line.split(":")[0]: int(line.split()[1]) for line in Path("/proc/meminfo").read_text().splitlines()}

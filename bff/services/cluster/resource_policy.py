@@ -23,6 +23,16 @@ def finite_number(value: object) -> float | None:
     return float(value) if math.isfinite(value) else None
 
 
+def commit_capacity_error(capability: dict, required_gb: float) -> str | None:
+    """Windows allocation can fail despite abundant physical RAM."""
+    if not str(capability.get("platform", "")).lower().startswith("windows") and "commit_available_gb" not in capability:
+        return None
+    available = finite_number(capability.get("commit_available_gb"))
+    if available is None or available < required_gb:
+        return "INSUFFICIENT_OR_UNKNOWN_COMMIT_CAPACITY"
+    return None
+
+
 def workload_key(manifest: dict) -> tuple:
     summary = manifest.get("summary") or {}
     return (manifest.get("kind"), manifest.get("execution_profile", manifest.get("profile_id", "legacy")), summary.get("mode"),
@@ -49,6 +59,9 @@ def resource_fit(worker: Worker, capability: dict, manifest: dict, jobs: list[di
     available_ram = None if total_ram is None or free_ram is None else max(
         0, min(total_ram, worker.ram_gb or total_ram, free_ram) - reserved_ram - worker.reserved_system_ram_gb)
     reasons = []
+    commit_error = commit_capacity_error(capability, required_ram + reserved_ram + worker.reserved_system_ram_gb)
+    if commit_error:
+        reasons.append(commit_error)
     if manifest.get("requires_gurobi") and not gurobi_ram_eligible(capability):
         reasons.append("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
     if len(active) >= worker.slots:
@@ -75,6 +88,8 @@ def resource_fit(worker: Worker, capability: dict, manifest: dict, jobs: list[di
         if 0 < duration < 7 * 24 * 3600:
             durations.append(duration)
     return {"eligible": not reasons, "reasons": reasons, "available_ram_gb": available_ram,
+            "commit_available_gb": finite_number(capability.get("commit_available_gb")),
+            "commit_limit_gb": finite_number(capability.get("commit_limit_gb")),
             "required_ram_gb": required_ram, "required_cpu_threads": threads, "cpu_count": cores,
             "cpu_load_percent": load, "disk_free_gb": disk,
             "matching_history_count": len(durations),

@@ -11038,3 +11038,7 @@ artifact_completenessを数値index順にし、index欠落/重複も明示拒否
 `output/cluster-deployment/controller-venv/Scripts/python.exe -X utf8 tools/cluster/verify_overnight_smoke.py output/overnight_smoke_20260925/v4/test-7days.json --state-dir output/overnight_smoke_20260925/v4/test-7days-state --output output/overnight_smoke_20260925/v4/verification.json`
 
 関連回帰43件＋検算器の欠便/費用不一致/正常の3件を通過（計46件、対象重複なし）。本番12週は停止継続、稼働/不明の実シナリオなし。小規模テストはゼロPV・BESSなし・終端初期値復元であり、本番のPV/BESS方策、翌朝延長、1700便級のメモリ耐性、研究採用を保証しない。2月実シナリオの32GB OOMは別途未解決。独立レビュー未実施。mainと開発ブランチへ同期、稼働固定版は変更しない。
+
+### 2026-09-25 過去完走とのメモリ差分調査
+
+7cb46894の2月原本684万変数と867cf4aeの686万変数を照合。ソルバー/4threads/Soft18GBは共通で差は0.322%。MATLABのOSイベント2004が失敗直前の仮想メモリ不足を記録。現時点のcommit余地約6.8GiBにもかかわらず空き物理RAM約18.5GBだけで投入を許可していた。system_metrics/resource_policy/scheduler/runnerへcommit容量の計測と三段階拒否を追加。予約・搭載32GB・ライセンスを維持し、数理条件の変更なし。関連94件通過。詳細 docs/notes/WEEKLY_MEMORY_REGRESSION_20260925.md。別32GB機で2月1週だけの新規Prepare/実行へ進む。全12週は再開しない。

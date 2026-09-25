@@ -452,7 +452,11 @@ class Scheduler:
         directory = self.store.root / "jobs" / job_id
         try:
             capability = self.invoke_worker(worker, {"operation": "probe"}, directory / "preflight", timeout=45)
-            from .resource_policy import gurobi_ram_eligible
+            from .resource_policy import gurobi_ram_eligible, commit_capacity_error
+            commit_error = commit_capacity_error(capability, max(row["manifest"].get("minimum_ram_gb", 0),
+                (row["manifest"].get("resource_requirements") or {}).get("minimum_ram_gb", 0)) + worker.reserved_system_ram_gb)
+            if commit_error:
+                raise ValueError(commit_error)
             if row["manifest"]["requires_gurobi"] and not gurobi_ram_eligible(capability):
                 raise ValueError("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
             if capability["git"] != row["manifest"]["git"] or capability["source_digest"] != row["manifest"]["source_digest"]:
