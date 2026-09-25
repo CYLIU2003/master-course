@@ -11052,3 +11052,11 @@ AIなしで適用するtools/cluster/configure_memory_headroom.pyを追加。--a
 2月のattempt a1069191-ae00-5509-a766-f14f3333f60fは17:27開始後も同じ子機PID24468/manifest hashでRUNNING応答。管理再起動後の状態名はLOST（再照合中）を保持する既存仕様だが、SSH collectでRUNNINGを確認し、ACTIVEライセンス予約1とPC枠を保持。新規attempt・求解再起動なし。自動照合は既存scheduler、完了回収は既存weekly_campaignが担当する。証拠: output/memory_regression_20260925/headroom-*-change.json、headroom-loaded-verification.json、queue内reconcile/transport.stdout。実行中計算にOSハード上限や予約メモリを後付けしたとの主張はしない。
 
 検証: 関連96件通過後、fresh preflightの余裕低下回帰を追加し、影響範囲48件通過（重複あり、合計144とは数えない）。物理空きのみ充足/commitのみ充足の拒否、22GiB境界、設定の無変更dry-run・バックアップ・大きい予約維持・NaN拒否を確認。依存ライブラリ非推奨警告2件。自己レビューでは対象P0/P1残件なし、独立レビュー未実施。実際の1週間の完走はまだ未確認。
+
+### 2026-09-25 17:49 JST 再実行依頼と異常時の対応引継ぎ
+
+ユーザーの再計算・問題時修正指示に対し、既に動いている2月1週の同じattempt a1069191-ae00-5509-a766-f14f3333f60fをSSH collectのRUNNING/PID24468/同一manifest hashで確認。重複投入せず継続。固定86c7b6b0、現行4/6GiB割当予約、32GB以上、共有ライセンス2枠は維持。17:45時点の子機の空き物理RAM6.82GiB/commit余地6.34GiB。正常完了や残り11週開始とはしない。
+
+既存weekly_terminal_observerへ任意のメモリ予兆通知を追加。30秒周期でローカルAPIの既存telemetryを読み、異なるfresh計測3回の4GiB未満だけ一度通知。古い計測、NaN、未知、通信失敗を求解失敗とは扱わない。末端通知には--repair-on-failureを明示した場合だけ、終了確認後の修正/新固定版再実行を引き継ぐ。ソルバー・物理条件・現在のworkerソースを変更しない。通常監視はAIなし、実コード修正はイベント時の担当者/agent。メールは既存終端手順で重複照合後に一度、予兆だけでは送信しない。
+
+`output/memory_regression_20260925/observer-process.json` に起動PID55760と引数、observer-launch-binding.jsonに実campaign PID17360と生成時刻識別子を保存。既存threadへ通知、新規タスクなし。出力はfebruary_campaign/terminal_observer。関連4テスト（fresh3回/復帰、stale/NaN、不明、通知重複、修正引継ぎを4ケース内で検証）通過。自己レビュー済み、独立レビュー未実施。
