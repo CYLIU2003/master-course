@@ -10945,3 +10945,24 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 
 - 13:13 JST、新固定cf4beb97のcontroller（8891）と12週campaignを起動。4台の配置照合完了、元の1シナリオ12期間へ実行を紐付け。現在のPrepare/求解/検算は別々に記録する。旧待機は取消、旧worker割当は無効化。起動上の制約、環境バイト差の解消、AIなし操作と一度だけの終端通知は `docs/notes/MONTHLY_LATEST_LAUNCH_20260925.md` を参照。計算releaseは変更しない。
 - 13:18 JST確認：1月週1,704便の新規Prepare通過。attempt `9b7ef2e8-7c33-5cdc-9be2-efecc1d8ef45` は64GB DESKTOP-3PRU7QPでRUNNING、2月週Prepare中。12週の完走や検算完了を意味しない。launch-verification.jsonへ状態・固定SHAを保存。
+# 2026-09-25 全18台のメモリ確認と月別計算の再開
+
+ユーザーの再開指示により22ef0e0dキャンペーンの投入プロセスをPID・生成時刻・
+コマンドで特定して停止し、親機8891の3台をdrain。2件の実行と1件の待機を
+通常cancel APIで取消し、全3件CANCELLEDを確認した。元入力・ログ・予約を保持。
+メモリ確保を目的としたブラウザ等の一括終了、OS再起動、Gurobi予約削除は行わない。
+
+`tools/cluster/memory_maintenance.py` を追加。登録設定の18台をSSH/ローカルで確認し、
+終了済みworker残存だけをrequestパス・PID・出生トークンで照合して整理する。
+不明状態は保持。Windows SSHのコマンド長制限を実測したため、固定スクリプトを
+標準入力へ渡す短い起動命令に修正。Windows PowerShellのJSON読取はUTF-8を明示。
+実機初回確認は18/18接続、32GB以上6台・16GB9台・8GB3台。整理確認は15/18で、
+3台はSSHタイムアウトしたため追加確認を行う。既に終了したworkerは自然にRAMを解放。
+追加強制停止0。読み取り専用の空きRAM差を「全て解放できた量」と解釈しない。
+
+対象テスト5件通過（短いSSH命令、タイムアウト時の状態不明、Windowsで実行中・
+状態不明・最近の終了プロセスを保持）。自己レビュー：無関係プロセスの停止と
+PID再利用を拒否する経路を確認。独立レビュー・研究採用の承認とは区別する。
+証拠は `output/monthly_memory_restart_20260925/`。数理条件・時刻表・料金・SOC・
+BESS・月別代表週は変更しない。正式mainへ同期し、別clean SHAを配布して
+新キャンペーンを起動する。稼働コードは変更しない。配置と起動結果は後続記録へ追記。

@@ -4344,3 +4344,14 @@ Windowsの一時的な保存拒否は原本を残して再試行します。Gmai
 `tools/research/weekly_campaign.py run --workers auto`（operation JSONでは `"workers": ["auto"]`）は、コントローラーに登録・配置確認されたPCの中から既存schedulerが空きRAM・CPU・ライセンス枠を確認して割り当てます。親機への固定割当による待機を避け、物理条件・18GB要求・同時枠は緩和しません。AIなしの再開・回収は既存 weekly_operations.ps1 を使います。実際の起動先・状態は `output/monthly_latest_20260925/` に保存します。
 
 新版の実行入口は `output/monthly_latest_20260925/operator/02_STATUS.cmd`、設定は `operation.local.json`。起動・通知・版の区別は [起動記録](docs/notes/MONTHLY_LATEST_LAUNCH_20260925.md) を参照してください。
+# 計算再開前のメモリ確認（2026-09-25）
+
+`tools/cluster/memory_maintenance.py --config <登録設定.json> --output <新しい記録.json>`
+で親機・Windows従機の搭載RAM、空きRAM、Pythonプロセスを確認できます。
+`--apply` は、終了済みの試行・保存されたPID生成時刻・要求パスを照合できる
+5分以上前の残存workerだけを終了します。実行中・通信不明・本人確認不能の
+プロセス、他のアプリ、OSキャッシュは変更しません。まず親機で割当をdrainし、
+必要な取消を通常APIから要求してください。Gurobi予約は手動解放せず、同じ
+queueの終了照合とcooldownを引き継ぎます。メモリの一括解放や全PC再起動は行いません。
+報告の `UNVERIFIED` は確認未了です。再開時のGurobi投入先は搭載32GB以上に限定し、
+さらに空きRAM・固定版・ライセンス枠の検査を通過する必要があります。
