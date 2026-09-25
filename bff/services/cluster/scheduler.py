@@ -464,7 +464,9 @@ class Scheduler:
             if (row["manifest"]["requires_gurobi"]
                     and capability.get("runtime_versions") != row["manifest"]["runtime_versions"]):
                 raise ValueError("Worker runtime does not match the frozen controller environment")
-            if row["manifest"]["minimum_ram_gb"] > min(capability.get("ram_gb") or 0, capability.get("ram_free_gb") or 0):
+            required_ram = max(row["manifest"]["minimum_ram_gb"],
+                               (row["manifest"].get("resource_requirements") or {}).get("minimum_ram_gb", 0))
+            if required_ram + worker.reserved_system_ram_gb > min(capability.get("ram_gb") or 0, capability.get("ram_free_gb") or 0):
                 raise ValueError("Worker RAM does not meet the requirement")
         except Exception as exc:
             self.store.transition(job_id, "BLOCKED", expected={"STAGING"}, error=f"Preflight: {exc}")

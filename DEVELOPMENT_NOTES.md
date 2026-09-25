@@ -11042,3 +11042,13 @@ artifact_completenessを数値index順にし、index欠落/重複も明示拒否
 ### 2026-09-25 過去完走とのメモリ差分調査
 
 7cb46894の2月原本684万変数と867cf4aeの686万変数を照合。ソルバー/4threads/Soft18GBは共通で差は0.322%。MATLABのOSイベント2004が失敗直前の仮想メモリ不足を記録。現時点のcommit余地約6.8GiBにもかかわらず空き物理RAM約18.5GBだけで投入を許可していた。system_metrics/resource_policy/scheduler/runnerへcommit容量の計測と三段階拒否を追加。予約・搭載32GB・ライセンスを維持し、数理条件の変更なし。関連94件通過。詳細 docs/notes/WEEKLY_MEMORY_REGRESSION_20260925.md。別32GB機で2月1週だけの新規Prepare/実行へ進む。全12週は再開しない。
+
+### 2026-09-25 17:35 JST PC別のメモリ余裕を追加
+
+ユーザー指定: 各PCに余裕を残して割当し、現在の管理にも反映。従来の明示予約は子機0〜1GiB/親機2GiBで小さかった。既存resource_fitの予約控除を利用し、子機最低4GiB・親機最低6GiBへ引上げ（既に大きい値は維持）。Windows commitにも同じ余裕を要求する。Workerの未指定既定を4GiB・有限値へ変更、サンプル親機は6GiB。割当後のfresh preflightで物理RAMから予約分が抜け落ちる点も修正。数理条件・便・SOC・料金・時間予算は不変。
+
+AIなしで適用するtools/cluster/configure_memory_headroom.pyを追加。--applyなしは読取のみ、適用時はバイト原本バックアップと一意temporaryを利用。設定の同時編集は避ける。実機config（非公開）のみ変更し、8868の18台と8891の計算用5台、master設定へ反映。両コントローラーだけを同じ凍結ソースで再起動し、SQLiteのworker config_hashで18/18・5/5の新設定読込を確認。共有Gurobi枠は8891で2、8868は外部予約2を維持。新コードのpreflight補強は次回リリース用、現在は86c7b6b0の既存予約判定へ新しい4/6GiB設定を適用している。
+
+2月のattempt a1069191-ae00-5509-a766-f14f3333f60fは17:27開始後も同じ子機PID24468/manifest hashでRUNNING応答。管理再起動後の状態名はLOST（再照合中）を保持する既存仕様だが、SSH collectでRUNNINGを確認し、ACTIVEライセンス予約1とPC枠を保持。新規attempt・求解再起動なし。自動照合は既存scheduler、完了回収は既存weekly_campaignが担当する。証拠: output/memory_regression_20260925/headroom-*-change.json、headroom-loaded-verification.json、queue内reconcile/transport.stdout。実行中計算にOSハード上限や予約メモリを後付けしたとの主張はしない。
+
+検証: 関連96件通過後、fresh preflightの余裕低下回帰を追加し、影響範囲48件通過（重複あり、合計144とは数えない）。物理空きのみ充足/commitのみ充足の拒否、22GiB境界、設定の無変更dry-run・バックアップ・大きい予約維持・NaN拒否を確認。依存ライブラリ非推奨警告2件。自己レビューでは対象P0/P1残件なし、独立レビュー未実施。実際の1週間の完走はまだ未確認。

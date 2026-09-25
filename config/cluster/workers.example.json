@@ -10,6 +10,7 @@
       "python": "C:/master-course/.venv-cluster/Scripts/python.exe",
       "workspace": "C:/master-course/output/cluster-worker",
       "slots": 1,
+      "reserved_system_ram_gb": 6,
       "gurobi": false,
       "ram_gb": 0
     },
@@ -24,6 +25,7 @@
       "workspace": "C:/mc-worker/jobs",
       "enabled": false,
       "slots": 1,
+      "reserved_system_ram_gb": 4,
       "gurobi": false,
       "ram_gb": 0
     }

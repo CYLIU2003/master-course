@@ -117,6 +117,26 @@ def test_preflight_rejects_16gb_before_submit_even_for_pinned_attempt(scheduler,
     assert "GUROBI_REQUIRES_32GB" in scheduler.store.get(row["id"])["error"]
 
 
+def test_preflight_preserves_headroom_when_ram_drops_after_allocation(scheduler, monkeypatch):
+    monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})
+    row = scheduler.enqueue("diagnostic", {}, minimum_ram_gb=4)
+    scheduler.store.transition(row["id"], "STAGING", expected={"QUEUED"}, worker_id="local")
+    requests = []
+
+    def probe_only(worker, request, *args, **kwargs):
+        requests.append(request["operation"])
+        return {"platform": "Windows", "commit_available_gb": 30,
+                "ram_gb": 32, "ram_free_gb": 7.9,
+                "git": row["manifest"]["git"], "source_digest": row["manifest"]["source_digest"]}
+
+    monkeypatch.setattr(scheduler, "invoke_worker", probe_only)
+    monkeypatch.setattr(scheduler, "mirror", lambda *args: None)
+    scheduler.execute(row["id"], scheduler.worker("local"))
+    assert requests == ["probe"]
+    assert scheduler.store.get(row["id"])["state"] == "BLOCKED"
+    assert "RAM does not meet" in scheduler.store.get(row["id"])["error"]
+
+
 def test_scheduler_allocates_distinct_workers_and_retains_lost_slots(scheduler, monkeypatch):
     scheduler.config = ClusterConfig(global_gurobi_slots=1, workers=[
         Worker(id="a", name="A", gurobi=True, ram_gb=32),

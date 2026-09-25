@@ -85,7 +85,7 @@ class Worker(BaseModel):
     slots: int = Field(default=1, ge=1, le=16)
     gurobi: bool = False
     ram_gb: float = Field(default=0, ge=0)
-    reserved_system_ram_gb: float = Field(default=0, ge=0)
+    reserved_system_ram_gb: float = Field(default=4, ge=0, allow_inf_nan=False)
     maximum_cpu_load_percent: float = Field(default=90, gt=0, le=100)
     require_ac_power: bool = False
     monitoring_enabled: bool = True
