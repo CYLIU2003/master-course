@@ -4367,3 +4367,5 @@ queueの終了照合とcooldownを引き継ぎます。メモリの一括解放�
 連続日テストでは電力量料金を明示的に有効化し、20円/kWhの固定単価で実行会計を照合します。7日テストは平日4便×5日・土曜3便・日曜2便の25便で、対象service集合もPrepare前に一致させます。PV/BESSは無効のため、その機能の検証とは区別します。
 
 テスト専用の非求解検算: `tools/cluster/verify_overnight_smoke.py <test-batch.json> --state-dir <test-state> --output <test-verification.json>`。回収hash・全便・毎時/区間数・物理検査・終端・20円/kWhの買電会計を照合し、未達なら終了コード1です。通常の監視や検算にAI/Gurobiを必要としません。テストの実発電はゼロ（設備正規化後はPV enabledになり得ます）、BESSは無効です。
+
+2026-09-25の実機確認: 固定`d5ccea1b`の7日25便テストがCOMPLETED。168時間/336区間、物理・終端・回収・買電会計を確認済みです。結果は `output/overnight_smoke_20260925/v4/verification.json`。本番12週は停止継続で、本番規模のメモリ問題はこの小規模合格と分けて扱います。

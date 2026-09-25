@@ -11027,3 +11027,14 @@ BFFの要求research_runをexecute_frontend_rolling_chain→RollingChainRequest�
 b0226eceの7日25便は168窓/336区間・物理・会計が通過、392.0294736842121kWh、電力費/総費用7840.589473684241円。最終成果物検査がstep名を辞書順に並べ、167を最終と扱わず存在不要の終端handoffを要求してFAILED。旧attempt 6d1cffe7-2dc1-56ee-99c1-4322f6349599を保存し再ラベルしない。
 
 artifact_completenessを数値index順にし、index欠落/重複も明示拒否。物理・費用・モデルは変更なし。関連43件通過、24/48/101/168/175窓と欠落/重複を検査。追加verify_overnight_smokeは回収hashと物理・全便・会計をGurobiなしで検査する。旧2日費用無効結果を失格とし、旧7日計画内容は検算を通るがジョブ失敗判定は保持。設備正規化でPV enabledがTrueになるが発電/利用は0でBESSはFalse、PV/BESS効果の試験ではない。新clean版で最終保存まで再試験する。独立レビュー未実施。
+
+### 2026-09-25 16:52 JST 7日間の小規模実機テスト完了
+
+固定d5ccea1bef57c60dc128ee3183d9097747b3b0fb、新規Prepare prepared-65184b2c50226514-5a27f7b3d7ab8028-8acc7b3a、attempt ff83b4a5-7d07-5f45-970d-5608055964d3。32GB DESKTOP-6AE0MIRで通常の親機キュー・Gurobi予約管理経由、COMPLETED/回収1件・未回収0件。実画面でも100% completedを確認。Gurobi Env1回/求解172回。
+
+平日5日×4便＋土曜3便＋日曜2便＝25便、168/168時間、336/336区間、未担当便なし、物理検証・終端BEV復元・欠落/重複なし・回収hash確認が通過。実行買電392.0294736842121kWh×20円/kWh＝7840.589473684241円で、電力費/総費用を1e-6円以内で照合。verification.jsonの15項目すべて通過。原本と新旧失敗は output/overnight_smoke_20260925/v1相当（直下）〜v4へ隔離保存し、旧FAILEDを改変しない。
+
+再検算コマンド:
+`output/cluster-deployment/controller-venv/Scripts/python.exe -X utf8 tools/cluster/verify_overnight_smoke.py output/overnight_smoke_20260925/v4/test-7days.json --state-dir output/overnight_smoke_20260925/v4/test-7days-state --output output/overnight_smoke_20260925/v4/verification.json`
+
+関連回帰43件＋検算器の欠便/費用不一致/正常の3件を通過（計46件、対象重複なし）。本番12週は停止継続、稼働/不明の実シナリオなし。小規模テストはゼロPV・BESSなし・終端初期値復元であり、本番のPV/BESS方策、翌朝延長、1700便級のメモリ耐性、研究採用を保証しない。2月実シナリオの32GB OOMは別途未解決。独立レビュー未実施。mainと開発ブランチへ同期、稼働固定版は変更しない。
