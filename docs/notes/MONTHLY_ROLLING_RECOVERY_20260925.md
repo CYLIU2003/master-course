@@ -19,3 +19,16 @@ weekly_operatorはworker.result.result.errorまで原因を引き継ぐ。表示
 ## 検証
 
 関連4ファイル70テスト通過。materialized入力への検査、欠落の事前拒否、nestedエラー原因、研究フラグtrue/false双方の車両契約保存、rolling orchestrationを含む。12件の実入力の事前検査通過は求解や週次物理・会計検算の完了を意味しない。自己レビューを実施し、独立レビューは未実施。展開・実行の最終記録は追記する。
+
+
+## 配置・切替結果（14:39 JST）
+
+- 固定計算版22ef0e0da97e555a07cca61dd9f16f2e3d84f94aを独立clone・SHA別workerディレクトリへ配置。4台のGit/source/runtime/dataset照合通過。初回stageは開発checkoutと配布cloneのuv.lock実バイト（LF/CRLF）差で停止し、同じ固定release内のstageコマンドで再照合して通過した。ハッシュ比較を緩めていない。
+- 旧12件は4FAILED・8CANCELLED（2件は通常cancel受付後に終了）となり、実行/状態不明0、実行済みworkerのarchive hashを確認した。旧controllerを終了して8891を新固定版で起動。authorityとqueueは元のままで、cooldown予約も引き継いだ。
+- 現在の割当対象はlocal/desktop-6ae0mir/laptop-a709una0の搭載32GB機。64GBのdesktop-3pru7qpはライセンス原因未解決のためdisabledを維持。親機は空きRAMが要件を満たす時に参加する。
+- 新しい12週campaignを既存weekly_operator runで開始。現在は1月の新規Prepare中で、新しい求解の開始・週次完走はまだ未確認。前段で実施した全12旧Preparedのmaterialized入力検査は新規Prepareの代替にしていない。単独Prepare先行プロセスは当方が起動したPID/コマンドを確認して停止し、同じinstanceを保持して既存campaignへ一本化した。
+- 入力準備・投入・収集・検算はweekly_campaign、status/collectはweekly_operator、画面詳細はpublish_execution_detailがAIなしで継続する。新キャンペーン名はcampaign_22ef0e0d。管理画面8868の仮・正式用に12件の新attempt履歴を追記し、旧エラーを削除せず最新試行を表示。実画面で1月「入力準備中」、他11件「入力準備待ち」、実行記録3件を確認。旧overview保存結果はこの新12週の成果ではない。
+- 操作設定: output/monthly_recovery_20260925/operation.local.json。手動起動は同ディレクトリoperatorの01_CHECK～07_DETAIL_WATCH.cmd。01で検査、02でcontroller、03でcampaign、06で集計監視、07で画面更新。既存owner/attemptがある時は重複起動を拒否する。
+- 切替証拠: activation.json、old-final-jobs.json、old-final-reservations.json、stage-frozen/report.json、ui-deployment.json。ソルバーを回さずに済む検査で新規Gurobi Envを起動していない。
+
+本変更は正式アプリへ同期した不具合修正であり、研究採用完了や12週完走の宣言ではない。計算コードは22ef0e0dに固定し、以後の文書追記SHAとは区別する。
