@@ -4379,3 +4379,5 @@ queueの終了照合とcooldownを引き継ぎます。メモリの一括解放�
 既存設定への反映は `python tools/cluster/configure_memory_headroom.py <workers.local.json> --apply`。省略時は確認のみです。原本バックアップを残し、より大きい予約値・ライセンス枠・有効/無効・同時実行数を維持します。管理者による設定編集を同時に行わず、対象コントローラーの再起動で読み込みます。受理済み遠隔計算を終了/再投入せず、同じキュー・試行ID・ライセンス予約を継承して照合してください。実行中の凍結ソースは変更しません。
 
 `tools/research/weekly_terminal_observer.py` は30秒ごとに既存campaignを確認します。`--controller http://127.0.0.1:<port> --worker <id>` を追加すると、異なる新しい計測で3回続けて空きRAMまたはcommit余地が4GiB未満になったときに一度だけ警告を引き継ぎます。キャッシュの繰返し・通信不明は低メモリ判定に数えません。`--repair-on-failure` は失敗時の通知に承認済み修正・再実行の指示を付けます。通常確認はAIを使いませんが、原因に応じたコード修正には通知先の担当者/agentが必要です。監視自体はジョブ終了・再投入・物理条件変更を行いません。元の必須引数は `--campaign <dir> --launch <pid/process_identity/git_shaのJSON> --thread <既存thread ID> --codex <CLI実行ファイル>`。terminal_observerの記録で重複を抑止し、受理不明の通知を無条件再送しません。
+
+毎時計画の `day_ahead_boundary_state` 方針では、保存した前日計画から車両/BESSのSOC時系列と充電セッションの継続情報も復元します。これらは予測計画の窓端参照であり、実行会計に前日計画の買電量等を転記するものではありません。必要な境界が欠ける場合は初期SOCで埋めず停止します。

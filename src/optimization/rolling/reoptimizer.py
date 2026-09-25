@@ -41,8 +41,9 @@ def assignment_plan_from_serialized_result(
 ) -> AssignmentPlan:
     """Rebuild the fixed day-ahead assignment from a persisted solver result.
 
-    Charging decisions are intentionally not restored: the hourly model must
-    recompute them from the latest SOC, PV forecast, and observed demand peak.
+    Charging is recomputed by the hourly model. A boundary-reference policy
+    additionally needs the saved forecast SOC and charging-session suffix;
+    those are reference data, never executed-hour accounting decisions.
     Timetable rows are never rewritten; every leg points back to the canonical
     dispatch trip already present in ``problem``.
     """
@@ -221,6 +222,29 @@ def assignment_plan_from_serialized_result(
                     f"{next_leg.trip.trip_id!r}, but current canonical rules "
                     f"require {canonical_deadhead_min} min"
                 )
+    if problem.metadata.get("rolling_window_terminal_policy") == "day_ahead_boundary_state":
+        from src.optimization.common.result import ResultSerializer
+
+        # Preserve the original kWh values and integer slot boundaries. Never
+        # substitute initial SOC for a missing forecast boundary.
+        for field in ("vehicle_soc_kwh_by_vehicle_slot", "bess_soc_kwh_by_depot_slot"):
+            references = serialized_result.get(field) or {}
+            if not isinstance(references, Mapping):
+                raise ValueError(f"Invalid day-ahead reference mapping {field}")
+            for identity, slots in references.items():
+                if not isinstance(slots, Mapping):
+                    raise ValueError(f"Invalid day-ahead reference slots {field}[{identity}]")
+                for slot, value in slots.items():
+                    if value is None or isinstance(value, bool) or not math.isfinite(float(value)):
+                        raise ValueError(f"Invalid day-ahead reference {field}[{identity}][{slot}]")
+        reference = ResultSerializer.deserialize_plan(problem, serialized_result)
+        for charge in reference.charging_slots:
+            if not math.isfinite(charge.charge_kw) or not math.isfinite(charge.discharge_kw):
+                raise ValueError("Invalid day-ahead reference charging power")
+        plan = replace(plan, charging_slots=reference.charging_slots,
+                       vehicle_soc_kwh_by_vehicle_slot=reference.vehicle_soc_kwh_by_vehicle_slot,
+                       bess_soc_kwh_by_depot_slot=reference.bess_soc_kwh_by_depot_slot,
+                       metadata={**plan.metadata, "restored_day_ahead_boundary_reference": True})
     return plan
 
 

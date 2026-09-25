@@ -11060,3 +11060,13 @@ AIなしで適用するtools/cluster/configure_memory_headroom.pyを追加。--a
 既存weekly_terminal_observerへ任意のメモリ予兆通知を追加。30秒周期でローカルAPIの既存telemetryを読み、異なるfresh計測3回の4GiB未満だけ一度通知。古い計測、NaN、未知、通信失敗を求解失敗とは扱わない。末端通知には--repair-on-failureを明示した場合だけ、終了確認後の修正/新固定版再実行を引き継ぐ。ソルバー・物理条件・現在のworkerソースを変更しない。通常監視はAIなし、実コード修正はイベント時の担当者/agent。メールは既存終端手順で重複照合後に一度、予兆だけでは送信しない。
 
 `output/memory_regression_20260925/observer-process.json` に起動PID55760と引数、observer-launch-binding.jsonに実campaign PID17360と生成時刻識別子を保存。既存threadへ通知、新規タスクなし。出力はfebruary_campaign/terminal_observer。関連4テスト（fresh3回/復帰、stale/NaN、不明、通知重複、修正引継ぎを4ケース内で検証）通過。自己レビュー済み、独立レビュー未実施。
+
+### 2026-09-25 18:20 JST 2月の保存済みSOC参照欠落を修正
+
+固定86c7b6b0のattempt a1069191-ae00-5509-a766-f14f3333f60fはFAILEDで終了/成果物回収済み。Stage1は1803.16秒TIME_LIMIT、incumbent4220860.911883円、native gap46.6848%。Stage2は198.40秒、gap0.0870%。今回はメモリ例外なし。毎時step0は0.098秒で `Day-ahead terminal reference lacks vehicle builder-bev-tsurumaki-004 at boundary 96`。原本canonicalには26BEV×696境界のSOCがあり、004の96境界は173.79198285612173kWh。前日計画費用/各stage gapを週間実行費用や統合最適性と混同しない。
+
+到達経路: BFF rolling_chain → scripts/run_hourly_charging_reoptimization.py → assignment_plan_from_serialized_result → _apply_window_terminal_targets。復元処理がdutiesだけを取り出してSOC/充電継続参照を破棄していた。boundary方針の時だけ既存ResultSerializerで保存済み車両/BESS SOCと充電スロットを復元し、窓端に使用。実行買電/燃料/費用の前日コピーはしない。従来return_to_evaluation_initial方針は割当のみ復元を維持。NaN/None/不正mappingを拒否、境界欠落の拒否も維持。初期SOC、BESS追加予備・終端方策、物理制約、会計式に変更なし。従来失敗を成功へ上書きせず、新固定版/新Prepareの再試行に適用する。
+
+関連44テスト通過（native実求解6件を明示除外）。その後JSONキーの整数復元と不正mapping検査を補強し対象6件を再確認。実1704便原本の読取再現では26台すべての24時間境界が保存値と一致、BESS minimum_onlyを維持、会計flowコピーなしでPASS。証拠 output/rolling_reference_fix_20260925/raw_reference_replay.json。再現は求解・研究完走の証明ではない。自己レビュー済み、独立レビュー未実施。
+
+イベントpayload hash照合、Gmail送信済み0件確認後、g2681320@tcu.ac.jpへ失敗メール1通送信。実message ID `1a0d7d76add8ea39`、送信済み再検索一致1件、email_receipt.json保存済み。旧attemptの終了とライセンスcooldownを維持して次の実行へ進む。
