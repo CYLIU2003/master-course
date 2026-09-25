@@ -45,10 +45,14 @@ foreach($p in $processes) {
                 $statePath=Join-Path (Join-Path $workspace $attempt) 'state.json'
                 try {
                     $state=Get-Content -Raw -Encoding UTF8 -LiteralPath $statePath | ConvertFrom-Json
-                    $request=Get-Content -Raw -Encoding UTF8 -LiteralPath $requestPath | ConvertFrom-Json
                     $row.state=$state.state
                     $oldEnough=$state.finished_at -and ([DateTimeOffset]::UtcNow-[DateTimeOffset]::Parse($state.finished_at)).TotalSeconds -ge 300
-                    if($state.id -eq $attempt -and $request.id -eq $attempt -and $request.operation -eq 'run' -and $request.defer_archive -eq $true -and $state.pid -eq $p.ProcessId -and $state.state -in @('COMPLETED','FAILED','CANCELLED','BLOCKED') -and $oldEnough) {
+                    if($state.id -eq $attempt -and $state.pid -eq $p.ProcessId -and $state.state -in @('COMPLETED','FAILED','CANCELLED','BLOCKED') -and $oldEnough) {
+                        # Never deserialize request.json: it contains the full large
+                        # optimization bundle. Use the small launch receipt instead.
+                        $launch=Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path (Split-Path $requestPath -Parent) 'state.json') | ConvertFrom-Json
+                        if($launch.id -ne $attempt -or -not $launch.manifest_sha256 -or $launch.manifest_sha256 -ne $state.manifest_sha256) { throw 'Launch binding differs' }
+                        if(-not (Test-Path -LiteralPath (Join-Path $workspace ($attempt+'.zip'))) -or (Test-Path -LiteralPath (Join-Path $workspace ($attempt+'.zip.tmp')))) { throw 'Artifact collection not finished' }
                         # The retained Process object binds Kill to the opened process,
                         # while birth time and command prevent a recycled-PID match.
                         $live=Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ProcessId)"

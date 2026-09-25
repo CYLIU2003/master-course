@@ -40,7 +40,8 @@ def test_active_unknown_or_recent_terminal_process_is_not_opened(tmp_path, state
     launch = tmp_path / '.launch' / attempt
     launch.mkdir(parents=True)
     request = launch / 'request.json'
-    request.write_text(json.dumps({'id': attempt, 'operation': 'run', 'defer_archive': True}))
+    # A malformed/huge input bundle must not be read for active/unknown jobs.
+    request.write_text('unreadable input bundle')
     folder = tmp_path / attempt
     folder.mkdir()
     (folder / 'state.json').write_text(json.dumps({'id': attempt, 'pid': 4321, 'state': state}))

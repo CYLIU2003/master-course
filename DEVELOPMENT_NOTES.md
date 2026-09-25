@@ -10947,6 +10947,34 @@ Production operation is ordinary deterministic code, not recurring AI calls: con
 - 13:18 JST確認：1月週1,704便の新規Prepare通過。attempt `9b7ef2e8-7c33-5cdc-9be2-efecc1d8ef45` は64GB DESKTOP-3PRU7QPでRUNNING、2月週Prepare中。12週の完走や検算完了を意味しない。launch-verification.jsonへ状態・固定SHAを保存。
 # 2026-09-25 全18台のメモリ確認と月別計算の再開
 
+## 配置・再開結果（15:20 JST時点）
+
+固定計算版867cf4ae8e4a68bb3418027dc5fd48d1915c464dを5台でGit/source/runtime/dataset
+照合後に配置。旧queue・ライセンスauthority・cooldownを保持して8891を切替。
+「仮・正式用」の同じ12代表週で新規Prepareを開始。現在は1月準備中、計算完了0週。
+8868の実画面で新しい12期間の進捗と履歴4件を確認した。通常運転はスクリプト、
+終端時だけ既存通知経路へ一度渡すobserver（PID63552）も起動した。
+
+MATLAB_DESKTOP（32GB）を既存の管理対象へ追加配置。親機の共有枠内でlicense_test
+8b15941f-c826-4b64-8d23-fd00049d0a4dがCOMPLETED。1 Env・2 Model・2 optimize、
+両目的値1.0を確認。32GB未満は求解対象外、64GB desktop-3pru7qpは既知の
+ライセンス問題でdisabledを維持する。残る4台も空きRAM・CPU等の通常検査に従う。
+
+18台の時刻付き観測はmemory-summary.jsonへ集約。取消後のdesktop-6ae0mirと
+laptop-a709una0は空き約21.4/21.6GB。後続照会の一部は一時タイムアウトしたので、
+全18台同時の整理成功とは表示しない。旧3試行はCANCELLED、実行済み2件の
+archive hash確認済み。追加の残存worker強制終了0、OSキャッシュ破棄0。
+
+保守処理の自己点検で、request.json全体を読むと巨大な最適化入力を再度RAMへ
+展開する問題を見つけた。保守ツールだけを修正し、小さいlaunch receiptと
+完成済みarchiveの存在で照合する。活動中/不明/最近の終了は入力bundleを読まない。
+5件の対象テスト再通過。固定計算版のコードは変更しない。
+
+実行設定とAI不要の手動操作はoutput/monthly_memory_restart_20260925/operation.local.json
+およびoperator/01_CHECK～09_TERMINAL_REMNANTS.cmd。activation.json、stage/report.json、
+matlab-license-result.json、period-binding.jsonに証拠を保存。起動時エラーログは空
+（controller.stderrは通常の起動INFOのみ）。12週完走・研究採用は未達。
+
 ユーザーの再開指示により22ef0e0dキャンペーンの投入プロセスをPID・生成時刻・
 コマンドで特定して停止し、親機8891の3台をdrain。2件の実行と1件の待機を
 通常cancel APIで取消し、全3件CANCELLEDを確認した。元入力・ログ・予約を保持。
