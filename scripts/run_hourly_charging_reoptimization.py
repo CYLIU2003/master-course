@@ -1214,6 +1214,9 @@ class RollingChainRequest:
     day_ahead_problem: Optional[Any] = None
     lookahead_hours: Optional[int] = None
     pv_actuals_json: Optional[str] = None
+    # Preserve the caller's execution class. CLI defaults remain formal; a
+    # diagnostic BFF run must not silently become a formal research run.
+    research_run: bool = True
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "RollingChainRequest":
@@ -1255,6 +1258,23 @@ def rolling_step_minutes(current_min: int, end_min: int | None,
     if remaining <= 0 or remaining % timestep_min:
         raise ValueError("Rolling horizon must end on a future model slot")
     return min(requested_minutes, remaining)
+
+
+def rolling_solver_config(request: RollingChainRequest) -> OptimizationConfig:
+    return OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        time_limit_sec=int(request.time_limit_sec),
+        stage2_time_limit_sec=int(request.time_limit_sec),
+        mip_gap=float(request.mip_gap),
+        random_seed=int(request.random_seed),
+        gurobi_threads=(None if request.gurobi_threads is None else int(request.gurobi_threads)),
+        research_run=request.research_run,
+        allow_postsolve_repair=False,
+        phase="phase1_charging_only",
+        requested_phase="phase1_charging_only",
+        resolved_phase="phase1_charging_only",
+        executed_phase="phase1_charging_only",
+    )
 
 
 def run_rolling_chain(
@@ -1308,22 +1328,7 @@ def run_rolling_chain(
         audited_bev_terminal_policy
     ).value
 
-    config = OptimizationConfig(
-        mode=OptimizationMode.MILP,
-        time_limit_sec=int(request.time_limit_sec),
-        stage2_time_limit_sec=int(request.time_limit_sec),
-        mip_gap=float(request.mip_gap),
-        random_seed=int(request.random_seed),
-        gurobi_threads=(
-            None if request.gurobi_threads is None else int(request.gurobi_threads)
-        ),
-        research_run=True,
-        allow_postsolve_repair=False,
-        phase="phase1_charging_only",
-        requested_phase="phase1_charging_only",
-        resolved_phase="phase1_charging_only",
-        executed_phase="phase1_charging_only",
-    )
+    config = rolling_solver_config(request)
     if request.day_ahead_problem is not None:
         # The frontend production path must use the very same canonical object
         # that generated the persisted assignment. Rebuilding duties or input
@@ -1660,6 +1665,7 @@ def run_rolling_chain(
             "solver_version": gurobi_snapshot["version"],
             "gurobi_threads": metadata.get("gurobi_threads"),
             "time_limit_sec": int(request.time_limit_sec),
+            "research_run": request.research_run,
             "mip_gap": float(request.mip_gap),
             "random_seed": int(request.random_seed),
             "timestep_min": int(problem.scenario.timestep_min),
@@ -1832,6 +1838,7 @@ def run_rolling_chain(
             rejection_reasons.append(str(executed_day_accounting["reason"]))
         chain_summary = {
             "schema_version": "rolling_chain_summary_v1",
+            "research_run": request.research_run,
             "scenario_id": request.scenario_id,
             "prepared_input_id": request.prepared_input_id,
             "service_date": service_date,

@@ -13446,6 +13446,7 @@ def _run_optimization(
                         mip_gap=mip_gap,
                         random_seed=random_seed,
                         gurobi_threads=gurobi_threads,
+                        research_run=bool(research_run),
                     )
                     optimization_result["rolling_execution"] = {
                         "status": rolling_result.status,

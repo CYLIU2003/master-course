@@ -11007,3 +11007,11 @@ BESS・月別代表週は変更しない。正式mainへ同期し、別clean SHA
 ユーザーの最新指示により本番の新規割当をdrainし、未開始9件を取消、実行中3月は同じattemptへ取消要求。既存ログと失敗成果物は保持。tools/cluster/overnight_smoke.pyで明示的な架空データの1/2/7日テストをPrepareできるようにした。通常のbatch・共有ライセンス管理・32GB制限・Rolling・回収を通す。初期テストは2日8便・BEV1台とICE予備1台・充電器1台。PV/BESSなしの引継ぎ診断であり、本番の負荷・PV/BESS・翌朝延長の全検証ではない。
 
 回帰: test_exported_overnight_deadhead / test_overnight_smoke / test_reopt_alns_critical_fixes の23件通過（Gurobiを起動しない）。実機結果は実行後に別記。自己レビューで出力経路と検証経路の一致を確認、独立レビューは未実施。
+
+### 2026-09-25 16:31 JST 2日テストで発見したRolling実行区分の不整合
+
+固定3bd8b897、attempt 3011d0af-0ec0-5ca2-bbce-06306c8cec2eを32GBのDESKTOP-6AE0MIRで実行。前日計画と保存配車の復元は通過したが、Rollingがresearch_run=Trueを固定し、診断投入を正式研究実行へ暗黙昇格して最初の窓でMULTIDAY_RESEARCH_BLOCKEDになった。FAILEDの原本ZIPを保持。
+
+BFFの要求research_runをexecute_frontend_rolling_chain→RollingChainRequest→OptimizationConfigへ明示伝達し、step/chain summaryへ保存する。省略時とCLIは従来通りTrue。正式複数日禁止、fleet検査、no-repair、物理・会計検査は維持。診断での通過を正式研究採用へ変換しない。
+
+変更関連26件通過。GA入口の既存mock試験1件はbuilder到達前に失敗し、変更前clean3bd8b897でも同じ失敗を再現（今回の回帰成功へ含めない）。実行区分伝達5件に診断/正式双方と正式複数日拒否を含む。次のclean版で新規Prepare・別attemptの同じ2日入力を再試験する。

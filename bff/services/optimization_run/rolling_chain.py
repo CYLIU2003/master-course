@@ -1641,6 +1641,7 @@ def execute_frontend_rolling_chain(
     mip_gap: float,
     random_seed: int,
     gurobi_threads: int | None,
+    research_run: bool = True,
 ) -> FrontendRollingResult:
     """Run and independently classify the production hourly chain."""
 
@@ -1679,6 +1680,7 @@ def execute_frontend_rolling_chain(
         lookahead_hours=problem.metadata.get('rolling_lookahead_hours'),
         bess_terminal_policy=problem.metadata.get('rolling_bess_terminal_policy', 'scenario'),
         pv_actuals_json=_prepare_actual_pv_execution_file(problem, Path(run_dir)),
+        research_run=research_run,
     )
     exit_code = run_rolling_chain(request)
     chain_summary_path = Path(request.output_dir) / "rolling_chain_summary.json"
