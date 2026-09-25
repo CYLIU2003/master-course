@@ -38,11 +38,20 @@ def local_license_callbacks(job_id: str):
     from bff.services.cluster.runner import process_identity
     config = read_config()
     root = Path(os.environ.get("MC_CLUSTER_DIR", output_paths.outputs_root() / "cluster"))
+    from bff.services.cluster.license_authority import authority_path, claim_authority
+    authority = authority_path()
+    if config.global_gurobi_slots > config.external_gurobi_slots:
+        claim_authority(authority, root)
+    os.environ["MC_GUROBI_AUTHORITY_FILE"] = str(authority)
     broker = LicenseBroker(JobStore(root), total=config.global_gurobi_slots, external=config.external_gurobi_slots)
     reservation_id = "local-" + job_id
     identity = f"{os.getpid()}:{process_identity(os.getpid())}"
 
     def acquire():
+        from bff.services.cluster.system_metrics import memory_metrics
+        from bff.services.cluster.resource_policy import gurobi_ram_eligible
+        if not gurobi_ram_eligible(memory_metrics()):
+            raise SolverPolicyViolation("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
         broker.reconcile_local_owners()
         while not broker.acquire(reservation_id, owner_kind="local", owner_identity=identity):
             from src.execution_control import check_cancelled

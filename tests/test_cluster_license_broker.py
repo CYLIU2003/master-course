@@ -20,6 +20,38 @@ def test_ten_simultaneous_callers_share_exactly_two_durable_slots(tmp_path):
     assert not LicenseBroker(JobStore(tmp_path), total=2, external=0).acquire("third", owner_kind="local")
 
 
+def test_other_controller_queue_cannot_open_an_independent_pool(tmp_path, monkeypatch):
+    from bff.services.cluster.license_authority import claim_authority
+    authority = tmp_path / "parent/authority.json"
+    designated = tmp_path / "designated"
+    claim_authority(authority, designated)
+    monkeypatch.setenv("MC_GUROBI_AUTHORITY_FILE", str(authority))
+    owner = LicenseBroker(JobStore(designated), total=2, external=0)
+    other = LicenseBroker(JobStore(tmp_path / "other"), total=2, external=0)
+    assert owner.acquire("first", owner_kind="remote")
+    assert not other.acquire("other-first", owner_kind="local")
+    with pytest.raises(ValueError, match="OTHER_QUEUE"):
+        claim_authority(authority, tmp_path / "other")
+    assert owner.acquire("second", owner_kind="local")
+    assert not owner.acquire("third", owner_kind="remote")
+    authority.write_text("invalid")
+    assert not owner.acquire("after-corruption", owner_kind="local")
+
+
+def test_local_gurobi_rejects_16gb_before_reserving_or_starting_env(tmp_path, monkeypatch):
+    from bff.services.cluster import contracts, system_metrics
+    from bff.services.optimization_run.solver_policy import local_license_callbacks
+    from src.solver_policy import SolverPolicyViolation
+    monkeypatch.setenv("MC_GUROBI_AUTHORITY_FILE", str(tmp_path / "authority.json"))
+    monkeypatch.setenv("MC_CLUSTER_DIR", str(tmp_path / "queue"))
+    monkeypatch.setattr(contracts, "read_config", lambda: contracts.ClusterConfig())
+    monkeypatch.setattr(system_metrics, "memory_metrics", lambda: {"installed_ram_gb": 16, "ram_gb": 15.8})
+    acquire, _ = local_license_callbacks("small-host")
+    with pytest.raises(SolverPolicyViolation, match="32GB"):
+        acquire()
+    assert LicenseBroker(JobStore(tmp_path / "queue"), total=2, external=0).snapshot() == []
+
+
 def test_reconnect_never_expires_unknown_owner_and_respects_token_tail(tmp_path, monkeypatch):
     from bff.services.cluster import license_broker
     monkeypatch.setattr(license_broker.time, "time", lambda: 1000)

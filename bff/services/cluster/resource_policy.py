@@ -7,6 +7,15 @@ import math
 
 from .contracts import RESERVED, Worker
 
+GUROBI_MINIMUM_INSTALLED_RAM_GB = 32
+
+
+def gurobi_ram_eligible(capability: dict) -> bool:
+    installed = finite_number(capability.get("installed_ram_gb"))
+    # Old probes may establish a conservative lower bound, never round 31.x up.
+    capacity = installed if installed is not None else finite_number(capability.get("ram_gb"))
+    return capacity is not None and capacity >= GUROBI_MINIMUM_INSTALLED_RAM_GB
+
 
 def finite_number(value: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -40,6 +49,8 @@ def resource_fit(worker: Worker, capability: dict, manifest: dict, jobs: list[di
     available_ram = None if total_ram is None or free_ram is None else max(
         0, min(total_ram, worker.ram_gb or total_ram, free_ram) - reserved_ram - worker.reserved_system_ram_gb)
     reasons = []
+    if manifest.get("requires_gurobi") and not gurobi_ram_eligible(capability):
+        reasons.append("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
     if len(active) >= worker.slots:
         reasons.append("WORKER_SLOTS_RESERVED")
     if available_ram is None or available_ram < required_ram:

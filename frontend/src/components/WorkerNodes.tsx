@@ -51,6 +51,7 @@ export type WorkerNode = {
     cpu_physical_cores?: number | null;
     cpu_percent?: number | null;
     ram_gb?: number | null;
+    installed_ram_gb?: number | null;
     ram_free_gb?: number | null;
     disk_free_gb?: number | null;
     python?: string;
@@ -378,7 +379,11 @@ export default function WorkerNodes({
                 <dd>{node.capability.cpu_count ?? "未確認"}</dd>
               </div>
               <div>
-                <dt>メモリ容量</dt>
+                <dt>搭載メモリ</dt>
+                <dd>{metric(node.capability.installed_ram_gb, "GB")}</dd>
+              </div>
+              <div>
+                <dt>OS認識メモリ容量</dt>
                 <dd>{metric(node.capability.ram_gb, "GB")}</dd>
               </div>
               <div>

@@ -424,6 +424,9 @@ def handle(request: dict, workspace: Path) -> dict:
         ):
             check_cancelled()
             provenance = probe()
+            from .resource_policy import gurobi_ram_eligible
+            if manifest.get("requires_gurobi") and not gurobi_ram_eligible(provenance):
+                raise ValueError("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
             if manifest.get("minimum_ram_gb", 0) > (provenance["ram_gb"] or 0):
                 raise ValueError("Worker RAM does not satisfy the frozen requirement")
             if manifest.get("requires_gurobi") and not provenance["gurobi_version"]:

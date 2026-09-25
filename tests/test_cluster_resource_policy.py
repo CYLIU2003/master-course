@@ -81,3 +81,15 @@ def test_automatic_gurobi_threads_require_entire_cpu_and_unknown_cpu_is_rejected
     assert not fit(requirement=requirement, capacity={"cpu_count": None})[1]["eligible"]
     job = {"worker_id": "a", "state": "RUNNING", "manifest": {"resource_requirements": {"cpu_threads": 1}}}
     assert not fit(requirement=requirement, jobs=[job], slots=2)[1]["eligible"]
+
+
+@pytest.mark.parametrize("installed,usable,allowed", [(16, 15.8, False), (24, 23.8, False), (32, 31.5, True), (64, 63.6, True), (None, 31.9, False), (float("nan"), 16, False)])
+def test_gurobi_requires_installed_32gb_separately_from_free_ram(installed, usable, allowed):
+    _, result = fit(capacity={"installed_ram_gb": installed, "ram_gb": usable}, requirement={"requires_gurobi": True})
+    assert result["eligible"] is allowed
+    assert ("GUROBI_REQUIRES_32GB_INSTALLED_RAM" in result["reasons"]) is not allowed
+
+
+def test_32gb_does_not_override_free_ram_and_non_gurobi_can_use_16gb():
+    assert not fit(capacity={"installed_ram_gb": 32, "ram_gb": 31.5, "ram_free_gb": 1}, requirement={"requires_gurobi": True})[1]["eligible"]
+    assert fit(requirement={"requires_gurobi": False})[1]["eligible"]

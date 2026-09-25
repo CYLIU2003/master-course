@@ -61,6 +61,17 @@ def hardware_identity() -> dict:
             "ac_power": ac_power, "battery_percent": battery_percent}
 
 
+def installed_ram_gb() -> float | None:
+    """Physical DIMM capacity, distinct from OS-usable and currently free RAM."""
+    if os.name != "nt":
+        return None
+    size = ctypes.c_ulonglong()
+    query = ctypes.windll.kernel32.GetPhysicallyInstalledSystemMemory
+    query.argtypes = [ctypes.POINTER(ctypes.c_ulonglong)]
+    query.restype = ctypes.c_int
+    return size.value / 1024**2 if query(ctypes.byref(size)) and size.value else None
+
+
 def memory_metrics() -> dict:
     if os.name == "nt":
         class Status(ctypes.Structure):
@@ -69,7 +80,8 @@ def memory_metrics() -> dict:
         status = Status()
         status.length = ctypes.sizeof(status)
         if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
-            return {"ram_gb": round(status.total / 1024**3, 2), "ram_free_gb": round(status.available / 1024**3, 2)}
+            return {"ram_gb": round(status.total / 1024**3, 2), "ram_free_gb": round(status.available / 1024**3, 2),
+                    "installed_ram_gb": installed_ram_gb()}
     elif Path("/proc/meminfo").is_file():
         values = {line.split(":")[0]: int(line.split()[1]) for line in Path("/proc/meminfo").read_text().splitlines()}
         return {"ram_gb": round(values["MemTotal"] / 1024**2, 2), "ram_free_gb": round(values["MemAvailable"] / 1024**2, 2)}

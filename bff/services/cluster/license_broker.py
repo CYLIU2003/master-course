@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
+from pathlib import Path
 import time
 
 from .store import JobStore, now, worker_has_slot
@@ -28,6 +30,11 @@ class LicenseBroker:
                 cpu_threads: int = 0, cpu_count: int | None = None) -> bool:
         if owner_kind not in {"local", "remote"}:
             raise ValueError("Invalid license owner kind")
+        authority = os.environ.get("MC_GUROBI_AUTHORITY_FILE")
+        if authority:
+            from .license_authority import has_authority
+            if not has_authority(Path(authority), self.store.root):
+                return False
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             at = time.time()

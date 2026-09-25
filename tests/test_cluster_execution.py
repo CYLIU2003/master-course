@@ -89,10 +89,38 @@ def test_controller_persists_final_worker_checkpoint_before_terminal_transition(
     assert saved["execution_progress"]["percent"] == 100
 
 
+def test_license_failure_disables_worker_without_clearing_token_tail(scheduler, monkeypatch):
+    row = scheduler.enqueue("diagnostic", {})
+    scheduler.store.transition(row["id"], "RUNNING", expected={"QUEUED"}, worker_id="local")
+    assert scheduler.licenses.acquire(row["id"], owner_kind="remote")
+    monkeypatch.setattr(module, "collect_artifacts", lambda *args: {"state": "FAILED", "result": {"error": "GUROBI_LICENSE_UNAVAILABLE"}})
+    monkeypatch.setattr(scheduler, "mirror", lambda *args: None)
+    scheduler.finish(row, {"id": row["id"], "state": "FAILED"})
+    assert scheduler.registry.get("local")["mode"] == "disabled"
+    lease = scheduler.licenses.snapshot()[0]
+    assert lease["state"] == "RELEASING" and lease["release_after"] > time.time() + 329
+
+
+def test_preflight_rejects_16gb_before_submit_even_for_pinned_attempt(scheduler, monkeypatch):
+    monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})
+    row = scheduler.enqueue("optimization", {}, minimum_ram_gb=4)
+    scheduler.store.transition(row["id"], "STAGING", expected={"QUEUED"}, worker_id="local")
+    requests = []
+    def probe_only(worker, request, *args, **kwargs):
+        requests.append(request["operation"])
+        return {"installed_ram_gb": 16, "ram_gb": 15.8, "ram_free_gb": 12}
+    monkeypatch.setattr(scheduler, "invoke_worker", probe_only)
+    monkeypatch.setattr(scheduler, "mirror", lambda *args: None)
+    scheduler.execute(row["id"], scheduler.worker("local"))
+    assert requests == ["probe"]
+    assert scheduler.store.get(row["id"])["state"] == "BLOCKED"
+    assert "GUROBI_REQUIRES_32GB" in scheduler.store.get(row["id"])["error"]
+
+
 def test_scheduler_allocates_distinct_workers_and_retains_lost_slots(scheduler, monkeypatch):
     scheduler.config = ClusterConfig(global_gurobi_slots=1, workers=[
-        Worker(id="a", name="A", gurobi=True, ram_gb=16),
-        Worker(id="b", name="B", gurobi=True, ram_gb=16),
+        Worker(id="a", name="A", gurobi=True, ram_gb=32),
+        Worker(id="b", name="B", gurobi=True, ram_gb=32),
     ])
     monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})
     dispatched = []
@@ -102,7 +130,7 @@ def test_scheduler_allocates_distinct_workers_and_retains_lost_slots(scheduler, 
     scheduler.monitor.controller = {"git": {"sha": "abc", "dirty": False}, "source_digest": "same", "runtime_versions": {}}
     for worker in scheduler.config.workers:
         scheduler.registry.update(worker.id, {"session_verified": True, "last_probe_at": now(), "capability": {
-            **scheduler.monitor.controller, "disk_free_gb": 100, "ram_gb": 16, "ram_free_gb": 16, "cpu_count": 8, "gurobi_version": [13]}})
+            **scheduler.monitor.controller, "disk_free_gb": 100, "installed_ram_gb": 32, "ram_gb": 31.7, "ram_free_gb": 20, "cpu_count": 8, "gurobi_version": [13]}})
     monkeypatch.setattr(scheduler, "execute", lambda job_id, worker: dispatched.append((job_id, worker.id)))
     first = scheduler.enqueue("optimization", {}, minimum_ram_gb=16)
     second = scheduler.enqueue("optimization", {}, minimum_ram_gb=16)
@@ -228,7 +256,7 @@ def test_automatic_placement_obeys_parent_job_role(scheduler, monkeypatch):
     for worker in workers:
         scheduler.registry.update(worker.id, {"session_verified": True, "last_probe_at": now(),
             "capability": {**scheduler.monitor.controller, "disk_free_gb": 100,
-                           "ram_gb": 16, "ram_free_gb": 16, "cpu_count": 8,
+                           "installed_ram_gb": 32 if worker.gurobi else 16, "ram_gb": 31.7 if worker.gurobi else 15.8, "ram_free_gb": 12, "cpu_count": 8,
                            "cpu_percent": 10, "gurobi_version": [13]}})
     scheduler.set_worker_job_role("solver", "gurobi_only")
     monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})

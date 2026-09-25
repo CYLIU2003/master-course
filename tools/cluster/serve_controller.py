@@ -37,6 +37,11 @@ def configure(settings_path: Path) -> dict:
     if source_digest() != settings["source_digest"] or runtime_versions() != settings["runtime_versions"]:
         raise ValueError("Runtime or source digest differs from the deployed workers")
     config = read_config()
+    from bff.services.cluster.license_authority import authority_path, claim_authority
+    authority = authority_path()
+    os.environ["MC_GUROBI_AUTHORITY_FILE"] = str(authority)
+    if config.global_gurobi_slots > config.external_gurobi_slots:
+        claim_authority(authority, Path(settings["queue"]))
     local = [worker for worker in config.workers if worker.transport == "local"]
     if any(Path(worker.repo).resolve() != Path(release) for worker in local):
         raise ValueError("Local worker repository must match this frozen controller")

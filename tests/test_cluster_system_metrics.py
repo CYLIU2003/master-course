@@ -3,6 +3,7 @@ import os
 import struct
 
 from bff.services.cluster.system_metrics import _count_core_records, physical_core_count
+from bff.services.cluster.system_metrics import installed_ram_gb, memory_metrics
 
 
 def test_counts_only_complete_processor_core_records():
@@ -18,3 +19,11 @@ def test_windows_physical_cores_are_bounded_by_logical_threads():
     cores = physical_core_count()
     assert cores is not None
     assert 0 < cores <= (os.cpu_count() or 0)
+
+
+def test_windows_installed_ram_is_distinct_from_os_usable_ram():
+    if os.name != "nt":
+        return
+    installed = installed_ram_gb()
+    usable = memory_metrics()["ram_gb"]
+    assert installed is not None and installed >= usable

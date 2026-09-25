@@ -452,6 +452,9 @@ class Scheduler:
         directory = self.store.root / "jobs" / job_id
         try:
             capability = self.invoke_worker(worker, {"operation": "probe"}, directory / "preflight", timeout=45)
+            from .resource_policy import gurobi_ram_eligible
+            if row["manifest"]["requires_gurobi"] and not gurobi_ram_eligible(capability):
+                raise ValueError("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
             if capability["git"] != row["manifest"]["git"] or capability["source_digest"] != row["manifest"]["source_digest"]:
                 raise ValueError("Worker code does not match the frozen controller code")
             if (row["manifest"]["requires_gurobi"]
@@ -504,6 +507,11 @@ class Scheduler:
             download = self.invoke_worker(self.worker(worker_id), {"operation": "archive", "id": row["id"]}, directory / "download")
             archive_path = Path(download["archive_path"])
         result = collect_artifacts(response, row["manifest"], directory / "artifacts", archive_path)
+        failure = result.get("result") or {}
+        if result.get("error") == "GUROBI_LICENSE_UNAVAILABLE" or failure.get("error") == "GUROBI_LICENSE_UNAVAILABLE":
+            # Stop repeated admission on a host whose solver credential failed.
+            # Existing reservations stay intact until the verified finish below.
+            self.registry.set_mode(self.store.get(row["id"])["worker_id"], "disabled")
         self.store.transition(row["id"], result["state"], expected={"COLLECTING"}, result=result, error=result.get("error"))
         self.licenses.finish(row["id"], cooldown_seconds=max(330, row["manifest"].get("gurobi_token_cooldown_seconds", 0)))
         self.mirror(row["id"], "completed" if result["state"] == "COMPLETED" else "failed",
@@ -594,6 +602,12 @@ def get_scheduler() -> Scheduler:
     with _instance_lock:
         if _instance is None:
             root = Path(os.environ.get("MC_CLUSTER_DIR", output_paths.outputs_root() / "cluster"))
-            _instance = Scheduler(root, read_config())
+            from .license_authority import authority_path, claim_authority
+            authority = authority_path()
+            config = read_config()
+            if config.global_gurobi_slots > config.external_gurobi_slots:
+                claim_authority(authority, root)
+            os.environ["MC_GUROBI_AUTHORITY_FILE"] = str(authority)
+            _instance = Scheduler(root, config)
         _instance.start()
         return _instance

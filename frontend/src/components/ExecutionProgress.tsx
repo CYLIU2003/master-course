@@ -20,6 +20,7 @@ const states: Record<string, string> = { PREPARING: "入力を準備中", NOT_PR
   LOST: "通信不明・同じ試行を照合中", STATE_UNKNOWN: "状態不明", FAILED_OR_UNVERIFIED: "失敗または未検算",
   PREPARE_OR_SUBMIT_FAILED: "入力準備・投入に失敗" };
 const reasons: Record<string, string> = { INSUFFICIENT_OR_UNKNOWN_RAM: "空きRAM不足・未確認", WORKER_SLOTS_RESERVED: "別の計算を実行中",
+  GUROBI_REQUIRES_32GB_INSTALLED_RAM: "Gurobiは搭載RAM 32GB以上が必要（不足・未確認）",
   CPU_BUSY: "CPU使用率が高い", AC_POWER_REQUIRED: "AC電源未確認", INSUFFICIENT_OR_UNKNOWN_CPU_THREADS: "CPU枠不足",
   GUROBI_LICENSE_UNAVAILABLE: "Gurobiライセンスを利用できません" };
 const stamp = (s?: string | null) => s ? new Date(s).toLocaleString("ja-JP") : "未確認";
