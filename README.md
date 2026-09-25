@@ -4363,3 +4363,5 @@ queueの終了照合とcooldownを引き継ぎます。メモリの一括解放�
 投入・再開は `tools/cluster/batch.py run <test-batch.json> --state-dir <test-state>`、回収物のhash照合は `tools/cluster/audit_batch.py <test-batch.json> --state-dir <test-state> --output <test-audit.json>`。プロセス終了と物理・Rolling・費用検証は別に確認します。2日テストは翌日引継ぎを確認し、本番12週のメモリ耐性や研究採用を保証しません。現在の12週は失敗原因を保持して新規割当を停止し、先にこのテストを行います。
 
 連続日テストは `research_run=false` の診断です。この区分は前日計画から毎時計画へ明示的に引き継ぎ、各窓と連続実行のsummaryへ記録します。正式複数日研究実行の承認条件は解除しません。小規模テストの成功と研究採用は別です。
+
+連続日テストでは電力量料金を明示的に有効化し、20円/kWhの固定単価で実行会計を照合します。7日テストは平日4便×5日・土曜3便・日曜2便の25便で、対象service集合もPrepare前に一致させます。PV/BESSは無効のため、その機能の検証とは区別します。

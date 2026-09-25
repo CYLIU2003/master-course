@@ -18,12 +18,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 def scenario_for_days(days: int) -> dict:
     from tools.cluster.monthly_smoke import scenario_for_month
     from src.optimization.common.date_series import content_hash, materialize_dated_timetable
+    from src.optimization.common.cost_components import COST_COMPONENT_KEYS
 
     if days not in (1, 2, 7):
         raise ValueError("Test duration must be 1, 2 or 7 days")
     document = scenario_for_month(2025, 1)
     templates = []
-    for service, count in (("WEEKDAY", 4), ("SATURDAY", 3), ("SUNDAY", 2)):
+    for service, count in (("WEEKDAY", 4), ("SAT", 3), ("SUN_HOL", 2)):
         for row in document["timetable_rows"][:count]:
             template = {key: value for key, value in row.items() if key not in {
                 "template_trip_id", "service_date", "day_index", "source_departure", "source_arrival"}}
@@ -40,6 +41,12 @@ def scenario_for_days(days: int) -> dict:
                   daily_return_depot_id="SMOKE_DEPOT", execution_profile="existing_solver_v1",
                   rolling_window_terminal_policy="day_ahead_boundary_state",
                   final_soc_target_tolerance_percent=0)
+    # Explicitly exercise purchased-energy accounting; the deployment-only base
+    # fixture disables every legacy "other" cost, including electricity.
+    config["cost_component_flags"] = {key: key == "electricity_cost" for key in COST_COMPONENT_KEYS}
+    document["dispatch_scope"]["serviceSelection"] = {
+        "serviceIds": sorted({row["service_id"] for row in rows}), "serviceDates": dates}
+    document["dispatch_scope"]["serviceDates"] = dates
     asset = config["depot_energy_assets"][0]
     asset.update(pv_generation_kwh_by_slot=[0.0] * (48 * days), pv_capacity_factor_by_date=profiles)
     document["energy_price_profiles"][0]["values"] = [20.0] * (48 * days)
@@ -85,7 +92,9 @@ def main() -> None:
     else:
         raise ValueError("Scenario already exists; use a new ID or resume the saved manifest")
     scenario_store._save(deepcopy(document))
-    scenario_store.set_dispatch_scope(args.batch_id, {"depotId": "SMOKE_DEPOT", "serviceId": "WEEKDAY"})
+    # Legacy serviceId is a single-service replacement in the store API.
+    scenario_store.set_dispatch_scope(args.batch_id, {
+        key: value for key, value in document["dispatch_scope"].items() if key != "serviceId"})
     persisted = scenario_store.get_scenario_document(args.batch_id)
     prepared = get_or_build_run_preparation(persisted, Path(settings["release"]) / "data/built/tokyu_full",
         output_paths.outputs_root() / "prepared_inputs", None)

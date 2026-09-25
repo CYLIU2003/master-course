@@ -11015,3 +11015,9 @@ BESS・月別代表週は変更しない。正式mainへ同期し、別clean SHA
 BFFの要求research_runをexecute_frontend_rolling_chain→RollingChainRequest→OptimizationConfigへ明示伝達し、step/chain summaryへ保存する。省略時とCLIは従来通りTrue。正式複数日禁止、fleet検査、no-repair、物理・会計検査は維持。診断での通過を正式研究採用へ変換しない。
 
 変更関連26件通過。GA入口の既存mock試験1件はbuilder到達前に失敗し、変更前clean3bd8b897でも同じ失敗を再現（今回の回帰成功へ含めない）。実行区分伝達5件に診断/正式双方と正式複数日拒否を含む。次のclean版で新規Prepare・別attemptの同じ2日入力を再試験する。
+
+### 2026-09-25 連続テストの土休日範囲・費用設定
+
+64400f92の2日テスト cb0652bb-5579-5938-976b-50fccf96ec62 は48/48時間、96区間、物理検証、回収hash照合が通過。ただしベースのdeployment-only fixtureがenable_other_cost=Falseで電力費も無効だったため、124.950736842kWhの系統→バス供給があるのに会計費用0。この結果を経済性検証合格とは扱わない。新版fixtureは明示cost_component_flagsで電力費だけ有効とし20円/kWhを検査する。元結果は保持。
+
+7日Prepareは平日だけのscopeと土休日を含む原本の不一致を正しく拒否。fixtureを既存canonical service IDのWEEKDAY/SAT/SUN_HOLに統一し、serviceSelectionに全対象を渡す。単一serviceIdはstore APIで集合を上書きするため送信から除外。Prepare側の拒否を弱めない。関連12件通過（store正規化の実経路も含む）。新しいclean版・新規Prepareで再試験する。
