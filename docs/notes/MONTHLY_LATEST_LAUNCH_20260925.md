@@ -16,3 +16,5 @@
 通常の実行/進捗/回収/監査/週次図表はPython/PowerShell。`campaign/operations/STATUS.md` と管理画面で状態を確認する。`campaign/terminal_observer` は完了または失敗を一度だけ既存チャットへ通知し、承認済み宛先へのGmail送信処理に渡す。PC単独のGmail OAuthは未設定。eventの生成やqueue成功はメール送信成功ではなく、実message IDを含むemail_receipt.jsonを別途確認する。
 
 開始時点ではPrepare中。12週完走・会計成立・正式研究採用・統合最適性を主張していない。最終状態は上記state/監査原本を参照する。
+
+13:18 JST: 1月週1,704便Prepare通過・DESKTOP-3PRU7QPでRUNNING、2月週Prepare中。最終状態はキャンペーン原本を参照。
