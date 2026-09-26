@@ -4,6 +4,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ExecutionProgress from "./ExecutionProgress";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it("keeps current failures visible and separates older terminal records", async () => {
+  const stamp = new Date().toISOString();
+  const base = {parent:"p",campaign:"old",week:"2025-01-06",state:"FAILED",worker:"pc",prepared:true,verified:false,
+    job_id:"old-job",solver_git_sha:"old-sha",connection:"CONNECTED",started_at:stamp,observed_at:stamp,
+    expected_windows:174,trip_count:1704,error:"old failure",execution:null,placement:[]};
+  vi.stubGlobal("fetch",vi.fn(() => Promise.resolve(new Response(JSON.stringify({schema_version:"execution_detail_v1",observed_at:stamp,errors:[],cases:[base,
+    {...base,campaign:"new",week:"2025-02-03",job_id:"new-job",solver_git_sha:"new-sha",error:"current failure"},
+    {...base,week:"2025-03-03",state:"LOST",error:null}
+  ]})))));
+  render(<QueryClientProvider client={new QueryClient()}><ExecutionProgress controllerSha="new-sha"/></QueryClientProvider>);
+  expect(await screen.findByText("current failure")).toBeTruthy();
+  expect(screen.getByText(/入力準備 2\/2週/)).toBeTruthy();
+  const old = screen.getByText("old failure").closest("details");
+  expect(old?.open).toBe(false);
+  expect(old?.textContent).toContain("今回の失敗ではありません");
+  expect(screen.getByText("通信不明・同じ試行を照合中")).toBeTruthy();
+});
 function show(stale = false, failed = false) {
   const stamp = new Date(Date.now() - (stale ? 300000 : 0)).toISOString();
   vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({

@@ -29,6 +29,15 @@ def test_native_barrier_iteration_is_not_optimality_or_week_completion(tmp_path)
     assert d["rolling_feasible"] == 0 and not d["chain_accepted"]
 
 
+def test_parameter_log_creation_is_not_a_started_solve(tmp_path):
+    root, run = attempt(tmp_path)
+    p = run / "stage1_native_1.log"
+    p.write_text("Set parameter SoftMemLimit to value 18\n", encoding="utf-8")
+    assert inspect_attempt(root)["phase"] == "MODEL_BUILD"
+    p.write_text("Optimize a model with 50 rows, 100 columns and 200 nonzeros\n", encoding="utf-8")
+    assert inspect_attempt(root)["phase"] == "STAGE1"
+
+
 def test_rolling_failed_and_partial_windows_are_not_counted_as_feasible(tmp_path):
     root, run = attempt(tmp_path)
     for i, item in enumerate([{"feasible": True}, {"feasible": False}, {"feasible": True, "chain_rejection_reason": "handoff"}]):

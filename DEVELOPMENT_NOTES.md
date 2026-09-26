@@ -11106,3 +11106,11 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 - 証拠: `output/machine_budget_20260926/{stage-standalone/report.json,deployment-check.json,frontend-progress.png,operation.local.json}`。スクリプトPID・ログ・元の失敗パッケージも保持。表示/配布guardの後続commitは実行固定SHAと区別する。
 
 - 15:10 JST追記: 2月1704便のPrepare/配布が通り、新試行 `f26aabe2-eff5-56a0-b042-13fc0d2c1227` は desktop-6ae0mir で RUNNING/数理モデル構築。フロントの自動更新で同じ状態を確認。子機memory-budget.jsonはtask16GiB/native hard15.032385536GB（14GiB）/soft13.5291469824GB。まだ7日完走・ピークメモリ検証ではない。証拠 `worker-effective-memory-budget.json` と更新済み `frontend-progress.png`。
+
+
+## 2026-09-26 15:20 旧失敗と現行実行の混在を修正
+
+- ユーザーの失敗指摘を原本で照合。新固定f9402ec2の2月試行f26aabe2はRUNNING/error=null。旧867cf4aeの1月・3月失敗が先頭に並び、現行試行の失敗に見える表示が残っていた。実際の旧失敗を削除/成功化せず、現行controller SHAで区別し、旧版の終了記録11週と全バッチ履歴を折りたたむ。現行失敗/通信不明は引き続き見える回帰テストを追加。計算版と試行IDをカードへ表示。
+- nativeログはモデル生成時にも作成されるため、ファイル存在だけのSTAGE1表示を修正。読取専用execution_detailはOptimize/Presolve/求解行を見て切替。15:14時点モデル構築、15:19時点は実際の求解開始行あり。計算プロセスの15:15確認時WorkingSetは約4.48GiB、15:16空きRAM16.6GiB/commit18.03GiB、memory_guard=OK。まだ最終ピーク/週完走ではない。
+- フロント15件・読取ログ解析8件通過、型検査/production build通過。8868/8891共通フロントへ配置、読取publisherだけ再起動。最初のpublisher置換ではパス区切り差で旧readerの停止に失敗、新readerは既存lockで安全停止した。正規化して同じ出力を持つ旧readerだけ停止し、単一readerで再開。計算worker/controller/物理入力は無変更、重複ジョブ投入なし。
+- 通常監視は引き続きスクリプト。terminal observerは終了/失敗時に一度だけ既存チャットへ通知し、承認済みの原因修正・検証・新固定版再試行へ引き継ぐ。AIを常時ポーリングさせない。独立レビュー/週完走/研究採用は未確認。

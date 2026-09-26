@@ -23,6 +23,7 @@ def native_detail(path: Path) -> dict:
         lines = stream.read().decode("utf-8", errors="replace").splitlines()
     metrics = {}
     evidence = []
+    solve_started = False
     for line in lines:
         # Numeric solver rows and fixed status lines only: no license/account text.
         stripped = line.strip()
@@ -30,6 +31,9 @@ def native_detail(path: Path) -> dict:
         status = stripped.startswith(("Root relaxation:", "Barrier solved model", "Time limit reached",
                                       "Memory limit reached", "Optimal solution found", "Best objective",
                                       "Explored ", "Solution count"))
+        solve_started = solve_started or numeric or status or stripped.startswith((
+            "Optimize a model", "Presolve", "User MIP start", "Loaded user MIP start",
+        ))
         if not (numeric or status):
             continue
         evidence.append(stripped[:260])
@@ -43,7 +47,7 @@ def native_detail(path: Path) -> dict:
         if gap:
             metrics["stage_gap_percent"] = float(gap[1])
     return {"file": path.name, "updated_at": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
-            "metrics": metrics, "lines": evidence[-6:]}
+            "metrics": metrics, "lines": evidence[-6:], "solve_started": solve_started}
 
 
 def inspect_attempt(directory: Path) -> dict:
@@ -65,7 +69,7 @@ def inspect_attempt(directory: Path) -> dict:
     latest = max(logs, key=lambda p: p.stat().st_mtime) if logs else None
     phase = "MODEL_BUILD"
     native = native_detail(latest) if latest else None
-    if latest:
+    if latest and native["solve_started"]:
         phase = "STAGE2" if "stage2" in latest.name else "STAGE1"
     steps = []
     chain_accepted = False

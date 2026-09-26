@@ -24,7 +24,7 @@ const reasons: Record<string, string> = { EXCEEDS_MACHINE_MEMORY_BUDGET: "機器
   CPU_BUSY: "CPU使用率が高い", AC_POWER_REQUIRED: "AC電源未確認", INSUFFICIENT_OR_UNKNOWN_CPU_THREADS: "CPU枠不足",
   GUROBI_LICENSE_UNAVAILABLE: "Gurobiライセンスを利用できません" };
 const stamp = (s?: string | null) => s ? new Date(s).toLocaleString("ja-JP") : "未確認";
-export default function ExecutionProgress({ scenarioId, origin = "" }: { scenarioId?: string; origin?: string }) {
+export default function ExecutionProgress({ scenarioId, origin = "", controllerSha }: { scenarioId?: string; origin?: string; controllerSha?: string }) {
   const [showHistory, setShowHistory] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 5000); return () => clearInterval(timer); }, []);
@@ -46,10 +46,15 @@ export default function ExecutionProgress({ scenarioId, origin = "" }: { scenari
     const previous = latest.get(key);
     if (!previous || !row.started_at || !previous.started_at || Date.parse(row.started_at) >= Date.parse(previous.started_at)) latest.set(key, row);
   }
-  const rows = showHistory ? allRows : [...latest.values()];
+  const liveStates = new Set(["PREPARING", "QUEUED", "STAGING", "RUNNING", "COLLECTING", "LOST", "STATE_UNKNOWN"]);
+  const latestRows = [...latest.values()];
+  const previousRows = controllerSha ? latestRows.filter(c => c.solver_git_sha !== controllerSha && !liveStates.has(c.state)) : [];
+  const rows = showHistory ? allRows : latestRows.filter(c => !previousRows.includes(c));
   return <section className="panel" aria-label="計算の詳細進捗">
     <h2>計算の詳細進捗</h2>
     <label><input type="checkbox" checked={showHistory} onChange={e => setShowHistory(e.target.checked)}/>過去の試行も表示（通常は各週の最新試行）</label>
+    {controllerSha && <p>監視先の計算版：<code>{controllerSha.slice(0, 8)}</code>。旧版の終了記録は下の履歴へ分けています。通信不明・実行中の試行は版にかかわらず表示します。</p>}
+    {!showHistory && previousRows.length > 0 && <p>別版で終了した {previousRows.length} 週は、今回の実行件数に含めていません。この監視データには、その週の現行版の実行記録がありません。</p>}
     <p>入力準備 {rows.filter(c => c.prepared).length}/{rows.length}週 ／ 計算終了 {rows.filter(c => ["COMPLETED", "VERIFIED"].includes(c.state)).length}/{rows.length}週 ／ 検算・集計 {rows.filter(c => c.verified).length}/{rows.length}週</p>
     <p>30秒ごとに読取・画面は10秒ごとに更新。取得時刻：{stamp(data?.observed_at)} <button onClick={() => void query.refetch()}>進捗を更新</button></p>
     <p>工程と保存済みの窓数を表示します。求解の残り時間・全体の最適性は、この進捗率からは分かりません。</p>
@@ -61,7 +66,7 @@ export default function ExecutionProgress({ scenarioId, origin = "" }: { scenari
         const phase = c.verified ? "検算・集計済み" : live && c.state === "RUNNING" && ex ? phases[ex.phase] ?? ex.phase : states[c.state] ?? c.state;
         const n = ex?.rolling_feasible ?? 0, total = c.expected_windows;
         return <article className="execution-progress-case" key={`${c.campaign}-${c.week}`} aria-label={`${c.week}の計算進捗`}>
-          <div className="execution-progress-overview"><div><h3>{c.week} 開始週</h3><p>{!live && "最終記録："}{phase}</p></div>
+          <div className="execution-progress-overview"><div><h3>{c.week} 開始週</h3><p>{!live && "最終記録："}{phase}</p><small>計算版 {c.solver_git_sha.slice(0, 8)} ／ 試行 {c.job_id?.slice(0, 8) ?? "未投入"}</small></div>
             <div><small>担当PC</small><p>{c.worker ?? "未割当"}</p></div>
             <div><small>毎時の計算</small><p>{ex && total ? <><progress aria-label={`${c.week}の保存済み可行窓`} value={Math.min(n, total)} max={total}/><br/>{n}/{total}窓（{(100*n/total).toFixed(1)}%）<br/><small>保存済み可行窓。週全体の検算は別。</small></> : "未取得・未着手"}</p></div></div>
           {c.error && <p role="alert">{reasons[c.error] ?? c.error}</p>}{c.probe_error && <p>{c.probe_error}</p>}
@@ -87,5 +92,8 @@ export default function ExecutionProgress({ scenarioId, origin = "" }: { scenari
             <p>試行ID：{c.job_id ?? "未投入"}<br/>計算コード：{c.solver_git_sha}<br/>実験：{c.campaign}</p>
           </details></article>;
       })}</div>
+    {!showHistory && previousRows.length > 0 && <details className="previous-execution-records"><summary>旧版の終了記録 {previousRows.length} 週（今回の失敗ではありません）</summary>
+      {previousRows.map(c => <article key={`${c.campaign}-${c.week}`}><h3>{c.week} ／ {states[c.state] ?? c.state}</h3><p>計算版 {c.solver_git_sha} ／ 試行 {c.job_id ?? "未投入"}</p>{c.error && <p>{reasons[c.error] ?? c.error}</p>}</article>)}
+    </details>}
   </section>;
 }
