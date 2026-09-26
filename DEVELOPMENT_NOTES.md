@@ -11262,3 +11262,12 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 関連104 passed / 1 managed-native skipped / 2 native deselected。Claude Opus 5.5の独立コードレビューは限定範囲P0/P1なし（実行原本の再検算は担当Codexが実施）。初期SOCと設定targetが異なるreturn_to_initialテストも追加。
 - 原本1,205hash・trip/vehicle hashを照合し、Gurobi起動0回で174窓を再集計。独立物理違反0、FeasibilityChecker可行、会計成立。週次4,776,386.715807円、1,704便。表・CSV・日本語需給/SOC図を生成し実表示確認。旧FAILEDを上書きせず、統合最適性・12週完了・研究採用とはしない。
 - 新固定版の配置と新規Prepare/再実行はこの後に実施し、運用receiptへ記録する。旧PID不在確認・shared queue/license予約・32GiB以上/半分程度のタスク予算を維持。詳細と再検算パスは docs/notes/EXECUTED_SOC_ACCOUNTING_FIX_20260926.md。
+
+
+## 2026-09-26 22:20 JST 新固定版の配置と再実行開始
+
+- f524eca2552a4386bd033a15bbe046c14dc09281 をmain/作業ブランチへ同期しpush。自己完結clean配置先 release-executed-soc-20260926 を作成し、62入力ファイルのhashを旧凍結版と照合。5台のstage照合通過（Gurobi起動0）。全18台の実行成功という意味ではない。
+- 旧job febdd18eの実機PID不在と共有queue active0件を確認し、8891のidle controllerのみ新設定へ切替。共有queue・ライセンス2枠を継続。32GiB対象2台READY、親機は空きRAM不足、MATLAB機はWindows割当余地不足でDRAINING、64GiB機はライセンス未解決でDISABLEDを維持。
+- output/executed_soc_20260926 で2月の新規Prepareを開始。残り11週は first-week VERIFIED 後に新規Prepare・投入する既存follow-onスクリプトが待機。終端observer・読み取り進捗publisher・月別集計watchを起動し、エラーログなし。8868/#clusterで固定版f524eca2・12週・2月「入力を準備中」を実画面確認。現時点は新しい求解完了ではない。
+- prefix_memoryの重複イベントは既送信1a0dd3321ae3495eを確認し再送せず。daily_socの新規失敗はGmail送信済み照合後1通送信、実ID1a0ddc95ed3ba792をreceiptへ保存。12週完了メールは未送信。
+- 運用receipt: output/executed_soc_20260926/deployment_receipt.json。新固定版の計算コードは開始後変更しない。通常監視はスクリプトへ任せる。
