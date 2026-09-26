@@ -19,6 +19,7 @@ from bff.services.cluster.system_metrics import memory_metrics
 from src.gurobi_session import managed_gurobi_session
 
 TESTS = [
+    "tests/test_daily_return_policy.py::test_rolling_window_reference_cannot_lower_next_morning_requirement",
     "tests/test_weekly_blocker_fixes.py::test_native_next_morning_target_precedes_daily_startup",
     "tests/test_daily_return_policy.py::test_next_morning_phase3_daily_return_native_stage2_preserves_deadlines",
 ]

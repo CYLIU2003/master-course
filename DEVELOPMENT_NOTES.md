@@ -11210,3 +11210,8 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 到達経路: weekly_campaign → frozen Prepare → worker optimization → RollingReoptimizer._apply_window_terminal_targets → fixed-assignment Stage2 → FeasibilityChecker。日別soc_next_morningは車両運用上限を使用し、窓のterminal target有無から独立。窓終端参照自体、便、回送、15分刻み、BESS方策、初期SOC、メモリ予算は変更なし。物理条件緩和ではなく合意済み翌朝上限要件の復元。旧途中結果はこの修正版の有効週には使わない。
 - 関連回帰55 passed / ネイティブ4 skipped。新回帰は低い窓終端目標30kWh、80kWh、minimum_onlyのいずれでも日別不足を拒否。小規模fixtureの運用上限を80kWhと明示（以前は物理上限100、終端目標80を混同）。実Gurobi検証はclean固定版で別途実施、全週完了を意味しない。
 - verify_weekly_socは共有brokerに加え親機CPU予約、32GB級・空き8GBの確認、PID生成時刻を記録する。時間より安定性を優先し、親機空きRAMに応じて準備を直列化。旧0b版の残り週Prepareは本人所有PIDを照合して停止、jobs_submitted=0、原本・停止理由を保持。
+
+
+## 2026-09-26 翌朝SOC修正の実求解・独立レビュー・再配置
+- ea72251aのclean版でネイティブ4件＋実rolling1件を共有ライセンスbroker下で通過。追加rolling回帰を恒久テストとverify_weekly_socへ組み込み。Claude Code Opus5.5はレビュー範囲内P1なし。詳細はdocs/notes/DAILY_SOC_STABILITY_FIX_20260926.md。
+- 初回の配置照合は開発側LFのlock hashと凍結側CRLFのlock hash差で安全停止した。ソースを改変せず凍結release側の既存stage CLIからやり直し、親機＋4従機5/5照合。実行版はea72251aに固定したまま、旧attempt終了確認後に8891更新・新Prepareを開始。通常進捗はスクリプト、失敗/完了だけイベント通知。

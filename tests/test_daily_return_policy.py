@@ -523,3 +523,24 @@ def test_next_morning_validator_keeps_operating_max_with_lower_window_target(win
     errors = FeasibilityChecker()._evaluate_soc(problem, plan)
     for day in (0, 1):
         assert any(f"service_day={day}" in error and "target=80" in error for error in errors), errors
+
+
+def test_rolling_window_reference_cannot_lower_next_morning_requirement():
+    from src.gurobi_session import current_session
+    if current_session() is None:
+        pytest.skip("Native regression requires shared license admission")
+    problem = daily_problem()
+    assert problem.vehicles[0].battery_capacity_kwh == 100
+    problem = replace(problem, vehicles=(replace(problem.vehicles[0], maximum_soc_kwh=80),), metadata={
+        **problem.metadata, "rolling_window_terminal_policy": "day_ahead_boundary_state",
+        "bev_soc_deadline_mode": "next_morning_operational_max", "final_overnight_mode": "include",
+        "bev_terminal_soc_policy": "fixed_target", "final_soc_target_percent": 80,
+        "post_return_target_slots": [23, 47]})
+    plan = replace(_fixed_plan(problem), vehicle_soc_kwh_by_vehicle_slot={"bev-1":{24:30}},
+        bess_soc_kwh_by_depot_slot={"DEPOT":{23:50}})
+    derived = RollingReoptimizer._apply_window_terminal_targets(problem, plan, 0, 24)
+    assert derived.metadata["bev_terminal_soc_target_kwh_by_vehicle"]["bev-1"] == 30
+    result = RollingReoptimizer().reoptimize_charging_hour(problem, plan,
+        OptimizationConfig(time_limit_sec=20, mip_gap=0, gurobi_threads=1),0,lookahead_hours=24)
+    assert result.feasible, result.infeasibility_reasons
+    assert result.plan.vehicle_soc_kwh_by_vehicle_slot["bev-1"][24] == pytest.approx(80,abs=1e-6)
