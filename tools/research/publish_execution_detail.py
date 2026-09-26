@@ -52,7 +52,7 @@ def campaign_rows(operation_path: Path) -> list[dict]:
     jobs = {j["id"]: j for j in client.request("/api/cluster/jobs")}
     fleet = client.request("/api/cluster/workers")
     license_state = {k: fleet.get(k) for k in ("global_gurobi_slots", "external_gurobi_slots", "reserved_gurobi_slots", "cooling_gurobi_slots")}
-    workers = {w.id: w for w in ClusterConfig.model_validate_json(Path(settings["config"]).read_text()).workers}
+    workers = {w.id: w for w in ClusterConfig.model_validate_json(Path(settings["config"]).read_text(encoding="utf-8-sig")).workers}
     def one(case):
         job = jobs.get(case["job_id"], {})
         manifest = job.get("manifest", {})

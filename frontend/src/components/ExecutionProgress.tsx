@@ -17,6 +17,7 @@ type Detail = { schema_version: "execution_detail_v1"; observed_at: string; case
 const phases: Record<string, string> = { MODEL_BUILD: "数理モデルの構築", STAGE1: "配車を求解中（Stage 1）",
   STAGE2: "充電計画を求解中（Stage 2）", ROLLING: "毎時の運用計算", FINALIZING: "会計・出力を作成中" };
 const states: Record<string, string> = { PREPARING: "入力を準備中", NOT_PREPARED: "入力準備待ち", QUEUED: "PC・ライセンスの空き待ち",
+  PREPARED_ONLY: "入力準備済み・求解未投入", WAITING_PARENT_FREE_RAM: "入力準備待ち（親機の空きRAM待ち）",
   STAGING: "子機へ配布中", RUNNING: "計算中（詳細を確認中）", COLLECTING: "成果物を回収中", COMPLETED: "計算終了・検算を確認",
   VERIFIED: "検算・集計済み", FAILED: "失敗", BLOCKED: "開始条件で停止", CANCELLED: "取消済み",
   LOST: "通信不明・同じ試行を照合中", STATE_UNKNOWN: "状態不明", FAILED_OR_UNVERIFIED: "失敗または未検算",
@@ -48,7 +49,7 @@ export default function ExecutionProgress({ scenarioId, origin = "", controllerS
     const previous = latest.get(key);
     if (!previous || !row.started_at || !previous.started_at || Date.parse(row.started_at) >= Date.parse(previous.started_at)) latest.set(key, row);
   }
-  const liveStates = new Set(["PREPARING", "QUEUED", "STAGING", "RUNNING", "COLLECTING", "LOST", "STATE_UNKNOWN"]);
+  const liveStates = new Set(["PREPARING", "WAITING_PARENT_FREE_RAM", "QUEUED", "STAGING", "RUNNING", "COLLECTING", "LOST", "STATE_UNKNOWN"]);
   const latestRows = [...latest.values()];
   const previousRows = controllerSha ? latestRows.filter(c => c.solver_git_sha !== controllerSha && !liveStates.has(c.state)) : [];
   const rows = showHistory ? allRows : latestRows.filter(c => !previousRows.includes(c));

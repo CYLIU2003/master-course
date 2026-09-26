@@ -11196,3 +11196,10 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 固定0b433705 / attempt06809186 の step23→24（absolute minute1440 / slot96）について、保存したstate_for_next_hourと前後の実行計画を直接照合。26台の車両SOCは欠損0・最大残差1.1368683772161603e-13kWh、BESS1拠点は欠損0・残差0。step24 feasible=true。日境界の一箇所を確認した結果であり、全週の所在/燃料/充電器/会計監査完了とはしない。原本hash付き記録は output/prefix_memory_20260926/first-day-boundary-audit.json。
 
 残り11か月は既存weekly_campaign.prepare_weekを使用する準備専用スクリプト output/prefix_memory_20260926/prepare_remaining.py で逐次処理開始。固定SHA・親シナリオhashを確認し、2月を除外。親機空きRAM14GiB未満または取得不明なら次のPrepareを待機し、子プロセスを一件ずつ終了させる。求解投入は0件、ODPT取得なし。最初の起動は未導入psutil importで副作用前に停止し、既存system_metrics.memory_metricsへ変更して再開。1月は事前検査中。完了記録は remaining_campaign/prepare-only-state.json と prepare-only.log。既存の週次計算・終端通知observerを変更していない。
+
+
+## 2026-09-26 — 12か月の準備専用進捗と新しい停止原因
+
+weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態を既存画面へ接続。古いPID・版違い・原本不足を状態不明にし、実ジョブ状態を優先。Windows既定文字コードによる設定読込失敗をUTF-8指定で修正。Python44件・画面9件・型検査を含む本番buildが通過。UTF-8モードなしの実CLIでも12cases/errors0を確認。読取publisherと静的assetsだけを更新し、固定workerコードは変更していない。
+
+表示確認中に0b433705/06809186が29枠通過後のstep29_2900で不可行終了したことを検知。IISは車両0c9b7317のsoc_next_morningと充電可能量の矛盾7制約。前4枠の翌朝目標に窓終端値122.002/189.975/204.225/239.85kWhが流用され、29時に282.6へ上昇していた。メモリ限界ではない。計画窓終端と翌朝運用上限を分離する修正が必要。今回の29枠を週次監査済みとは扱わない。承認済宛先への失敗メールは送信済検索0件後に1通送信、実ID1a0dd3321ae3495eをemail_receipt.jsonへ保存。

@@ -75,6 +75,36 @@ def busy(directory: Path) -> bool:
     return False
 
 
+def preparation_cases(operation: dict, campaign: Path) -> dict:
+    """Read preparation-only progress without treating it as submitted work."""
+    path = campaign / "prepare-only-state.json"
+    if not path.exists():
+        return {}
+    saved = read(path)
+    if (saved.get("git") != {"sha": operation["git_sha"], "dirty": False}
+            or saved.get("parent") != operation["parent"]):
+        return {week: {"state": "STATE_UNKNOWN", "error": "準備記録のコード版・シナリオが一致しません"}
+                for week in operation["weeks"]}
+    from bff.services.cluster.runner import process_identity
+    pid, identity = saved.get("pid"), saved.get("process_identity")
+    live = (type(pid) is int and pid > 0 and identity not in (None, "", "unknown")
+            and process_identity(pid) == identity)
+    result = {}
+    for week in operation["weeks"]:
+        status = saved.get("cases", {}).get(week)
+        if saved.get("status") == "WAITING_PARENT_FREE_RAM" and saved.get("waiting_week") == week:
+            status = "WAITING_PARENT_FREE_RAM"
+        if status == "PREPARED_ONLY" and (campaign / week / "prepared.json").is_file():
+            result[week] = {"state": "PREPARED_ONLY"}
+        elif status == "PREPARE_FAILED":
+            result[week] = {"state": "PREPARE_OR_SUBMIT_FAILED", "error": "入力準備に失敗（準備ログを確認）"}
+        elif status in {"PREPARING", "WAITING_PARENT_FREE_RAM"} and live:
+            result[week] = {"state": status}
+        elif status:
+            result[week] = {"state": "STATE_UNKNOWN", "error": "準備の原本または同じ準備プロセスを確認できません"}
+    return result
+
+
 def snapshot(operation: dict, settings: dict, campaign: Path, client=None) -> dict:
     client = client or Client(f"http://127.0.0.1:{settings['port']}")
     connection = "CONNECTED"
@@ -89,6 +119,7 @@ def snapshot(operation: dict, settings: dict, campaign: Path, client=None) -> di
     worker_views = {w["id"]: w for w in fleet.get("workers", [])}
     cases = []
     recorded = read(campaign / "state.json") if (campaign / "state.json").exists() else {}
+    preparing = preparation_cases(operation, campaign)
     recovery_path = campaign / "operations/collection.json"
     recovered = read(recovery_path).get("cases", {}) if recovery_path.exists() else {}
     for week in operation["weeks"]:
@@ -96,11 +127,12 @@ def snapshot(operation: dict, settings: dict, campaign: Path, client=None) -> di
         path = directory / "state/batch-state.json"
         saved = read(path).get("tasks", {}).get(week, {}) if path.exists() else {}
         row = jobs_by_id.get(saved.get("job_id"))
-        state = row["state"] if row else "STATE_UNKNOWN" if saved.get("job_id") else recorded.get("cases", {}).get(week, {}).get("state", "NOT_PREPARED")
+        local_case = recorded.get("cases", {}).get(week) or preparing.get(week, {})
+        state = row["state"] if row else "STATE_UNKNOWN" if saved.get("job_id") else local_case.get("state", "NOT_PREPARED")
         item = {"week": week, "state": state, "last_recorded_state": saved.get("state"),
                 "job_id": saved.get("job_id"), "worker": (row or saved).get("worker_id"),
                 "prepared": (directory / "prepared.json").exists(),
-                "error": job_error(row or saved) or recorded.get("cases", {}).get(week, {}).get("error"),
+                "error": job_error(row or saved) or local_case.get("error"),
                 "directory": str(directory), "placement": []}
         if row and state == "QUEUED":
             manifest = row["manifest"]

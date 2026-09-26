@@ -4,6 +4,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ExecutionProgress from "./ExecutionProgress";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it("separates prepared-only and preparation RAM waits from computation", async () => {
+  const stamp = new Date().toISOString();
+  const base = {parent:"p",campaign:"prepare",week:"2025-01-06",state:"PREPARED_ONLY",worker:null,prepared:true,verified:false,
+    job_id:null,solver_git_sha:"sha",connection:"CONNECTED",started_at:null,observed_at:stamp,
+    expected_windows:null,trip_count:null,error:null,execution:null,placement:[]};
+  vi.stubGlobal("fetch",vi.fn(() => Promise.resolve(new Response(JSON.stringify({schema_version:"execution_detail_v1",observed_at:stamp,errors:[],cases:[base,
+    {...base,week:"2025-03-03",state:"WAITING_PARENT_FREE_RAM",prepared:false}
+  ]})))));
+  render(<QueryClientProvider client={new QueryClient()}><ExecutionProgress controllerSha="sha"/></QueryClientProvider>);
+  expect(await screen.findByText("入力準備済み・求解未投入")).toBeTruthy();
+  expect(screen.getByText("入力準備待ち（親機の空きRAM待ち）")).toBeTruthy();
+  expect(screen.getByText(/入力準備 1\/2週/)).toBeTruthy();
+  expect(screen.getByText(/計算終了 0\/2週/)).toBeTruthy();
+});
+
 it("keeps current failures visible and separates older terminal records", async () => {
   const stamp = new Date().toISOString();
   const base = {parent:"p",campaign:"old",week:"2025-01-06",state:"FAILED",worker:"pc",prepared:true,verified:false,

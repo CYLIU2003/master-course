@@ -106,6 +106,49 @@ def test_disconnect_preserves_unknown_not_failed_or_zero_progress_completion(tmp
     assert op.terminal_notice(operation, campaign, report) == "NOT_TERMINAL"
 
 
+@pytest.mark.parametrize("status,live,has_input,expected", [
+    ("PREPARING", True, False, "PREPARING"),
+    ("PREPARING", False, False, "STATE_UNKNOWN"),
+    ("WAITING_PARENT_FREE_RAM", True, False, "WAITING_PARENT_FREE_RAM"),
+    ("WAITING_PARENT_FREE_RAM", False, False, "STATE_UNKNOWN"),
+    ("PREPARED_ONLY", False, True, "PREPARED_ONLY"),
+    ("PREPARED_ONLY", True, False, "STATE_UNKNOWN"),
+    ("PREPARE_FAILED", False, False, "PREPARE_OR_SUBMIT_FAILED"),
+])
+def test_preparation_only_never_implies_submitted_or_live_without_identity(
+        tmp_path, monkeypatch, status, live, has_input, expected):
+    from bff.services.cluster import runner
+    operation, settings, campaign, directory = fixture(tmp_path)
+    (directory / "state/batch-state.json").unlink()
+    week = operation["weeks"][0]
+    write_json(campaign / "prepare-only-state.json", {
+        "git": {"sha": operation["git_sha"], "dirty": False}, "parent": operation["parent"],
+        "pid": 12, "process_identity": "birth", "status": status, "waiting_week": week,
+        "cases": {week: status}})
+    if has_input:
+        write_json(directory / "prepared.json", {"prepared_input_id": "input"})
+    monkeypatch.setattr(runner, "process_identity", lambda pid: "birth" if live else "different-birth")
+    class Online:
+        def request(self, path):
+            return [] if path.endswith("jobs") else {"workers": []}
+    report = op.snapshot(operation, settings, campaign, Online())
+    case = report["cases"][0]
+    assert case["state"] == expected
+    assert case["job_id"] is None
+    assert report["progress"]["completed_percent"] == 0
+
+
+@pytest.mark.parametrize("bad_field", ["git", "parent"])
+def test_wrong_preparation_binding_is_unknown(tmp_path, bad_field):
+    operation, _, campaign, _ = fixture(tmp_path)
+    saved = {"git": {"sha": operation["git_sha"], "dirty": False}, "parent": operation["parent"]}
+    saved[bad_field] = "different"
+    write_json(campaign / "prepare-only-state.json", saved)
+    case = op.preparation_cases(operation, campaign)[operation["weeks"][0]]
+    assert case["state"] == "STATE_UNKNOWN"
+    assert "一致しません" in case["error"]
+
+
 @pytest.mark.parametrize("state", ["LOST", "RUNNING", "QUEUED", "FAILED"])
 def test_recovery_only_reads_same_attempt_never_submits(tmp_path, state):
     _, _, _, directory = fixture(tmp_path)
