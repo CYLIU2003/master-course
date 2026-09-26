@@ -11237,3 +11237,10 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 対応: 読取専用 `tools/research/monthly_campaign_report.py` を追加。同じ実行SHA・親・parent hashを照合し、宣言週全件の状態と、VERIFIED週の週次/日別CSV・費用図・元判定をrevision単位に出力。archiveを既存audit_batchで再照合し、Prepared hash/attempt/会計/最終翌朝区間をチェック。未完了と失敗は費用未確定のまま残す。--watchは状態変更時に集計、全週採用またはcampaign失敗時に終了し、再投入・AI・メールはない。
 - 検証: 専用11件通過（別版/別親/重複/費用改変/非有限値/attempt/Prepared/archive拒否、未完了除外、既存revision改変拒否、失敗時watch終了）。日本語図の実表示は別出力report-render-testの合成123.5円データで確認。これは研究結果ではない。実operation2件で12週一覧生成、検算済み0/12と未確定表示を確認。新しい比較スクリプトの自己レビューで未解決P0/P1なし。第三者によるこの追加コードのレビューは未実施。
 - 実行分離: workerの固定版ea72251a・物理条件・16GiB予算は変更していない。19:52時点の同じPID15700でStage1ログ801秒まで進行、RAM約11.1GiB・最大13.17GiB。週次完走はまだ未確認。追加は報告専用で、旧結果を新SHAへ読み替えない。
+
+
+## 2026-09-26 21:13 JST — 翌朝SOC修正の旧失敗区間通過
+
+- 固定ea72251a / attempt febdd18e-f380-5236-b419-d54a8a130f54 / desktop-6ae0mirで、旧0b433705が不可行になったstep_29_2900を実機原本で確認。feasible=true、trip_count_unserved=0、infeasibility_reasons=[]、Stage2 status=optimal、求解13.537080秒（区間全体19.179284秒）。31/174枠保存後もRUNNING。これは当該固定配車・毎時充電問題の判定であり、週間の統合最適性や全週完了ではない。証拠と原本hash: output/daily_soc_20260926/previous_failure_step_verification.json。
+- 新版のstep23保存状態→step24開始状態（absolute minute1440/slot96）を直接照合。SOC traceに含まれる26台とBESS1拠点は集合一致・最大差0kWh。全60台の燃料・所在・充電器・全週会計をこの確認だけで監査済みとはしない。再実行用読取スクリプトと原本hash: output/daily_soc_20260926/first_day_boundary/verify.py、verification.json。
+- 同じPID15700/生成時刻を照合してCPU時間・ログ進行を確認。作業予算16GiBを維持、観測済み生涯最大working set13.165016GiB。保存先空き約36.3GiB、当該試行約0.55GiB（確認時点）。モデル・物理条件・実行中ソース・ライセンス上限は変更なし。残る確認は174枠全体と週次検算、その後の残り11代表週。
