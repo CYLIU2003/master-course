@@ -6,8 +6,63 @@ the solver nor changes the worker's frozen checkout or calculation artifacts.
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+
+
+def _windows_process_memory(pid: int, expected_identity: str) -> dict:
+    """Read one process through one handle, checking its creation time first."""
+    import ctypes
+    from ctypes import wintypes
+    if ctypes.sizeof(ctypes.c_void_p) != 8:
+        return {"status": "UNSUPPORTED"}
+
+    class Counters(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + [
+            (name, ctypes.c_size_t) for name in (
+                "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage",
+                "QuotaNonPagedPoolUsage", "PagefileUsage", "PeakPagefileUsage", "PrivateUsage",
+            )
+        ]
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    kernel.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+    handle = kernel.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return {"status": "EXITED" if ctypes.get_last_error() == 87 else "UNKNOWN"}
+    try:
+        created, exited, kt, ut = (wintypes.FILETIME() for _ in range(4))
+        if not kernel.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(exited), ctypes.byref(kt), ctypes.byref(ut)):
+            return {"status": "UNKNOWN"}
+        if f"{created.dwHighDateTime}:{created.dwLowDateTime}" != expected_identity:
+            return {"status": "IDENTITY_MISMATCH"}
+        if exited.dwHighDateTime or exited.dwLowDateTime:
+            return {"status": "EXITED"}
+        counters = Counters()
+        counters.cb = ctypes.sizeof(counters)
+        if not kernel.K32GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+            return {"status": "UNKNOWN"}
+        return {"status": "OBSERVED", "working_set_gib": counters.WorkingSetSize / 2**30,
+                "peak_working_set_gib": counters.PeakWorkingSetSize / 2**30,
+                "private_commit_gib": counters.PrivateUsage / 2**30}
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def process_memory(state: dict) -> dict:
+    """Unknown memory is never zero; remote PIDs are queried only on their worker."""
+    pid, identity = state.get("pid"), state.get("process_identity")
+    if os.name != "nt":
+        return {"status": "UNSUPPORTED"}
+    if type(pid) is not int or not 0 < pid <= 0xFFFFFFFF or not isinstance(identity, str) or not re.fullmatch(r"\d+:\d+", identity):
+        return {"status": "IDENTITY_UNAVAILABLE"}
+    return {"pid": pid, **_windows_process_memory(pid, identity)}
 
 
 def read_object(path: Path) -> dict:
@@ -90,4 +145,5 @@ def inspect_attempt(directory: Path) -> dict:
             "native": native, "rolling_saved": len(steps),
             "rolling_feasible": sum(passed for _, passed in steps), "chain_accepted": chain_accepted,
             "last_step": max((name for name, _ in steps), default=None),
+            "memory": process_memory(state),
             "observed_at": datetime.now(timezone.utc).isoformat()}

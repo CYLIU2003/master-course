@@ -3,12 +3,14 @@ import { useEffect, useState } from "react";
 import "./ExecutionProgress.css";
 
 type Execution = { phase: string; observed_at: string; rolling_saved: number; rolling_feasible: number;
+  memory?: { status: string; working_set_gib?: number; peak_working_set_gib?: number; private_commit_gib?: number };
   chain_accepted: boolean; last_step: string | null;
   native: { file: string; updated_at: string; metrics: { solver_seconds?: number; barrier_iteration?: number; stage_gap_percent?: number }; lines: string[] } | null };
 type Case = { parent: string; campaign: string; week: string; state: string; worker: string | null;
   prepared: boolean; verified: boolean; job_id: string | null; solver_git_sha: string; observed_at: string;
   connection: string; started_at: string | null; expected_windows: number | null; trip_count: number | null;
   error: string | null; probe_error?: string; execution: Execution | null;
+  memory_budget_gib?: number;
   license?: { global_gurobi_slots: number; external_gurobi_slots: number; reserved_gurobi_slots: number; cooling_gurobi_slots: number };
   placement: { worker: string; reasons: string[]; readiness_reasons: string[]; available_ram_gb?: number; required_ram_gb?: number; physical_free_ram_gb?: number; system_reserve_gb?: number; machine_memory_budget_gib?: number; commit_available_gb?: number }[] };
 type Detail = { schema_version: "execution_detail_v1"; observed_at: string; cases: Case[]; errors: { operation: string; error: string }[] };
@@ -70,6 +72,13 @@ export default function ExecutionProgress({ scenarioId, origin = "", controllerS
             <div><small>担当PC</small><p>{c.worker ?? "未割当"}</p></div>
             <div><small>毎時の計算</small><p>{ex && total ? <><progress aria-label={`${c.week}の保存済み可行窓`} value={Math.min(n, total)} max={total}/><br/>{n}/{total}窓（{(100*n/total).toFixed(1)}%）<br/><small>保存済み可行窓。週全体の検算は別。</small></> : "未取得・未着手"}</p></div></div>
           {c.error && <p role="alert">{reasons[c.error] ?? c.error}</p>}{c.probe_error && <p>{c.probe_error}</p>}
+          {ex?.memory && <div className="execution-memory" aria-label="計算プロセスのメモリ">
+            <strong>{live && c.state === "RUNNING" ? "メモリ実測" : "メモリの最終記録"}</strong>
+            {ex.memory.status === "OBSERVED" ? <p>使用中RAM {ex.memory.working_set_gib?.toFixed(2)} GiB ／ 起動後のRAM最大 {ex.memory.peak_working_set_gib?.toFixed(2)} GiB<br/>
+              専用コミット {ex.memory.private_commit_gib?.toFixed(2)} GiB ／ 計算予算 {c.memory_budget_gib ?? "未確認"} GiB<br/>
+              <small>計算プロセス単体の値。専用コミットと使用中RAMは合算しません。読取：{stamp(ex.observed_at)}</small></p>
+              : <p>メモリ未取得（{ex.memory.status}）。0 GiBとは判定しません。</p>}
+          </div>}
           {c.state === "QUEUED" && <div className="execution-wait" role="status">
             <strong>{live ? "求解はまだ始まっていません" : "最終記録：求解開始待ち"}</strong>
             <p>投入から {c.started_at ? Math.max(0, Math.floor((now-Date.parse(c.started_at))/60000)) : "不明"} 分待機</p>

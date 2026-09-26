@@ -7,6 +7,27 @@ from bff.services.cluster.contracts import canonical, digest
 from tools.research.execution_detail import inspect_attempt, native_detail
 
 
+def test_memory_missing_identity_never_queries_pid_or_reports_zero(monkeypatch):
+    from tools.research import execution_detail as detail
+    monkeypatch.setattr(detail.os, "name", "nt")
+    monkeypatch.setattr(detail, "_windows_process_memory", lambda *_: pytest.fail("must not query unbound PID"))
+    for state in ({}, {"pid": 99}, {"pid": True, "process_identity": "1:2"}, {"pid": 99, "process_identity": "unknown"}):
+        assert detail.process_memory(state) == {"status": "IDENTITY_UNAVAILABLE"}
+
+
+@pytest.mark.skipif(__import__('os').name != 'nt', reason='Windows read-only process metrics')
+def test_windows_memory_matches_birth_and_rejects_reused_pid():
+    import os
+    from bff.services.cluster.runner import process_identity
+    from tools.research.execution_detail import process_memory
+    observed = process_memory({"pid": os.getpid(), "process_identity": process_identity(os.getpid())})
+    assert observed["status"] == "OBSERVED"
+    assert 0 < observed["working_set_gib"] <= observed["peak_working_set_gib"]
+    assert observed["private_commit_gib"] > 0
+    wrong = process_memory({"pid": os.getpid(), "process_identity": "1:2"})
+    assert wrong == {"pid": os.getpid(), "status": "IDENTITY_MISMATCH"}
+
+
 def attempt(tmp_path):
     root = tmp_path / "attempt-1"
     root.mkdir()

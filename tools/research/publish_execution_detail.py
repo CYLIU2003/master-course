@@ -61,6 +61,7 @@ def campaign_rows(operation_path: Path) -> list[dict]:
                   "connection": report["connection"], "started_at": job.get("created_at"),
                   "expected_windows": manifest.get("summary", {}).get("expected_rolling_windows"),
                   "trip_count": manifest.get("summary", {}).get("trip_count"),
+                  "memory_budget_gib": (manifest.get("resource_requirements") or {}).get("task_memory_budget_gib"),
                   "checkpoint": job.get("execution_progress"), "execution": None, "license": license_state}
         failure = (job.get("result") or {}).get("result") or {}
         detail["error"] = _safe_message(case.get("error") or failure.get("error"))
@@ -79,6 +80,14 @@ def campaign_rows(operation_path: Path) -> list[dict]:
                 detail["execution"] = probe(workers[job["worker_id"]], job)
                 detail["execution"]["terminal_snapshot"] = terminal
                 replace_bytes(cache, canonical(detail["execution"]))
+                if (detail["execution"].get("memory") or {}).get("status") == "OBSERVED":
+                    sample = {key: detail["execution"].get(key) for key in (
+                        "job_id", "manifest_sha256", "observed_at", "phase", "rolling_saved", "memory",
+                    )}
+                    # One controller-owned reader writes each attempt's history.
+                    # These observations never modify the frozen worker artifacts.
+                    with (cache.parent / "process-memory.jsonl").open("ab") as stream:
+                        stream.write(canonical(sample) + b"\n")
             except (OSError, ValueError, KeyError, RuntimeError, subprocess.TimeoutExpired) as exc:
                 detail["probe_error"] = type(exc).__name__ + ": 詳細の読取に失敗（計算終了とは判定しません）"
         # Do not publish private paths or SSH configuration.
