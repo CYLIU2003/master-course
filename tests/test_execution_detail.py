@@ -91,6 +91,15 @@ def test_stage_gap_is_read_only_from_mip_log_not_lp_objectives(tmp_path):
     assert native_detail(p)["metrics"]["stage_gap_percent"] == 1
 
 
+def test_presolve_progress_is_visible_without_claiming_root_lp_finished(tmp_path):
+    p = tmp_path / 'stage1.log'
+    p.write_text('Presolve removed 20 rows (presolve time = 195s)...\nPresolve time: 202.92s\nPresolved: 902682 rows, 6796155 columns, 25228776 nonzeros\n')
+    detail = native_detail(p)
+    assert detail['metrics'] == {'presolve_seconds': 202.92, 'solver_seconds': 202.92}
+    assert detail['solve_started']
+    assert len(detail['lines']) == 3
+
+
 def test_multiple_runs_cannot_inflate_rolling_progress(tmp_path):
     root, run = attempt(tmp_path)
     (run.parent / "run_other").mkdir()

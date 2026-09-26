@@ -5,7 +5,7 @@ import "./ExecutionProgress.css";
 type Execution = { phase: string; observed_at: string; rolling_saved: number; rolling_feasible: number;
   memory?: { status: string; working_set_gib?: number; peak_working_set_gib?: number; private_commit_gib?: number };
   chain_accepted: boolean; last_step: string | null;
-  native: { file: string; updated_at: string; metrics: { solver_seconds?: number; barrier_iteration?: number; stage_gap_percent?: number }; lines: string[] } | null };
+  native: { file: string; updated_at: string; metrics: { solver_seconds?: number; presolve_seconds?: number; barrier_iteration?: number; stage_gap_percent?: number }; lines: string[] } | null };
 type Case = { parent: string; campaign: string; week: string; state: string; worker: string | null;
   prepared: boolean; verified: boolean; job_id: string | null; solver_git_sha: string; observed_at: string;
   connection: string; started_at: string | null; expected_windows: number | null; trip_count: number | null;
@@ -93,6 +93,7 @@ export default function ExecutionProgress({ scenarioId, origin = "", controllerS
               <li>回収・検算・集計：{c.verified ? "完了" : "未完了"}</li></ol>
             <p>投入時刻：{stamp(c.started_at)} ／ 詳細読取：{stamp(ex?.observed_at)}</p>
             {ex?.native && <><p>直近ログ：{ex.native.file} ／ 更新 {stamp(ex.native.updated_at)}</p>
+              {ex.native.metrics.presolve_seconds != null && <p>前処理（presolve）の記録：{ex.native.metrics.presolve_seconds}秒。下記ログでその後の工程も確認できます。</p>}
               <p>求解器の経過 {ex.native.metrics.solver_seconds ?? "未取得"}秒 ／ barrier反復 {ex.native.metrics.barrier_iteration ?? "該当なし"} ／ この求解のgap {ex.native.metrics.stage_gap_percent == null ? "未取得" : `${ex.native.metrics.stage_gap_percent}%`}（週全体のgapではありません）</p>
               <pre>{ex.native.lines.join("\n")}</pre></>}
             {c.state === "QUEUED" && <><p>PC要件を満たしていても共有ライセンス使用中・解放待ちなら待機します。</p>

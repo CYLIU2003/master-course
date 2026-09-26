@@ -338,6 +338,16 @@ def worker_state(workspace: Path, job_id: str) -> dict:
     if not state_file.exists():
         state_file = workspace / ".launch" / job_id / "state.json"
     state = json.loads(state_file.read_text(encoding="utf-8"))
+    if state.get("state") in {"COMPLETED", "FAILED", "BLOCKED", "CANCELLED"} and state.get("pid"):
+        current = process_identity(state["pid"])
+        previous = state.get("process_identity", "unknown")
+        exited = current is None or (previous not in {None, "unknown"} and current != "unknown" and previous != current)
+        if not exited:
+            # A recorded result precedes process exit. In particular, failed
+            # native cleanup must not release the worker/license slot early.
+            # Keep the original terminal record intact for later reconciliation.
+            return {**state, "state": "RUNNING", "terminal_result_state": state["state"],
+                    "process_exit_confirmation": "UNKNOWN" if current == "unknown" else "PENDING"}
     if state["state"] == "RUNNING" and state.get("pid"):
         current = process_identity(state["pid"])
         previous = state.get("process_identity", "unknown")

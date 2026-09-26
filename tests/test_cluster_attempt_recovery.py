@@ -31,6 +31,26 @@ def test_T16_pid_reuse_is_not_the_original_worker(tmp_path, monkeypatch):
     assert runner.worker_state(tmp_path, "attempt-a")["state"] == "FAILED"
 
 
+@pytest.mark.parametrize('terminal', ['COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED'])
+@pytest.mark.parametrize('identity', ['birth-1', 'unknown', None, 'birth-2'])
+def test_terminal_result_holds_resources_until_original_process_exits(tmp_path, monkeypatch, terminal, identity):
+    directory = tmp_path / 'attempt-a'; directory.mkdir()
+    path = directory / 'state.json'
+    runner.write_json(path, {'id': 'attempt-a', 'state': terminal, 'pid': 123,
+                            'process_identity': 'birth-1', 'manifest_sha256': 'same-hash'})
+    before = path.read_bytes()
+    monkeypatch.setattr(runner, 'process_identity', lambda _: identity)
+    state = runner.handle({'operation': 'collect', 'id': 'attempt-a'}, tmp_path) if identity in ('birth-1', 'unknown') else runner.worker_state(tmp_path, 'attempt-a')
+    if identity in ('birth-1', 'unknown'):
+        assert state['state'] == 'RUNNING' and state['terminal_result_state'] == terminal
+        assert state['process_exit_confirmation'] == ('UNKNOWN' if identity == 'unknown' else 'PENDING')
+        assert 'archive_sha256' not in state
+    else:
+        assert state['state'] == terminal
+    assert state['manifest_sha256'] == 'same-hash'
+    assert path.read_bytes() == before
+
+
 def test_T15_T32_recovery_backoff_survives_restart_and_keeps_reservation(tmp_path):
     store = JobStore(tmp_path)
     store.add({"id": "job", "requires_gurobi": True})

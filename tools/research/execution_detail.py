@@ -85,7 +85,7 @@ def native_detail(path: Path) -> dict:
         numeric = bool(re.match(r"^[*H ]*\d", line) and re.search(r"\d+s\s*$", line))
         status = stripped.startswith(("Root relaxation:", "Barrier solved model", "Time limit reached",
                                       "Memory limit reached", "Optimal solution found", "Best objective",
-                                      "Explored ", "Solution count"))
+                                      "Explored ", "Solution count", "Presolve removed", "Presolve time:", "Presolved:"))
         solve_started = solve_started or numeric or status or stripped.startswith((
             "Optimize a model", "Presolve", "User MIP start", "Loaded user MIP start",
         ))
@@ -95,6 +95,9 @@ def native_detail(path: Path) -> dict:
         seconds = re.search(r"([\d.]+)s\s*$", line)
         if seconds:
             metrics["solver_seconds"] = float(seconds[1])
+        presolve = re.search(r"presolve time = ([\d.]+)s", line) or re.search(r"Presolve time: ([\d.]+)s", line)
+        if presolve:
+            metrics["presolve_seconds"] = float(presolve[1])
         barrier = re.match(r"^\s*(\d+)\s+(?:[-+\d.eE]+\s+){5}([\d.]+)s\s*$", line)
         if barrier:
             metrics["barrier_iteration"] = int(barrier[1])

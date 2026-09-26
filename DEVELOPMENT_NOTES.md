@@ -11173,3 +11173,10 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 ## 2026-09-26 — Opus5.5独立レビューによるメモリ修正の補完
 
 `docs/notes/MEMORY_LIFETIME_REVIEW_20260926.md` にレビュー原本hash・対応・限界を記録。公開solve/Phase4近傍のmodel scope、Stage2失敗モデルの再試行前解放、scope所有権、全モデルcleanup、設定失敗前の登録、prefix不要台帳とNone-mapを修正。解放失敗時はライセンスを返さず、元の実行例外も保持する。対象111件通過（実Env/求解の3項目は除外）。2回目のOpusレビューは確認差分に未解決P1なしとしたが、その後のsession例外保持2テスト分は自己検証であり、再独立確認は未実施。固定0b433705の実機計算は継続し、実行中ソースは変更していない。週次完走・プロセス16GiB内は引き続き実測で判断する。
+
+
+## 2026-09-26 — 終了プロセス照合とpresolve進捗
+
+独立レビューのcleanup失敗時HOLDを実際の回収経路でも維持するため、workerがterminal JSONを保存済みでも、元PID/生成時刻がまだ生存または照会不明ならcollect/statusはRUNNINGとterminal_result_state/process_exit_confirmationを返す。原本を上書きせず、同じ試行を再照会し、プロセス終了または別生成時刻を確認してから既存回収・cooldownへ進む。架空の完了率は追加しない。関連53件（terminal4状態×PID4状態、回収/進捗/共有枠/実測読取を含む）が通過。
+
+監視ログでpresolve行が隠れていたため固定書式のみ公開し、処理秒数を別表示した。Python11件、画面8件/buildを通過。初回の追加テストは既存solver_secondsも正しく出る点を期待値に追加して再通過。計算版0b433705は変更しておらず、監視用静的assetsだけを更新する。
