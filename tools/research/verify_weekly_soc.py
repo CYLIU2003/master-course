@@ -39,7 +39,7 @@ def main() -> int:
     config = ClusterConfig.model_validate_json(Path(settings["config"]).read_text(encoding="utf-8-sig"))
     broker = LicenseBroker(JobStore(Path(settings["queue"])), total=config.global_gurobi_slots, external=config.external_gurobi_slots)
     metrics = memory_metrics()
-    if (metrics.get("ram_total_gb") or 0) < 31 or (metrics.get("ram_free_gb") or 0) < 8:
+    if (metrics.get("installed_ram_gb") or metrics.get("ram_gb") or 0) < 31 or (metrics.get("ram_free_gb") or 0) < 8:
         raise RuntimeError("Native diagnostic needs a 32 GB class PC with 8 GB free")
     worker = next(worker for worker in config.workers if worker.transport == "local")
     resources = LocalResources(broker.store)
