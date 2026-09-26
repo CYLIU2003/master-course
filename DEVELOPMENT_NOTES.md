@@ -11215,3 +11215,10 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 ## 2026-09-26 翌朝SOC修正の実求解・独立レビュー・再配置
 - ea72251aのclean版でネイティブ4件＋実rolling1件を共有ライセンスbroker下で通過。追加rolling回帰を恒久テストとverify_weekly_socへ組み込み。Claude Code Opus5.5はレビュー範囲内P1なし。詳細はdocs/notes/DAILY_SOC_STABILITY_FIX_20260926.md。
 - 初回の配置照合は開発側LFのlock hashと凍結側CRLFのlock hash差で安全停止した。ソースを改変せず凍結release側の既存stage CLIからやり直し、親機＋4従機5/5照合。実行版はea72251aに固定したまま、旧attempt終了確認後に8891更新・新Prepareを開始。通常進捗はスクリプト、失敗/完了だけイベント通知。
+
+
+## 2026-09-26 19:34 JST 安定性を優先した月別継続
+- ea72251a / febdd18e-f380-5236-b419-d54a8a130f54 がdesktop-6ae0mirでRUNNING（数理モデル構築）。新Prepareは1704便・60台、物理条件維持。mainと作業ブランチはa79c09a0までpush済み。この追記は実行コードを変更しない。
+- 通常処理はoutput/daily_soc_20260926/continue_after_first_week.py。2月のCOMPLETEDかつVERIFIEDを照合してから残り11週を新Prepare→既存weekly_operatorで投入。失敗・SHA違い・未検算完了を拒否する5状態試験を通過。初回起動ではControllerLockをcontext managerと誤認し投入前停止、closingによる既存close呼出しへ修正し、実プロセスのWAITING_FIRST_WEEKを確認。重複起動はロックとremaining-launch-bindingで拒否。
+- フロントの最新表示は12週すべてea72251aに統一、入力準備1/12、計算終了0/12、検算0/12。他11週は準備待ち。画面のfebdd18e RUNNINGとtask16GiBを確認、実画面保存output/daily_soc_20260926/live-progress.png。旧0b失敗は履歴。observerとpublisherは通常AIを呼ばず、終端/持続的資源不足のみイベント。
+- 残る確認はこの新しい1週の174窓と週次検算、続く11週。メモリ停止回避や小規模5件の実求解を、全週完走・正式研究採用とは扱わない。

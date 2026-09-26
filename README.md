@@ -4437,3 +4437,6 @@ Phase 3で配車候補が1件の経路は、確定配車とStage 1の数値を�
 
 ### 翌朝SOCと計画窓の終端SOC（2026-09-26）
 `next_morning_operational_max` は各営業日の帰庫後から翌朝出庫前までに車両の運用上限へ充電します。ローリング窓の終端参照SOCが低くても、この日別目標は下がりません。修正前の途中結果は新しい週次計算へ継ぎ足さず、新固定版・新Prepareから開始します。小規模実求解確認は `tools/research/verify_weekly_soc.py --settings <既存コントローラー設定> --output <新しい保存先>` を使用し、共有ライセンス枠と親機の空き資源を確認します。
+
+
+2026-09-26の再実行は `output/daily_soc_20260926/operation.local.json`（2月）と `operation.remaining.local.json`（残り11月分）で管理します。`tools/research/weekly_operator.py status --operation <対象JSON>` は投入しない読取確認です。`output/daily_soc_20260926/follow-on/state.json` が `WAITING_FIRST_WEEK` の間、残りは未投入です。既存の継続スクリプトが2月のVERIFIED後だけ、親機空きRAM14GiB以上で1週ずつPrepareし、共有キューへ渡します。停止・不明時に継続スクリプトを重複起動せず、同じattemptを照合してください。
