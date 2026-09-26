@@ -11126,3 +11126,15 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 - 根拠: https://docs.gurobi.com/projects/optimizer/en/current/concepts/parameters/guidelines.html （メモリ制約時のdual simplex）。
 - 検証: weekly_results_execution / weekly_operator / machine_memory_budget / cluster_memory_headroom / vehicle_day_bound の非native関連63件通過、native12件は除外（共有枠を無断取得しない）。公開要求型→実効threads/profile→nativeメモリclampを回帰確認。自己レビューでは今回差分のP0/P1残件なし。独立レビュー・週次完走・物理/会計監査は未確認。
 - 再実行は別output dual_memory_20260926、同じqueue/license authorityで新しい固定版を配置後、新規2月Prepareから開始する。通常監視はスクリプト、成功/失敗の一回通知。全12週完了とはしない。
+
+
+## 2026-09-26 16時台 実機監視・Stage 1解放漏れの修正
+
+- ユーザーの継続監視依頼により、固定c78d5c0d/attempt 0e104b8a-1f08-5586-827a-10a4a4b366a8を直接追跡。Stage 1は1800.71秒time_limit、解1件、目的4,220,860.911883、native bound0/gap100%。hard memory failureを再発せずStage 2へ到達した。最適性は未証明。
+- Stage 2は171.89秒、解10件、充電側目的290,102.1107593、bound91,500.62718157/gap68.4592%、soft memory limitで解を保持して終了。総費用と充電側目的を混同しない。毎時計算へ入り、16:28 JSTまでに7/174可行窓を保存。これは週全体の検算・会計完了を意味しない。native原本末尾はoutput/dual_memory_20260926/day-ahead-stage2-tail.txt等へ保存。
+- 追加P1: _solve_thesis_two_stageの単一候補return経路で、巨大なStage 1モデルをsession.modelsとローカル変数が保持したままStage 2を実行していた。同一Env内の全モデルはメモリ上限へ加算される（Gurobi公式parameters/SoftMemLimit）。Stage 2のsoft停止への寄与が考えられるが、今回修正による実機削減量は未測定。
+- 修正: _solve_charging_after_stage1_releaseでRuntimeを先に保存し、src.gurobi_session.dispose_modelで当該モデルのみ解放・追跡リストから除去してから既存Stage 2へ渡す。Env・ライセンス予約・他モデルを保持。解放失敗は握り潰さず、追跡記録も残す。複数候補経路には適用せず、候補探索モデルを壊さない。数学的条件、便、SOC、BESS、目的係数、gap判定、メモリ予算は変更なし。資源解放で探索到達度が変わり得るため新規試行のSHAを分離する。
+- 検証: stage1_model_release / gurobi_memory_snapshot / machine_memory_budget / weekly_results_executionは31件通過。cluster_license_broker / stage1_model_release / vehicle_day_boundの非nativeは25件通過・native8件除外。3件は重複のため合計件数として加算しない。解放順、Runtime・bound・gap・計画の保持、ライセンスを途中解放しないこと、後段例外・解放失敗、二重dispose回避を確認。追加Envや本番再投入は行っていない。
+- 自己レビュー: 当該差分のP0/P1残件なし。独立レビュー・修正版での実機メモリ削減は未検証。進行中のc78d5c0dはそのまま継続し、今回の修正を同版の成果としない。現行の30秒監視・一回の失敗/完了通知を継続する。
+- 監視上の注意: SSH側PowerShellが32bitであり、Get-ProcessのWorkingSet64等が約4GiBに丸められる場合を観測した。CIM WorkingSetSizeで当該プロセス約11.11GiB、pagefile usage約13.62GiBを確認。製品の空きRAM/commit照会は別で、今回この読取試行だけを理由に製品バグとは断定しない。
+- 仕様出典: https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parameter:SoftMemLimit 、https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html#Model.dispose 。

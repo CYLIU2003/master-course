@@ -88,3 +88,11 @@ def track_model(model):
     if session is not None and all(item is not model for item in session.models):
         session.models.append(model)
     return model
+
+
+def dispose_model(model: Any) -> None:
+    """Release one finished model without releasing the shared Env or grant."""
+    model.dispose()
+    session = current_session()
+    if session is not None:
+        session.models[:] = [item for item in session.models if item is not model]

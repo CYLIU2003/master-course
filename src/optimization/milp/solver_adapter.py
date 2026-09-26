@@ -16983,7 +16983,8 @@ class GurobiMILPAdapter:
             return stage1_outcome, stage1_plan
 
         if stage1_stage2_candidate_limit <= 1:
-            return self._solve_thesis_stage2_charging_dispatch(
+            return self._solve_charging_after_stage1_release(
+                stage1,
                 problem,
                 config,
                 stage1_plan,
@@ -16991,9 +16992,6 @@ class GurobiMILPAdapter:
                 stage1_gap=stage1_gap,
                 stage1_bound=stage1_bound,
                 stage1_objective_value=stage1_objective_value,
-                stage1_runtime_sec=float(
-                    getattr(stage1, "Runtime", 0.0) or 0.0
-                ),
                 slots_per_day=slots_per_day,
             )
 
@@ -22120,6 +22118,26 @@ class GurobiMILPAdapter:
         audit.update(checked=True, accepted=not audit["violations"],
                      start_slot_index=first, stop_slot_index=stop)
         return audit
+
+    def _solve_charging_after_stage1_release(
+        self,
+        stage1: Any,
+        problem: CanonicalOptimizationProblem,
+        config: OptimizationConfig,
+        stage1_plan: AssignmentPlan,
+        **stage1_evidence: Any,
+    ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
+        from src.gurobi_session import dispose_model
+
+        runtime = float(getattr(stage1, "Runtime", 0.0) or 0.0)
+        # A single fixed assignment no longer needs the native assignment model.
+        # Its allocation otherwise consumes the charging model's shared Env cap.
+        # Multi-candidate search still needs its model and does not use this path.
+        dispose_model(stage1)
+        return self._solve_thesis_stage2_charging_dispatch(
+            problem, config, stage1_plan,
+            stage1_runtime_sec=runtime, **stage1_evidence,
+        )
 
     def _solve_thesis_stage2_charging_dispatch(
         self,
