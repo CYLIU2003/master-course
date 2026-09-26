@@ -11276,3 +11276,12 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 ## 2026-09-26 22:25 JST 2月代表週の日本語説明
 
 旧ea72251a原本の再検算成果から、費用構成・PV/BESS在庫・日別配賦・主張範囲を説明する report.md を output/daily_soc_20260926/terminal_diagnosis/research_readout/ へ生成。隣接manifestは入力manifest・生成スクリプト・報告書のhashを保持。write_readout.py は原本hashと費用内訳/日別和を確認して再生成でき、求解を呼ばない。月別比較未完了・旧FAILED維持・新固定版の結果ではないことを明記。実行中f524eca2のソースは変更していない。
+
+
+## 2026-09-26 22:42 JST — 32GB/64GB機の資源利用と入力準備の先行
+
+- ユーザーの高RAM機活用指示に従い、現在配置済みの5台をlive APIで確認。DESKTOP-6AE0MIR（32GB）で2月job ca61928c-800a-5c76-8cab-d4993dc9fcdaはRUNNING、LAPTOP-A709UNA0（32GB）はREADY。親機（32GB）は求解分の空きRAMがなく、MATLAB機（32GB）はWindowsコミット余裕約0.35GiBのためDRAININGを維持。全18台の成功確認ではない。投入予算は32GB機16GiB、64GB機32GiBまで、共有Gurobi2枠を維持。
+- DESKTOP-3PRU7QP（64GB）は空きRAM約46.5GiB。既存のライセンス試験と、共有brokerで予約したEnvのみの原因分類を実施。後者はEnv.start 1回/Model 0回、error 10009/EXPIREDを確認し、終了確認後330秒の解放待ちを保持。秘密値・生の例外文は記録しない。64gb-safe-diagnosis.jsonに分類結果を保存。既存WLS資格情報の別PCへの配置はユーザー確認待ちで、当該機はDISABLED/diagnostic_onlyを維持。購入・契約変更なし。
+- 最初の週を待っていた旧follow-onのPID/生成時刻を照合し、待機プロセスだけを終了。親機でprepare_ahead_then_continue.pyを開始し、空きRAM14GiB以上を各開始時に確認しながら残り11週を逐次Prepareする。準備後は既存の最初の週VERIFIED判定へ戻り、同SHA/入力hashのPreparedを再利用して残り求解へ進む。実行中worker、固定ソース、物理条件は変更なし。
+- 観測時点で1月PREPARED_ONLY/3月PREPARING、追加求解0件。prepare-ahead supervisor実PID1728、prepare manager37660、失敗時1回通知observer74644のプロセス存在と空stderrを確認。observerは準備成功時に静かに終了し、通常監視でAIを呼ばない。起動receiptと状態ファイルはoutput/executed_soc_20260926配下。追加のローカル運用スクリプトの完了・障害注入の通し試験は未実施で、現在の稼働確認と区別する。
+- high_ram_allocation_receipt.jsonへAPI機器状態・ジョブ状態・準備状態・ライセンス分類を保存。READMEの現行操作先を追記し、旧daily_soc原本を新固定版の成果へ読み替えない。今回ソルバーコードの変更・追加求解再起動はなし。

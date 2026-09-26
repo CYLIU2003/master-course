@@ -4456,3 +4456,10 @@ VERIFIEDの週だけ、既存archive監査、Prepared hash、attempt、実行会
 ### 2026-09-26 実行済みSOCの終端確認
 
 週次rollingの会計は、予測窓末尾の在庫一致ではなく、採用済みSOCから終端方針と各日の翌朝目標を検査します。旧FAILED原本を残した再検算と新規求解は区別します。[修正・1週の費用・検証記録](docs/notes/EXECUTED_SOC_ACCOUNTING_FIX_20260926.md)を参照してください。通常監視・残り週の開始は既存スクリプトで行い、最初の週の検算通過後だけ先へ進みます。
+
+
+### 高RAM機の利用と現行キャンペーン（2026-09-26）
+
+現在の固定版は `f524eca2`、操作設定は `output/executed_soc_20260926/operation.local.json`（2月）と `operation.remaining.local.json`（残り11週）です。上記の `daily_soc_20260926` は旧試行の記録として保持します。親機は最初の週の求解と並行して残り週を一つずつPrepareし、`remaining_campaign/prepare-only-state.json` に準備状況を保存します。追加の求解は最初の週の検算通過後に共有キューへ投入します。準備済みは計算完了を意味しません。
+
+32GB機の予算は16GiB程度、64GB機は32GiB程度までとし、現時点の空きRAM・OS用余裕・Windowsコミット余裕も必要です。ライセンス期限切れの機器は、更新と共有枠内の実機試験が通るまで投入対象へ戻しません。状態確認は既存 `weekly_operator.py status --operation <対象JSON>`、詳細は分散計算画面と `output/executed_soc_20260926/high_ram_allocation_receipt.json`（取得時点の記録）で確認できます。重複起動せず同じ試行を照合してください。
