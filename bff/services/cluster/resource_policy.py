@@ -23,6 +23,13 @@ def finite_number(value: object) -> float | None:
     return float(value) if math.isfinite(value) else None
 
 
+def machine_memory_budget(capability: dict) -> float | None:
+    """Use half installed RAM: 16/32/64 GiB machines admit 8/16/32 GiB."""
+    installed = finite_number(capability.get("installed_ram_gb"))
+    capacity = installed if installed is not None else finite_number(capability.get("ram_gb"))
+    return capacity / 2 if capacity is not None and capacity > 0 else None
+
+
 def commit_capacity_error(capability: dict, required_gb: float) -> str | None:
     """Windows allocation can fail despite abundant physical RAM."""
     if not str(capability.get("platform", "")).lower().startswith("windows") and "commit_available_gb" not in capability:
@@ -58,7 +65,10 @@ def resource_fit(worker: Worker, capability: dict, manifest: dict, jobs: list[di
     load = finite_number(capability.get("cpu_percent"))
     available_ram = None if total_ram is None or free_ram is None else max(
         0, min(total_ram, worker.ram_gb or total_ram, free_ram) - reserved_ram - worker.reserved_system_ram_gb)
+    machine_budget = machine_memory_budget(capability)
     reasons = []
+    if machine_budget is None or required_ram + reserved_ram > machine_budget:
+        reasons.append("EXCEEDS_MACHINE_MEMORY_BUDGET")
     commit_error = commit_capacity_error(capability, required_ram + reserved_ram + worker.reserved_system_ram_gb)
     if commit_error:
         reasons.append(commit_error)
@@ -88,6 +98,9 @@ def resource_fit(worker: Worker, capability: dict, manifest: dict, jobs: list[di
         if 0 < duration < 7 * 24 * 3600:
             durations.append(duration)
     return {"eligible": not reasons, "reasons": reasons, "available_ram_gb": available_ram,
+            "installed_ram_gb": finite_number(capability.get("installed_ram_gb")),
+            "physical_free_ram_gb": free_ram, "system_reserve_gb": worker.reserved_system_ram_gb,
+            "reserved_job_ram_gb": reserved_ram, "machine_memory_budget_gib": machine_budget,
             "commit_available_gb": finite_number(capability.get("commit_available_gb")),
             "commit_limit_gb": finite_number(capability.get("commit_limit_gb")),
             "required_ram_gb": required_ram, "required_cpu_threads": threads, "cpu_count": cores,

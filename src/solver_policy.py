@@ -103,6 +103,8 @@ def usage_record() -> dict:
 def optimize_model(model, *args, **kwargs):
     """Keep every reachable optimize call observable, including model clones."""
     require_gurobi("optimize")
+    from src.solver_memory import apply_memory_limits
+    apply_memory_limits(model)
     from src.gurobi_session import track_model
     track_model(model)
     usage = current_usage()

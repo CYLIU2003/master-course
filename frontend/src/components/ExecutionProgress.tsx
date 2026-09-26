@@ -10,7 +10,7 @@ type Case = { parent: string; campaign: string; week: string; state: string; wor
   connection: string; started_at: string | null; expected_windows: number | null; trip_count: number | null;
   error: string | null; probe_error?: string; execution: Execution | null;
   license?: { global_gurobi_slots: number; external_gurobi_slots: number; reserved_gurobi_slots: number; cooling_gurobi_slots: number };
-  placement: { worker: string; reasons: string[]; readiness_reasons: string[]; available_ram_gb?: number; required_ram_gb?: number }[] };
+  placement: { worker: string; reasons: string[]; readiness_reasons: string[]; available_ram_gb?: number; required_ram_gb?: number; physical_free_ram_gb?: number; system_reserve_gb?: number; machine_memory_budget_gib?: number; commit_available_gb?: number }[] };
 type Detail = { schema_version: "execution_detail_v1"; observed_at: string; cases: Case[]; errors: { operation: string; error: string }[] };
 const phases: Record<string, string> = { MODEL_BUILD: "数理モデルの構築", STAGE1: "配車を求解中（Stage 1）",
   STAGE2: "充電計画を求解中（Stage 2）", ROLLING: "毎時の運用計算", FINALIZING: "会計・出力を作成中" };
@@ -19,12 +19,13 @@ const states: Record<string, string> = { PREPARING: "入力を準備中", NOT_PR
   VERIFIED: "検算・集計済み", FAILED: "失敗", BLOCKED: "開始条件で停止", CANCELLED: "取消済み",
   LOST: "通信不明・同じ試行を照合中", STATE_UNKNOWN: "状態不明", FAILED_OR_UNVERIFIED: "失敗または未検算",
   PREPARE_OR_SUBMIT_FAILED: "入力準備・投入に失敗" };
-const reasons: Record<string, string> = { INSUFFICIENT_OR_UNKNOWN_RAM: "空きRAM不足・未確認", WORKER_SLOTS_RESERVED: "別の計算を実行中",
+const reasons: Record<string, string> = { EXCEEDS_MACHINE_MEMORY_BUDGET: "機器の計算予算（搭載RAMの半分）を超過", INSUFFICIENT_OR_UNKNOWN_COMMIT_CAPACITY: "Windowsのメモリ割当余地が不足・未確認", INSUFFICIENT_OR_UNKNOWN_RAM: "空きRAM不足・未確認", WORKER_SLOTS_RESERVED: "別の計算を実行中",
   GUROBI_REQUIRES_32GB_INSTALLED_RAM: "Gurobiは搭載RAM 32GB以上が必要（不足・未確認）",
   CPU_BUSY: "CPU使用率が高い", AC_POWER_REQUIRED: "AC電源未確認", INSUFFICIENT_OR_UNKNOWN_CPU_THREADS: "CPU枠不足",
   GUROBI_LICENSE_UNAVAILABLE: "Gurobiライセンスを利用できません" };
 const stamp = (s?: string | null) => s ? new Date(s).toLocaleString("ja-JP") : "未確認";
 export default function ExecutionProgress({ scenarioId, origin = "" }: { scenarioId?: string; origin?: string }) {
+  const [showHistory, setShowHistory] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 5000); return () => clearInterval(timer); }, []);
   const query = useQuery({ queryKey: ["execution-detail", origin], queryFn: async () => {
@@ -38,9 +39,17 @@ export default function ExecutionProgress({ scenarioId, origin = "" }: { scenari
   const data = query.data;
   if (!data && !query.error) return null;
   const stale = !!query.error || !data || now - Date.parse(data.observed_at) > 120000 || Date.parse(data.observed_at) - now > 30000;
-  const rows = data?.cases.filter(c => !scenarioId || c.parent === scenarioId) ?? [];
+  const allRows = data?.cases.filter(c => !scenarioId || c.parent === scenarioId) ?? [];
+  const latest = new Map<string, Case>();
+  for (const row of allRows) {
+    const key = `${row.parent}-${row.week}`;
+    const previous = latest.get(key);
+    if (!previous || !row.started_at || !previous.started_at || Date.parse(row.started_at) >= Date.parse(previous.started_at)) latest.set(key, row);
+  }
+  const rows = showHistory ? allRows : [...latest.values()];
   return <section className="panel" aria-label="計算の詳細進捗">
     <h2>計算の詳細進捗</h2>
+    <label><input type="checkbox" checked={showHistory} onChange={e => setShowHistory(e.target.checked)}/>過去の試行も表示（通常は各週の最新試行）</label>
     <p>入力準備 {rows.filter(c => c.prepared).length}/{rows.length}週 ／ 計算終了 {rows.filter(c => ["COMPLETED", "VERIFIED"].includes(c.state)).length}/{rows.length}週 ／ 検算・集計 {rows.filter(c => c.verified).length}/{rows.length}週</p>
     <p>30秒ごとに読取・画面は10秒ごとに更新。取得時刻：{stamp(data?.observed_at)} <button onClick={() => void query.refetch()}>進捗を更新</button></p>
     <p>工程と保存済みの窓数を表示します。求解の残り時間・全体の最適性は、この進捗率からは分かりません。</p>
@@ -56,6 +65,14 @@ export default function ExecutionProgress({ scenarioId, origin = "" }: { scenari
             <div><small>担当PC</small><p>{c.worker ?? "未割当"}</p></div>
             <div><small>毎時の計算</small><p>{ex && total ? <><progress aria-label={`${c.week}の保存済み可行窓`} value={Math.min(n, total)} max={total}/><br/>{n}/{total}窓（{(100*n/total).toFixed(1)}%）<br/><small>保存済み可行窓。週全体の検算は別。</small></> : "未取得・未着手"}</p></div></div>
           {c.error && <p role="alert">{reasons[c.error] ?? c.error}</p>}{c.probe_error && <p>{c.probe_error}</p>}
+          {c.state === "QUEUED" && <div className="execution-wait" role="status">
+            <strong>{live ? "求解はまだ始まっていません" : "最終記録：求解開始待ち"}</strong>
+            <p>投入から {c.started_at ? Math.max(0, Math.floor((now-Date.parse(c.started_at))/60000)) : "不明"} 分待機</p>
+            {c.placement.map(p => <p key={p.worker}>{p.worker}：{[...p.reasons, ...p.readiness_reasons].map(r => reasons[r] ?? r).join("、") || "PC資源要件内"}<br/>
+              計算予算 {p.required_ram_gb ?? "不明"} GiB ／ 現在の空きRAM {p.physical_free_ram_gb?.toFixed(1) ?? "未取得"} GiB ／ 残す余裕 {p.system_reserve_gb ?? "未取得"} GiB<br/>
+              割当可能 {p.available_ram_gb?.toFixed(1) ?? "不明"} GiB ／ 機器の計算予算上限 {p.machine_memory_budget_gib ?? "未取得"} GiB ／ Windows割当余地 {p.commit_available_gb?.toFixed(1) ?? "未取得"} GiB</p>)}
+            {c.license && <p>Gurobi：全{c.license.global_gurobi_slots}枠／使用・予約{c.license.reserved_gurobi_slots}／解放待ち{c.license.cooling_gurobi_slots}／外部予約{c.license.external_gurobi_slots}</p>}
+          </div>}
           <details><summary>工程・求解・待機理由を見る</summary>
             <ol><li>入力準備：{c.prepared ? "完了" : "未完了"}（対象便 {c.trip_count ?? "未取得"}）</li>
               <li>配車・充電：{phase}</li><li>毎時計算：保存 {ex?.rolling_saved ?? "未取得"}窓／チェーン検査 {ex?.chain_accepted ? "通過" : "未確認"}</li>

@@ -1,6 +1,8 @@
 """Persistent operator controls and time-bounded observations, separate from jobs."""
 from __future__ import annotations
 
+from .resource_policy import machine_memory_budget
+
 import json
 import time
 from datetime import datetime, timezone
@@ -193,6 +195,8 @@ class WorkerRegistry:
                 "status": state, "slots": worker.slots,
                 "reserved": len(active), "active_jobs": [{"id": job["id"], "state": job["state"]} for job in active],
                 "gurobi": worker.gurobi, "ram_gb": worker.ram_gb,
+                "reserved_system_ram_gb": worker.reserved_system_ram_gb,
+                "machine_memory_budget_gib": machine_memory_budget(capability),
                 "tailscale_online": online, "ssh_ready": bool(ssh_ready and recent),
                 "environment_ready": runner_ready, "can_run_optimization": ready and mode == "active",
                 "can_run_no_gurobi": cpu_ready and mode == "active",

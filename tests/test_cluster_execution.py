@@ -276,7 +276,7 @@ def test_automatic_placement_obeys_parent_job_role(scheduler, monkeypatch):
     for worker in workers:
         scheduler.registry.update(worker.id, {"session_verified": True, "last_probe_at": now(),
             "capability": {**scheduler.monitor.controller, "disk_free_gb": 100,
-                           "installed_ram_gb": 32 if worker.gurobi else 16, "ram_gb": 31.7 if worker.gurobi else 15.8, "ram_free_gb": 12, "cpu_count": 8,
+                           "installed_ram_gb": 32 if worker.gurobi else 16, "ram_gb": 31.7 if worker.gurobi else 15.8, "ram_free_gb": 24 if worker.gurobi else 12, "cpu_count": 8,
                            "cpu_percent": 10, "gurobi_version": [13]}})
     scheduler.set_worker_job_role("solver", "gurobi_only")
     monkeypatch.setattr(module, "git_state", lambda: {"sha": "abc", "dirty": False})

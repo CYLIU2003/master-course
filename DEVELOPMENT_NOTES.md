@@ -11082,3 +11082,15 @@ AIなしで適用するtools/cluster/configure_memory_headroom.pyを追加。--a
 新campaign PID73404、固定版08829662、新規Prepare、2月2025-02-03だけを開始。操作設定 `output/rolling_reference_fix_20260925/operation.local.json`、launch/observer-launch-bindingにPID生成時刻を保存。終端observer PID23144は同じthreadへ成功/失敗一度だけを通知し、障害修正引継ぎとfresh3回のメモリ予兆通知を有効化。通常監視にAIを使わない。詳細進捗publisherを既存12件＋今回1件へ切替、8868の配信JSONで13件/エラー0、新SHAのPREPARINGを確認。親機/workerの既存試行を再ラベルしない。
 
 18:28時点はPrepare継続で新規求解未開始。対象32GB子機の空き物理21.34GiB、commit22.84GiBで要求22GiBの物理側を下回る。準備後も不足なら待機し、基準を下げない。ユーザーへ不要なアプリを閉じて約1GiB確保できるか通知済み。新週の完走・独立レビュー・研究採用は未達。
+
+## 2026-09-26 機器別半RAM予算とフロント待機可視化
+
+ユーザーが32GB機16GB程度・16GB機8〜10GB程度・64GB機半分を指定。旧18GiB＋4GiB固定で20時間待機したケースa91243b8はQUEUED/worker未割当を再確認し、旧observerを停止して正規APIでCANCELLED。新試行へ置換し、実行済み原本を上書きしない。
+
+resource_policyは搭載RAMの半分を各機器の計算予算上限とし、同時予約の合計・現在の空きRAM・commit・OS余裕を確認。fresh preflightとworkerでも上限を照合。schedulerは未指定Gurobi16GiB/非Gurobi8GiBをmanifest固定、明示4GiB未満は4GiBへ引上げて実効値を保存。weekly_campaignの18を16へ変更。32GB未満Gurobi禁止、共有2枠、通信不明保持、330秒cooldownは維持。
+
+worker execute_optimization→MC_SOLVER_MEMORY_BUDGET_GIB→GurobiFacade.Model / solver_policy.optimize_modelで、全Stage/補助求解/clone/毎時に共通のnative hard/soft上限を適用。2GiBをPython等用に見込みhard=(budget-2)*2^30/1e9 GB、soft=hard*0.9。profileによる18/32GBの上書きを求解前に再制限し、元のさらに低い制限は保持。memory-budget.jsonに実効値を記録。OSプロセス全体のハード上限とは区別。モデルの物理条件、目的、便、SOC、時間刻み、回送は変更なし。探索予算変更のため新しい実験版として扱い、費用改善や完走は未主張。
+
+フロントExecutionProgressをscenario絞込時も表示、最新試行と旧履歴を分離、待機理由/経過/各メモリ値/ライセンスを常時表示。WorkerNodesに機器上限/OS余裕/commitを表示。JSON/APIの実測のみ使用。既存Solcast文書変更は本コミットに含めない。
+
+Python関連115 passed/1 skipped（native統合は別確認）、追加の並列・復旧・native予算42 passed（重複は合算しない）。旧18GiB前提の並列fixtureを16へ、従来空き12GiBのGurobi配置fixtureを24へ修正して新配置規則を確認。フロント23 tests、型検査・production build通過。自己レビュー済み。独立レビューと本番週完走は未実施。配置結果は追記する。

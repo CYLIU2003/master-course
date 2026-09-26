@@ -188,6 +188,13 @@ def execute_optimization(manifest: dict, bundle: dict, directory: Path) -> dict:
     from bff.store import job_store, scenario_store
     from bff.routers.optimization import _run_optimization
 
+    from src.solver_memory import ENV_KEY, memory_limits
+    budget = manifest.get("resource_requirements", {}).get("task_memory_budget_gib")
+    if budget is not None:
+        os.environ[ENV_KEY] = str(budget)
+        write_json(directory / "memory-budget.json", memory_limits())
+    else:
+        os.environ.pop(ENV_KEY, None)
     kwargs = copy.deepcopy(bundle["kwargs"])
     scenario_id = segment(kwargs["scenario_id"])
     prepared_id = segment(kwargs["prepared_input_id"])
@@ -431,6 +438,10 @@ def handle(request: dict, workspace: Path) -> dict:
                 raise ValueError(commit_error)
             if manifest.get("requires_gurobi") and not gurobi_ram_eligible(provenance):
                 raise ValueError("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
+            from .resource_policy import machine_memory_budget
+            task_budget = (manifest.get("resource_requirements") or {}).get("task_memory_budget_gib")
+            if task_budget is not None and (machine_memory_budget(provenance) is None or task_budget > machine_memory_budget(provenance)):
+                raise ValueError("EXCEEDS_MACHINE_MEMORY_BUDGET")
             if manifest.get("minimum_ram_gb", 0) > (provenance["ram_gb"] or 0):
                 raise ValueError("Worker RAM does not satisfy the frozen requirement")
             if manifest.get("requires_gurobi") and not provenance["gurobi_version"]:

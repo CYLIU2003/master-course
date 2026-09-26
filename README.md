@@ -4385,3 +4385,11 @@ queueの終了照合とcooldownを引き継ぎます。メモリの一括解放�
 2026-09-25 18:28 JST：この修正の固定版 `08829662` を5台で照合し、計算controller（8891）へ配置しました。2月1週の再試行は `output/rolling_reference_fix_20260925/operation.local.json`、状態は同ディレクトリの `february_campaign/state.json` です。新規Prepare中で、週次完走ではありません。通常の投入・待機・回収・終端通知は既存スクリプトが担当します。18GiB要求と子機4GiBの余裕は維持し、不足時は待機します。管理画面の詳細進捗にも旧12件と今回の新試行を別々に配信しています。
 
 固定版の配布検査は、固定版自身の `tools/cluster/release.py` を指定し、登録済みcontroller用Pythonで実行してください。開発checkoutの同名スクリプトでは、そのcheckoutの `uv.lock` のバイト列を比較するため、改行形式が異なる固定版に対しruntime不一致となり得ます。照合条件を外したり、稼働済み固定版のファイルを書き換えて回避しないでください。
+
+## 機器別メモリ予算と最新試行の監視（2026-09-26）
+
+計算予算の上限を搭載RAMの半分にします（16GB機は8GiB、32GB機は16GiB、64GB機は32GiB）。実際の投入は現在の空きRAMとWindows commit余地からOS用の追加余裕・他ジョブ予約を引いて判定します。Gurobiは引き続き32GB以上に限定。週次campaignの要求は18から16GiBへ変更し、標準の子機では16＋4＝20GiBの空きが必要です。64GB機で必ず32GiBを消費する設定ではなく、仕事の予算が小さければその値を使います。
+
+新しい分散attemptは予算をmanifestに固定し、workerはGurobiのモデル生成と毎回の求解前に上限を適用します。予算内の2GiBをPython等用に見込み、残りをnative hard limit、さらにその90%をsoft limitにします。GiBからGurobiの10^9バイト単位へ変換します。これはGurobi全モデルの上限で、Pythonを含むOSプロセス全体の厳密なハード上限ではありません。hard limit到達時は解を取得できないことがあるため、成功扱いせず失敗原本を保存します。[公式パラメータ仕様](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parameter:MemLimit)。旧試行の数値を新予算の結果へ流用しません。
+
+分散計算画面ではシナリオ選択時も詳細進捗を表示します。各週の最新試行を標準表示し、過去の失敗は履歴チェックで確認できます。待機理由、待機時間、計算予算、現在の空きRAM、残す余裕、Windows割当余地、共有ライセンス枠は折り畳まず表示します。PC一覧にも機器別の予算上限を表示。実データ未取得の値は未取得と表示します。

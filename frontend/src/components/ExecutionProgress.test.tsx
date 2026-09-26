@@ -31,3 +31,21 @@ it("shows license failure without counting it as successful computation", async 
   expect(await screen.findByText("Gurobiライセンスを利用できません")).toBeTruthy();
   expect(screen.getByText(/計算終了 0\/1週/)).toBeTruthy();
 });
+
+it("shows queued memory and license cause without opening details", async () => {
+  const stamp = new Date().toISOString();
+  const row = { parent:"p", campaign:"new", week:"2025-02-03", state:"QUEUED", worker:null,
+    prepared:true, verified:false, job_id:"new", solver_git_sha:"new", connection:"CONNECTED", observed_at:stamp,
+    started_at:stamp, expected_windows:174, trip_count:1704, error:null, execution:null,
+    license:{global_gurobi_slots:2,reserved_gurobi_slots:0,cooling_gurobi_slots:0,external_gurobi_slots:0},
+    placement:[{worker:"pc32",reasons:["INSUFFICIENT_OR_UNKNOWN_RAM"],readiness_reasons:[],required_ram_gb:16,
+      physical_free_ram_gb:19,system_reserve_gb:4,available_ram_gb:15,machine_memory_budget_gib:16,commit_available_gb:24}] };
+  vi.stubGlobal("fetch",vi.fn(() => Promise.resolve(new Response(JSON.stringify({schema_version:"execution_detail_v1",observed_at:stamp,errors:[],
+    cases:[{...row,campaign:"old",state:"FAILED",started_at:"2026-01-01T00:00:00Z",error:"old failure"},row]})))));
+  render(<QueryClientProvider client={new QueryClient()}><ExecutionProgress/></QueryClientProvider>);
+  expect(await screen.findByText("求解はまだ始まっていません")).toBeTruthy();
+  expect(screen.getByRole("status").textContent).toContain("計算予算 16 GiB");
+  expect(screen.getByRole("status").textContent).toContain("現在の空きRAM 19.0 GiB");
+  expect(screen.queryByText("old failure")).toBeNull();
+  expect(screen.getByText(/入力準備 1\/1週/)).toBeTruthy();
+});

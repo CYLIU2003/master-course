@@ -309,6 +309,12 @@ class Scheduler:
                     "source_digest": source_digest(), "bundle_sha256": digest(canonical(bundle)),
                     "worker_id": worker_id, "requires_gurobi": kind == "license_test" or (kind == "optimization" and (bundle.get("kwargs") or {}).get("execution_profile") != "alns_no_gurobi_v1"),
                     "minimum_ram_gb": minimum_ram_gb, "retry_of": retry_of}
+        if kind == "optimization" and minimum_ram_gb <= 0:
+            minimum_ram_gb = 16.0 if manifest["requires_gurobi"] else 8.0
+            manifest["minimum_ram_gb"] = minimum_ram_gb
+        if kind == "optimization" and 0 < minimum_ram_gb < 4:
+            minimum_ram_gb = 4.0
+            manifest["minimum_ram_gb"] = minimum_ram_gb
         prior = self.store.get(retry_of)["manifest"] if retry_of else None
         manifest["logical_job_id"] = (prior.get("logical_job_id", prior["id"]) if prior else manifest["id"])
         manifest["attempt_id"] = manifest["id"]
@@ -327,6 +333,7 @@ class Scheduler:
             manifest["summary"] = horizon_summary(bundle.get("scenario", {}), json.loads(base64.b64decode(bundle.get("prepared_base64", "e30="))), bundle.get("kwargs", {}))
         manifest["resource_requirements"] = {
             "minimum_ram_gb": minimum_ram_gb,
+            "task_memory_budget_gib": minimum_ram_gb if kind == "optimization" else None,
             "minimum_disk_free_gb": 2,
             "cpu_threads": int((bundle.get("kwargs") or {}).get("gurobi_threads") or 0),
         }
@@ -466,6 +473,10 @@ class Scheduler:
                 raise ValueError("Worker runtime does not match the frozen controller environment")
             required_ram = max(row["manifest"]["minimum_ram_gb"],
                                (row["manifest"].get("resource_requirements") or {}).get("minimum_ram_gb", 0))
+            from .resource_policy import machine_memory_budget
+            machine_budget = machine_memory_budget(capability)
+            if machine_budget is None or required_ram > machine_budget:
+                raise ValueError("EXCEEDS_MACHINE_MEMORY_BUDGET")
             if required_ram + worker.reserved_system_ram_gb > min(capability.get("ram_gb") or 0, capability.get("ram_free_gb") or 0):
                 raise ValueError("Worker RAM does not meet the requirement")
         except Exception as exc:

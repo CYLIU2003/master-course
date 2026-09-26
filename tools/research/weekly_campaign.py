@@ -223,7 +223,7 @@ def run(settings_path: Path, directory: Path, parent: str, weeks: list[str], wor
             spec = {"schema_version": 1, "batch_id": f"weekly-{expected['sha'][:8]}-{hashlib.sha256(parent.encode()).hexdigest()[:12]}-{week}",
                     "controller_url": f"http://127.0.0.1:{settings['port']}", "git_sha": expected["sha"],
                     "tasks": [{"task_id": week, "submission": {"scenario_id": prepared["scenario_id"],
-                               "worker_id": worker, "minimum_ram_gb": 18., "request": prepared["request"]}}]}
+                               "worker_id": worker, "minimum_ram_gb": 16., "request": prepared["request"]}}]}
             validate_batch(spec)
             manifest = case_dir / "batch.json"
             if manifest.exists() and read(manifest) != spec:

@@ -66,7 +66,7 @@ def test_two_workers_execute_concurrently_and_third_waits_for_license(fleet, mon
         barrier.wait(timeout=5)
         release.wait(timeout=5)
     monkeypatch.setattr(fleet, "execute", execute)
-    jobs = [fleet.enqueue("optimization", {}, minimum_ram_gb=18) for _ in range(3)]
+    jobs = [fleet.enqueue("optimization", {}, minimum_ram_gb=16) for _ in range(3)]
     try:
         fleet.tick()
         barrier.wait(timeout=5)  # Both dispatch threads reached this before either completed.
@@ -78,8 +78,8 @@ def test_two_workers_execute_concurrently_and_third_waits_for_license(fleet, mon
 
 def test_reserved_memory_including_lost_blocks_same_pc_overcommit(fleet, monkeypatch):
     monkeypatch.setattr(fleet, "execute", lambda *args: None)
-    first = fleet.enqueue("optimization", {}, "a", minimum_ram_gb=18)
-    second = fleet.enqueue("optimization", {}, "a", minimum_ram_gb=18)
+    first = fleet.enqueue("optimization", {}, "a", minimum_ram_gb=16)
+    second = fleet.enqueue("optimization", {}, "a", minimum_ram_gb=16)
     fleet.tick()
     assert fleet.store.get(first["id"])["state"] == "STAGING"
     assert fleet.store.get(second["id"])["state"] == "QUEUED"
@@ -131,7 +131,7 @@ def test_external_license_reservation_does_not_block_solver_free_work(fleet, mon
 
 def test_concurrent_ticks_cannot_double_assign(fleet, monkeypatch):
     monkeypatch.setattr(fleet, "execute", lambda *args: None)
-    jobs = [fleet.enqueue("optimization", {}, "a", minimum_ram_gb=18) for _ in range(5)]
+    jobs = [fleet.enqueue("optimization", {}, "a", minimum_ram_gb=16) for _ in range(5)]
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(lambda _: fleet.tick(), range(4)))
     assert sum(fleet.store.get(job["id"])["state"] == "STAGING" for job in jobs) == 1
@@ -139,7 +139,7 @@ def test_concurrent_ticks_cannot_double_assign(fleet, monkeypatch):
 
 @pytest.mark.parametrize("changed", [{"ram_free_gb": 3}, {"runtime_versions": {"python": "different"}}])
 def test_fresh_preflight_blocks_memory_or_runtime_drift_before_submit(fleet, monkeypatch, changed):
-    row = fleet.enqueue("optimization", {}, "a", minimum_ram_gb=18)
+    row = fleet.enqueue("optimization", {}, "a", minimum_ram_gb=16)
     fleet.store.transition(row["id"], "STAGING", expected={"QUEUED"}, worker_id="a")
     capability = {**fleet.monitor.controller, "ram_gb": 32, "ram_free_gb": 30, **changed}
     operations = []

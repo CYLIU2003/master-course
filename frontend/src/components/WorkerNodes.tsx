@@ -16,6 +16,8 @@ export type WorkerNode = {
   reserved: number;
   gurobi: boolean;
   ram_gb: number;
+  reserved_system_ram_gb?: number;
+  machine_memory_budget_gib?: number | null;
   tailscale_online: boolean | null;
   ssh_ready: boolean;
   environment_ready: boolean;
@@ -53,6 +55,7 @@ export type WorkerNode = {
     ram_gb?: number | null;
     installed_ram_gb?: number | null;
     ram_free_gb?: number | null;
+    commit_available_gb?: number | null;
     disk_free_gb?: number | null;
     python?: string;
     gurobi_version?: number[];
@@ -389,6 +392,12 @@ export default function WorkerNodes({
               <div>
                 <dt>利用可能メモリ</dt>
                 <dd>{metric(node.capability.ram_free_gb, "GB")}</dd>
+                <dt>計算予算の上限（搭載RAMの半分）</dt>
+                <dd>{metric(node.machine_memory_budget_gib ?? ((node.capability.installed_ram_gb ?? node.capability.ram_gb ?? 0) / 2 || null), "GiB")}</dd>
+                <dt>OS・他アプリ用の追加余裕</dt>
+                <dd>{metric(node.reserved_system_ram_gb, "GiB")}</dd>
+                <dt>Windows割当余地</dt>
+                <dd>{metric(node.capability.commit_available_gb, "GiB")}</dd>
               </div>
               <div>
                 <dt>ストレージ空き</dt>

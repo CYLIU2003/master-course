@@ -30,13 +30,13 @@ def test_config_dry_run_and_backup(tmp_path):
     assert json.loads(path.read_bytes())["workers"][0]["reserved_system_ram_gb"] == 6
 
 
-@pytest.mark.parametrize("free,commit,eligible", [(21.9, 40, False), (30, 21.9, False), (22, 22, True)])
-def test_18gb_job_requires_additional_4gb_in_both_memory_pools(free, commit, eligible):
+@pytest.mark.parametrize("free,commit,eligible", [(19.9, 40, False), (30, 19.9, False), (20, 20, True)])
+def test_16gb_job_requires_additional_4gb_in_both_memory_pools(free, commit, eligible):
     worker = Worker(id="child", name="child", transport="ssh", host="child")
     capability = {"platform": "Windows", "installed_ram_gb": 32, "ram_gb": 31.7,
                   "ram_free_gb": free, "commit_available_gb": commit,
                   "disk_free_gb": 40, "cpu_count": 8, "cpu_percent": 1}
-    manifest = {"minimum_ram_gb": 18, "requires_gurobi": True,
+    manifest = {"minimum_ram_gb": 16, "requires_gurobi": True,
                 "resource_requirements": {"cpu_threads": 4}}
     assert resource_fit(worker, capability, manifest, [])["eligible"] is eligible
 
