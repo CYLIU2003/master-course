@@ -11104,3 +11104,5 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 - フロントを8868/8891共通の配信先へ配置。最新の週別工程を先頭にし、当該画面で8891を監視対象に選択。15:08の実表示は2月「入力を準備中」・未割当、旧月の失敗/取消を保持。準備を求解開始と呼ばない。詳細の固定SHA・工程表示を実画面で確認。通常監視はpublisherとterminal observerが担当しAI定期監視なし。通知は終了/失敗時のみ既存1回方式。
 - メモリ実装の関連115passed/1skipped、別グループ42passed（重複あり）、フロント23passed、型検査・build通過。追加の配置guard11passed、進捗表示位置のClusterPanel10passed・build通過。native上限は計算予算から2GiBを除いたGurobiメモリに適用され、OS全体/プロセス全体のハード上限ではない。実求解のピークと7日完走は別途確認する。独立レビュー/正式研究採用は未完了。
 - 証拠: `output/machine_budget_20260926/{stage-standalone/report.json,deployment-check.json,frontend-progress.png,operation.local.json}`。スクリプトPID・ログ・元の失敗パッケージも保持。表示/配布guardの後続commitは実行固定SHAと区別する。
+
+- 15:10 JST追記: 2月1704便のPrepare/配布が通り、新試行 `f26aabe2-eff5-56a0-b042-13fc0d2c1227` は desktop-6ae0mir で RUNNING/数理モデル構築。フロントの自動更新で同じ状態を確認。子機memory-budget.jsonはtask16GiB/native hard15.032385536GB（14GiB）/soft13.5291469824GB。まだ7日完走・ピークメモリ検証ではない。証拠 `worker-effective-memory-budget.json` と更新済み `frontend-progress.png`。
