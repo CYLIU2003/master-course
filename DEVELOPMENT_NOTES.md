@@ -11149,3 +11149,12 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 - 自己レビュー: 共通sessionに完了Stage2が蓄積するP1を修正。資源管理を使う実経路に適用し、許容メモリ増量や物理guard削除で通していない。独立レビュー・正式研究採用は未完了。配布・起動の実績は後続記録へ分ける。
 
 - 17:11 JST配置記録: main/作業/基準の3ブランチをa06a4560へFF・push。新規独立clean release、凍結入力62ファイルのhash維持、既存5台への配布/コード/データ/runtime照合が通過（Env probe追加0）。同じqueue/license管理の8891 controllerを新版へ更新。旧試行/状態不明ジョブ0を照合後、2月代表週を新規Prepare中。launch PID55752、observer25168、読取publisher1728。8868フロントの計算版a06a4560と「入力を準備中」を確認。現時点求解未投入、週完走未検証。output/window_memory_20260926/deployment-check.jsonに実績を保存。通常監視はスクリプト、terminal時一度だけ既存チャットへ引継ぐ。
+
+
+## 2026-09-26 17:25 毎時の全先読み結果を集計中に保持しない
+
+- 前回のモデルdisposeだけではプロセス全体の消費を確認できていないという指摘を受け、nativeモデルとPython結果の寿命を再確認。a06a4560の実機job9da36eb7は17:17時点MODEL_BUILD、WorkingSet4.450GiB/専用コミット4.579GiB。これは途中実測であり全週の上限内通過ではない。
+- 追加の保持箇所: scripts/run_hourly_charging_reoptimization.py の executed_segments が毎時の全先読み結果（planの時系列と巨大solver metadata）を全週完了まで保持していた。保存済みの全hourly_solver_result/hourly_execution_resultを変更せず、内部集計専用ExecutedAccountingPrefixを追加。採用電力量[start,stop)、車両SOC[start,stop]と集計が参照する終端/電源由来の判定だけを保持。全planは従来どおりstate handoffと原本保存に使用し、コンパクトな集計用viewを求解器へ渡さない。料金式・物理条件・便・車両を変更しない。
+- 原本15窓の時系列値を全件照合。tracemallocで同じ集計対象の保持量69,580,805→337,290bytes（99.515%減）。全プロセス/nativeメモリ削減率へ外挿しない。prefix-retention-comparison.jsonに測定範囲を記録。695区間/174窓の保持要素数が全先読み保持の1/70未満になる回帰も追加。
+- 既存2区間の費用/電力/初終端判定と図表CSVはfull/prefixで完全一致、SOC境界矛盾を引き続き拒否。phase3_time_budget_and_rolling46件（既存native小規模2件と可用性検査を含む）、契約超過会計/週次実行/モデル解放43件が通過。共有枠下の週次実機確認は別途。全週完走をテスト数から推論しない。
+- 自己レビューでは集計の対象区間・電力量kWh・SOC境界・電源由来判定の論理同値を確認。新規の費用係数/制約/予備SOC変更なし。機器別予算32GB→16GiB・native hard14GiB/soft12.6GiBは維持。独立レビュー未実施。新版への切替と実機ピークは後続で記録する。

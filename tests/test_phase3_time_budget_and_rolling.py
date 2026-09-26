@@ -512,6 +512,56 @@ def test_executed_day_accounting_stitches_each_slot_once(tmp_path) -> None:
     }
 
 
+def test_compact_prefix_preserves_accounting_charts_and_boundary_rejection(tmp_path):
+    problem = _hourly_result_problem()
+    segments = []
+    for start, grid, bess, soc in [(0, 10., 49., (100., 90.)), (1, 20., 50., (90., 100.))]:
+        result = SimpleNamespace(solver_metadata={"bev_terminal_soc_balance_satisfied": True},
+            plan=AssignmentPlan(
+                charging_slots=(ChargingSlot(vehicle_id="ev-1", slot_index=start,
+                                             charge_kw=grid, charger_id="charger-1"),),
+                grid_to_bus_kwh_by_depot_slot={"dep-1": {start: grid, 99: 999.}},
+                bess_soc_kwh_by_depot_slot={"dep-1": {start: bess, 99: 999.}},
+                vehicle_soc_kwh_by_vehicle_slot={"ev-1": {start: soc[0], start+1: soc[1], 99: 999.}},
+                metadata={"canonical_source_flow_context": {"source_provenance_exact": True},
+                          "vehicle_source_provenance_exact": False,
+                          "vehicle_source_allocation_policy": "proportional", "unused_large_diagnostic": [1]*10000},
+            ))
+        segments.append((problem, result, start, start+1))
+    prefixes = [(p, hourly_runner._executed_accounting_prefix(r, a, b), a, b) for p,r,a,b in segments]
+    before = hourly_runner._build_executed_day_accounting(problem, AssignmentPlan(), segments)
+    after = hourly_runner._build_executed_day_accounting(problem, AssignmentPlan(), prefixes)
+    assert before == after and after["eligible"]
+    for writer in (hourly_runner._write_hourly_chart_csv, hourly_runner._write_executed_charging_schedule):
+        writer(tmp_path/'full.csv', problem=problem, executed_segments=segments)
+        writer(tmp_path/'prefix.csv', problem=problem, executed_segments=prefixes)
+        assert (tmp_path/'full.csv').read_bytes() == (tmp_path/'prefix.csv').read_bytes()
+    assert 99 in segments[0][1].plan.vehicle_soc_kwh_by_vehicle_slot['ev-1']
+    assert 99 not in prefixes[0][1].plan.vehicle_soc_kwh_by_vehicle_slot['ev-1']
+    assert 'unused_large_diagnostic' not in prefixes[0][1].plan.metadata
+    assert prefixes[0][1].plan.vehicle_soc_kwh_by_vehicle_slot['ev-1'][1] == 90.
+    prefixes[1][1].plan.vehicle_soc_kwh_by_vehicle_slot['ev-1'][1] = 80.
+    with pytest.raises(ValueError, match="disagree"):
+        hourly_runner._build_executed_day_accounting(problem, AssignmentPlan(), prefixes)
+
+
+def test_weekly_prefix_storage_scales_with_executed_slots_not_remaining_horizons():
+    # 174 hourly windows, each formerly retaining the full 695-slot result.
+    results = []
+    full_entries = 0
+    for start in range(0, 695, 4):
+        stop = min(start+4, 695)
+        result = SimpleNamespace(solver_metadata={}, plan=AssignmentPlan(
+            vehicle_soc_kwh_by_vehicle_slot={'ev': {slot: 100. for slot in range(start, 696)}},
+            grid_to_bus_kwh_by_depot_slot={'dep': {slot: 1. for slot in range(start, 695)}},
+        ))
+        full_entries += len(result.plan.vehicle_soc_kwh_by_vehicle_slot['ev']) + len(result.plan.grid_to_bus_kwh_by_depot_slot['dep'])
+        results.append(hourly_runner._executed_accounting_prefix(result, start, stop))
+    entries = sum(len(r.plan.vehicle_soc_kwh_by_vehicle_slot['ev']) + len(r.plan.grid_to_bus_kwh_by_depot_slot['dep']) for r in results)
+    assert entries == 695*2 + 174
+    assert entries < full_entries / 70
+
+
 def test_executed_day_accounting_rejects_bess_terminal_soc_difference() -> None:
     problem = _hourly_result_problem()
     result = SimpleNamespace(

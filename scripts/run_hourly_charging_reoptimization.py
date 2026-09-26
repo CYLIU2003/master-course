@@ -142,6 +142,50 @@ _EXECUTED_SLOT_MAP_FIELDS = (
 )
 
 
+@dataclass(frozen=True)
+class ExecutedAccountingPrefix:
+    """Small in-memory view; the complete solver result stays in its JSON file."""
+
+    plan: AssignmentPlan
+    solver_metadata: Mapping[str, Any]
+
+
+def _executed_accounting_prefix(
+    result: Any, start_slot: int, stop_slot: int,
+) -> ExecutedAccountingPrefix:
+    """Keep only adopted energy intervals and both SOC boundary states.
+
+    This is used after the full result has been saved. It is never a solver
+    input or a replacement for the full plan used by the state handoff.
+    """
+    plan = result.plan
+    metadata = {**dict(plan.metadata or {}), **dict(result.solver_metadata or {})}
+    retained_metadata = {key: metadata[key] for key in (
+        "bev_terminal_soc_balance_satisfied", "vehicle_source_provenance_exact",
+        "vehicle_source_allocation_policy",
+    ) if key in metadata}
+
+    def prefix_map(mapping: Mapping, stop: int) -> dict:
+        return {owner: {slot: value for slot, value in slots.items()
+                        if start_slot <= int(slot) < stop}
+                for owner, slots in mapping.items()}
+
+    copied = replace(
+        plan,
+        charging_slots=tuple(slot for slot in plan.charging_slots
+                             if start_slot <= int(slot.slot_index) < stop_slot),
+        refuel_slots=tuple(slot for slot in plan.refuel_slots
+                          if start_slot <= int(slot.slot_index) < stop_slot),
+        vehicle_soc_kwh_by_vehicle_slot=prefix_map(
+            plan.vehicle_soc_kwh_by_vehicle_slot, stop_slot + 1),
+        metadata={**retained_metadata,
+                  "source_provenance_exact": CostEvaluator()._source_provenance_is_exact(plan)},
+        **{name: prefix_map(getattr(plan, name), stop_slot)
+           for name in _EXECUTED_SLOT_MAP_FIELDS},
+    )
+    return ExecutedAccountingPrefix(copied, retained_metadata)
+
+
 def _merge_executed_slot_values(
     target: dict[str, dict[int, float]],
     source: Any,
@@ -1735,7 +1779,9 @@ def run_rolling_chain(
                 summaries.append(summary)
                 chain_failure_reason = 'actual_pv_execution_failed'
                 break
-        executed_segments.append((step_problem, result, start_slot, stop_slot))
+        executed_segments.append((step_problem,
+                                  _executed_accounting_prefix(result, start_slot, stop_slot),
+                                  start_slot, stop_slot))
 
         next_min = current_min + step_execution_minutes
         should_continue = end_min is not None and next_min < end_min
