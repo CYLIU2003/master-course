@@ -11253,3 +11253,12 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 既存publisherは遠隔読取コードを都度送るため修正を即時反映。ローカル読取経路も更新するため、監視PID53560の生成時刻を照合して終了し、同じ8操作設定・同じ出力先で非表示再起動。新実PID70204/identity31280564:1095136471、配信cases29/errors0、122枠保存・last_step121を確認。起動記録はoutput/daily_soc_20260926/detail-numeric-order-launch.json。workerのPID15700、固定ea72251a、物理条件、入力、共有枠は維持。フロント型・描画コードは変更せず、実配信JSONで確認。
 - 計算中の追加読取確認: 最初の2日境界で、前区間の実行trace→保存状態→次区間開始値を照合。26台の記録SOC・BESS1拠点で最大差8.5265e-14kWh以下。証拠はday_boundary_checks_v2/verification.json（同output配下）。最初の照合コマンドはSSH exit1で結果未取得、圧縮した読取コードで再試行して通過し、transport_attempts.jsonに区別して保存。
 - 固定Preparedのhash一致、平日264便×5日・土曜203便・日曜181便=1704便、渋21〜23を確認（frozen_calendar_check.json）。原本再取得なし。未完了の全週検算や費用を合格・確定と扱わない。
+
+
+## 2026-09-26 実行済みSOCと日付別暦の最終判定修正
+
+- ea72251aの174/174窓後の失敗は、fixed_target下限超過を予測在庫不一致として拒否する会計バグ。メモリ最大13.165 GiBで予算16 GiB内。実行済みSOCの元の終端方針・日次翌朝目標を再検査し、旧予測フラグは別保存。制約・料金・BESS方策不変。
+- 日付別calendar v2を単一SATラベルと比較してERRORにしていた表示も修正。不正v2はfail-closed。
+- 関連104 passed / 1 managed-native skipped / 2 native deselected。Claude Opus 5.5の独立コードレビューは限定範囲P0/P1なし（実行原本の再検算は担当Codexが実施）。初期SOCと設定targetが異なるreturn_to_initialテストも追加。
+- 原本1,205hash・trip/vehicle hashを照合し、Gurobi起動0回で174窓を再集計。独立物理違反0、FeasibilityChecker可行、会計成立。週次4,776,386.715807円、1,704便。表・CSV・日本語需給/SOC図を生成し実表示確認。旧FAILEDを上書きせず、統合最適性・12週完了・研究採用とはしない。
+- 新固定版の配置と新規Prepare/再実行はこの後に実施し、運用receiptへ記録する。旧PID不在確認・shared queue/license予約・32GiB以上/半分程度のタスク予算を維持。詳細と再検算パスは docs/notes/EXECUTED_SOC_ACCOUNTING_FIX_20260926.md。

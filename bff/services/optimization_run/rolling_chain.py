@@ -1076,6 +1076,28 @@ def _calendar_audit(
 ) -> dict[str, Any]:
     parsed = date.fromisoformat(str(service_date)[:10])
     normalized_service_id = str(service_id or "").strip().upper()
+    validation = dict(problem_metadata.get("service_calendar_validation") or {})
+    if validation.get("schema_version") == "service_calendar_validation_v2":
+        # The canonical builder already validated each dated row/hash. A
+        # legacy single service_id cannot describe a weekday/weekend week.
+        dates = list(validation.get("service_dates") or ())
+        days = list(validation.get("days") or ())
+        valid = bool(
+            validation.get("status") == "OK"
+            and validation.get("calendar_policy") == "fixed_version_date_specific_calendar"
+            and not validation.get("errors")
+            and validation.get("unknown_timetable_row_count") == 0
+            and dates and dates[0] == parsed.isoformat()
+            and [day.get("service_date") for day in days] == dates
+            and _is_sha256(str(validation.get("timetable_rows_sha256") or ""))
+        )
+        return {
+            **validation,
+            "calendar_validation_status": "OK" if valid else "ERROR",
+            "requested_service_id": normalized_service_id,
+            "service_id_scope": "per_date_not_single_service_id",
+            "reason": None if valid else "dated_calendar_validation_not_accepted",
+        }
     weekday = parsed.weekday()
     matches = (
         weekday <= 4

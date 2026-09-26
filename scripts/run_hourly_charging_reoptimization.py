@@ -46,6 +46,7 @@ from src.optimization.common.research_phase3_policy import (  # noqa: E402
     enforce_research_phase3_single_continuous_duty,
 )
 from src.optimization.common.evaluator import CostEvaluator  # noqa: E402
+from src.optimization.common.executed_soc import audit_executed_bev_targets  # noqa: E402
 from src.optimization.common.cost_components import (  # noqa: E402
     DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
     normalize_cost_component_flags,
@@ -394,7 +395,7 @@ def _build_executed_day_accounting(
     contract_overage_audit = _contract_overage_accounting_audit(
         accounting_problem, accounting_plan, breakdown
     )
-    bev_terminal_balanced = all(
+    lookahead_inventory_balanced = all(
         bool(
             {
                 **dict(getattr(segment_result.plan, "metadata", {}) or {}),
@@ -403,6 +404,8 @@ def _build_executed_day_accounting(
         )
         for _, segment_result, _, _ in executed_segments
     )
+    bev_terminal_audit = audit_executed_bev_targets(accounting_problem, accounting_plan)
+    bev_terminal_balanced = bev_terminal_audit["satisfied"]
     bess_terminal_details: dict[str, dict[str, Any]] = {}
     bess_terminal_balanced = True
     bess_daily_balanced = True
@@ -533,6 +536,8 @@ def _build_executed_day_accounting(
             bev_terminal_balanced and bess_terminal_balanced
         ),
         "bev_terminal_energy_balanced": bev_terminal_balanced,
+        "bev_executed_target_audit": bev_terminal_audit,
+        "lookahead_bev_inventory_balance_all_windows": lookahead_inventory_balanced,
         "bess_terminal_energy_balanced": bess_terminal_balanced,
         "bess_daily_energy_balanced": bess_daily_balanced,
         "bess_terminal_soc_by_depot": bess_terminal_details,
