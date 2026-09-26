@@ -11285,3 +11285,11 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 最初の週を待っていた旧follow-onのPID/生成時刻を照合し、待機プロセスだけを終了。親機でprepare_ahead_then_continue.pyを開始し、空きRAM14GiB以上を各開始時に確認しながら残り11週を逐次Prepareする。準備後は既存の最初の週VERIFIED判定へ戻り、同SHA/入力hashのPreparedを再利用して残り求解へ進む。実行中worker、固定ソース、物理条件は変更なし。
 - 観測時点で1月PREPARED_ONLY/3月PREPARING、追加求解0件。prepare-ahead supervisor実PID1728、prepare manager37660、失敗時1回通知observer74644のプロセス存在と空stderrを確認。observerは準備成功時に静かに終了し、通常監視でAIを呼ばない。起動receiptと状態ファイルはoutput/executed_soc_20260926配下。追加のローカル運用スクリプトの完了・障害注入の通し試験は未実施で、現在の稼働確認と区別する。
 - high_ram_allocation_receipt.jsonへAPI機器状態・ジョブ状態・準備状態・ライセンス分類を保存。READMEの現行操作先を追記し、旧daily_soc原本を新固定版の成果へ読み替えない。今回ソルバーコードの変更・追加求解再起動はなし。
+
+
+## 2026-09-26 22:46 JST — 次の32GB機の共有枠内実求解確認
+
+- LAPTOP-A709UNA0（32GB、固定f524eca2、空きRAM約21.5GiB/コミット余裕約23.6GiB）へ既存APIのlicense-testを1回投入。共有brokerの空き1枠でjob a3e9094f-36ca-4c09-b599-f3f16b11d496がCOMPLETED。Env開始1回、Model作成/optimize各2回、目的値各1.0。終了後330秒の解放待ちを維持。2月の実行中jobを停止・変更せず、並行して確認した。
+- 成果物archive SHA 05326806df70f1509fe77456893e4bc68665a723172f5cfc35dbb3f30bdae167と内部7ファイルのhashを照合。output/executed_soc_20260926/a709-license-verification.jsonに保存。小規模のライセンス・転送試験であり、7日間完走/研究承認の証拠ではない。64GB機の期限切れ対応は引き続き資格情報配置の確認待ち。
+- 先行Prepareした1月・3月の原本ファイルhash、固定git、親シナリオ/hash、instance、共通要求、翌朝延長、fleet handoffを読取照合し不一致0。prepared_binding_audit.jsonへ検査範囲を保存（求解/物理/会計の監査ではない）。その後4月Prepare完了・5月準備中を確認。2月の同一実PID11688/identity31280570:251952698は生存しCPU時間とnative logの進行を確認。
+- 読取確認でPowerShell Get-Processのメモリ値が4GiBに張り付いたため、その値は破棄。正式な監視は既存64bit Windows APIのexecution-detailを使用する。計算コード・予算・入力条件への変更なし。
