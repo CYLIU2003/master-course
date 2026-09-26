@@ -11222,3 +11222,10 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 通常処理はoutput/daily_soc_20260926/continue_after_first_week.py。2月のCOMPLETEDかつVERIFIEDを照合してから残り11週を新Prepare→既存weekly_operatorで投入。失敗・SHA違い・未検算完了を拒否する5状態試験を通過。初回起動ではControllerLockをcontext managerと誤認し投入前停止、closingによる既存close呼出しへ修正し、実プロセスのWAITING_FIRST_WEEKを確認。重複起動はロックとremaining-launch-bindingで拒否。
 - フロントの最新表示は12週すべてea72251aに統一、入力準備1/12、計算終了0/12、検算0/12。他11週は準備待ち。画面のfebdd18e RUNNINGとtask16GiBを確認、実画面保存output/daily_soc_20260926/live-progress.png。旧0b失敗は履歴。observerとpublisherは通常AIを呼ばず、終端/持続的資源不足のみイベント。
 - 残る確認はこの新しい1週の174窓と週次検算、続く11週。メモリ停止回避や小規模5件の実求解を、全週完走・正式研究採用とは扱わない。
+
+
+## 2026-09-26 19:39 JST 継続処理の障害試験と第二32GB機の復帰
+- 実行中ea72251a / febdd18eはremote PID15700の生存・生成時刻を照合。前回通知の重複処理後も同一attemptを継続。メモリ使用は4.4GiB時点で確認、16GiB予算を拡大していない。
+- output/daily_soc_20260926/test_follow_on_workflow.pyの5件が通過。first-week失敗/未検算では投入0、成功時だけPrepare→run、再起動による二重observer/投入を拒否、Prepare失敗では求解未開始、既存failure原本を上書きしない。モックの状態遷移検証であり12週完走ではない。結果: follow-on-workflow-tests.xml。継続実プロセスPID2132/生成時刻の一致とWAITING_FIRST_WEEKを確認。
+- LAPTOP-A709UNA0は新版の配置照合済み、RAM32GB/空き21.24GiB/commit余裕23.11GiB。diagnostic_onlyで共有brokerからlicense_test 0d3013ed-8998-47af-98ed-60fa0230ec5fを実行、Env1/Model2/optimize2、目的値1.0/1.0、回収hash一致、旧PID25208消滅を確認した後にgurobi_onlyへ変更。現行2月週は移動せず、残り11週の候補を2台へ増やす。同時枠2と330秒解放待ちは維持。原本output/daily_soc_20260926/second-worker-check。週次負荷の通過を意味しない。
+- 親機は空きRAM14.88GiBで16GiB作業＋OS余裕を満たせず、MATLAB機はcommit余裕0.93GiB、64GB機は既存ライセンス失敗のため投入停止を維持。現状に合わない無理な割当や他アプリ強制終了は行わない。
