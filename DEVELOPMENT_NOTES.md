@@ -11271,3 +11271,8 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - output/executed_soc_20260926 で2月の新規Prepareを開始。残り11週は first-week VERIFIED 後に新規Prepare・投入する既存follow-onスクリプトが待機。終端observer・読み取り進捗publisher・月別集計watchを起動し、エラーログなし。8868/#clusterで固定版f524eca2・12週・2月「入力を準備中」を実画面確認。現時点は新しい求解完了ではない。
 - prefix_memoryの重複イベントは既送信1a0dd3321ae3495eを確認し再送せず。daily_socの新規失敗はGmail送信済み照合後1通送信、実ID1a0ddc95ed3ba792をreceiptへ保存。12週完了メールは未送信。
 - 運用receipt: output/executed_soc_20260926/deployment_receipt.json。新固定版の計算コードは開始後変更しない。通常監視はスクリプトへ任せる。
+
+
+## 2026-09-26 22:26 JST 2月代表週の日本語説明
+
+旧ea72251a原本の再検算成果から、費用構成・PV/BESS在庫・日別配賦・主張範囲を説明する report.md を output/daily_soc_20260926/terminal_diagnosis/research_readout/ へ生成。隣接manifestは入力manifest・生成スクリプト・報告書のhashを保持。write_readout.py は原本hashと費用内訳/日別和を確認して再生成でき、求解を呼ばない。月別比較未完了・旧FAILED維持・新固定版の結果ではないことを明記。実行中f524eca2のソースは変更していない。
