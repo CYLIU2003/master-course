@@ -11229,3 +11229,11 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - output/daily_soc_20260926/test_follow_on_workflow.pyの5件が通過。first-week失敗/未検算では投入0、成功時だけPrepare→run、再起動による二重observer/投入を拒否、Prepare失敗では求解未開始、既存failure原本を上書きしない。モックの状態遷移検証であり12週完走ではない。結果: follow-on-workflow-tests.xml。継続実プロセスPID2132/生成時刻の一致とWAITING_FIRST_WEEKを確認。
 - LAPTOP-A709UNA0は新版の配置照合済み、RAM32GB/空き21.24GiB/commit余裕23.11GiB。diagnostic_onlyで共有brokerからlicense_test 0d3013ed-8998-47af-98ed-60fa0230ec5fを実行、Env1/Model2/optimize2、目的値1.0/1.0、回収hash一致、旧PID25208消滅を確認した後にgurobi_onlyへ変更。現行2月週は移動せず、残り11週の候補を2台へ増やす。同時枠2と330秒解放待ちは維持。原本output/daily_soc_20260926/second-worker-check。週次負荷の通過を意味しない。
 - 親機は空きRAM14.88GiBで16GiB作業＋OS余裕を満たせず、MATLAB機はcommit余裕0.93GiB、64GB機は既存ライセンス失敗のため投入停止を維持。現状に合わない無理な割当や他アプリ強制終了は行わない。
+
+
+## 2026-09-26 19:53 JST — 分割された12代表週の逐次集計
+
+- 問題: weekly_campaignは週ごとの回収・検算・図を生成するが、既存weekly_resultsの横断比較は旧BEV終端条件専用の説明を含む。今回の2月＋残り11週へそのまま流用できない。
+- 対応: 読取専用 `tools/research/monthly_campaign_report.py` を追加。同じ実行SHA・親・parent hashを照合し、宣言週全件の状態と、VERIFIED週の週次/日別CSV・費用図・元判定をrevision単位に出力。archiveを既存audit_batchで再照合し、Prepared hash/attempt/会計/最終翌朝区間をチェック。未完了と失敗は費用未確定のまま残す。--watchは状態変更時に集計、全週採用またはcampaign失敗時に終了し、再投入・AI・メールはない。
+- 検証: 専用11件通過（別版/別親/重複/費用改変/非有限値/attempt/Prepared/archive拒否、未完了除外、既存revision改変拒否、失敗時watch終了）。日本語図の実表示は別出力report-render-testの合成123.5円データで確認。これは研究結果ではない。実operation2件で12週一覧生成、検算済み0/12と未確定表示を確認。新しい比較スクリプトの自己レビューで未解決P0/P1なし。第三者によるこの追加コードのレビューは未実施。
+- 実行分離: workerの固定版ea72251a・物理条件・16GiB予算は変更していない。19:52時点の同じPID15700でStage1ログ801秒まで進行、RAM約11.1GiB・最大13.17GiB。週次完走はまだ未確認。追加は報告専用で、旧結果を新SHAへ読み替えない。

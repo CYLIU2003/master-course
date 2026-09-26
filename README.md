@@ -4440,3 +4440,10 @@ Phase 3で配車候補が1件の経路は、確定配車とStage 1の数値を�
 
 
 2026-09-26の再実行は `output/daily_soc_20260926/operation.local.json`（2月）と `operation.remaining.local.json`（残り11月分）で管理します。`tools/research/weekly_operator.py status --operation <対象JSON>` は投入しない読取確認です。`output/daily_soc_20260926/follow-on/state.json` が `WAITING_FIRST_WEEK` の間、残りは未投入です。既存の継続スクリプトが2月のVERIFIED後だけ、親機空きRAM14GiB以上で1週ずつPrepareし、共有キューへ渡します。停止・不明時に継続スクリプトを重複起動せず、同じattemptを照合してください。
+
+
+### 分割キャンペーンの月別結果をまとめる（2026-09-26）
+
+`python -X utf8 tools/research/monthly_campaign_report.py --operation <operation1.json> <operation2.json> --output <report-directory>` は、同じ固定SHA・親シナリオの複数キャンペーンを一つの代表週一覧へ集約する。`--watch` で60秒ごとに状態の変更だけを検知し、完了した週から更新する。求解・再投入・ODPT取得・メール・AI呼出しは行わない。
+
+VERIFIEDの週だけ、既存archive監査、Prepared hash、attempt、実行会計、日別費用合計を照合して掲載する。未完了・再照合失敗は0円に置換せず除外する。`latest.json` が最新版の `revisions/<hash>/report.md`、CSV、comparison.json、費用図を指す。元研究判定と統合最適性未証明は保持する。実行中の固定版は変更せず、集計コードの追加で求解を再実行しない。
