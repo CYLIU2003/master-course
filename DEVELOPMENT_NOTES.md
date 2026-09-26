@@ -11147,3 +11147,5 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 - scoped_gurobi_modelsでStage2呼出し単位に新規モデルを所有し、通常return・解なしreturn・例外の各出口で診断/値抽出後にdisposeする。既存の候補比較用Stage1や共有Env/ライセンス予約は解放しない。standalone呼出しも同じ処理。001c1038の単一候補Stage1→Stage2解放と併用。物理条件、費用式、時間枠、16GiB機器予算、native hard14GiB/soft12.6GiB、threads4、Method1は変更しない。
 - 検証: モデル寿命/Stage1解放/nativeメモリ値/機器予算26件、共有ライセンス/モデル寿命22件通過（重複あり、合算不可）。週次実行/成果物保存順序18件通過。174回の実Stage2入口で例外経路と解放・外側モデル保持を検査し、別テストで値の抽出後returnと入れ子scopeを確認。大規模nativeピーク減少・全174窓完走は再実行で検証する。誤ったテストファイル名を指定した1回は0件実行で、合格数に含めない。
 - 自己レビュー: 共通sessionに完了Stage2が蓄積するP1を修正。資源管理を使う実経路に適用し、許容メモリ増量や物理guard削除で通していない。独立レビュー・正式研究採用は未完了。配布・起動の実績は後続記録へ分ける。
+
+- 17:11 JST配置記録: main/作業/基準の3ブランチをa06a4560へFF・push。新規独立clean release、凍結入力62ファイルのhash維持、既存5台への配布/コード/データ/runtime照合が通過（Env probe追加0）。同じqueue/license管理の8891 controllerを新版へ更新。旧試行/状態不明ジョブ0を照合後、2月代表週を新規Prepare中。launch PID55752、observer25168、読取publisher1728。8868フロントの計算版a06a4560と「入力を準備中」を確認。現時点求解未投入、週完走未検証。output/window_memory_20260926/deployment-check.jsonに実績を保存。通常監視はスクリプト、terminal時一度だけ既存チャットへ引継ぐ。
