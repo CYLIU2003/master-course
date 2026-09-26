@@ -11180,3 +11180,12 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 独立レビューのcleanup失敗時HOLDを実際の回収経路でも維持するため、workerがterminal JSONを保存済みでも、元PID/生成時刻がまだ生存または照会不明ならcollect/statusはRUNNINGとterminal_result_state/process_exit_confirmationを返す。原本を上書きせず、同じ試行を再照会し、プロセス終了または別生成時刻を確認してから既存回収・cooldownへ進む。架空の完了率は追加しない。関連53件（terminal4状態×PID4状態、回収/進捗/共有枠/実測読取を含む）が通過。
 
 監視ログでpresolve行が隠れていたため固定書式のみ公開し、処理秒数を別表示した。Python11件、画面8件/buildを通過。初回の追加テストは既存solver_secondsも正しく出る点を期待値に追加して再通過。計算版0b433705は変更しておらず、監視用静的assetsだけを更新する。
+
+
+## 2026-09-26 18:53 JST — 旧メモリ失敗地点の実機通過と安定性優先
+
+ユーザーの「時間がかかっても失敗しないことが大事」を運用優先順位としてREADMEへ記録。新たなモデル条件変更や実行中コード更新は行わない。固定0b433705 / attempt06809186-4858-5449-93b7-12c4be180dbe / desktop-6ae0mir（32GB）で、旧試行が止まったstep_15_1500を含む16/174枠の保存済み可行判定を実機原本で確認。step15 feasible=true、API RUNNING。最適性または週全体の検算完了を意味しない。
+
+147回のメモリ観測時点でOS記録のプロセス生涯最大working set 13.166546GiB、サンプル最大private commit 14.577175GiB、現在working set 1.289295GiB。両指標は合算しない。private commitの最大はサンプル上の最大であり連続監視の最大とは言わない。予算16GiBを引き上げず、Stage1→Stage2で11.12→4.07GiB、前日充電後0.58GiB、毎時の長い求解後も約0.6～0.8GiBへ戻った。これはこの1試行の通過範囲の実測であり、全機器・全12週の完走保証ではない。
+
+原本とhash: output/prefix_memory_20260926/first16-evidence.json、memory-checkpoint.json、step15-hourly-summary.json。フロントで同一試行16/174、RAM1.29/最大13.17/予算16GiBを確認しmemory-ui.pngへ保存。通常計算・読取監視・終了イベントは既存スクリプトを継続。記録版mainの追加scope/終了プロセス照合と、実際に求解した固定0b433705は区別する。
