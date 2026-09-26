@@ -58,6 +58,21 @@ def test_clean_release_packages_git_and_dataset_without_ignored_private_material
         package(root, tmp_path / "bad", "data/built/test")
 
 
+def test_shared_clone_is_rejected_before_creating_an_archive(tmp_path):
+    root = tmp_path / "origin"
+    root.mkdir()
+    git(root, "init")
+    (root / "example.py").write_text("pass\n", encoding="utf-8")
+    git(root, "add", ".")
+    git(root, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "fixture")
+    clone = tmp_path / "shared"
+    subprocess.check_call(["git", "clone", "--shared", str(root), str(clone)])
+    output = tmp_path / "package"
+    with pytest.raises(ValueError, match="self-contained Git objects"):
+        package(clone, output, "data/built/test")
+    assert not output.exists()
+
+
 def test_crlf_release_keeps_effective_git_checkout_policy(tmp_path):
     root = tmp_path / "crlf"
     root.mkdir()

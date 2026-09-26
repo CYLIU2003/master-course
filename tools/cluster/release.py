@@ -40,6 +40,9 @@ def package(release: Path, output: Path, dataset: str) -> dict:
     git_dir = release / ".git"
     if not git_dir.is_dir():
         raise ValueError("Package needs a standalone Git release, not a worktree link")
+    alternates = git_dir / "objects/info/alternates"
+    if alternates.exists() and alternates.read_text(encoding="utf-8").strip():
+        raise ValueError("Package needs self-contained Git objects; dissociate the shared clone before packaging")
     # The archive sanitizes .git/config. Preserve this one non-secret checkout
     # setting so Windows CRLF files remain clean against the transported index.
     try:

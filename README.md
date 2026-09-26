@@ -4393,3 +4393,10 @@ queueの終了照合とcooldownを引き継ぎます。メモリの一括解放�
 新しい分散attemptは予算をmanifestに固定し、workerはGurobiのモデル生成と毎回の求解前に上限を適用します。予算内の2GiBをPython等用に見込み、残りをnative hard limit、さらにその90%をsoft limitにします。GiBからGurobiの10^9バイト単位へ変換します。これはGurobi全モデルの上限で、Pythonを含むOSプロセス全体の厳密なハード上限ではありません。hard limit到達時は解を取得できないことがあるため、成功扱いせず失敗原本を保存します。[公式パラメータ仕様](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parameter:MemLimit)。旧試行の数値を新予算の結果へ流用しません。
 
 分散計算画面ではシナリオ選択時も詳細進捗を表示します。各週の最新試行を標準表示し、過去の失敗は履歴チェックで確認できます。待機理由、待機時間、計算予算、現在の空きRAM、残す余裕、Windows割当余地、共有ライセンス枠は折り畳まず表示します。PC一覧にも機器別の予算上限を表示。実データ未取得の値は未取得と表示します。
+
+
+### 2026-09-26 稼働中の監視先とメモリ予算
+
+現在の計算管理は `http://127.0.0.1:8891/#cluster`。既存の8868画面でも「監視先ポート」を8891にすると同じ計算を閲覧できる（別監視先は読取専用）。詳細進捗を画面先頭へ置き、通常は各週の最新試行を表示する。旧失敗の履歴は保持する。操作設定は `output/machine_budget_20260926/operation.local.json`。32GB機の今回の試行予算は16GiB、機器全体の計算予約は搭載RAMの半分以下、さらに現在の空きRAM・Windows commit余地とOS余裕を検査する。
+
+配布用Gitコピーは共有objectsに依存させない。`release.py package` は `.git/objects/info/alternates` が残るコピーを拒否する。配布前に独立したcloneを用意し、Git整合・clean SHAを確認する。

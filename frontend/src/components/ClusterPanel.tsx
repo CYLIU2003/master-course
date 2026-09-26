@@ -160,8 +160,8 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   );
   return (
     <>
-      {jobScope === "all" && <BatchProgress jobs={jobs.data ?? []} />}
       <ExecutionProgress origin={monitorOrigin} scenarioId={jobScope === "scenario" ? scenarioId : undefined} />
+      {jobScope === "all" && <BatchProgress jobs={jobs.data ?? []} />}
       {jobScope === "all" && controllerSha && (
         <CampaignProgress origin={monitorOrigin} controllerSha={controllerSha} />
       )}

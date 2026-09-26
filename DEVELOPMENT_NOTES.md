@@ -11094,3 +11094,13 @@ worker execute_optimization→MC_SOLVER_MEMORY_BUDGET_GIB→GurobiFacade.Model /
 フロントExecutionProgressをscenario絞込時も表示、最新試行と旧履歴を分離、待機理由/経過/各メモリ値/ライセンスを常時表示。WorkerNodesに機器上限/OS余裕/commitを表示。JSON/APIの実測のみ使用。既存Solcast文書変更は本コミットに含めない。
 
 Python関連115 passed/1 skipped（native統合は別確認）、追加の並列・復旧・native予算42 passed（重複は合算しない）。旧18GiB前提の並列fixtureを16へ、従来空き12GiBのGurobi配置fixtureを24へ修正して新配置規則を確認。フロント23 tests、型検査・production build通過。自己レビュー済み。独立レビューと本番週完走は未実施。配置結果は追記する。
+
+
+## 2026-09-26 機器別メモリ予算の実配置と監視画面
+
+- `f9402ec2` の計算コードを親機＋対象4従機へ配置。source/runtime/lock/datasetを5/5照合。配布初回はshared cloneのalternatesが親機内を参照しており、子機Git検査で停止した。稼働プロセスがないことを確認して失敗配置を保存し、objectsを独立化して再パッケージ・照合した。今後はpackage入口で共有objectsを拒否する回帰を追加（releaseテスト11件通過）。実行中ソースの変更なし。
+- 旧08829662の2月試行a91243b8はQUEUED/未割当を確認して正規APIでCANCELLED。旧通知observerを停止し、原本・取消記録を保持。二重投入なし。新固定f9402ec2・新Prepare・計算予算16GiBで2月1週を15:04 JSTに開始した。全12週の再投入ではない。
+- 新コントローラー8891は既存queueとscenario storeを引継ぎ、共有Gurobi2枠・解放待ち・不明時予約保持を維持。15:07時点desktop-6ae0mirは搭載32GiB/計算上限16GiB/空き21.14GiB/OS余裕4GiB/commit22.65GiB。親機は空き14.67GiBで重い投入を控え、MATLAB機はcommit2.16GiBで投入しない。64GB機の既存disabled状態を勝手に解除していない。
+- フロントを8868/8891共通の配信先へ配置。最新の週別工程を先頭にし、当該画面で8891を監視対象に選択。15:08の実表示は2月「入力を準備中」・未割当、旧月の失敗/取消を保持。準備を求解開始と呼ばない。詳細の固定SHA・工程表示を実画面で確認。通常監視はpublisherとterminal observerが担当しAI定期監視なし。通知は終了/失敗時のみ既存1回方式。
+- メモリ実装の関連115passed/1skipped、別グループ42passed（重複あり）、フロント23passed、型検査・build通過。追加の配置guard11passed、進捗表示位置のClusterPanel10passed・build通過。native上限は計算予算から2GiBを除いたGurobiメモリに適用され、OS全体/プロセス全体のハード上限ではない。実求解のピークと7日完走は別途確認する。独立レビュー/正式研究採用は未完了。
+- 証拠: `output/machine_budget_20260926/{stage-standalone/report.json,deployment-check.json,frontend-progress.png,operation.local.json}`。スクリプトPID・ログ・元の失敗パッケージも保持。表示/配布guardの後続commitは実行固定SHAと区別する。
