@@ -11189,3 +11189,10 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 147回のメモリ観測時点でOS記録のプロセス生涯最大working set 13.166546GiB、サンプル最大private commit 14.577175GiB、現在working set 1.289295GiB。両指標は合算しない。private commitの最大はサンプル上の最大であり連続監視の最大とは言わない。予算16GiBを引き上げず、Stage1→Stage2で11.12→4.07GiB、前日充電後0.58GiB、毎時の長い求解後も約0.6～0.8GiBへ戻った。これはこの1試行の通過範囲の実測であり、全機器・全12週の完走保証ではない。
 
 原本とhash: output/prefix_memory_20260926/first16-evidence.json、memory-checkpoint.json、step15-hourly-summary.json。フロントで同一試行16/174、RAM1.29/最大13.17/予算16GiBを確認しmemory-ui.pngへ保存。通常計算・読取監視・終了イベントは既存スクリプトを継続。記録版mainの追加scope/終了プロセス照合と、実際に求解した固定0b433705は区別する。
+
+
+## 2026-09-26 — 初日境界の照合と残り11か月の逐次Prepare
+
+固定0b433705 / attempt06809186 の step23→24（absolute minute1440 / slot96）について、保存したstate_for_next_hourと前後の実行計画を直接照合。26台の車両SOCは欠損0・最大残差1.1368683772161603e-13kWh、BESS1拠点は欠損0・残差0。step24 feasible=true。日境界の一箇所を確認した結果であり、全週の所在/燃料/充電器/会計監査完了とはしない。原本hash付き記録は output/prefix_memory_20260926/first-day-boundary-audit.json。
+
+残り11か月は既存weekly_campaign.prepare_weekを使用する準備専用スクリプト output/prefix_memory_20260926/prepare_remaining.py で逐次処理開始。固定SHA・親シナリオhashを確認し、2月を除外。親機空きRAM14GiB未満または取得不明なら次のPrepareを待機し、子プロセスを一件ずつ終了させる。求解投入は0件、ODPT取得なし。最初の起動は未導入psutil importで副作用前に停止し、既存system_metrics.memory_metricsへ変更して再開。1月は事前検査中。完了記録は remaining_campaign/prepare-only-state.json と prepare-only.log。既存の週次計算・終端通知observerを変更していない。
