@@ -20,7 +20,7 @@ from src.dispatch.daily_return import checked_deadhead_minutes, connection_deadh
 from src.optimization.common.vehicle_timeline import build_vehicle_timeline, connection_energy_events, fixed_path_slot_loads, fixed_path_soc_target_slots
 from src.dispatch.route_band import duty_route_band_ids, fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
-from src.gurobi_session import scoped_gurobi_models
+from src.gurobi_session import dispose_model, scoped_gurobi_models, track_model
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import (
     DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
@@ -2634,7 +2634,7 @@ def _separate_exact_weighted_assignment_path_incompatibility_cliques(
         summary["wall_runtime_sec"] = float(time.perf_counter() - started)
         for auxiliary_model in auxiliary_models:
             try:
-                auxiliary_model.dispose()
+                dispose_model(auxiliary_model)
             except Exception:
                 pass
     return summary
@@ -2705,7 +2705,7 @@ def _stage1_root_lp_diagnostic(
     started = time.perf_counter()
     try:
         model.update()
-        relaxed_model = model.relax()
+        relaxed_model = track_model(model.relax())
         relaxed_model.Params.OutputFlag = 0
         relaxed_model.Params.Method = int(diagnostic["solver_controls"]["method"])
         relaxed_model.Params.Crossover = int(
@@ -3234,7 +3234,7 @@ def _stage1_root_lp_diagnostic(
         diagnostic["wall_runtime_sec"] = float(time.perf_counter() - started)
         if relaxed_model is not None:
             try:
-                relaxed_model.dispose()
+                dispose_model(relaxed_model)
             except Exception:
                 pass
     return diagnostic
@@ -4633,6 +4633,7 @@ class DispatchBaselineMILPAdapter:
 class GurobiMILPAdapter:
     backend_name = "gurobi"
 
+    @scoped_gurobi_models()
     def improve_phase4_seed_with_unused_bev_neighborhood(
         self,
         problem: CanonicalOptimizationProblem,
@@ -6978,6 +6979,7 @@ class GurobiMILPAdapter:
             audit,
         )
 
+    @scoped_gurobi_models()
     def solve(
         self,
         problem: CanonicalOptimizationProblem,
@@ -22128,8 +22130,6 @@ class GurobiMILPAdapter:
         stage1_plan: AssignmentPlan,
         **stage1_evidence: Any,
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
-        from src.gurobi_session import dispose_model
-
         runtime = float(getattr(stage1, "Runtime", 0.0) or 0.0)
         # A single fixed assignment no longer needs the native assignment model.
         # Its allocation otherwise consumes the charging model's shared Env cap.
@@ -22139,6 +22139,13 @@ class GurobiMILPAdapter:
             problem, config, stage1_plan,
             stage1_runtime_sec=runtime, **stage1_evidence,
         )
+
+    def _retry_two_stage_after_charging_release(
+        self, stage2: Any, problem: CanonicalOptimizationProblem,
+        config: OptimizationConfig,
+    ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
+        dispose_model(stage2)
+        return self._solve_thesis_two_stage(problem, config)
 
     @scoped_gurobi_models()
     def _solve_thesis_stage2_charging_dispatch(
@@ -23457,7 +23464,8 @@ class GurobiMILPAdapter:
                     # local-only arguments here: they are not in this
                     # helper's scope and previously made a proven-infeasible
                     # handoff crash before the no-good retry could run.
-                    return self._solve_thesis_two_stage(
+                    return self._retry_two_stage_after_charging_release(
+                        stage2,
                         retry_problem,
                         config,
                     )
@@ -28352,7 +28360,7 @@ class GurobiMILPAdapter:
                 )
                 if path_source_model is not None:
                     try:
-                        path_source_model.dispose()
+                        dispose_model(path_source_model)
                     except Exception:
                         pass
 

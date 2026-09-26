@@ -518,6 +518,7 @@ def test_compact_prefix_preserves_accounting_charts_and_boundary_rejection(tmp_p
     for start, grid, bess, soc in [(0, 10., 49., (100., 90.)), (1, 20., 50., (90., 100.))]:
         result = SimpleNamespace(solver_metadata={"bev_terminal_soc_balance_satisfied": True},
             plan=AssignmentPlan(
+                vehicle_cost_ledger=(object(),), daily_cost_ledger=(object(),),
                 charging_slots=(ChargingSlot(vehicle_id="ev-1", slot_index=start,
                                              charge_kw=grid, charger_id="charger-1"),),
                 grid_to_bus_kwh_by_depot_slot={"dep-1": {start: grid, 99: 999.}},
@@ -539,6 +540,8 @@ def test_compact_prefix_preserves_accounting_charts_and_boundary_rejection(tmp_p
     assert 99 in segments[0][1].plan.vehicle_soc_kwh_by_vehicle_slot['ev-1']
     assert 99 not in prefixes[0][1].plan.vehicle_soc_kwh_by_vehicle_slot['ev-1']
     assert 'unused_large_diagnostic' not in prefixes[0][1].plan.metadata
+    assert prefixes[0][1].plan.vehicle_cost_ledger == prefixes[0][1].plan.daily_cost_ledger == ()
+    assert len(segments[0][1].plan.vehicle_cost_ledger) == 1
     assert prefixes[0][1].plan.vehicle_soc_kwh_by_vehicle_slot['ev-1'][1] == 90.
     prefixes[1][1].plan.vehicle_soc_kwh_by_vehicle_slot['ev-1'][1] = 80.
     with pytest.raises(ValueError, match="disagree"):
@@ -560,6 +563,14 @@ def test_weekly_prefix_storage_scales_with_executed_slots_not_remaining_horizons
     entries = sum(len(r.plan.vehicle_soc_kwh_by_vehicle_slot['ev']) + len(r.plan.grid_to_bus_kwh_by_depot_slot['dep']) for r in results)
     assert entries == 695*2 + 174
     assert entries < full_entries / 70
+
+
+def test_accounting_prefix_preserves_existing_none_map_semantics():
+    result = SimpleNamespace(solver_metadata=None, plan=AssignmentPlan(
+        grid_to_bus_kwh_by_depot_slot=None, vehicle_soc_kwh_by_vehicle_slot={'ev': None}))
+    saved = hourly_runner._executed_accounting_prefix(result, 0, 4)
+    assert saved.plan.grid_to_bus_kwh_by_depot_slot == {}
+    assert saved.plan.vehicle_soc_kwh_by_vehicle_slot == {'ev': {}}
 
 
 def test_executed_day_accounting_rejects_bess_terminal_soc_difference() -> None:

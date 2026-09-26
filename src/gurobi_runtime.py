@@ -31,10 +31,10 @@ class GurobiFacade:
             usage.model_creations += 1
             if session is None:
                 usage.counts_complete = False  # An unmanaged implicit default Env is not measured.
-        model = self._module.Model(*args, **kwargs)
+        model = track_model(self._module.Model(*args, **kwargs))
         from src.solver_memory import apply_memory_limits
         apply_memory_limits(model)
-        return track_model(model)
+        return model
 
     def Env(self, *args, **kwargs):
         require_gurobi("Env")

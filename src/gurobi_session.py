@@ -55,13 +55,11 @@ class GurobiSession:
     def dispose_models(self):
         """Release completed models while retaining one admitted Env for a campaign."""
         # Model references retain Env/license resources even after Env.dispose.
-        for model in reversed(self.models):
-            model.dispose()
-        self.models.clear()
+        _dispose_all(tuple(self.models), self.models)
 
 
 _session: ContextVar[GurobiSession | None] = ContextVar("gurobi_session", default=None)
-_model_scope: ContextVar[list[Any] | None] = ContextVar("gurobi_model_scope", default=None)
+_model_scopes: ContextVar[tuple[list[Any], ...]] = ContextVar("gurobi_model_scopes", default=())
 
 
 def current_session() -> GurobiSession | None:
@@ -75,22 +73,32 @@ def managed_gurobi_session(acquire: Callable[[], None], release: Callable[[bool]
         return
     session = GurobiSession(acquire, release)
     token = _session.set(session)
+    body_error = None
     try:
         yield session
+    except BaseException as exc:
+        body_error = exc
+        raise
     finally:
         try:
             session.close()
+        except Exception as cleanup_error:
+            if body_error is not None:
+                raise BaseExceptionGroup("Execution and session cleanup failed", [body_error, cleanup_error]) from None
+            raise
         finally:
             _session.reset(token)
 
 
 def track_model(model):
     session = current_session()
-    if session is not None and all(item is not model for item in session.models):
+    already_tracked = session is not None and any(item is model for item in session.models)
+    if session is not None and not already_tracked:
         session.models.append(model)
-    scope = _model_scope.get()
-    if scope is not None and all(item is not model for item in scope):
-        scope.append(model)
+    scopes = _model_scopes.get()
+    # Re-optimizing an enclosing model must not transfer its ownership inward.
+    if scopes and not already_tracked and not any(item is model for scope in scopes for item in scope):
+        scopes[-1].append(model)
     return model
 
 
@@ -100,9 +108,22 @@ def dispose_model(model: Any) -> None:
     session = current_session()
     if session is not None:
         session.models[:] = [item for item in session.models if item is not model]
-    scope = _model_scope.get()
-    if scope is not None:
+    for scope in _model_scopes.get():
         scope[:] = [item for item in scope if item is not model]
+
+
+def _dispose_all(models: tuple[Any, ...], retained: list[Any] | None = None) -> None:
+    errors = []
+    for model in reversed(models):
+        try:
+            dispose_model(model)
+            if retained is not None:
+                retained[:] = [item for item in retained if item is not model]
+        except Exception as exc:
+            errors.append(exc)
+    if errors:
+        # Failed models stay tracked; do not release an uncertain Env/grant.
+        raise ExceptionGroup("Native model cleanup failed", errors)
 
 
 @contextmanager
@@ -113,12 +134,19 @@ def scoped_gurobi_models():
     models alive. Also bound model lifetime for standalone adapter calls.
     """
     owned: list[Any] = []
-    token = _model_scope.set(owned)
+    token = _model_scopes.set((*_model_scopes.get(), owned))
+    body_error = None
     try:
         yield
+    except BaseException as exc:
+        body_error = exc
+        raise
     finally:
         try:
-            for model in reversed(tuple(owned)):
-                dispose_model(model)
+            _dispose_all(tuple(owned))
+        except Exception as cleanup_error:
+            if body_error is not None:
+                raise BaseExceptionGroup("Solve and cleanup failed", [body_error, cleanup_error]) from None
+            raise
         finally:
-            _model_scope.reset(token)
+            _model_scopes.reset(token)

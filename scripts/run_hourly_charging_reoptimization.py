@@ -165,13 +165,15 @@ def _executed_accounting_prefix(
         "vehicle_source_allocation_policy",
     ) if key in metadata}
 
-    def prefix_map(mapping: Mapping, stop: int) -> dict:
-        return {owner: {slot: value for slot, value in slots.items()
+    def prefix_map(mapping: Mapping | None, stop: int) -> dict:
+        return {owner: {slot: value for slot, value in dict(slots or {}).items()
                         if start_slot <= int(slot) < stop}
-                for owner, slots in mapping.items()}
+                for owner, slots in dict(mapping or {}).items()}
 
     copied = replace(
         plan,
+        vehicle_cost_ledger=(),
+        daily_cost_ledger=(),
         charging_slots=tuple(slot for slot in plan.charging_slots
                              if start_slot <= int(slot.slot_index) < stop_slot),
         refuel_slots=tuple(slot for slot in plan.refuel_slots
