@@ -4447,3 +4447,7 @@ Phase 3で配車候補が1件の経路は、確定配車とStage 1の数値を�
 `python -X utf8 tools/research/monthly_campaign_report.py --operation <operation1.json> <operation2.json> --output <report-directory>` は、同じ固定SHA・親シナリオの複数キャンペーンを一つの代表週一覧へ集約する。`--watch` で60秒ごとに状態の変更だけを検知し、完了した週から更新する。求解・再投入・ODPT取得・メール・AI呼出しは行わない。
 
 VERIFIEDの週だけ、既存archive監査、Prepared hash、attempt、実行会計、日別費用合計を照合して掲載する。未完了・再照合失敗は0円に置換せず除外する。`latest.json` が最新版の `revisions/<hash>/report.md`、CSV、comparison.json、費用図を指す。元研究判定と統合最適性未証明は保持する。実行中の固定版は変更せず、集計コードの追加で求解を再実行しない。
+
+
+### 週間進捗の最終保存区間
+詳細進捗の「最後の区間」は区間番号の数値順です。100区間以降も99区間で表示が止まらず、1週間＋最終翌朝まで追跡します。保存区間数、実行可能判定数、週全体の検算完了は別の表示です。監視側の修正だけで求解を再起動する必要はありません。

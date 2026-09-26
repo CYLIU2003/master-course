@@ -108,6 +108,13 @@ def native_detail(path: Path) -> dict:
             "metrics": metrics, "lines": evidence[-6:], "solve_started": solve_started}
 
 
+def _rolling_step_order(name: str) -> tuple[int, str]:
+    # Directory names are zero-padded to a minimum width, not a fixed width.
+    # Lexical order would leave step_99 ahead of step_100 through step_173.
+    match = re.match(r"^step_(\d+)(?:_|$)", name)
+    return (int(match[1]) if match else -1, name)
+
+
 def inspect_attempt(directory: Path) -> dict:
     root = directory.resolve(strict=True)
     manifest = read_object(root / "manifest.json")
@@ -147,6 +154,6 @@ def inspect_attempt(directory: Path) -> dict:
     return {"job_id": root.name, "manifest_sha256": fingerprint, "phase": phase,
             "native": native, "rolling_saved": len(steps),
             "rolling_feasible": sum(passed for _, passed in steps), "chain_accepted": chain_accepted,
-            "last_step": max((name for name, _ in steps), default=None),
+            "last_step": max((name for name, _ in steps), key=_rolling_step_order, default=None),
             "memory": process_memory(state),
             "observed_at": datetime.now(timezone.utc).isoformat()}

@@ -11244,3 +11244,12 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 固定ea72251a / attempt febdd18e-f380-5236-b419-d54a8a130f54 / desktop-6ae0mirで、旧0b433705が不可行になったstep_29_2900を実機原本で確認。feasible=true、trip_count_unserved=0、infeasibility_reasons=[]、Stage2 status=optimal、求解13.537080秒（区間全体19.179284秒）。31/174枠保存後もRUNNING。これは当該固定配車・毎時充電問題の判定であり、週間の統合最適性や全週完了ではない。証拠と原本hash: output/daily_soc_20260926/previous_failure_step_verification.json。
 - 新版のstep23保存状態→step24開始状態（absolute minute1440/slot96）を直接照合。SOC traceに含まれる26台とBESS1拠点は集合一致・最大差0kWh。全60台の燃料・所在・充電器・全週会計をこの確認だけで監査済みとはしない。再実行用読取スクリプトと原本hash: output/daily_soc_20260926/first_day_boundary/verify.py、verification.json。
 - 同じPID15700/生成時刻を照合してCPU時間・ログ進行を確認。作業予算16GiBを維持、観測済み生涯最大working set13.165016GiB。保存先空き約36.3GiB、当該試行約0.55GiB（確認時点）。モデル・物理条件・実行中ソース・ライセンス上限は変更なし。残る確認は174枠全体と週次検算、その後の残り11代表週。
+
+
+## 2026-09-26 21:42 JST — 100区間以降の進捗表示順序を修正
+
+- 新版の同一試行が109/174枠まで進んだ際、execution-detailのlast_stepだけstep_99_9900に留まることを観測。execution_detail.inspect_attemptがフォルダー名を文字列maxで選ぶため、step_100以降が99より前に並んだ。番号による比較へ限定修正し、保存件数・可行判定・費用・ソルバーには変更なし。
+- 9→10、99→100、週末173、空結果、旧3桁名の5回帰を追加。修正前3失敗/2通過、修正後は既存進捗・月別集計を含む27件通過。自己レビューで未解決P0/P1なし。独立レビューは未実施、研究採用判断は変更しない。
+- 既存publisherは遠隔読取コードを都度送るため修正を即時反映。ローカル読取経路も更新するため、監視PID53560の生成時刻を照合して終了し、同じ8操作設定・同じ出力先で非表示再起動。新実PID70204/identity31280564:1095136471、配信cases29/errors0、122枠保存・last_step121を確認。起動記録はoutput/daily_soc_20260926/detail-numeric-order-launch.json。workerのPID15700、固定ea72251a、物理条件、入力、共有枠は維持。フロント型・描画コードは変更せず、実配信JSONで確認。
+- 計算中の追加読取確認: 最初の2日境界で、前区間の実行trace→保存状態→次区間開始値を照合。26台の記録SOC・BESS1拠点で最大差8.5265e-14kWh以下。証拠はday_boundary_checks_v2/verification.json（同output配下）。最初の照合コマンドはSSH exit1で結果未取得、圧縮した読取コードで再試行して通過し、transport_attempts.jsonに区別して保存。
+- 固定Preparedのhash一致、平日264便×5日・土曜203便・日曜181便=1704便、渋21〜23を確認（frozen_calendar_check.json）。原本再取得なし。未完了の全週検算や費用を合格・確定と扱わない。

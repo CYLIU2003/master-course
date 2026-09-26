@@ -78,6 +78,27 @@ def test_mismatched_attempt_manifest_is_rejected(tmp_path):
         inspect_attempt(root)
 
 
+@pytest.mark.parametrize("names, expected", [
+    ([], None),
+    (["step_9_0900", "step_10_1000"], "step_10_1000"),
+    (["step_100_10000", "step_99_9900"], "step_100_10000"),
+    (["step_173_17300", "step_99_9900", "step_100_10000"], "step_173_17300"),
+    (["step_010", "step_002"], "step_010"),
+])
+def test_latest_rolling_checkpoint_uses_numeric_execution_order(tmp_path, names, expected):
+    root, run = attempt(tmp_path)
+    for name in names:
+        path = run / "rolling_hourly_chain" / name / "hourly_summary.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"feasible": True}))
+
+    result = inspect_attempt(root)
+
+    assert result["last_step"] == expected
+    assert result["rolling_saved"] == result["rolling_feasible"] == len(names)
+    assert result["chain_accepted"] is False
+
+
 def test_partial_checkpoint_does_not_masquerade_as_progress(tmp_path):
     root, _ = attempt(tmp_path)
     (root / "state.json").write_text('{"id":')
