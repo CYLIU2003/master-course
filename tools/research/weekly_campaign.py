@@ -89,7 +89,10 @@ def request(prepared_id: str) -> dict:
               "run_profile": "day_ahead_and_hourly_rolling", "run_hourly_rolling": True,
               "rolling_execution_minutes": 60, "time_limit_seconds": 7200,
               "stage1_time_limit_seconds": 1800, "stage2_time_limit_seconds": 600,
-              "stage1_gurobi_search_profile": "bounded_presolve_barrier_no_crossover",
+              # The 2026-09-26 root barrier exhausted the native 14 GiB cap
+              # before its first iteration. Keep the budget and model intact;
+              # use the existing dual-simplex profile for memory-limited weeks.
+              "stage1_gurobi_search_profile": "bounded_presolve_dual",
               "stage1_fragment_transition_cut_mode": "lazy", "mip_gap": .01, "timestep_min": 15}
     validate_budget(result)
     return result

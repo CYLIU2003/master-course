@@ -11114,3 +11114,15 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 - nativeログはモデル生成時にも作成されるため、ファイル存在だけのSTAGE1表示を修正。読取専用execution_detailはOptimize/Presolve/求解行を見て切替。15:14時点モデル構築、15:19時点は実際の求解開始行あり。計算プロセスの15:15確認時WorkingSetは約4.48GiB、15:16空きRAM16.6GiB/commit18.03GiB、memory_guard=OK。まだ最終ピーク/週完走ではない。
 - フロント15件・読取ログ解析8件通過、型検査/production build通過。8868/8891共通フロントへ配置、読取publisherだけ再起動。最初のpublisher置換ではパス区切り差で旧readerの停止に失敗、新readerは既存lockで安全停止した。正規化して同じ出力を持つ旧readerだけ停止し、単一readerで再開。計算worker/controller/物理入力は無変更、重複ジョブ投入なし。
 - 通常監視は引き続きスクリプト。terminal observerは終了/失敗時に一度だけ既存チャットへ通知し、承認済みの原因修正・検証・新固定版再試行へ引き継ぐ。AIを常時ポーリングさせない。独立レビュー/週完走/研究採用は未確認。
+
+
+## 2026-09-26 根LP barrierメモリ停止の原本確認と省メモリ再実行
+
+- 対象: machine_budget_20260926/february_campaign、固定f9402ec2、attempt f26aabe2-eff5-56a0-b042-13fc0d2c1227。15:21 JSTにFAILED。native logはpresolve後902,682行・6,796,155列・25,228,776係数、root barrier ordering19.87秒、0反復、Memory limit reached。GurobiError10001であり、回収可能な可行解を確認していない。旧ログのbest objectiveを採用済み解と扱わない。
+- native log SHA256: 00a86383fe2cb31a91f6cab93c45d71c500fd4224e7334f0c1388d0ffbc68185。旧PID12776および同attemptのプロセスがSSHの読取専用CIM照会で存在しないことを確認。記録はoutput/machine_budget_20260926/old-process-check.txt。
+- 失敗メールは送信済み検索後に1通送信し、email_receipt.jsonへ実ID 1a0dc62096cb25b1を保存。送信後検索も一致。未完了を完了と表示していない。
+- 到達経路: weekly_campaign.request → frozen Prepare → cluster bundle/runner → BFF _run_optimization → MILPOptimizer → _solve_thesis_two_stage → optimize_model。週次の既定profileだけを既存bounded_presolve_dual(Method1/NoRel0)へ変更。threads4、Stage1 1800秒/Stage2 600秒、全体7200秒、15分刻み、全便・完全後続網・SOC/BESS/終端・費用条件は維持。数学モデルは変更なし、探索設定変更として別版にする。
+- タスク16 GiB/native hard14 GiB/soft12.6 GiBを維持。これはnative割当上限であり、Python含むOSプロセス全体の厳密hard capではない。空きRAM・commit余裕・機器半分予算・32GB以上Gurobi制限を引き続き適用。根LP前の停止なのでB&B nodefileによる解決とはしない。
+- 根拠: https://docs.gurobi.com/projects/optimizer/en/current/concepts/parameters/guidelines.html （メモリ制約時のdual simplex）。
+- 検証: weekly_results_execution / weekly_operator / machine_memory_budget / cluster_memory_headroom / vehicle_day_bound の非native関連63件通過、native12件は除外（共有枠を無断取得しない）。公開要求型→実効threads/profile→nativeメモリclampを回帰確認。自己レビューでは今回差分のP0/P1残件なし。独立レビュー・週次完走・物理/会計監査は未確認。
+- 再実行は別output dual_memory_20260926、同じqueue/license authorityで新しい固定版を配置後、新規2月Prepareから開始する。通常監視はスクリプト、成功/失敗の一回通知。全12週完了とはしない。

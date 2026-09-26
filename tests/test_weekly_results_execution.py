@@ -19,6 +19,31 @@ def test_weekly_budget_keeps_build_and_both_solver_stages():
         validate_budget(controls)
 
 
+def test_weekly_root_uses_simplex_without_enlarging_machine_budget(monkeypatch):
+    from bff.routers.optimization import RunOptimizationBody, _resolve_runtime_controls
+    from src.optimization.common.problem import OptimizationConfig
+    from src.optimization.milp.solver_adapter import _configured_stage1_gurobi_search_controls
+    from src.solver_memory import ENV_KEY, apply_memory_limits
+
+    request_body = RunOptimizationBody(**request("prepared-example"))
+    _, _, threads = _resolve_runtime_controls(
+        requested_stage1_best_obj_stop_enabled=False,
+        requested_gurobi_threads=request_body.gurobi_threads,
+        enforce_interactive_runtime_controls=True,
+    )
+    assert threads == request_body.gurobi_threads == 4
+    controls = _configured_stage1_gurobi_search_controls(OptimizationConfig(
+        stage1_gurobi_search_profile=request_body.stage1_gurobi_search_profile))
+    assert controls["root_method"] == 1
+    assert controls["no_rel_heur_work"] == 0
+    monkeypatch.setenv(ENV_KEY, "16")
+    model = SimpleNamespace(Params=SimpleNamespace(
+        MemLimit=float("inf"), SoftMemLimit=controls["soft_mem_limit_gb"]))
+    apply_memory_limits(model)
+    assert model.Params.MemLimit == pytest.approx(14 * 1024**3 / 1e9)
+    assert model.Params.SoftMemLimit == pytest.approx(12.6 * 1024**3 / 1e9)
+
+
 @pytest.mark.parametrize("paths", [{"a": ["t1"]}, {"a": ["t1", "t2"], "b": ["t1"]}, {"a": ["t1", "t3"]}])
 def test_weekly_reuse_rejects_missing_duplicate_or_invented_trips(paths):
     with pytest.raises(ValueError, match="exactly once"):
