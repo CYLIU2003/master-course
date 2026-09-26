@@ -757,6 +757,8 @@ class FeasibilityChecker:
                         departures.setdefault((event.start_min-start_min)//step, []).append(trips[event.trip_id])
                         served_days.add((event.start_min - start_min) // 1440)
                 target = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
+                daily_target = (maximum if (problem.metadata or {}).get("bev_soc_deadline_mode")
+                                == "next_morning_operational_max" else target)
                 daily_target_slots = {slot: day for day, slot in fixed_path_soc_target_slots(problem, events).items()}
                 for slot in slots:
                     for trip in departures.get(slot, ()):
@@ -771,10 +773,10 @@ class FeasibilityChecker:
                     soc += kw * step / 60.0 * 0.95 - loads.energy_kwh.get((vid, slot), 0.0)
                     if not minimum - 1e-6 <= soc <= maximum + 1e-6:
                         errors.append(f"[SOC] vehicle={vid} slot={slot} SOC={soc} bounds={minimum}..{maximum}")
-                    if target is not None and slot in daily_target_slots and soc < target - 1e-6:
+                    if daily_target is not None and slot in daily_target_slots and soc < daily_target - 1e-6:
                         errors.append(
                             f"[SOC_TARGET] vehicle={vid} service_day={daily_target_slots[slot]} "
-                            f"slot={slot} SOC={soc} target={target}"
+                            f"slot={slot} SOC={soc} target={daily_target}"
                         )
                 if target is not None and soc < target - 1e-6:
                     errors.append(f"[SOC_TARGET] vehicle={vid} terminal={soc} target={target}")

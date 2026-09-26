@@ -286,6 +286,7 @@ def test_daily_return_energy_is_spent_before_night_charging_and_all_days_carry()
 
 def test_next_morning_energy_horizon_checks_paid_final_charge_and_each_deadline():
     problem = daily_problem()
+    problem = replace(problem, vehicles=tuple(replace(v, maximum_soc_kwh=80.0) for v in problem.vehicles))
     price = problem.price_slots[-1]
     asset = problem.depot_energy_assets["DEPOT"]
     problem = replace(
@@ -328,12 +329,17 @@ def test_next_morning_energy_horizon_checks_paid_final_charge_and_each_deadline(
     assert any("service_day=0" in error for error in errors), errors
 
 
-def test_next_morning_phase3_daily_return_native_stage2_preserves_deadlines():
+@pytest.mark.parametrize("window_target", [None, 30.0, 80.0])
+def test_next_morning_phase3_daily_return_native_stage2_preserves_deadlines(window_target):
+    from src.gurobi_session import current_session
+    if current_session() is None:
+        pytest.skip("Native regression requires shared license admission")
     pytest.importorskip("gurobipy")
     from src.optimization.common.problem import OptimizationMode
     from src.optimization.engine import OptimizationEngine
 
     problem = daily_problem()
+    problem = replace(problem, vehicles=tuple(replace(v, maximum_soc_kwh=80.0) for v in problem.vehicles))
     asset = problem.depot_energy_assets["DEPOT"]
     problem = replace(
         problem,
@@ -350,6 +356,11 @@ def test_next_morning_phase3_daily_return_native_stage2_preserves_deadlines():
                   "max_start_fragments_per_vehicle": 100,
                   "max_end_fragments_per_vehicle": 100},
     )
+    # The rolling terminal reference must not replace a daily departure target.
+    problem = replace(problem, metadata={**problem.metadata,
+        "bev_terminal_soc_target_kwh_by_vehicle": {"bev-1": window_target} if window_target is not None else {},
+        "bev_terminal_soc_policy": "minimum_only" if window_target is None else "fixed_target",
+    })
     result = OptimizationEngine().solve(problem, OptimizationConfig(
         mode=OptimizationMode.MILP, phase="phase3_two_stage",
         time_limit_sec=20, stage1_time_limit_sec=10,
@@ -492,3 +503,23 @@ def test_48_hourly_prefixes_preserve_state_and_reject_changed_location():
     stitched = replace(plan,charging_slots=tuple(executed_charging))
     physical = validate_physical_event_schedule(problem=problem,serialized_result=ResultSerializer.serialize_plan(stitched))
     assert physical["accepted"],physical["violations"]
+
+
+@pytest.mark.parametrize("window_target", [None, 30.0, 80.0])
+def test_next_morning_validator_keeps_operating_max_with_lower_window_target(window_target):
+    problem = daily_problem()
+    problem = replace(problem, vehicles=tuple(replace(v, maximum_soc_kwh=80.0) for v in problem.vehicles))
+    problem = replace(problem, metadata={**problem.metadata,
+        "bev_soc_deadline_mode": "next_morning_operational_max",
+        "post_return_target_slots": [23, 47],
+        "bev_terminal_soc_target_kwh_by_vehicle": {"bev-1": window_target} if window_target is not None else {},
+        "bev_terminal_soc_policy": "minimum_only" if window_target is None else "fixed_target",
+    })
+    # Start at 80, use 37 each day and restore only 27: daily state is 70/60.
+    plan = replace(_fixed_plan(problem), charging_slots=tuple(
+        ChargingSlot("bev-1", slot, "chg-1", 27 / .95, charging_depot_id="DEPOT")
+        for slot in (23, 47)
+    ))
+    errors = FeasibilityChecker()._evaluate_soc(problem, plan)
+    for day in (0, 1):
+        assert any(f"service_day={day}" in error and "target=80" in error for error in errors), errors

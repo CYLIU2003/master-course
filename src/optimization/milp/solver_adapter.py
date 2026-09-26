@@ -22859,31 +22859,6 @@ class GurobiMILPAdapter:
                     terminal_soc_expr >= target_kwh,
                     name=f"terminal_soc__{vehicle_id}__target",
                 )
-                # Stage 1 guards each serviced day's next-morning SOC.  The
-                # fixed-assignment charging solve must preserve those same
-                # deadlines; a final-horizon target alone is insufficient.
-                if (problem.metadata or {}).get("bev_soc_deadline_mode") == "next_morning_operational_max":
-                    for day_idx in range(int(problem.scenario.planning_days)):
-                        if (vehicle_id, day_idx) not in final_trip_by_vehicle_day:
-                            continue
-                        target_slot = fixed_soc_deadlines.get(vehicle_id, {}).get(
-                            day_idx, post_return_target_slot_index(problem, day_idx))
-                        if target_slot not in slot_indices:
-                            continue
-                        target_soc_expr = _vehicle_soc_transition_kwh(
-                            s_var[(vehicle_id, target_slot)],
-                            charge_power_kw=c_var[(vehicle_id, target_slot)],
-                            timestep_h=timestep_h,
-                            charge_efficiency=0.95,
-                            drive_energy_kwh=max(
-                                float(trip_load_by_vehicle_slot.get((vehicle_id, target_slot), 0.0) or 0.0),
-                                0.0,
-                            ),
-                        )
-                        stage2.addConstr(
-                            target_soc_expr >= target_kwh,
-                            name=f"soc_next_morning__{vehicle_id}__day_{day_idx}",
-                        )
                 terminal_policy = normalize_bev_terminal_soc_policy(
                     problem.metadata.get("bev_terminal_soc_policy"),
                     has_explicit_target=(
@@ -22913,6 +22888,34 @@ class GurobiMILPAdapter:
                     stage2.addConstr(
                         terminal_soc_expr <= target_kwh + tolerance_kwh,
                         name=f"terminal_soc__{vehicle_id}__return_to_initial_upper",
+                    )
+            # Stage 1 guards each serviced day's next-morning SOC.  The
+            # fixed-assignment charging solve must preserve those same
+            # deadlines; a final-horizon target alone is insufficient.
+            if (problem.metadata or {}).get("bev_soc_deadline_mode") == "next_morning_operational_max":
+                for day_idx in range(int(problem.scenario.planning_days)):
+                    if (vehicle_id, day_idx) not in final_trip_by_vehicle_day:
+                        continue
+                    target_slot = fixed_soc_deadlines.get(vehicle_id, {}).get(
+                        day_idx, post_return_target_slot_index(problem, day_idx))
+                    if target_slot not in slot_indices:
+                        continue
+                    target_soc_expr = _vehicle_soc_transition_kwh(
+                        s_var[(vehicle_id, target_slot)],
+                        charge_power_kw=c_var[(vehicle_id, target_slot)],
+                        timestep_h=timestep_h,
+                        charge_efficiency=0.95,
+                        drive_energy_kwh=max(
+                            float(trip_load_by_vehicle_slot.get((vehicle_id, target_slot), 0.0) or 0.0),
+                            0.0,
+                        ),
+                    )
+                    stage2.addConstr(
+                        # A rolling window's terminal reference may be lower
+                        # than the operating maximum. It must never lower a
+                        # serviced day's next-morning departure requirement.
+                        target_soc_expr >= soc_max,
+                        name=f"soc_next_morning__{vehicle_id}__day_{day_idx}",
                     )
             for pos in range(len(slot_indices) - 1):
                 slot_idx = slot_indices[pos]
