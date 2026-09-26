@@ -20,6 +20,7 @@ from src.dispatch.daily_return import checked_deadhead_minutes, connection_deadh
 from src.optimization.common.vehicle_timeline import build_vehicle_timeline, connection_energy_events, fixed_path_slot_loads, fixed_path_soc_target_slots
 from src.dispatch.route_band import duty_route_band_ids, fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
+from src.gurobi_session import scoped_gurobi_models
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import (
     DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH,
@@ -22139,6 +22140,7 @@ class GurobiMILPAdapter:
             stage1_runtime_sec=runtime, **stage1_evidence,
         )
 
+    @scoped_gurobi_models()
     def _solve_thesis_stage2_charging_dispatch(
         self,
         problem: CanonicalOptimizationProblem,

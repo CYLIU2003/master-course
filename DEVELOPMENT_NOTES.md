@@ -11138,3 +11138,12 @@ Python関連115 passed/1 skipped（native統合は別確認）、追加の並列
 - 自己レビュー: 当該差分のP0/P1残件なし。独立レビュー・修正版での実機メモリ削減は未検証。進行中のc78d5c0dはそのまま継続し、今回の修正を同版の成果としない。現行の30秒監視・一回の失敗/完了通知を継続する。
 - 監視上の注意: SSH側PowerShellが32bitであり、Get-ProcessのWorkingSet64等が約4GiBに丸められる場合を観測した。CIM WorkingSetSizeで当該プロセス約11.11GiB、pagefile usage約13.62GiBを確認。製品の空きRAM/commit照会は別で、今回この読取試行だけを理由に製品バグとは断定しない。
 - 仕様出典: https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parameter:SoftMemLimit 、https://docs.gurobi.com/projects/optimizer/en/current/reference/python/model.html#Model.dispose 。
+
+
+## 2026-09-26 17:05 毎時モデル蓄積によるメモリ停止を修正
+
+- c78d5c0d、attempt 0e104b8a-1f08-5586-827a-10a4a4b366a8 は15/174窓の可行結果保存後、step_15_1500でmemory_limit / Solution count 0。週完了ではない。回収原本のchain summaryとnative logのhashをcontroller記録と照合し、failure-diagnosis.jsonに保存。17:00の子機CIM照会でsolver18460とwrapper16808が終了済み。失敗メール1通、実ID 1a0dcb8e1b3a4da4を保存し送信済み検索一致。
+- 実経路: weekly_campaign → frozen Prepare/cluster runner → BFF guarded_executionの共通managed_gurobi_session → 前日二段階 → rolling_chain → 毎時固定配車Stage2。GurobiFacade.Modelがtrack_modelで共通session.modelsへ登録し、従来は全週終了まで参照を保持していた。今回18モデル作成が記録され、15窓目は約5秒でメモリ停止。運行不可の証明ではない。
+- scoped_gurobi_modelsでStage2呼出し単位に新規モデルを所有し、通常return・解なしreturn・例外の各出口で診断/値抽出後にdisposeする。既存の候補比較用Stage1や共有Env/ライセンス予約は解放しない。standalone呼出しも同じ処理。001c1038の単一候補Stage1→Stage2解放と併用。物理条件、費用式、時間枠、16GiB機器予算、native hard14GiB/soft12.6GiB、threads4、Method1は変更しない。
+- 検証: モデル寿命/Stage1解放/nativeメモリ値/機器予算26件、共有ライセンス/モデル寿命22件通過（重複あり、合算不可）。週次実行/成果物保存順序18件通過。174回の実Stage2入口で例外経路と解放・外側モデル保持を検査し、別テストで値の抽出後returnと入れ子scopeを確認。大規模nativeピーク減少・全174窓完走は再実行で検証する。誤ったテストファイル名を指定した1回は0件実行で、合格数に含めない。
+- 自己レビュー: 共通sessionに完了Stage2が蓄積するP1を修正。資源管理を使う実経路に適用し、許容メモリ増量や物理guard削除で通していない。独立レビュー・正式研究採用は未完了。配布・起動の実績は後続記録へ分ける。

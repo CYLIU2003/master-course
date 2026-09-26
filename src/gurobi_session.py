@@ -61,6 +61,7 @@ class GurobiSession:
 
 
 _session: ContextVar[GurobiSession | None] = ContextVar("gurobi_session", default=None)
+_model_scope: ContextVar[list[Any] | None] = ContextVar("gurobi_model_scope", default=None)
 
 
 def current_session() -> GurobiSession | None:
@@ -87,6 +88,9 @@ def track_model(model):
     session = current_session()
     if session is not None and all(item is not model for item in session.models):
         session.models.append(model)
+    scope = _model_scope.get()
+    if scope is not None and all(item is not model for item in scope):
+        scope.append(model)
     return model
 
 
@@ -96,3 +100,25 @@ def dispose_model(model: Any) -> None:
     session = current_session()
     if session is not None:
         session.models[:] = [item for item in session.models if item is not model]
+    scope = _model_scope.get()
+    if scope is not None:
+        scope[:] = [item for item in scope if item is not model]
+
+
+@contextmanager
+def scoped_gurobi_models():
+    """Dispose models created by one solve after its result/diagnostics are copied.
+
+    Keep the admitted Env, license reservation, and any enclosing candidate
+    models alive. Also bound model lifetime for standalone adapter calls.
+    """
+    owned: list[Any] = []
+    token = _model_scope.set(owned)
+    try:
+        yield
+    finally:
+        try:
+            for model in reversed(tuple(owned)):
+                dispose_model(model)
+        finally:
+            _model_scope.reset(token)
