@@ -39,3 +39,64 @@ def test_resource_uncertainty_and_shortage_refuse_native_work(change, reason):
 
 def test_unknown_cost_is_not_serialized_as_zero():
     assert json_value({"cost": math.inf, "nested": (math.nan,)}) == {"cost": "inf", "nested": ["nan"]}
+
+
+@pytest.mark.parametrize("candidate_text,expected_calls", [("same constraints", 2), ("changed bounds", 1)])
+def test_native_mismatch_stops_before_candidate_optimize(monkeypatch, tmp_path, candidate_text, expected_calls):
+    from dataclasses import dataclass, field
+    from pathlib import Path
+    import sys
+    from types import SimpleNamespace
+    from tools.research.run_charging_replay_pair import solve_profile
+    from src.optimization.engine import OptimizationEngine
+    from src.optimization.milp import solver_adapter
+
+    @dataclass
+    class Problem:
+        metadata: dict = field(default_factory=dict)
+
+    @dataclass
+    class Result:
+        feasible: bool = True
+        solver_status: str = "optimal"
+        objective_value: float = 10
+        infeasibility_reasons: tuple = ()
+
+    class Model:
+        NumVars = 2
+        NumConstrs = 3
+        NumNZs = 4
+        Status = 2
+        SolCount = 1
+        Runtime = .1
+        MaxMemUsed = .01
+        ObjVal = ObjBound = 10
+        MIPGap = 0
+
+        def update(self):
+            pass
+
+        def write(self, path):
+            Path(path).write_text(self.content)
+
+    calls = []
+    monkeypatch.setitem(sys.modules, "gurobipy", SimpleNamespace(GurobiError=RuntimeError))
+    monkeypatch.setattr(solver_adapter, "optimize_model", lambda *a, **k: calls.append("optimize"))
+
+    def solve(self, problem, config):
+        model = Model()
+        model.content = "same constraints" if config.stage2_charging_start_policy == "none" else candidate_text
+        solver_adapter.optimize_model(model)
+        return Result()
+
+    monkeypatch.setattr(OptimizationEngine, "solve", solve)
+    baseline = solve_profile(Problem(), SimpleNamespace(stage2_charging_start_policy="none"), tmp_path / "none")
+    if candidate_text != "same constraints":
+        with pytest.raises(ValueError, match="Native MPS differs"):
+            solve_profile(Problem(), SimpleNamespace(stage2_charging_start_policy="candidate"),
+                          tmp_path / "candidate", baseline["native_models"])
+    else:
+        candidate = solve_profile(Problem(), SimpleNamespace(stage2_charging_start_policy="candidate"),
+                                 tmp_path / "candidate", baseline["native_models"])
+        assert candidate["native_models"][0]["mps_sha256"] == baseline["native_models"][0]["mps_sha256"]
+    assert len(calls) == expected_calls

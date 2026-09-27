@@ -11462,3 +11462,12 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 既存authorityと同じqueueのLocalResources/LicenseBrokerを使用。32GB以上・active・現在空きRAM/commit・OS予備をresource_fitで検査、予約後も再確認。共有2枠と330秒解放待ちを維持。別ライセンスpoolは作らない。通常週と同じ16GiBを取れない親機では、同一8GiB枠の小窓診断を別条件として明記できる。
 - Claude Sonnetの読取レビューで予約後・try前の初期化例外による解放漏れを修正。並行claimは既存トランザクションで防ぎ、実RAMはclaim後再確認。別queueを使う助言は共有ライセンス迂回になるため不採用。releaseの例外は伝播し、未解放を黙認しない。レビュー原文output/charging_start_review_20260927/pair-executor-review.json。
 - 関連46テスト通過（資源拒否・事前入力再生・初期候補）。これは実測の前段。実求解の費用・可行性・速度の結果は別途state.json/native logに保存し、単体テストから速度向上を主張しない。
+
+
+## 2026-09-27 充電窓比較のAI不要集計と実行証拠
+
+- 3e6a2678のclean main checkoutで3月step61を実求解開始。親機空き16.13GiB、OS予約6GiB、診断8GiB/4threads。共有2枠のうち11月と診断が各1枠。親機は受理後に元のdrainingへ戻し、新規割当を抑止。既存11月の試行・予約・コードは不変。原実行のNumericFocus0/Presolve0/Method0/MIPFocus1/seed42/4threadsをnative logで照合。PCとメモリ予算は原実行と異なる診断条件で、原週との直接速度比較ではない。
+- 実行記録output/charging_start_review_20260927/march61-native-pair。モデル不一致でcandidate optimizeを呼ばない回帰2件を追加。稼働checkoutは変更せず、追加テストは開発checkoutのみ。
+- tools/research/summarize_charging_replay_pair.pyを追加。終端・clean SHA・MPS原本hash・結果/summaryを照合し、初期候補の可否と時間/目的値差を求解せず集計。高速でも目的値が悪ければその符号を残す。未完了を報告完了にしない。単一窓・同一モデルの可行候補比較であり、週間実行会計・統合最適性・自動採用ではない。
+- Claudeの集計レビューで打切り解の明示を追加。gap未達なら可行解比較も拒否すべきとの助言は、ユーザーの研究方針と異なるため不採用。終了状態/gapを別々に保存し、可行性未確認と数学的不可行を区別する。自己レビューではMaxMemUsedが同一Envの累積ピークであると公式仕様を照合、per-policyメモリ節約には使わない名称へ修正。仕様: https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/model.html#maxmemused
+- 関連14テスト通過。実求解比較はまだ進行中であり、速度改善の結論は保留。

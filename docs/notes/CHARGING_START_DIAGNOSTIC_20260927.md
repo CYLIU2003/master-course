@@ -76,3 +76,12 @@ C:/master-course/output/cluster-deployment/controller-venv/Scripts/python.exe -X
 ```
 
 この8GiBは両条件共通の診断予算で、過去の16GiB週と同条件の再現という意味ではない。state.jsonに段階・資源判定・比較結果、各policy配下に元の結果構造・native log・MPSとhashを残す。単一窓のエンジン可行判定であり、独立した週間実行監査ではない。MPS一致だけでも実行パラメータや初期候補の採用を保証しないため、native log/設定/結果も確認する。
+
+
+終了後の集計（求解・再投入なし）:
+
+```powershell
+C:/master-course/output/cluster-deployment/controller-venv/Scripts/python.exe -X utf8 tools/research/summarize_charging_replay_pair.py C:/master-course/output/charging_start_review_20260927/march61-native-pair --output C:/master-course/output/charging_start_review_20260927/march61-comparison.json
+```
+
+未完了、モデルhash不一致、結果とsummary不一致は拒否。目的値差は得られた候補同士の数値差で、週次実績費用削減ではない。終了理由/gap・可行性を別表示し、短いだけで候補を自動採用しない。Gurobi MaxMemUsedは共有Envの累積ピークであり、後から解いた候補の単独ピークとは扱わない（[公式定義](https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/model.html#maxmemused)）。
