@@ -11498,3 +11498,11 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 工程別CSV/JSON・日本語図PNG/PDFをoutput/charging_start_review_20260927/monthly-timings-v2へ保存し図の実表示確認。11月・queue・Prepare・前日計画・実行再現・回収・図表時間は対象外。月/PC差があるためPC性能や手法速度比較ではない。
 - 初回集計はraw配下のcanonicalコピーも候補に入り2件で停止。単一の最終executed_day_accountingからprefixを選ぶ修正で全件照合通過。失敗側の空ディレクトリは残した。測定スクリプトも同親outputに保存。
 - 診断50260755は親機PID69672で継続。8GiB/4threads、共有2枠の残り1枠を使用。ローカルは受理後drainingに戻し追加投入なし。11月の同じ試行・固定f524eca2を保持。
+
+
+## 2026-09-27 22:01 JST：下界重視の探索で同じ窓の短縮を実測
+
+- 固定50260755の3月step61で、MIPFocus1→3のみ変更。native600.043→42.301秒、呼出633.393→75.164秒、同じ費用（差約3e-9円）、gap1.009308→0.629086%。同一MPS/他native設定と実行前後clean SHAを照合。単一窓の証拠であり全週の高速化率ではない。
+- 両案engine可行、同じ元ZIP/直前実状態/Prepared設備に対するBESS96区間検算通過。物理/会計/週間独立監査の全面通過とは言わない。結果集計・両BESS検査は起動スクリプトで自動実行しterminal statusを保存。
+- Claudeへ実測値を提示。一般化防止と通常窓検査は採用。中央値からtime_limitを推定、330秒がペア内待ち、週の窓目的値合算、といった誤読は明示的に不採用。output/charging_start_review_20260927/bound-focus-review-decisions.md参照。
+- 3月step12の通常窓を同じ固定版・8GiBで予約解放待ち後に診断するスクリプトを起動。11月は22:04 JST時点で同一PID8976、99/174保存・全99可行、最大13.16GiB。正式版の既定値変更・進行週の再投入はなし。

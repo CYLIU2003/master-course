@@ -108,3 +108,21 @@ Claudeの提案はMIPFocus3。ただし「Startが劣る」「改善する可能
 1〜10月・12月の1917窓を照合した。時間切れ67窓（3.50%）がnative求解時間の56.34%を占める。呼出合計88502.91秒のうちnative71347.26秒（80.62%）、それ以外17155.65秒。11月途中のnative約97%だけを全月へ外挿しない。6〜8月は時間切れ0で、構築/抽出/検査も相対的に大きい。
 
 測定元は `output/charging_start_review_20260927/monthly-timings-v2/{summary.json,comparison.csv,README.md}`、再現スクリプトは同親ディレクトリの `collect_monthly_timings.py`。各窓のsummary/result/native logを回収ZIP SHAおよびmember hashと照合した。求解打切りと物理失敗は別。queue、Prepare、前日計画、実行再現、回収・図表はこの時間に含まず、月・PC差があるのでPC速度比較にもしない。
+
+
+## 同じモデルでの探索方針比較：3月step61
+
+固定50260755、同じ親機・4threads・予算8GiB、同一MPS SHA b7405a52…、MIPFocusだけ1対3。実行前後clean SHA一致。
+
+|観測|focus1|focus3|
+|---|---:|---:|
+|native求解 秒|600.043|42.301|
+|engine呼出 秒|633.393|75.164|
+|native費用 円|157588.716155|157588.716155|
+|native下界 円|155998.160626|156597.347884|
+|native gap|1.009308%|0.629086%|
+|終了理由|time_limit|指定gap1%内で終了|
+
+この窓では呼出558.229秒の短縮。費用差は約3e-9円で数値誤差、経済的削減ではない。両案engine可行・BESS96区間独立計算通過。BESS初期1889.439768→終端2920.230289kWh。車両/会計/週全体の独立監査を代替しない。証拠 `output/charging_start_review_20260927/march61-bound-focus/comparison.json`。
+
+標準設定へはまだ適用していない。通常窓step12の同条件比較を、先のEnv終了後330秒の解放待ちを守ってスクリプトで実行する。現在の11月の固定版・予約・入力はそのまま。Claude実測レビューの「一般化しない」は採用し、誤読（中央値から時間切れを推測、ペア内部で330秒待つ、窓目的値を週次加算）は採用しない。採否記録は `bound-focus-review-decisions.md`。
