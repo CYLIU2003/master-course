@@ -85,3 +85,6 @@ C:/master-course/output/cluster-deployment/controller-venv/Scripts/python.exe -X
 ```
 
 未完了、モデルhash不一致、結果とsummary不一致は拒否。目的値差は得られた候補同士の数値差で、週次実績費用削減ではない。終了理由/gap・可行性を別表示し、短いだけで候補を自動採用しない。Gurobi MaxMemUsedは共有Envの累積ピークであり、後から解いた候補の単独ピークとは扱わない（[公式定義](https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/model.html#maxmemused)）。
+
+
+保存提案のBESSだけを再計算する入口は `tools/research/audit_charging_replay_bess.py --help`。`--archive`へ監査済み元ZIP、`--preflight`へ診断のpreflight.json、`--result`へ各policy/result.json、`--output`へ新しい検査JSONを指定する。元ZIP/hashから設備の効率と制限・直前の実残量を読み、対象窓の96区間を検算する。前日初期在庫に戻さない。許容差は1e-6kWh。これは車両SOC・運行・PV量・会計・終端目標の独立監査を代替しない。

@@ -11471,3 +11471,11 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - tools/research/summarize_charging_replay_pair.pyを追加。終端・clean SHA・MPS原本hash・結果/summaryを照合し、初期候補の可否と時間/目的値差を求解せず集計。高速でも目的値が悪ければその符号を残す。未完了を報告完了にしない。単一窓・同一モデルの可行候補比較であり、週間実行会計・統合最適性・自動採用ではない。
 - Claudeの集計レビューで打切り解の明示を追加。gap未達なら可行解比較も拒否すべきとの助言は、ユーザーの研究方針と異なるため不採用。終了状態/gapを別々に保存し、可行性未確認と数学的不可行を区別する。自己レビューではMaxMemUsedが同一Envの累積ピークであると公式仕様を照合、per-policyメモリ節約には使わない名称へ修正。仕様: https://docs.gurobi.com/projects/optimizer/en/current/reference/attributes/model.html#maxmemused
 - 関連14テスト通過。実求解比較はまだ進行中であり、速度改善の結論は保留。
+
+
+## 2026-09-27 保存充電窓のBESS収支再検算
+
+- audit-cost-modelの単位・状態式確認に従い、`audit_charging_replay_bess.py`で保存提案のBESS収支を原本から再計算する入口を追加。監査済み回収ZIP/hash、実効設備の効率・SOC/電力限界・系統充電許可、直前保存境界を使用。元の初期3000kWhへリセットしない。対象窓の時刻も照合する。旧every-prefix在庫保護や終端復元は導入しない。
+- 基準側96区間、初期1889.439767588→終端2920.230288698kWh、最大収支残差2.13162820728e-13kWh・連続性残差1.36424205266e-12kWh。図表用の丸め値ではなく保存済みフローを照合。検査範囲は提案BESSのみで、車両SOC・便・PV供給可能量・会計・終端目標・週間実行監査は別と明記。
+- 関連8テスト通過。Claude Sonnetの読取レビューはこの範囲のP0/P1なし。出力は新規ファイル専用で、既存検査原本を上書きしない。未完ファイルが残れば新出力名で再検算する。レビュー原文output/charging_start_review_20260927/pair-bess-audit-review.json。
+- 実求解の比較は3e6a2678で進行中、candidate側のMPS一致と初期候補提出を確認。最初のMIP startは新incumbentを生成していない。最終結果前に有効化・高速化を宣言しない。
