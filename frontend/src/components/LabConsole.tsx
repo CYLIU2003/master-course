@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api";
+import { api, type Overview } from "../api";
 import { discovery, type Discovery } from "./ControllerRecovery";
 import type { ClusterWorkers, WorkerNode } from "./WorkerNodes";
 
@@ -73,14 +73,21 @@ function FleetInventory({ port, current, origin, currentUnconfirmed }: { port: n
   </section>;
 }
 
-export default function LabConsole({ origin = "", readOnly = false, controllerSha, workers, scenarioId, workersUnconfirmed = false }: {
+export default function LabConsole({ origin = "", readOnly = false, controllerSha, workers, scenarioId, workersUnconfirmed = false, intakeOnly = false, resultsOnly = false, onSelectScenario }: {
   origin?: string; readOnly?: boolean; controllerSha?: string; workers?: ClusterWorkers; scenarioId?: string; workersUnconfirmed?: boolean;
+  intakeOnly?: boolean; resultsOnly?: boolean; onSelectScenario?: (id: string) => void;
 }) {
   const client = useQueryClient();
   const key = ["lab-console", origin, controllerSha];
   const [form, setForm] = useState<RequestForm>(blankRequest);
   const [fileError, setFileError] = useState("");
   const [preview, setPreview] = useState<{ revision: string; src: string } | null>(null);
+  const reviewScenario = useMutation({ mutationFn: async (id: string) => {
+    if (readOnly || !onSelectScenario) throw new Error("この画面ではシナリオを選択できません");
+    const overview = await api<Overview>(`/desktop/scenarios/${encodeURIComponent(id)}`, { cache: "no-store" }, origin);
+    if (overview.meta?.id !== id) throw new Error("依頼のシナリオがこのサーバーに登録されていません。入力の受領・登録を確認してください。");
+    return id;
+  }, onSuccess: id => onSelectScenario?.(id) });
   const query = useQuery({ queryKey: key, queryFn: async () => {
     const info = await discovery(origin);
     if (!info) return null;
@@ -110,8 +117,8 @@ export default function LabConsole({ origin = "", readOnly = false, controllerSh
   const report = data?.report && (!scenarioId || data.report.parent === scenarioId) ? data.report : null;
   const disabled = readOnly || query.isError || !data || submit.isPending;
   return <>
-    {data?.inventory_port && <FleetInventory port={data.inventory_port} current={workers} origin={origin} currentUnconfirmed={workersUnconfirmed} />}
-    {report && <section id="lab-results" className="panel" aria-label="検算済みの月別比較">
+    {!intakeOnly && !resultsOnly && data?.inventory_port && <FleetInventory port={data.inventory_port} current={workers} origin={origin} currentUnconfirmed={workersUnconfirmed} />}
+    {!intakeOnly && report && <section id="lab-results" className="panel" aria-label="検算済みの月別比較">
       <h2>検算済みの月別比較：{report.included} / {report.declared}週</h2>
       {query.isError && <p role="alert">集計の現在状態は未確認です。以下は前回取得した結果です。</p>}
       <p>{report.complete ? "比較対象の集計が揃いました。" : "途中結果です。未完了週は費用比較に含めません。"} 正式研究採用・統合最適性とは別判定です。</p>
@@ -124,7 +131,7 @@ export default function LabConsole({ origin = "", readOnly = false, controllerSh
       {preview?.revision === report.revision && <img src={preview.src} alt="検算済み代表週の費用比較" style={{ maxWidth: "100%" }} />}
       {download.isError && <p role="alert">{download.error.message}</p>}
     </section>}
-    <section id="lab-intake" className="panel" aria-label="研究室の計算依頼受付">
+    {!resultsOnly && <section id="lab-intake" className="panel" aria-label="研究室の計算依頼受付">
       <h2>研究室の計算依頼受付</h2>
       <p>他のメンバーの依頼を親機に保存します。受付は求解の投入ではありません。入力・実行環境・RAM・利用者本人のライセンスを確認後、対応済みのシナリオは既存の「実行」画面からPrepareして投入します。</p>
       <p>任意のPython・他ソルバーの依頼は要対応として受け付けます。ファイル本体の転送やコード実行は行いません。APIキー・秘密鍵・ライセンスキーは入力しないでください。</p>
@@ -165,14 +172,19 @@ export default function LabConsole({ origin = "", readOnly = false, controllerSh
       </details>
       {readOnly && <p>閲覧専用です。<a href={`${origin}/#cluster`}>対象の計算画面を開く</a>と受付できます。</p>}
       {fileError && <p role="alert">{fileError}</p>}{submit.isError && <p role="alert">{submit.error.message}</p>}
+      {reviewScenario.isError && <p role="alert">シナリオを開けません：{reviewScenario.error.message}</p>}
       {submit.isSuccess && <p role="status">受付簿へ保存しました。実行確認待ちです。求解ジョブは作成していません。</p>}
       <p>受付済み {data?.requests.length ?? "未確認"}件</p>
       {data?.requests.map(entry => <details key={entry.request.request_id}><summary>{entry.request.title} ／ {entry.request.requester} ／ 実行確認待ち</summary>
         <p>{entry.request.project} · {entry.request.solver} · {entry.request.memory_gib} GiB · {entry.request.threads} threads · {entry.request.time_limit_minutes}分</p>
         <p>{entry.request.instructions}</p><p>ライセンス申告：{entry.request.license_basis}（未検証）</p>
+        {onSelectScenario && entry.request.workload === "thesis_scenario" && entry.request.scenario_id && <button disabled={disabled || reviewScenario.isPending}
+          onClick={() => reviewScenario.mutate(entry.request.scenario_id)}>この依頼のシナリオを確認（まだ開始しません）</button>}
+        {entry.request.workload === "thesis_scenario" && !entry.request.scenario_id && <p>シナリオが未登録です。入力を受領し、このサーバーにシナリオを登録してから実行対象を選択してください。</p>}
+        {entry.request.workload !== "thesis_scenario" && <p>この形式の実行経路は未対応です。受付だけでは計算は開始されません。</p>}
         <p>受付：{entry.received_at} · ID {entry.request.request_id}</p><p>依頼hash：{entry.sha256}</p>
         <button onClick={() => saveBlob(new Blob([JSON.stringify(entry.request, null, 2)], { type: "application/json" }), `lab-request-${entry.request.request_id}.json`)}>この依頼を保存</button>
       </details>)}
-    </section>
+    </section>}
   </>;
 }

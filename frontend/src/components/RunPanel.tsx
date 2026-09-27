@@ -290,7 +290,8 @@ export default function RunPanel({
         <h2>入力の準備と計算</h2>
         {noGurobi && <p className="warning">Gurobi非依存ALNS：単日・BESSなしの診断専用です。正式研究・時間別rolling・再最適化には使えません。手法をALNSに設定し、保存してから入力を準備してください。</p>}
         <p className="subtle">
-          入力準備では、このシナリオの派生データを更新します。実行中はアプリを開いたままにしてください。
+          入力準備は保存済みの時刻表と設定を使用します。ODPTの再取得は行いません。
+          このPCで通常実行する間はアプリを開いてください。分散実行はworkerの受理後、画面を閉じても継続します。
         </p>
         <form
           onSubmit={(e) => {

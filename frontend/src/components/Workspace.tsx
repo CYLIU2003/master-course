@@ -12,7 +12,7 @@ import {
 } from "../api";
 import { ErrorBox } from "./common";
 import Results from "./Results";
-import RunPanel from "./RunPanel";
+import ExecutionWorkspace from "./ExecutionWorkspace";
 import PeriodPlans from "./PeriodPlans";
 import SettingsPanel from "./SettingsPanel";
 import EntityManager from "./EntityManager";
@@ -28,11 +28,15 @@ export default function Workspace({
   page,
   onSelect,
   onDirty,
+  onNavigate,
+  onChoose,
 }: {
   id: string;
   page: string;
   onSelect: (id: string) => void;
   onDirty: (dirty: boolean) => void;
+  onNavigate: (page: string) => void;
+  onChoose: () => void;
 }) {
   const client = useQueryClient();
   const [visited, setVisited] = useState(new Set([page]));
@@ -277,11 +281,14 @@ export default function Workspace({
           {visited.has("periods") && <div hidden={page !== "periods"}><PeriodPlans id={id} onDirty={periodsDirty} /></div>}
           {visited.has("run") && (
             <div hidden={page !== "run"}>
-              <RunPanel
+              <ExecutionWorkspace
                 id={id}
                 data={data}
                 revision={revision}
                 blocked={locked}
+                onNavigate={onNavigate}
+                onChoose={onChoose}
+                onSelect={onSelect}
               />
             </div>
           )}

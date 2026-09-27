@@ -28,6 +28,7 @@ import { api, post, put, type Page, type Scenario } from "./api";
 import { ErrorBox, Pager } from "./components/common";
 import Workspace from "./components/Workspace";
 import ClusterPanel from "./components/ClusterPanel";
+import ExecutionWorkspace from "./components/ExecutionWorkspace";
 const routeGroups = [
   ["all", "すべて"],
   ["shibu24", "渋24"],
@@ -38,7 +39,7 @@ const routeGroups = [
 type RouteGroup = (typeof routeGroups)[number][0];
 const pages = [
   ["overview", "概要と検証", Home],
-  ["settings", "運行・計算設定", Settings2],
+  ["settings", "設定確認・保存", Settings2],
   ["fleet", "車両", BusFront],
   ["depots", "営業所・充電設備", Layers3],
   ["routes", "路線・運行パターン", Map],
@@ -46,7 +47,7 @@ const pages = [
   ["weather", "気象・PVデータ", CloudSun],
   ["data", "データを確認", Database],
   ["periods", "期間別計画", CalendarDays],
-  ["run", "実行", Activity],
+  ["run", "実行開始・進捗", Activity],
   ["cluster", "分散計算", Layers3],
   ["results", "グラフ・費用明細", Gauge],
   ["compare", "シナリオ比較", ArrowLeftRight],
@@ -60,9 +61,9 @@ export default function App() {
     localStorage.getItem("ev-scenario") ?? "",
   );
   const [page, setPage] = useState(() =>
-    window.location.hash === "#cluster" ? "cluster" : "overview",
+    pages.some(([key]) => window.location.hash === `#${key}`) ? window.location.hash.slice(1) : "overview",
   );
-  const [picker, setPicker] = useState(!selected);
+  const [picker, setPicker] = useState(!selected && !["#run", "#cluster"].includes(window.location.hash));
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
@@ -107,12 +108,16 @@ export default function App() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
+  function navigate(next: string) {
+    setPage(next);
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${next}`);
+  }
   function select(id: string) {
     setSelected(id);
     localStorage.setItem("ev-scenario", id);
     setPicker(!id);
     setDirty(false);
-    setPage("overview");
+    navigate(page === "run" ? "run" : "overview");
   }
   const create = useMutation({
     mutationFn: () =>
@@ -176,26 +181,16 @@ export default function App() {
               key={key}
               aria-label={label}
               title={label}
-              disabled={!selected && key !== "cluster"}
+              disabled={!selected && key !== "cluster" && key !== "run"}
               className={
-                page === key && (selected || key === "cluster") ? "active" : ""
+                page === key && (selected || key === "cluster" || key === "run") ? "active" : ""
               }
               aria-current={
-                page === key && (selected || key === "cluster")
+                page === key && (selected || key === "cluster" || key === "run")
                   ? "page"
                   : undefined
               }
-              onClick={() => {
-                setPage(key);
-                if (key === "cluster") window.location.hash = "cluster";
-                else if (window.location.hash === "#cluster") {
-                  window.history.replaceState(
-                    null,
-                    "",
-                    window.location.pathname,
-                  );
-                }
-              }}
+              onClick={() => navigate(key)}
             >
               <Icon size={18} />
               <span>{label}</span>
@@ -213,12 +208,14 @@ export default function App() {
           <span>
             研究ワークスペース{" "}
             <span className="crumb">
-              / {selected || page === "cluster" ? title : "シナリオ"}
+              / {selected || page === "cluster" || page === "run" ? title : "シナリオ"}
             </span>
           </span>
           <span className="local-tag">LOCAL</span>
         </header>
-        {!selected && page === "cluster" ? (
+        {!selected && page === "run" ? (
+          <div className="workspace"><ExecutionWorkspace onChoose={() => setPicker(true)} onNavigate={navigate} onSelect={select} /></div>
+        ) : !selected && page === "cluster" ? (
           <div className="workspace">
             <ClusterPanel />
           </div>
@@ -229,6 +226,8 @@ export default function App() {
             page={page}
             onSelect={select}
             onDirty={setDirty}
+            onNavigate={navigate}
+            onChoose={() => setPicker(true)}
           />
         ) : (
           <section className="welcome">

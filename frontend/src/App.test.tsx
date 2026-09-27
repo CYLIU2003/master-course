@@ -77,3 +77,19 @@ it("duplicates a scenario through the existing scenario API and opens the copy",
   await waitFor(() => expect(calls).toContain("POST /api/scenarios/s-1/duplicate"));
   expect(await screen.findByText("渋24 原案 Copy")).toBeTruthy();
 });
+
+ it("keeps the execution entry accessible without selecting a scenario", async () => {
+  window.history.replaceState(null, "", "/#run");
+  const fetcher = vi.fn(async (url: string) => new Response(JSON.stringify(
+    url.includes("/desktop/scenarios") ? { items: [], total: 0, offset: 0, limit: 50 } : null
+  ), { status: url.includes("/desktop/scenarios") ? 200 : 404 }));
+  vi.stubGlobal("fetch", fetcher);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+  expect(await screen.findByRole("heading", { name: "実行開始・進捗" })).toBeTruthy();
+  expect((screen.getByRole("button", { name: "実行開始・進捗" }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "研究室の依頼から選ぶ" }));
+  expect(await screen.findByRole("heading", { name: "研究室の計算依頼受付" })).toBeTruthy();
+  expect(fetcher.mock.calls.some(([url]) => url.includes("/optimization/prepare") || url.includes("/cluster/jobs"))).toBe(false);
+  client.clear();
+});
