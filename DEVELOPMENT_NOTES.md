@@ -11345,3 +11345,13 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 関連73件通過、最後のhash固定後に対象19件再通過。専用Scheduled Taskで試験用controllerの停止→1回復旧→disableを実測。試験タスクを解除、証拠保全。
 - 18:15 JSTにMasterCourseControllerSupervisor8891を配置。既存PID52332を継続、監督起動0回、job ID54件一致。固定f524eca2の実計算は変更なし。
 - 詳細: docs/notes/CONTROLLER_SUPERVISION_20260927.md。全helper監督・再ログオン・12週完走・求解高速化は未完了。
+
+
+## 2026-09-27 管理サーバー自動復旧のフロント操作
+
+ユーザーの「フロントから運用する」に対応。ControllerRecoveryを分散計算画面へ追加し、同一管理先の復旧有効／無効と状態詳細を提供。
+独立loopback操作サービスsupervisor_ui.pyを既存ログオンタスクへ適用。対象ポート・nonce・Originを検査し、別管理先は閲覧専用。
+固定計算コードf524eca2は変更せず、BFFも再起動せず静的frontendを配置。実画面で無効→有効、PID52332不変、全54job ID不変を確認。
+Python36件、画面14件、型検査、本番build通過。Claude Sonnet 5の限定レビューと外部Originの追加拒否テストを実施。
+別管理先からのGETは意図した監視要件のため維持し、POSTだけ同一ポートに制限。再ログオン実機試験と研究採用は未確認。
+[変更・レビュー詳細](docs/notes/SUPERVISOR_FRONTEND_20260927.md)、[利用手順](docs/guides/weekly_operations.md)。

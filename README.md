@@ -4487,3 +4487,11 @@ Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/S
 同じ固定版・既存キューのcontrollerを、AIなしで監督する手順を追加しました。
 [操作・停止方法](docs/guides/weekly_operations.md)と[実機検証・配置記録](docs/notes/CONTROLLER_SUPERVISION_20260927.md)を参照してください。
 求解再投入は行いません。復旧後は既存QUEUEDの割当も再開します。
+
+
+### 管理サーバーの自動復旧を画面で操作（2026-09-27）
+
+[分散計算画面](http://127.0.0.1:8891/#cluster)の上部に、有効／無効、PID、再起動回数、保留理由を追加しました。
+通常操作にAIやターミナルは不要です。無効化は自動復旧だけを止め、求解を終了しません。
+別の監視先は閲覧専用です。初回設置・画面が開けない場合は[運用手順](docs/guides/weekly_operations.md)、
+配置と検証は[実装記録](docs/notes/SUPERVISOR_FRONTEND_20260927.md)を参照してください。

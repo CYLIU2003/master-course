@@ -7,6 +7,7 @@ import WorkerNodes, { type ClusterWorkers } from "./WorkerNodes";
 import BatchProgress from "./BatchProgress";
 import CampaignProgress from "./CampaignProgress";
 import ExecutionProgress from "./ExecutionProgress";
+import ControllerRecovery from "./ControllerRecovery";
 export type { ClusterWorkers } from "./WorkerNodes";
 type ClusterJob = {
   id: string;
@@ -160,6 +161,7 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   );
   return (
     <>
+      {validPort && <ControllerRecovery key={monitorOrigin} origin={monitorOrigin} readOnly={remoteMonitor} controllerSha={controllerSha} />}
       <ExecutionProgress origin={monitorOrigin} controllerSha={controllerSha} scenarioId={jobScope === "scenario" ? scenarioId : undefined} />
       {jobScope === "all" && <details className="panel"><summary>全試行のバッチ履歴（旧版・取消済みを含む）</summary><BatchProgress jobs={jobs.data ?? []} /></details>}
       {jobScope === "all" && controllerSha && (
