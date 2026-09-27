@@ -666,6 +666,7 @@ def _energy_management_figure(
         )
 
     co2_by_time: dict[str, float] = {}
+    conflicting_co2_times: set[str] = set()
     for row in co2_rows:
         time = time_key(row, "timestamp", "time")
         value = _float(row.get("grid_emission_factor_kg_per_kwh"))
@@ -675,11 +676,19 @@ def _energy_management_figure(
             rel_tol=0.0,
             abs_tol=1.0e-9,
         ):
-            raise LiteratureFigureError(
-                "Conflicting grid CO2 factors were found for the same "
-                f"timestamp: {time}"
-            )
+            # This is a figure signal, not the canonical emissions accounting.
+            # Keep conflicting raw values and leave a visible gap, never pick
+            # one value or fail an otherwise validated calculation for this plot.
+            conflicting_co2_times.add(time)
         co2_by_time[time] = value
+    for time in conflicting_co2_times:
+        co2_by_time.pop(time, None)
+    signal_warnings = [{
+        "code": "FIGURE_CO2_SIGNAL_CONFLICT", "severity": "WARNING",
+        "timestamps": sorted(conflicting_co2_times),
+        "message": "図表用CO₂係数が同一区間で不一致。該当点は空欄とし、原データを保持。計算・会計値は変更しません。",
+        "source": "graph/co2_timeseries.csv",
+    }] if conflicting_co2_times else []
     price_by_time_and_depot: dict[str, dict[str, float]] = {}
     for row in cost_rows:
         time = time_key(row, "timestamp", "time")
@@ -888,7 +897,9 @@ def _energy_management_figure(
             label=f"Grid price: {depot_id}",
         )
     price_axis.set_ylabel("Grid energy price [JPY/kWh]")
-    axis.set_title("Executed grid carbon and price signals")
+    axis.set_title("Executed grid carbon and price signals" + (
+        " (warning: conflicting CO2 points omitted)" if signal_warnings else ""
+    ))
     handles_1, labels_1 = axis.get_legend_handles_labels()
     handles_2, labels_2 = price_axis.get_legend_handles_labels()
     axis.legend(
@@ -950,6 +961,7 @@ def _energy_management_figure(
             "price_depot_count": len(price_depot_ids),
             "price_depot_ids": price_depot_ids,
             "timeline_origin_date": origin_date or None,
+            "warnings": signal_warnings,
             "missing_grid_co2_signal_intervals": sum(
                 row["grid_emission_factor_kg_per_kwh"] is None for row in normalized
             ),
@@ -2300,6 +2312,8 @@ def generate_literature_figure_bundle(run_dir: Path) -> dict[str, Any]:
             output_dir
         ).as_posix(),
         "entries": figure_specs,
+        "warnings": [warning for entry in figure_specs
+                     for warning in entry.get("metrics", {}).get("warnings", [])],
         "source_artifacts": source_artifacts,
         "literature_references": reference_rows,
         "limitations": [

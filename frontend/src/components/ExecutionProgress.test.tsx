@@ -135,3 +135,21 @@ for (const mode of ["fresh", "old", "future", "probe_error", "wrong_identity"] a
     client.clear();
   });
 }
+
+it("treats only the known terminal CO2 figure error as a warning and retains its evidence", async () => {
+  const stamp = new Date().toISOString();
+  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+    schema_version:"execution_detail_v1", observed_at:stamp, errors:[], cases:[{
+      parent:"p", campaign:"campaign", week:"2025-12-01", state:"FAILED", worker:"pc",
+      prepared:true, verified:false, job_id:"attempt", solver_git_sha:"frozen", connection:"CONNECTED",
+      started_at:stamp, observed_at:stamp, expected_windows:174, trip_count:1704,
+      error:"LiteratureFigureError: Conflicting grid CO2 factors were found for the same timestamp: 05:45",
+      execution:null, placement:[]
+    }]
+  })))));
+  render(<QueryClientProvider client={new QueryClient()}><ExecutionProgress scenarioId="p"/></QueryClientProvider>);
+  expect(await screen.findByText("図表の注意（CO₂係数の照合）")).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByText(/元の状態：FAILED/)).toBeTruthy();
+  expect(screen.getByText(/検算結果は月別集計で確認/)).toBeTruthy();
+});

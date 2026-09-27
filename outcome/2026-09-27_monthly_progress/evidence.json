@@ -1,0 +1,15 @@
+{
+  "report_revision": "9e55ca12f1cb04bb30354333ff5f95c513227d04ec1c651281c0678d85cd1a44",
+  "comparison_sha256": "4d9423a50f8f4286b9afaf31d00d21928ea5283baa4c47c74b4e20c57066c78d",
+  "source_sha": "f524eca2552a4386bd033a15bbe046c14dc09281",
+  "included": 11,
+  "declared": 12,
+  "missing": "11月",
+  "generated_slides": 6,
+  "files_sha256": {
+    "comparison.json": "4d9423a50f8f4286b9afaf31d00d21928ea5283baa4c47c74b4e20c57066c78d",
+    "monthly_progress_11weeks_20260927_v2.pdf": "23233f917aa18e88b2150a5c6773e989f7c8c0dd36f7158fe660134c55000a7d",
+    "monthly_progress_11weeks_20260927_v2.pptx": "0072c4e381aa780f4dfcd3f9dc6a8f4e7dc52a353a1d00ba24576be3ec8253e7",
+    "README.md": "d635bff4e15674c14fced81a93618960aae5f70bce778ead28230548e0f45640"
+  }
+}

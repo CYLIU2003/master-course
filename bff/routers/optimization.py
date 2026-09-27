@@ -5206,6 +5206,7 @@ def _persist_rich_run_outputs(
                     "diagnostic_only"
                 ),
                 "manifest": "graph/literature_figures/manifest.json",
+                "warnings": literature_figure_bundle.get("warnings", []),
             }
             optimization_result[
                 "literature_figure_bundle"

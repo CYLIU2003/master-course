@@ -75,13 +75,17 @@ export default function ExecutionProgress({ scenarioId, origin = "", controllerS
         const observedProcess = freshExecution && ex?.memory?.status === "OBSERVED"
           && ["RUNNING", "LOST", "STATE_UNKNOWN"].includes(c.state);
         const live = !stale && c.connection === "CONNECTED" && (!["RUNNING", "LOST", "STATE_UNKNOWN"].includes(c.state) || !ex || freshExecution);
-        const phase = c.verified ? "検算・集計済み" : live && c.state === "RUNNING" && ex ? phases[ex.phase] ?? ex.phase : states[c.state] ?? c.state;
+        // Frozen older workers still record this exact figure-only exception.
+        // Keep the original FAILED receipt; recovery/validation is a separate gate.
+        const figureWarning = c.state === "FAILED" && !!c.error?.includes("LiteratureFigureError: Conflicting grid CO2 factors");
+        const phase = c.verified ? "検算・集計済み" : figureWarning ? "図表の注意（CO₂係数の照合）" : live && c.state === "RUNNING" && ex ? phases[ex.phase] ?? ex.phase : states[c.state] ?? c.state;
         const n = ex?.rolling_feasible ?? 0, total = c.expected_windows;
         return <article className="execution-progress-case" key={`${c.campaign}-${c.week}`} aria-label={`${c.week}の計算進捗`}>
           <div className="execution-progress-overview"><div><h3>{c.week} 開始週</h3><p>{!live && "最終記録："}{phase}</p><small>計算版 {c.solver_git_sha.slice(0, 8)} ／ 試行 {c.job_id?.slice(0, 8) ?? "未投入"}</small></div>
             <div><small>担当PC</small><p>{c.worker ?? "未割当"}</p></div>
             <div><small>毎時の計算</small><p>{ex && total ? <><progress aria-label={`${c.week}の保存済み可行窓`} value={Math.min(n, total)} max={total}/><br/>{n}/{total}窓（{(100*n/total).toFixed(1)}%）<br/><small>保存済み可行窓。週全体の検算は別。</small></> : "未取得・未着手"}</p></div></div>
-          {c.error && <p role="alert">{reasons[c.error] ?? c.error}</p>}{c.probe_error && <p>{c.probe_error}</p>}
+          {figureWarning ? <p role="status">図表出力の注意です。原データから図表だけを再生成できます。計算・会計の検算結果は月別集計で確認してください。元の試行記録は保持しています。</p>
+            : c.error && <p role="alert">{reasons[c.error] ?? c.error}</p>}{c.probe_error && <p>{c.probe_error}</p>}
           {observedProcess && c.state !== "RUNNING" && <p role="status">子機の計算プロセスは生存確認済み（{stamp(ex?.observed_at)}）。
             親機の管理状態は照合中です。直近工程：{ex ? phases[ex.phase] ?? ex.phase : "未確認"}。
             予約を保持し、同じ試行を確認しています。完了・検算済みという意味ではありません。</p>}
@@ -101,6 +105,7 @@ export default function ExecutionProgress({ scenarioId, origin = "", controllerS
             {c.license && <p>Gurobi：全{c.license.global_gurobi_slots}枠／使用・予約{c.license.reserved_gurobi_slots}／解放待ち{c.license.cooling_gurobi_slots}／外部予約{c.license.external_gurobi_slots}</p>}
           </div>}
           <details><summary>工程・求解・待機理由を見る</summary>
+            {figureWarning && <p>元の状態：{c.state} ／ {c.error}</p>}
             <ol><li>入力準備：{c.prepared ? "完了" : "未完了"}（対象便 {c.trip_count ?? "未取得"}）</li>
               <li>配車・充電：{phase}</li><li>毎時計算：保存 {ex?.rolling_saved ?? "未取得"}窓／チェーン検査 {ex?.chain_accepted ? "通過" : "未確認"}</li>
               <li>回収・検算・集計：{c.verified ? "完了" : "未完了"}</li></ol>

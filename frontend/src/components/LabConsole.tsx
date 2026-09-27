@@ -124,7 +124,7 @@ export default function LabConsole({ origin = "", readOnly = false, controllerSh
       <p>{report.complete ? "比較対象の集計が揃いました。" : "途中結果です。未完了週は費用比較に含めません。"} 正式研究採用・統合最適性とは別判定です。</p>
       <p className="subtle">集計更新：{new Date(report.observed_at_utc).toLocaleString("ja-JP")} ／ 計算版 {data?.solver_git_sha.slice(0, 8)}</p>
       <div className="detail-table"><table><thead><tr><th>代表週</th><th>検算・集計</th><th>費用 [円 / 週＋最終翌朝]</th></tr></thead>
-        <tbody>{report.cases.map(c => <tr key={c.week}><td>{c.week}</td><td>{c.state === "REPORTING_RECOVERED" ? "図表失敗を修復・再検算済み（元試行は失敗）" : c.included ? "検算・集計済み" : `集計待ち (${c.state})`}</td>
+        <tbody>{report.cases.map(c => <tr key={c.week}><td>{c.week}</td><td>{c.state === "REPORTING_RECOVERED" ? "検算・集計済み（図表の注意は復旧済み／元記録は保持）" : c.included ? "検算・集計済み" : `集計待ち (${c.state})`}</td>
           <td>{c.included && c.total_cost_jpy != null ? c.total_cost_jpy.toLocaleString("ja-JP", { maximumFractionDigits: 2 }) : "未確定"}</td></tr>)}</tbody></table></div>
       <div className="actions"><button disabled={query.isError || download.isPending} onClick={() => download.mutate({ name: "monthly_cost.png", show: true })}>費用グラフを表示</button>
         {["report.md", "weekly_summary.csv", "daily_summary.csv", "experiment_index.csv"].map(name => <button key={name} disabled={query.isError || download.isPending} onClick={() => download.mutate({ name })}>{name}を保存</button>)}</div>

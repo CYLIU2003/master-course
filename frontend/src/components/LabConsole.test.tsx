@@ -36,7 +36,7 @@ it('shows all 17 children separately from the five campaign workers', async () =
   expect(await screen.findByText(/登録 18台（親機 1台・子機 17台）/)).toBeTruthy();
   expect(screen.getAllByText('今回の計算設定の対象外')).toHaveLength(13);
   expect(screen.getAllByText('割当候補・実投入時に判定')).toHaveLength(5);
-  expect(screen.getByText('図表失敗を修復・再検算済み（元試行は失敗）')).toBeTruthy();
+    expect(screen.getByText('検算・集計済み（図表の注意は復旧済み／元記録は保持）')).toBeTruthy();
   expect(screen.getByText('未確定')).toBeTruthy();
   client.clear();
 });

@@ -1,0 +1,6 @@
+# Preserve frozen input bytes and stable documentation line endings.
+comparison.json -text
+evidence.json text eol=lf
+README.md text eol=lf
+*.pptx binary
+*.pdf binary

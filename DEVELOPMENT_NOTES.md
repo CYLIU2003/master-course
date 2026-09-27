@@ -11425,3 +11425,15 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 検証：report32テスト、受付/復旧51テスト、関連React43テストと本番build通過（重複する途中テストは加算しない）。既存10週comparisonは完全一致、新しい求解なし。新報告revision7e62d10a、図表/数値原本は保持。
 - 配置：frontend index-CyF1CH9f.jsを静的配置し8891で表示確認。controller PID52332継続。report watcherのみ旧35584/52816を同一コマンド確認後に停止し、同じ2operationと1月復旧を指定してPID42512へ更新。通常運用はスクリプトで継続。20:15時点の12月は174/174窓保存、COLLECTING。検算済みとはまだしない。
 - 証拠：output/monthly_findings_20260927/。Claudeの再レビューには同額/同時刻/欠損時刻について追加助言があり、現行データ契約との違いと限界を記録。全バックエンド・モデルの承認を得たとはしない。未適用MIP-start変更、他作業の文書・データは今回に含めない。
+
+## 2026-09-27 20:36 JST：CO₂図表を注意扱いに分離し11週を資料へ反映
+
+- ユーザー指定：図表CO₂係数の照合だけで計算失敗にしない。完成月を最新進捗資料へ逐次反映する。
+- 原因：固定f524eca2の図表最終化が日付の異なる05:45を衝突扱いした。12月ccf82c9cの174窓計算は保存済み。原ZIP SHA b248ac05fed517aa859747b7301d012a987c3f2eb022f5b15af252c47f15a008を保持し、既存rebuild/recover経路で再求解なしの復旧。714原本項目の監査通過、週次費用4,992,623.661348696円。BESS 3000→1539.4155978728925 kWh。
+- 新版のliterature_figures：日付付き照合を維持し、なお同一区間にCO₂係数の不一致があればWARNINGと対象時刻をmanifest/結果へ記録。図の該当点は空欄、原CSVは全値保持。係数の恣意的選択、会計再計算、物理検証緩和はしない。価格不一致等はこの例外に含めない。
+- フロント：旧固定版の該当例外に限って「図表の注意」。検算済みをエラー文字列から推定せず、月別の独立した回収監査に委ねる。原FAILEDを詳細に残す。LabConsoleの復旧済みは別表示。
+- 検証：literature figure/recovery Python20件、ExecutionProgress/LabConsole24件合格。TypeScript・本番build通過。最初のvitestは誤ったroot cwdでjsdom設定が読まれず失敗、frontend cwdで実行し直して通過。
+- Claude Sonnetレビュー：会計/原本の不変性とwarning伝達は確認。旧例外分岐の用途をコメント追加（回帰テストあり）。REPORTING_RECOVEREDの範囲についてはrecover_weekly_reportingが該当CO₂例外・原本hash・監査を必須とすることを確認。他の失敗一般への格下げではない。全モデル/全実機の独立承認ではない。回答はoutput/monthly_slides_20260927/claude-warning-review.json。
+- 配置：8891は静的asset index-fToHUCnM.jsのみ更新。controller PID52332（16:12:17起動）は不変。f524eca2の実行中ソースは変更せず。月別report watcherのみ同じ2operationと1月/12月復旧receiptで再起動、PID64560。新規投入・メールなし。実画面で11/12集計と注意表示を確認。11月は20:34:29時点で74/174窓、プロセス生存・同一予約を保持。
+- 資料：最新バス研究資料9/19版へ6枚の現版11週更新を先頭追加し、旧24枚を非表示の履歴として保持。別名PPTXと6ページPDF、編集可能な月別費用表・電力量グラフ、原値/出典をoutcome/2026-09-27_monthly_progressへ保存。元PPTX SHA不変、PowerPointによる追加6枚の実レンダリングを目視確認。11月は未収録と明示。
+- AI不要の追加集計→資料更新CLIをtools/thesis_authoring/build_monthly_live_update.mjsとmerge_monthly_update.ps1に実装。hash/同一SHA/検算済み/1704便/有限値/費目合計を検査。PowerPoint原本上書き不可。現行条件用の途中更新であり、天候カーブを含む最終発表本文の統合は12週確定後に残る。

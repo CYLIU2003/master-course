@@ -590,7 +590,7 @@ def test_weekly_energy_signals_keep_dates_and_three_digit_hours(tmp_path: Path) 
     assert [r["grid_energy_price_yen_per_kwh"] for r in rows] == ["30.0", "40.0", "", ""]
 
 
-@pytest.mark.parametrize("signal", ["co2", "price"])
+@pytest.mark.parametrize("signal", ["price"])
 def test_same_dated_interval_still_rejects_conflicting_signals(tmp_path: Path, signal: str) -> None:
     field = "grid_emission_factor_kg_per_kwh" if signal == "co2" else "grid_energy_price_yen_per_kwh"
     rows = [{"timestamp": "2025-01-06T05:45:00", field: value} for value in (0.3, 0.5)]
@@ -599,6 +599,30 @@ def test_same_dated_interval_still_rejects_conflicting_signals(tmp_path: Path, s
             hourly_rows=[], co2_rows=rows if signal == "co2" else [],
             cost_rows=rows if signal == "price" else [], output_dir=tmp_path,
         )
+
+
+def test_conflicting_co2_plot_signal_warns_and_preserves_accounting(tmp_path: Path) -> None:
+    run = _fixture_run(tmp_path)
+    from tools.research.rebuild_literature_figures import sha
+    sources = [run / "rolling_hourly_chain/executed_day_accounting.json",
+               run / "graph/canonical_cost_ledger.json", run / "graph/co2_timeseries.csv"]
+    with sources[-1].open(encoding="utf-8-sig", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    duplicate = dict(rows[0])
+    duplicate["grid_emission_factor_kg_per_kwh"] = float(rows[0]["grid_emission_factor_kg_per_kwh"]) + 1
+    with sources[-1].open("a", encoding="utf-8", newline="") as stream:
+        csv.DictWriter(stream, fieldnames=list(rows[0])).writerow(duplicate)
+    before = {str(p): sha(p) for p in sources}
+    manifest = generate_literature_figure_bundle(run)
+    assert manifest["status"] == "READY"
+    assert manifest["figure_count"] == 5
+    assert manifest["warnings"][0]["code"] == "FIGURE_CO2_SIGNAL_CONFLICT"
+    assert manifest["warnings"][0]["severity"] == "WARNING"
+    assert before == {str(p): sha(p) for p in sources}
+    with (run / "graph/literature_figures/03_energy_management_profile_source.csv").open(encoding="utf-8-sig") as stream:
+        plotted = list(csv.DictReader(stream))
+    affected = manifest["warnings"][0]["timestamps"]
+    assert all(r["grid_emission_factor_kg_per_kwh"] == "" for r in plotted if r["time"] in affected)
 
 
 def test_rebuild_preserves_failed_attempt_and_original_evidence(tmp_path: Path) -> None:
