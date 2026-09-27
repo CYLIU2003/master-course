@@ -61,7 +61,7 @@ def test_formal_multiday_is_blocked_until_continuous_execution_is_accepted():
         OptimizationEngine().solve(_two_day_problem(),OptimizationConfig(research_run=True))
 
 
-def test_actual_two_day_charging_model_respects_daily_boundary_and_24_hour_window():
+def test_actual_two_day_charging_model_respects_daily_boundary_and_24_hour_window(admitted_gurobi_session):
     pytest.importorskip('gurobipy')
     problem=_two_day_problem()
     result=RollingReoptimizer().reoptimize_charging_hour(

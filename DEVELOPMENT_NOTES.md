@@ -11553,3 +11553,11 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 原週の会計再監査とは区別：再構築は診断configで、元のresearch実行とreturn-leg bonusの扱いが異なり、元objectiveとの差がある。今回の一致判定は同一診断入力上の旧/新評価処理間であり、原週の採用判定・実会計を上書きしない。証拠は `output/charging_start_review_20260927/price-lookup-comparison.json`、`postsolve-profile*/summary.json` とprofile.pstats。比較JSONに旧/新evaluatorのhashを保存。
 - 回帰44 passed（lookup、既存cost/CO2/provisional/ledger、strict coverage、engine postsolve）。コマンドと実行記録は `price-lookup-tests.txt`。Claude Code Sonnet静的レビューは承認可。新constructorを継承する既存クラスはsrc/tests検索でなし。Claudeの「異なるproblemを順次扱うと効果ゼロ」は採用せず、各1回のevaluate/ledger内部でも同じ料金tupleを数万回引く実測を根拠に修正。週全体での効果未検証という指摘は維持。`price-lookup-review.json`に原レビュー保存。独立レビューは実機/研究承認ではない。
 - 23:01 JST、11月の同一PID8976が生存、105/174保存・105可行、現在1.393GiB/最大13.162GiB。週全体未受入。月別集計・詳細進捗publisherの実プロセスも生存確認。新版へ差し替えず固定f524eca2継続。追加の求解・予約解放・再投入なし。
+
+
+## 2026-09-27 23:11 JST — 関連native回帰の無管理ライセンス取得を防止
+
+- 今回の時系列軽量化の初回回帰54 passed/4 skippedには、既存テストの無管理native求解経路が含まれた。fixture依存のimportから `skipif(not is_gurobi_available())` が呼ばれ、収集自体がEnv開始に達し得ることも判明。この初回結果を共有枠適合の証拠にしない。追加native試験を停止し、既存試行の予約は変更しなかった。
+- `tests/conftest.py::admitted_gurobi_session` を追加。current_sessionがないとprobe前にskip。明示的managed scopeがある場合だけ既存availability経路を使い、環境を再利用してacquire側で枠を確保する。acquire例外は隠さず失敗とする。日帰庫・複数日・SOC roundtrip・finite ICE fuel・CO2関連の到達経路へ適用。モデル本体/ライセンス上限/本番要求は変更なし。
+- 失敗注入：is_gurobi_available/Facade.Env/Modelを呼ぶと例外にする同一pytestプロセスで関連全8ファイルを収集・実行。55 passed/24 skipped、禁止呼出0（`timeline-reuse-no-license-tests.txt`/同json）。この件数は次の時系列差分テストも含み、前の件数と加算しない。24件は実機未実施として残す。fixture単体で未管理時のprobe禁止・managed内probe・admission例外伝播の3件を確認（上の55件に包含）。
+- Claude Code Sonnet静的レビューは関連2変更を承認。review中のcurrent_session確認への回答：src/gurobi_session.pyがContextVarへmanaged scopeを登録し、environment()がacquire後にEnv.startを行い、同scope内は既存Envを再利用する。scope終了時はモデル/Env破棄とreleaseを行う。テストfixture自体に資格情報や独立枠を作らない。証拠 `output/charging_start_review_20260927/timeline-reuse-review.json`。未変更nativeテストの全経路を監査済みとはしない。

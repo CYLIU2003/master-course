@@ -51,7 +51,7 @@ def test_daily_carbon_uses_each_materialized_vehicle_emission_factor():
     assert result['ice_co2_kg'] == pytest.approx(expected_emissions(problem,plan))
 
 
-def test_native_two_day_fuel_and_co2_account_for_the_same_movements():
+def test_native_two_day_fuel_and_co2_account_for_the_same_movements(admitted_gurobi_session):
     pytest.importorskip('gurobipy')
     problem = _ice_phase3_problem()
     problem = replace(problem, metadata={**problem.metadata,'cost_component_flags':{

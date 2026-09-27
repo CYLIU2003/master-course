@@ -126,7 +126,7 @@ def test_rolling_reference_stays_active_until_paid_next_morning_end():
     assert final.metadata["bev_terminal_soc_target_kwh_by_vehicle"]["bev-1"] == 80.0
 
 
-def test_failed_hourly_solve_never_publishes_the_old_reference_energy_trace():
+def test_failed_hourly_solve_never_publishes_the_old_reference_energy_trace(admitted_gurobi_session):
     from src.optimization.rolling.vehicle_execution import vehicle_positions_at
     pytest.importorskip("gurobipy")
     problem = daily_problem()
@@ -154,7 +154,7 @@ def test_failed_hourly_solve_never_publishes_the_old_reference_energy_trace():
     assert not failed.solver_metadata["stage2_exact_optimality_certified"]
 
 
-def test_rolling_reference_tolerance_cannot_accumulate_before_an_idle_final_day():
+def test_rolling_reference_tolerance_cannot_accumulate_before_an_idle_final_day(admitted_gurobi_session):
     from src.optimization.rolling.vehicle_execution import vehicle_positions_at
     pytest.importorskip("gurobipy")
     problem = daily_problem()
@@ -194,7 +194,7 @@ def test_rolling_reference_tolerance_cannot_accumulate_before_an_idle_final_day(
     assert final.plan.vehicle_soc_kwh_by_vehicle_slot["bev-1"][48] <= 80.000001 + 1e-9
 
 
-def test_native_phase3_two_day_dispatch_uses_the_declared_fragment_allowance():
+def test_native_phase3_two_day_dispatch_uses_the_declared_fragment_allowance(admitted_gurobi_session):
     from src.optimization.engine import OptimizationEngine
     from src.optimization.common.problem import OptimizationMode
     pytest.importorskip("gurobipy")
@@ -210,7 +210,7 @@ def test_native_phase3_two_day_dispatch_uses_the_declared_fragment_allowance():
     assert physical["accepted"], physical["violations"]
 
 
-def test_recursive_and_cumulative_soc_have_the_same_native_two_day_solution():
+def test_recursive_and_cumulative_soc_have_the_same_native_two_day_solution(admitted_gurobi_session):
     from src.optimization.engine import OptimizationEngine
     from src.optimization.common.problem import OptimizationMode
     pytest.importorskip("gurobipy")
@@ -420,7 +420,7 @@ def test_ice_inventory_includes_daily_returns_and_both_startups():
     assert validate_physical_event_schedule(problem=depleted,serialized_result=ResultSerializer.serialize_plan(plan))["metrics"]["fuel_lower_violation_count"] > 0
 
 
-def test_two_day_native_charging_solve_matches_the_physical_replay():
+def test_two_day_native_charging_solve_matches_the_physical_replay(admitted_gurobi_session):
     pytest.importorskip("gurobipy")
     problem = daily_problem()
     plan = _fixed_plan(problem)
@@ -466,7 +466,7 @@ def test_execution_state_tracks_partial_trip_and_continuous_fuel():
         advance_vehicle_prefix(problem,plan,start_min=1440,stop_min=1500)
 
 
-def test_48_hourly_prefixes_preserve_state_and_reject_changed_location():
+def test_48_hourly_prefixes_preserve_state_and_reject_changed_location(admitted_gurobi_session):
     from src.optimization.rolling.day_ahead_hourly import build_next_execution_state
     pytest.importorskip("gurobipy")
     problem = daily_problem()

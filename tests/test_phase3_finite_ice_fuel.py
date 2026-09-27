@@ -4,7 +4,6 @@ from dataclasses import replace
 
 import pytest
 
-from src.gurobi_runtime import is_gurobi_available
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.optimization.common.problem import AssignmentPlan, OptimizationConfig, OptimizationMode
 from src.optimization.common.result import ResultSerializer
@@ -18,9 +17,7 @@ from src.optimization.validation.physical_event_schedule import validate_physica
 from test_daily_return_policy import daily_problem
 
 
-pytestmark = pytest.mark.skipif(
-    not is_gurobi_available(), reason="Gurobi required for native Phase 3 regression"
-)
+pytestmark = pytest.mark.usefixtures("admitted_gurobi_session")
 
 
 def _ice_phase3_problem(

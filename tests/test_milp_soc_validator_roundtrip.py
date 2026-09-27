@@ -10,7 +10,6 @@ from src.dispatch.models import (
     Trip,
     VehicleProfile,
 )
-from src.gurobi_runtime import is_gurobi_available
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
@@ -122,7 +121,7 @@ def _soc_roundtrip_problem() -> CanonicalOptimizationProblem:
     )
 
 
-@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+@pytest.mark.usefixtures("admitted_gurobi_session")
 @pytest.mark.parametrize('phase', ['phase3_two_stage', 'phase4_integrated'])
 def test_both_solver_paths_honor_per_vehicle_maximum_soc(phase):
     problem = _soc_roundtrip_problem()
@@ -137,7 +136,7 @@ def test_both_solver_paths_honor_per_vehicle_maximum_soc(phase):
     assert FeasibilityChecker().evaluate(problem,result.plan).feasible
 
 
-@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+@pytest.mark.usefixtures("admitted_gurobi_session")
 def test_gurobi_plan_with_startup_deadhead_roundtrips_through_validator() -> None:
     problem = _soc_roundtrip_problem()
     result = MILPOptimizer().solve(
