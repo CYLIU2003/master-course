@@ -11581,3 +11581,13 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 14:17 UTC読取: 11月同PID8976、ROLLING106/174保存・106可行、working set1.119GiB、peak13.162GiB。チェーン未承認・月別11/12。以後の最新値は画面/原本を参照。
 - 未実施: SSHへの新版配置、本番controller切替、新版Prepare、全週求解・独立物理会計再検算。候補準備を正式研究完了・週間高速化とは扱わない。現行計算の終了後、共有brokerと32GB以上/機器別RAM予算を保持して新入力版で1週を確認する。
 - 手順: docs/notes/NEXT_WEEKLY_RELEASE_20260927.md。コードの既存テスト・局所profileは各修正commitの証拠を利用し、今回は新しい配布成果物とビルド・展開境界を確認した。
+
+## 2026-09-27 新版の実機stageと3月同条件Prepare
+
+- 固定267e33ebの既存release.py stageで親機/localとlaptop-a709una0の2台を確認。予約0・active_jobs空、直前の子機attemptはrunnerのプロセス終了照合を通したFAILED。元FAILEDを成功へ変更していない。新SHA別ディレクトリのGit/source/runtime/dataset一致、private config新規生成まで。親機drainingを維持。本番設定・11月workerは未変更。
+- 隔離したscenario storeへ現行親をSQLite read-only backupで複製し、旧固定版の時刻表DB・祝日・PV原本・予測holdoutをhash一致で配置。既存prepare_weekで2025-03-03開始7日＋翌朝を新規Prepare、1,704便・厳格coverage/接続/折返し/適合性・fleet引継ぎ通過。socket.connectとGurobi Env/Model/availabilityを禁止したPrepare呼出し内で違反0。ジョブ投入なし。前後267e33eb/clean。観測したPrepareプロセスPrivate約1.9GiB、ピーク保証ではない。
+- 旧Prepared原本hashを確認。新旧の全入力からprepared_at/input_id/scenario_hash/scenario_id/scope_hash/scope.scenario_idだけを除き完全一致。実行要求はPrepared ID以外一致、翌朝条件とfleet契約も一致。モデル入力比較hash3fdf134f6ba060d52c4a9adce832d5bdffbc52d530768bb30395ac5795368205。旧結果の再ラベルなし。
+- Claude静的レビュー: scenario元artifact全byteの前後hashを取っていない指摘は認め、主張をmetadata前後とPrepared全体のモデル入力一致へ限定。WAL漏れ指摘は未checkpoint commitを保持するwriter稼働中にread-only backupして全行一致・元行不変を確認する分離試験が通過。新規出力専用と未追跡も含むgit_state確認を維持。
+- 証拠: output/cluster-deployment/package-next-267e33eb/staging/{preflight.json,evidence/report.json,verified.private.json}、prepare-march/{verification.json,input-copy.json,input-comparison.json,sqlite-backup-review-check.json}、prepare-review.json。private設定・元データは公開Gitへ追加しない。
+- 23:36 JSTの原worker読取: 11月同PID8976、169/174保存・169可行、peak working set13.162GiB、chain未承認。旧試行を継続し、残区間と回収・最終会計を待つ。
+- 本番controller切替、新版の1週求解・会計検証・週次短縮率は未完了。詳しい配置手順と証拠範囲はNEXT_WEEKLY_RELEASE_20260927.mdを更新。
