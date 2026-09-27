@@ -4510,3 +4510,8 @@ Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/S
 研究室メンバーの依頼は入力照合情報付きで親機の受付簿へ保存できます。受付は実行確認待ちであり、
 求解・ライセンス取得は行いません。別Python等の任意モデルの自動配布は未対応です。
 [画面操作・受渡しテンプレート・設置方法](docs/guides/lab_compute_intake.md)を参照してください。
+
+
+### 保存済み毎時計算の時間内訳（2026-09-27）
+
+`python -m tools.research.rolling_timing_report --run C:/path/to/run --output C:/path/to/new/timing.json` で、原本を変更せず窓別の呼出し時間とnative求解時間を分けて確認できます。AI・Gurobi起動は不要です。Stage2の既存runtimeにはモデル構築等も含まれるため、その値を純粋な求解時間へ読み替えません。[実測と検証条件](docs/notes/ROLLING_RUNTIME_DIAGNOSIS_20260927.md)。

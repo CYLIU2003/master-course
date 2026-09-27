@@ -11376,3 +11376,13 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 配置: 共有静的frontendのみ更新、受付/監督UIサービスのみ再起動。計算controller PID52332、54件のjob ID集合を維持。計算固定版f524eca2と2件のLOST予約・実行ソースは変更していない。新規求解・worker更新・ライセンス追加取得なし。
 - 未対応: 他者の実モデル/ライセンスは未受領。受付と実ジョブの自動連結、任意Pythonランナー、複数利用者認証/遠隔ポータルは未実装。通常の修論シナリオは既存実行画面から検査・Prepare後に投入する。詳細手順はdocs/guides/lab_compute_intake.md。
 - 追加確認: Claudeの修正後レビューは両指摘の解消・新規P0/P1なし。実ブラウザー再読込後も受付テスト1件を保持、CSV配信hash照合通過。画面証拠はoutput/lab_frontend_20260927/frontend-inventory.png。
+
+
+## 2026-09-27 毎時計算のnative時間を原本から分離測定
+
+- 目的: 12週の残り2週を維持し、遅さの支配要因を測定して次の改善対象を絞る。前ターンは台帳照合の再確認が中心で、新たな高速化は未実施。今回は保存原本と実workerへの一度の読取りから原因を定量化した。
+- 変更: `tools/research/rolling_timing_report.py`。窓別summary/solver result/native logをbundle内で照合しSHA256を保存。根LP時間を重複加算せず、複数optimizeは呼出し内累積と回数を記録。欠損は未知、窓ID不一致を拒否、出力は原本外・新規のみ。
+- 実測: 1月175窓、呼出し13,626.309秒のうちnative12,287.740秒(90.18%)。長い16窓がnative時間の74.08%。11月51窓は97.79%、12月102窓は93.15%がnative。19:15時点に同一attempt/manifestとPID生成時刻を照合し、両プロセス実在を確認。
+- 検証: `python -m pytest tests/test_rolling_timing_report.py -q` 16passed。1月175窓の実行、11月・12月の読取測定を実施。Claude Code sonnet読取レビューで逐次求解時間の加算への指摘は計測範囲を根拠に訂正し撤回確認。複数求解表示・窓ID照合を追加、再レビューP0/P1なし。
+- 判断: 主因はnative探索。Stage2充電計画の初期候補利用は現経路に未実装で、次の同一ケース比較候補。速度改善・物理通過はまだ未検証、既存数値対策を変更しない。詳細は `docs/notes/ROLLING_RUNTIME_DIAGNOSIS_20260927.md`。
+- 稼働系: solver固定f524eca2、物理条件、attempt、予約、コントローラー、workerソースは変更なし。Gurobi起動・新規投入・追加監視0。ツールの正式ソース同期は既存計算の版変更や高速化適用を意味しない。

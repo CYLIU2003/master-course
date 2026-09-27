@@ -200,3 +200,10 @@ controller-settings内のpython/release/config/frontend/queue/outputs/scenarios�
 実際の起動場所を変えたSTATUS/CHECKは設置時記録を参照。
 稼働中のPCを意図的に落とす復旧試験、単独メール自動送信、独立レビューは今回実施していません。
 本書の整備をもって正式研究採用や全機器の無故障を保証したとは扱いません。
+
+## 保存済み毎時計算の遅さを調べる
+
+`python -m tools.research.rolling_timing_report --run C:/path/to/run --output C:/path/to/new/timing.json`
+で、原本を変更せず窓別の呼出し時間・native求解時間・欠損・遅い窓を集計できます。
+AI・Gurobiの起動は不要です。出力先は原本外の新規ファイルを指定します。
+計測範囲と実測例は[時間内訳の記録](../notes/ROLLING_RUNTIME_DIAGNOSIS_20260927.md)を参照してください。
