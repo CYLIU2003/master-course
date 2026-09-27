@@ -11525,3 +11525,12 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 検証：比較hash・実行証拠等の関連30件通過。HTTP保存GET/PUT/GET、stale revision409、誤記422、拒否後値不変を含むdesktop編集35件通過。Claude Sonnet追加静的レビューのv2/v3境界懸念に対し、実pair生成入口で拒否と旧manifest不変を確認するテストを追加し、関連16件通過（先の30件と重複あり）。自己確認とClaude静的レビューでは未解決の阻害的P0/P1なし。全週・実機配置の承認ではない。
 - 原result照合：step75のwindow評価差760.933075円はelectricity_inventory_valuation_cost差であり、買電量・買電費・契約超過モデル費は一致。PV直接利用とBESS経由、終端在庫が異なる代替解。買電費削減や週間節約と表示しない。詳細・原本所在はROLLING_SEARCH_COMPARISON_20260927.md。
 - 22:37:06実機読取：11月PID8976が生存、102/174区間保存・102可行、現在RAM1.86GiB、ピーク13.162GiB。native logも更新中。元のattempt・固定f524eca2・共有予約を保持。controller8891へ新版を配置しておらず、稼働コードの更新・再投入なし。main同期はソースのみ。新UI/毎時探索選択のlive配置・全週確認は残る。
+
+
+## 2026-09-27 22:44 JST：毎時探索方針の実ブラウザ保存確認
+
+- clean main 98733831のBFFと新版frontend/distを検証専用8897で起動。別scenario/queue/output、worker0・Gurobi枠0、設定保存PUT以外の書込拒否。production8891と実行固定f524eca2を変更しない。
+- 実ブラウザで設定1→3を選択し保存、PUT200、reload後の選択保持、実行画面の「下界改善重視（設定3・比較用）」を確認。API値bound_firstとrevision、ジョブ0件・worker0台を照合。未指定・正式運用の全ケース確認ではなく、変更した設定の保存経路に限定した実画面検査。
+- 一部のブラウザ自動クリックが表示位置と一致せず遷移しなかったため、画面確認後の座標操作とキーボードEnterで検査した。アプリ側の保存エラーではなく、保存APIは200。検査用サーバーとタブを終了した。
+- 証拠：output/charging_start_review_20260927/ui-save-check/verification.json、run-screen.png、serverログ、隔離scenario。ソースSHAと配信asset/画像hashを保存。新規求解なし。Claude静的レビューは前項の記録を再利用し、新たなコード変更はない。
+- 残る確認は新版の本番配置と新探索設定での全週評価。3窓の実測は高速化が一様でないため、既定1を維持し比較用3を自動採用しない。

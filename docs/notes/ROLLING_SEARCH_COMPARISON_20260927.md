@@ -34,6 +34,12 @@ PV対照比較用の条件hashにもcharging_search_requestedとstage2_charging_
 
 ## 検証の範囲とレビュー
 
+### 隔離ブラウザでの保存確認
+
+2026-09-27、clean main 98733831のBFFと新版ビルドを127.0.0.1:8897で一時起動。研究用とは別のscenario/queue/outputを使い、worker・Gurobi枠は0、設定PUT以外の書込は拒否した。実ブラウザで設定1→設定3を選び「変更を保存」、HTTP 200、再読込み後の選択保持、実行画面の「下界改善重視（設定3・比較用）」を確認した。API保存値もbound_first、ジョブ0件・worker0台を照合。検証サーバーとタブは終了済み。
+
+証拠は`output/charging_start_review_20260927/ui-save-check/verification.json`、`run-screen.png`、serverログ、隔離scenario原本。verificationにはソースSHA、配信assetと画面画像hash、保存revisionを残す。これは画面→実API→保存→実行前表示の確認で、Prepare・求解・全週の検査ではない。本番8891への新版配置は未実施。
+
 保存・revision/CAS・入力hash変更、Prepare・canonical metadata・BFF→rolling config・native setParamの引継ぎ、未知値拒否、設定以外のcontrol不変を回帰テストする。画面保存とPrepare要求、TypeScript、本番buildも検証。新設定での全週運用・新UIの稼働コントローラーへの配置は別の確認であり、この診断やmockテストだけで完了としない。
 
 Claude Sonnetによる静的レビューを実施。二重の既定値は旧metadataを読む互換処理として保持し、両経路のテストで一致を確認。毎時以外への影響の疑義は呼出し検索と、差分がstage2_gurobi_mip_focusだけで前日既定が不変という回帰で確認した。「P1だがマージ前必須ではない」という分類は採用せず、実害の証拠と分ける。比較用・速度保証なしの表示は維持。レビューの「step75のみ同一MPS」は誤読で、3組とも同一MPSを照合済み。全週の独立承認ではない。
