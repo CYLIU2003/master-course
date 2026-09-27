@@ -11479,3 +11479,13 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 基準側96区間、初期1889.439767588→終端2920.230288698kWh、最大収支残差2.13162820728e-13kWh・連続性残差1.36424205266e-12kWh。図表用の丸め値ではなく保存済みフローを照合。検査範囲は提案BESSのみで、車両SOC・便・PV供給可能量・会計・終端目標・週間実行監査は別と明記。
 - 関連8テスト通過。Claude Sonnetの読取レビューはこの範囲のP0/P1なし。出力は新規ファイル専用で、既存検査原本を上書きしない。未完ファイルが残れば新出力名で再検算する。レビュー原文output/charging_start_review_20260927/pair-bess-audit-review.json。
 - 実求解の比較は3e6a2678で進行中、candidate側のMPS一致と初期候補提出を確認。最初のMIP startは新incumbentを生成していない。最終結果前に有効化・高速化を宣言しない。
+
+
+## 2026-09-27：保存窓の初期候補比較を確定し探索方針の診断を追加
+
+- 3e6a2678のMarch61 A/B完了。両native600秒、費用157588.716155円、gap1.009308%、同一MPS。Start案は短縮効果なしで標準採用せず。両BESS96区間の原本再計算通過。候補単独ピークは未測定（MaxMemUsedは共有Env累積）。
+- 同じ既存runnerにbound_focus比較を追加。変更はstage2_gurobi_mip_focusの1→3のみ。全Configの差分、nativeパラメータ、MPS一致を記録・照合し、異なる予算/許容差等の混入を拒否。数理モデルと本番既定値は不変。
+- 関連28件通過。Claudeの次案レビューを取得し、未証明の候補優劣・成功予測は採用しない。詳細docs/notes/CHARGING_START_DIAGNOSTIC_20260927.md。実測の新比較はこの記録時点では未実行。
+- 21:40 JSTの実機読取り：11月同一PID8976、84/174保存、全84可行。現在1.17GiB/最大13.16GiB。週次監査は未完了。旧診断PID終了済み、ローカルはdraining、既存11月の予約を保持。
+
+- Claude差分レビューの指摘へ対応：profile名と実際のcharging policy/focusを求解前に照合し、誤表示を拒否。config由来はdeclared_profile_configs、native実測はeffective_parametersと命名を分離。修正後29テスト通過。レビュー原文はoutput/charging_start_review_20260927/bound-focus-code-review.json。

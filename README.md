@@ -4553,3 +4553,6 @@ Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/S
 
 
 保存済み毎時窓の初期候補A/B診断は `tools/research/run_charging_replay_pair.py --help`。既存親機の資源・ライセンス管理下で、原週を再投入せず比較します。通常運用の既定値は変更しません。手順と制限は[充電初期候補診断](docs/notes/CHARGING_START_DIAGNOSTIC_20260927.md)を参照してください。
+
+
+保存窓の探索方針比較は `run_charging_replay_pair.py --comparison bound_focus` で行えます。既存の共有資源管理下で、MIPFocusだけを1対3に変える診断です。通常キャンペーンの既定値は変わりません。初期候補比較は速度・費用とも改善なしでした。[実測・手順・判定範囲](docs/notes/CHARGING_START_DIAGNOSTIC_20260927.md)。

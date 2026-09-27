@@ -36,6 +36,23 @@ from src.solver_policy import solver_policy_scope
 from src.solver_memory import ENV_KEY
 
 
+def comparison_controls(baseline, start_candidate, comparison):
+    """Declare one existing search control change, never a new model condition."""
+    if comparison == "charging_start":
+        names = ("none", "fixed_assignment_binary")
+        candidate, field = start_candidate, "stage2_charging_start_policy"
+    elif comparison == "bound_focus":
+        if baseline.stage2_gurobi_mip_focus != 1 or baseline.stage2_charging_start_policy != "none":
+            raise ValueError("Bound comparison requires the original focus1/no-start baseline")
+        names = ("mip_focus_1", "mip_focus_3")
+        candidate, field = replace(baseline, stage2_gurobi_mip_focus=3), "stage2_gurobi_mip_focus"
+    else:
+        raise ValueError("Unknown diagnostic comparison")
+    if replace(candidate, **{field: getattr(baseline, field)}) != baseline:
+        raise ValueError("Comparison changes more than the declared control")
+    return tuple(zip(names, (baseline, candidate))), field
+
+
 def json_value(value):
     """Preserve unavailable/nonfinite diagnostics explicitly, never as zero."""
     if isinstance(value, dict):
@@ -64,6 +81,15 @@ def check_admission(worker, row, capability, budget, threads, jobs):
 
 def solve_profile(problem, config, directory, expected_models=None):
     """Record native models at the real optimize boundary without changing them."""
+    name = directory.name
+    if name in ("none", "fixed_assignment_binary"):
+        valid_label = config.stage2_charging_start_policy == name
+    else:
+        valid_label = (name in ("mip_focus_1", "mip_focus_3")
+            and config.stage2_charging_start_policy == "none"
+            and config.stage2_gurobi_mip_focus == int(name[-1]))
+    if not valid_label:
+        raise ValueError("Profile label differs from the solver configuration")
     from src.optimization.engine import OptimizationEngine
     from src.optimization.milp import solver_adapter
     directory.mkdir()
@@ -82,6 +108,9 @@ def solve_profile(problem, config, directory, expected_models=None):
                 raise ValueError("Native MPS differs between policies; candidate solve refused")
         row = {"mps_sha256": checksum, "variables": model.NumVars,
                "constraints": model.NumConstrs, "nonzeros": model.NumNZs}
+        row["effective_parameters"] = {name: getattr(model.Params, name) for name in (
+            "MIPFocus", "Presolve", "Aggregate", "NumericFocus", "Method", "Threads",
+            "Seed", "MIPGap", "FeasibilityTol", "IntFeasTol")}
         observed.append(row)
         save(directory / "native-models.json", observed)
         started = time.perf_counter()
@@ -105,7 +134,7 @@ def solve_profile(problem, config, directory, expected_models=None):
     save(directory / "result.json", json_value(asdict(result)))
     if not observed or expected_models is not None and len(observed) != len(expected_models):
         raise ValueError("Unexpected native solve count")
-    return {"policy": config.stage2_charging_start_policy,
+    return {"policy": directory.name,
             "wall_seconds": time.perf_counter() - started,
             "feasible": result.feasible, "solver_status": result.solver_status,
             "objective_value": result.objective_value, "native_models": observed,
@@ -119,6 +148,7 @@ def main():
     parser.add_argument("--archive-sha256", required=True)
     parser.add_argument("--step", type=int, required=True)
     parser.add_argument("--memory-gib", type=float, required=True)
+    parser.add_argument("--comparison", choices=("charging_start", "bound_focus"), default="charging_start")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if not math.isfinite(args.memory_gib) or args.memory_gib < 4:
@@ -140,6 +170,11 @@ def main():
         worker, = [w for w in config.workers if w.transport == "local"]
         client = Client(f"http://127.0.0.1:{settings['port']}")
         window, baseline, candidate, preflight = prepare(args.archive, args.archive_sha256, args.step)
+        profiles, changed_field = comparison_controls(baseline, candidate, args.comparison)
+        preflight.update(comparison_kind=args.comparison,
+            comparison_policies=[name for name, _ in profiles], only_config_difference=changed_field,
+            declared_profile_configs={name: json_value(asdict(control)) for name, control in profiles})
+        report["comparison_kind"] = args.comparison
         save(output / "preflight.json", preflight)
         snapshot = client.request("/api/cluster/workers")
         row = next(r for r in snapshot["workers"] if r["id"] == worker.id)
@@ -174,12 +209,12 @@ def main():
                 client.request("/api/cluster/jobs") + [r for r in resources.rows() if r["id"] != identity])
             with patch.dict(os.environ, {ENV_KEY: str(args.memory_gib)}):
                 with solver_policy_scope() as usage, managed_gurobi_session(acquire, release):
-                    for control in (baseline, candidate):
-                        report["status"] = "RUNNING_" + control.stage2_charging_start_policy
+                    for name, control in profiles:
+                        report["status"] = "RUNNING_" + name
                         save(output / "state.json", report)
                         expected = report["profiles"][0]["native_models"] if report["profiles"] else None
                         report["profiles"].append(solve_profile(window, control,
-                            output / control.stage2_charging_start_policy, expected))
+                            output / name, expected))
                     report["solver_usage"] = asdict(usage)
         finally:
             resources.release(identity)

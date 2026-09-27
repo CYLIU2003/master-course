@@ -61,3 +61,47 @@ def test_summary_cannot_hide_infeasibility(tmp_path):
     write(tmp_path / "fixed_assignment_binary/result.json", {"feasible": False, "objective_value": 101})
     with pytest.raises(ValueError, match="Result differs"):
         summarize(tmp_path)
+
+
+def bound_evidence(root):
+    state = evidence(root)
+    state["comparison_kind"] = "bound_focus"
+    names = ["mip_focus_1", "mip_focus_3"]
+    configs = {}
+    for profile, name, focus in zip(state["profiles"], names, [1, 3]):
+        (root / profile["policy"]).rename(root / name)
+        profile["policy"] = name
+        profile["native_models"][0]["effective_parameters"] = {"MIPFocus": focus, "MIPGap": .01, "Presolve": 0}
+        write(root / name / "native-models.json", profile["native_models"])
+        configs[name] = {"stage2_gurobi_mip_focus": focus, "stage2_charging_start_policy": "none", "time_limit_sec": 600}
+    write(root / "state.json", state)
+    write(root / "preflight.json", {"comparison_kind": "bound_focus", "comparison_policies": names,
+                                    "declared_profile_configs": configs})
+    return state
+
+
+def test_bound_pair_reports_effective_controls(tmp_path):
+    bound_evidence(tmp_path)
+    report = summarize(tmp_path)
+    assert report["comparison_kind"] == "bound_focus"
+    assert [p["effective_parameters"][0]["MIPFocus"] for p in report["profiles"]] == [1, 3]
+
+
+@pytest.mark.parametrize("parameter,value", [("MIPFocus", 1), ("MIPGap", .1), ("Presolve", 2)])
+def test_wrong_native_control_cannot_be_presented_as_focus_only(tmp_path, parameter, value):
+    state = bound_evidence(tmp_path)
+    state["profiles"][1]["native_models"][0]["effective_parameters"][parameter] = value
+    write(tmp_path / "state.json", state)
+    write(tmp_path / "mip_focus_3/native-models.json", state["profiles"][1]["native_models"])
+    with pytest.raises(ValueError, match="Native"):
+        summarize(tmp_path)
+
+
+def test_changed_declared_budget_is_rejected(tmp_path):
+    bound_evidence(tmp_path)
+    path = tmp_path / "preflight.json"
+    preflight = json.loads(path.read_text())
+    preflight["declared_profile_configs"]["mip_focus_3"]["time_limit_sec"] = 30
+    write(path, preflight)
+    with pytest.raises(ValueError, match="another input control"):
+        summarize(tmp_path)

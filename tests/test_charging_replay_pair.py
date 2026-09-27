@@ -63,6 +63,8 @@ def test_native_mismatch_stops_before_candidate_optimize(monkeypatch, tmp_path, 
         infeasibility_reasons: tuple = ()
 
     class Model:
+        Params = SimpleNamespace(**{k: 1 for k in ("MIPFocus", "Presolve", "Aggregate", "NumericFocus",
+            "Method", "Threads", "Seed", "MIPGap", "FeasibilityTol", "IntFeasTol")})
         NumVars = 2
         NumConstrs = 3
         NumNZs = 4
@@ -93,10 +95,35 @@ def test_native_mismatch_stops_before_candidate_optimize(monkeypatch, tmp_path, 
     baseline = solve_profile(Problem(), SimpleNamespace(stage2_charging_start_policy="none"), tmp_path / "none")
     if candidate_text != "same constraints":
         with pytest.raises(ValueError, match="Native MPS differs"):
-            solve_profile(Problem(), SimpleNamespace(stage2_charging_start_policy="candidate"),
-                          tmp_path / "candidate", baseline["native_models"])
+            solve_profile(Problem(), SimpleNamespace(stage2_charging_start_policy="fixed_assignment_binary"),
+                          tmp_path / "fixed_assignment_binary", baseline["native_models"])
     else:
-        candidate = solve_profile(Problem(), SimpleNamespace(stage2_charging_start_policy="candidate"),
-                                 tmp_path / "candidate", baseline["native_models"])
+        candidate = solve_profile(Problem(), SimpleNamespace(stage2_charging_start_policy="fixed_assignment_binary"),
+                                 tmp_path / "fixed_assignment_binary", baseline["native_models"])
         assert candidate["native_models"][0]["mps_sha256"] == baseline["native_models"][0]["mps_sha256"]
     assert len(calls) == expected_calls
+
+
+def test_mislabeled_profile_is_rejected_before_creating_output(tmp_path):
+    from types import SimpleNamespace
+    from tools.research.run_charging_replay_pair import solve_profile
+    with pytest.raises(ValueError, match="Profile label"):
+        solve_profile(None, SimpleNamespace(stage2_charging_start_policy="none"), tmp_path / "fixed_assignment_binary")
+    assert not (tmp_path / "fixed_assignment_binary").exists()
+
+
+def test_bound_focus_comparison_preserves_all_other_declared_controls():
+    from dataclasses import asdict, replace
+    from src.optimization.common.problem import OptimizationConfig
+    from tools.research.run_charging_replay_pair import comparison_controls
+    baseline = OptimizationConfig(time_limit_sec=600, mip_gap=.01, gurobi_threads=4)
+    profiles, field = comparison_controls(baseline, None, "bound_focus")
+    assert field == "stage2_gurobi_mip_focus"
+    assert [name for name, _ in profiles] == ["mip_focus_1", "mip_focus_3"]
+    changed = [k for k, v in asdict(baseline).items() if asdict(profiles[1][1])[k] != v]
+    assert changed == [field]
+    assert profiles[1][1].stage2_gurobi_mip_focus == 3
+    with pytest.raises(ValueError, match="original focus1"):
+        comparison_controls(replace(baseline, stage2_charging_start_policy="fixed_assignment_binary"), None, "bound_focus")
+    with pytest.raises(ValueError, match="Unknown"):
+        comparison_controls(baseline, None, "anything")

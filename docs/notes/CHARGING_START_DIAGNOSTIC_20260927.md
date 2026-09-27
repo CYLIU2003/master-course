@@ -88,3 +88,16 @@ C:/master-course/output/cluster-deployment/controller-venv/Scripts/python.exe -X
 
 
 保存提案のBESSだけを再計算する入口は `tools/research/audit_charging_replay_bess.py --help`。`--archive`へ監査済み元ZIP、`--preflight`へ診断のpreflight.json、`--result`へ各policy/result.json、`--output`へ新しい検査JSONを指定する。元ZIP/hashから設備の効率と制限・直前の実残量を読み、対象窓の96区間を検算する。前日初期在庫に戻さない。許容差は1e-6kWh。これは車両SOC・運行・PV量・会計・終端目標の独立監査を代替しない。
+
+
+## 2026-09-27：初期候補の実測結果と次の探索比較
+
+固定3e6a2678・同一3月step61の比較は両案ともengine可行、600秒time_limit、native費用157,588.716155円、下界155,998.160626円、gap1.009308%。呼出時間633.655秒対634.073秒で、費用・速度の改善はない。全native MPS SHAは一致。binary Startは新incumbentを作らなかったが、候補の数学的不可行を証明したわけではない。標準policyはnoneのまま。
+
+両案の元ZIP/設備/直前状態を用いたBESS96区間の別検算は通過（1,889.439768→2,920.230289kWh、最大収支残差2.14e-13kWh）。これは週間実行・全車両・会計の独立再監査ではない。証拠は `output/charging_start_review_20260927/march61-comparison.json` と同 `march61-native-pair/*bess*audit.json`。
+
+次の診断は既存CLIへ `--comparison bound_focus` を指定する。元のMIPFocus1/no-startとMIPFocus3/no-startだけを比較し、600秒、gap1%、seed42、4threads、許容差、Presolve0、Method0、SOC・BESS方策は保持する。起動時の全Config比較と、native MPS・実効パラメータ記録で差分を検査する。実行後は従来のsummary CLIで集計できる。省略時のcomparisonは従来のcharging_start。通常キャンペーンの既定値は変更しない。
+
+目的は同じ終了基準へ早く到達するかの確認であり、下界改善を費用削減と扱わない。まずstep61、改善の兆しがあれば既に復元済みの通常窓step12も確認する。可行性、費用、gap、時間、メモリを並記する。600秒未達・費用悪化・可行性不明なら高速化の採用根拠にしない。単一窓で週次安定性を主張しない。既存11月のattempt・予約・固定版は変更しない。
+
+Claudeの提案はMIPFocus3。ただし「Startが劣る」「改善する可能性が高い」は証明されておらず採用理由にしない。根拠はログ上38秒以降のincumbent、75秒以降のbound停滞と、Gurobi公式の[パラメータ定義](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parameter-MIPFocus)。実測で判断する。
