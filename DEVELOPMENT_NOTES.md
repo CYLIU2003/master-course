@@ -11569,3 +11569,15 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 保存済み3月step75の同一復元診断問題で旧二重構築経路を再現し、FeasibilityReport全体が完全一致。費用86項目、車両日台帳420行、日別台帳7行も一致。timeline呼出8→7回、cProfile込み合計4.026→3.661秒。逐次1窓測定であり週間速度向上・元研究SHAの会計再監査ではない。原本SHA照合とsolver禁止scopeでEnv/Model/optimize0。証拠 `output/charging_start_review_20260927/postsolve-profile-timeline/`、`timeline-reuse-comparison.json`。
 - 前項の55 passed/24 skippedに、同一検算1回構築・別問題で欠落回送を再検出する回帰、空/全域/部分slotの従来helperとの一致テストを包含。Claude静的レビュー承認済み。新しいnative solveはこの等価性診断では実行していない。
 - 23:11 JST、11月同一PID8976が生存し106/174保存・106可行、現在1.545 GiB/最大13.162 GiB。chainは未受入。予約・実行固定版f524eca2・旧成果物は維持。今回の2commitは開発branch/mainへ同期する次回用修正で、実行中workerの差替えなし。
+
+## 2026-09-27 次回週次releaseのオフライン準備（固定267e33eb）
+
+- 目的: 検証済みの料金表cache・同一検査内timeline再利用・毎時探索設定を、既存配布経路から次回実行へ渡せる形にする。実行中f524eca2、同じ11月attempt、予約と物理条件は変更しない。
+- release-next-267e33ebへ独立shallow cloneを作成し、detached/cleanを確認。旧固定releaseのdata/built/tokyu_fullをhash一致で複製。ODPT取得・DB再生成・旧Prepared再ラベルなし。既存tools/cluster/release.py packageとstage_release.ps1をローカルで使用。
+- 配布ZIPを展開し、tracked 2,036ファイル、source_digest、SHA/clean、対象データ8ファイルを確認。同固定cloneでnpm ci --offline --no-audit --no-fundとnpm run build成功、静的成果物をfrontend-next-267e33ebへコピー/hash保存。稼働配信先の差替えなし。
+- 最初の照合は旧runtime lock hashとの不一致で停止。旧CRLF730行・新LFであること、改行を除く内容が一致すること、親機の実インストール版が一致することを確認。照合コードの回避やlock改変は行わず、新release自身の正確なhashを使用する。遠隔環境は新版stageで再検査が必要。
+- 展開後worker probeをGurobi Env/Model/availabilityの失敗注入下で実行し呼出し0。これはライセンス利用可能性の検査ではない。AIなし再検査用verify_offline.py、verification.json、release.jsonをoutput/cluster-deployment/package-next-267e33ebに保存。再検査には実ZIPのhash照合も含む。
+- Claude Sonnetの静的レビュー実施。hash桁数と旧source assert不存在の2指摘は原コード・64文字の実測と矛盾するため不採用。review-fact-check.jsonに反証を保存。親機の確認と遠隔未確認の区別を説明文へ追記。研究/全週実機承認ではない。
+- 14:17 UTC読取: 11月同PID8976、ROLLING106/174保存・106可行、working set1.119GiB、peak13.162GiB。チェーン未承認・月別11/12。以後の最新値は画面/原本を参照。
+- 未実施: SSHへの新版配置、本番controller切替、新版Prepare、全週求解・独立物理会計再検算。候補準備を正式研究完了・週間高速化とは扱わない。現行計算の終了後、共有brokerと32GB以上/機器別RAM予算を保持して新入力版で1週を確認する。
+- 手順: docs/notes/NEXT_WEEKLY_RELEASE_20260927.md。コードの既存テスト・局所profileは各修正commitの証拠を利用し、今回は新しい配布成果物とビルド・展開境界を確認した。
