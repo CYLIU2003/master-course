@@ -11326,3 +11326,13 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 文書正本をdocs/guides/weekly_operations.mdへ集約。README先頭・docs/README・旧日付runbook・tools/research/READMEから誘導。操作フォルダ、原本、Prepared、queue、結果、PPTの保管区分を明記。過去日付にlive参照があるため物理移動・削除なし。Solcast、SQLite WAL、別チャットのPPT編集は未変更。
 - 検証: 関連78件（Windows別CWD/日本語空白&パスの実PowerShell起動、通信断の終了コード、重複拒否、原本保持、回収から比較への反映を含む）。実際の設定で別CWDからSTATUS=3（切断時）、CHECK=0、復旧後STATUS=0を確認。詳細配信12件/errors0。証跡は操作フォルダVERIFICATION.mdと各ログ。
 - 自己レビュー: この変更範囲の未解決P0/P1なし。原本を保持する復旧経路を維持。独立レビュー、意図的PC再起動試験、AIなしメール自動送信は未実施。単独メール認証未設定につき.emlは未送信。研究正式採用・全18台無故障・12/12完了の承認ではない。Windowsでテスト継続中に原資料を移動していない。
+
+
+## 2026-09-27: Claude Codeと安定・高速な週次運用構成を検討
+
+- ユーザー指示により既存Claude Code 2.1.283/claude.ai Proで2回の読取レビュー。実応答モデルclaude-sonnet-5、safe-mode、tools空/MCPなし、秘密・SSH実アドレスなしの証拠パケット。追加契約・課金設定・資格情報配置はなし。Claude自身の求解/原本監査はなし。
+- 完了9週のworker所要87.0〜218.0分、中央値140.3分、合計22.15worker時間。観測peak working set約13.17GiB、Private Commit最大14.63GiB。32GB機16GiB予算・4threads・slots1、共有Gurobi2枠を確認。3/8/10月のhourly_summary合計169.0/44.4/96.5分、time_limit6/0/2窓（全窓記録上feasible）。Stage2経過はnative solver Runtimeだけではない。月とPCが交絡しており、速度順位や将来ピーク保証はしない。
+- Claude初回の全CPU予約、毎月source_digest変更、実質10/12完了、残る2週は回収待ちのみ、の解釈を原本・コードで訂正し再レビュー。訂正後も「診断が最優先」「時間だけで比較」の提案は採用せず、現行12週成果を優先、物理・会計・解品質・メモリを受入条件へ追加。source_digestはコードhash、入力hashは別契約で維持。
+- docs/notes/STABLE_FAST_WEEKLY_CONFIGURATION_20260927.mdへ構成・実測・次の受入試験を記録。docs/reviews/CLAUDE_WEEKLY_CAPACITY_20260927.mdへ訂正後原文を保存。証拠・応答JSON・hashはoutput/claude_capacity_design_20260927。重い3月step61/10月step14と通常8月step160のMPS未保存を確認し、同一問題復元が診断開始前の残件。
+- 現行固定版・実行中worker・シナリオ・Threads・時間上限は変更せず、新規求解/再投入なし。Task Scheduler監督と4対2threads比較は設計段階で未配置・未実行。管理停止原因/commit不足原因/64GB利用許可/1月再監査/11・12月完走が未解決。設計レビューを正式研究承認や高速化実証へ読み替えない。
+- 検証は保存数値の再集計、リンク、diff、応答モデル/成功フラグ/ツール0、証拠hashを確認。文書変更だけなのでソルバーテスト再実行は対象外。今後もAIなしで起動・照合・回収する既存CLIを基礎とし、新しい分散基盤は導入しない。

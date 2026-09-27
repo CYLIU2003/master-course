@@ -4476,3 +4476,8 @@ python tools/research/rebuild_literature_figures.py --run-dir <回収済みrun�
 ```
 
 workerがFAILED/COMPLETEDで、原本の最終費用照合がOKの場合だけ実行します。原本をコピーして既存の物理・会計ゲートを適用し、図表のhashと原本不変を検査します。求解・再投入は行いません。`figure_rebuild_receipt.json` は `FIGURES_REBUILT_ONLY` であり、元ジョブのFAILEDや月別監査状態をCOMPLETEDへ変更しません。全runをコピーするため原本相当の空きディスクが必要です。
+
+
+## 安定性・計算時間の構成検討（2026-09-27）
+
+Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/STABLE_FAST_WEEKLY_CONFIGURATION_20260927.md)。現行12代表週の結果を優先し、同じattemptの復旧、共有枠内の配置、重い毎時窓の限定診断の順で進めます。OSによる管理プロセス監督とThreads比較は計画段階で、高速化・無人完走を実証済みとはしていません。
