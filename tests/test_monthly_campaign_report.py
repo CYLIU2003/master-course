@@ -56,6 +56,53 @@ def test_pending_costs_are_not_zero_and_duplicate_weeks_are_rejected(tmp_path):
     assert "未確定" in (destination / "report.md").read_text(encoding="utf-8")
 
 
+def test_descriptive_findings_decompose_observed_difference_not_causal_effect():
+    base = {"week": "2025-01-06", "total_cost": 100, "vehicle_usage_cost": 60,
+            "electricity_cost": 20, "fuel_cost": 10, "contract_overage_cost": 5,
+            "co2_cost": 1, "grid_import_kwh": 8}
+    high = {**base, "week": "2025-03-03", "total_cost": 150,
+            "vehicle_usage_cost": 70, "electricity_cost": 15, "contract_overage_cost": 40,
+            "grid_import_kwh": 6}
+    text = "\n".join(report.descriptive_findings([high, base], 12))
+    assert "2/12週" in text
+    assert "最小は2025-01-06開始週の100.00円" in text
+    assert "最大は2025-03-03開始週の150.00円" in text
+    assert "|車両日費|10.00|" in text and "|買電費|-5.00|" in text
+    assert "|契約超過モデル費|35.00|" in text
+    assert "|未分解の費目差（総費用差から上記差の和を引いた値）|10.00|" in text
+    assert "上記5費目だけでは総費用差の全額を説明できません" in text
+    assert "|総費用差|50.00|" in text
+    assert "買電量：6.00〜8.00 kWh（記録あり2/2週）" in text
+    assert "PVだけを変えた対照実験ではなく" in text
+    assert "最適費用の順位や季節平均ではありません" in text
+
+
+@pytest.mark.parametrize("bad", [None, float("nan"), float("inf"), True])
+def test_descriptive_findings_do_not_turn_missing_or_invalid_values_into_zero(bad):
+    rows = [{"week": "2025-01-06", "total_cost": 100, "grid_import_kwh": bad},
+            {"week": "2025-02-03", "total_cost": 200, "grid_import_kwh": 3}]
+    text = "\n".join(report.descriptive_findings(rows, 12))
+    assert "費用差の完全な内訳は算出していません" in text
+    assert "買電量：3.00〜3.00 kWh（記録あり1/2週）" in text
+    assert "|総費用差|" not in text
+
+
+def test_descriptive_findings_empty_or_single_week_do_not_invent_comparison():
+    for rows in ([], [{"week": "2025-01-06", "total_cost": 0, "grid_import_kwh": 0}]):
+        text = "\n".join(report.descriptive_findings(rows, 12))
+        assert "最小は" not in text and "最大は" not in text
+    assert "買電量：0.00〜0.00 kWh" in text
+
+
+def test_descriptive_findings_tolerates_only_sub_micro_yen_rounding():
+    first = {"week": "2025-01-06", "total_cost": 100, "vehicle_usage_cost": 60,
+             "electricity_cost": 20, "fuel_cost": 10, "contract_overage_cost": 9, "co2_cost": 1}
+    second = {**first, "week": "2025-02-03", "total_cost": 120 + 1e-8, "electricity_cost": 40}
+    text = "\n".join(report.descriptive_findings([first, second], 12))
+    assert "|買電費|20.00|" in text
+    assert "未分解の費目差が1e-6円を超えています" not in text
+
+
 def test_reporting_recovery_has_separate_status_and_preserves_failed_campaign(tmp_path, monkeypatch):
     path, case, _ = operation(tmp_path, status="FAILED_OR_UNVERIFIED")
     folder = tmp_path / "repaired"

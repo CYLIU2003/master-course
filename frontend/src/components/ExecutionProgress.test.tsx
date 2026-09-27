@@ -4,6 +4,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ExecutionProgress from "./ExecutionProgress";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it.each([null, "not-a-time", "2026-10-01T00:00:00Z"])("does not hide a real attempt behind preparation without a job: %s", async started_at => {
+  const now = new Date().toISOString();
+  const active = { parent: "p", campaign: "running", week: "2025-11-10", state: "RUNNING", job_id: "actual",
+    prepared: true, verified: false, connection: "CONNECTED", solver_git_sha: "sha", placement: [], started_at: now,
+    expected_windows: 174, execution: { observed_at: now, phase: "ROLLING", rolling_saved: 55, rolling_feasible: 55, chain_accepted: false } };
+  const placeholder = { ...active, campaign: "prepare", state: "PREPARED_ONLY", job_id: null, execution: null, started_at };
+  for (const cases of [[active, placeholder], [placeholder, active]]) {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ schema_version: "execution_detail_v1", observed_at: now, errors: [], cases }))));
+    const client = new QueryClient();
+    render(<QueryClientProvider client={client}><ExecutionProgress /></QueryClientProvider>);
+    expect(await screen.findByText("55/174窓（31.6%）")).toBeTruthy();
+    expect(screen.queryByText("入力準備済み・求解未投入")).toBeNull();
+    cleanup(); client.clear();
+  }
+});
 it("separates prepared-only and preparation RAM waits from computation", async () => {
   const stamp = new Date().toISOString();
   const base = {parent:"p",campaign:"prepare",week:"2025-01-06",state:"PREPARED_ONLY",worker:null,prepared:true,verified:false,

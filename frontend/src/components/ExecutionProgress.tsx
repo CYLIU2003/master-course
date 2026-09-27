@@ -47,7 +47,12 @@ export default function ExecutionProgress({ scenarioId, origin = "", controllerS
   for (const row of allRows) {
     const key = `${row.parent}-${row.week}`;
     const previous = latest.get(key);
-    if (!previous || !row.started_at || !previous.started_at || Date.parse(row.started_at) >= Date.parse(previous.started_at)) latest.set(key, row);
+    const started = Date.parse(row.started_at ?? "");
+    const previousStarted = Date.parse(previous?.started_at ?? "");
+    // A preparation placeholder must never hide a submitted attempt.
+    if (!previous || (Boolean(row.job_id) && !previous.job_id) ||
+        (Boolean(row.job_id) === Boolean(previous.job_id) && Number.isFinite(started) &&
+          (!Number.isFinite(previousStarted) || started >= previousStarted))) latest.set(key, row);
   }
   const liveStates = new Set(["PREPARING", "WAITING_PARENT_FREE_RAM", "QUEUED", "STAGING", "RUNNING", "COLLECTING", "LOST", "STATE_UNKNOWN"]);
   const latestRows = [...latest.values()];

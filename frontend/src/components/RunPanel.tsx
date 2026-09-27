@@ -80,6 +80,7 @@ export default function RunPanel({
   const workers = useQuery({
     queryKey: ["cluster-workers"],
     queryFn: () => api<ClusterWorkers>("/cluster/workers"),
+    refetchInterval: 15000,
   });
   const [rolling, setRolling] = useState(true);
   const [prepared, setPrepared] = useState<Prepared | null>(null);
@@ -442,13 +443,11 @@ export default function RunPanel({
                 ? `1時間ずつ運用するローリングを予定${planningDays * 24}回実行します。これは予定数で、完了数ではありません。`
                 : "前日計画のみ実行します。ローリング運用は行いません。"}
             </p>
-            {planningDays > 1 && (
-              <p>
-                複数日は診断実行です（MULTIDAY_RESEARCH_BLOCKED）。正式研究実行は開始できません。対象シナリオの準備済み入力と実行条件を確認してください。
-              </p>
-            )}
           </div>
         )}
+        {method !== "simulate" && planningDays > 1 && <p className="warning">
+          複数日は診断実行です（MULTIDAY_RESEARCH_BLOCKED）。正式研究実行は開始できません。対象シナリオの準備済み入力と実行条件を確認してください。
+        </p>}
         <ErrorBox
           error={prepare.error ?? run.error ?? job.error ?? preflight.error}
         />

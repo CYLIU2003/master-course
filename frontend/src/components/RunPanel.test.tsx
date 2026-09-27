@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   cleanup,
+  act,
   fireEvent,
   render,
   screen,
@@ -133,6 +134,24 @@ it.each([
   expect(blocked.textContent).toContain("担当外");
 });
 
+it("refreshes worker readiness while the execution screen remains open", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    workerRows = [{ id: "solver", name: "Solver", enabled: true, job_role: "gurobi_only", can_run_optimization: true }];
+    mount();
+    const select = screen.getByLabelText("計算の配布先") as HTMLSelectElement;
+    await waitFor(() => expect(select.querySelector('option[value="solver"]')).not.toBeNull());
+    expect((select.querySelector('option[value="solver"]') as HTMLOptionElement).disabled).toBe(false);
+    workerRows = [{ ...workerRows[0], can_run_optimization: false }];
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    await waitFor(() => expect((select.querySelector('option[value="solver"]') as HTMLOptionElement).disabled).toBe(true));
+    expect(requests.filter(r => r.url === "/api/cluster/workers").length).toBeGreaterThan(1);
+  } finally {
+    cleanup();
+    vi.useRealTimers();
+  }
+});
+
 async function prepare() {
   await waitFor(() =>
     expect(
@@ -154,6 +173,14 @@ it("shows 168 planned windows and blocks formal seven-day execution", async () =
       .getByRole("button", { name: "2. 計算を開始" })
       .hasAttribute("disabled"),
   ).toBe(true);
+});
+it("explains the multi-day formal guard for reoptimization too", async () => {
+  mount();
+  await prepare();
+  fireEvent.change(screen.getByLabelText("実行する処理"), { target: { value: "reoptimize" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: /正式実行/ }));
+  expect(screen.getByText(/MULTIDAY_RESEARCH_BLOCKED/)).toBeTruthy();
+  expect((screen.getByRole("button", { name: "2. 計算を開始" }) as HTMLButtonElement).disabled).toBe(true);
 });
 it("sends the authoritative day-ahead profile when rolling is disabled", async () => {
   mount();

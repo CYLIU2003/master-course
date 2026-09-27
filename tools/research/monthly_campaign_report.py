@@ -207,9 +207,56 @@ def comparison_tables(rows: list[dict]) -> list[str]:
     return lines
 
 
+def descriptive_findings(rows: list[dict], declared: int) -> list[str]:
+    """Describe audited outcomes without inferring causal or optimality effects."""
+    def finite(row: dict, key: str) -> bool:
+        value = row.get(key)
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+    lines = ["", "## 数値から読めること（記述的比較）", "",
+             f"以下は集計採用した{len(rows)}/{declared}週の範囲です。未完了週をゼロや推定値で補いません。"]
+    cost_rows = [r for r in rows if finite(r, "total_cost")]
+    if len(cost_rows) >= 2:
+        low = min(cost_rows, key=lambda r: r["total_cost"])
+        high = max(cost_rows, key=lambda r: r["total_cost"])
+        difference = high["total_cost"] - low["total_cost"]
+        lines += [f"保存済み総費用の最小は{low['week']}開始週の{low['total_cost']:,.2f}円、"
+                  f"最大は{high['week']}開始週の{high['total_cost']:,.2f}円、差は{difference:,.2f}円です。",
+                  "これは取得した運用計画の費用差であり、各月の最適費用の順位や季節平均ではありません。"]
+        components = [("vehicle_usage_cost", "車両日費"), ("electricity_cost", "買電費"),
+                      ("fuel_cost", "燃料費・在庫評価"), ("contract_overage_cost", "契約超過モデル費"),
+                      ("co2_cost", "CO₂費")]
+        if all(finite(r, key) for r in (low, high) for key, _ in components):
+            deltas = [(label, high[key] - low[key]) for key, label in components]
+            lines += ["", "最大費用週−最小費用週の内訳（正値は最大費用週の方が高い）:", "",
+                      "|費目|差 [円]|", "|---|---:|"]
+            lines += [f"|{label}|{delta:,.2f}|" for label, delta in deltas]
+            remainder = difference - math.fsum(delta for _, delta in deltas)
+            lines += [f"|未分解の費目差（総費用差から上記差の和を引いた値）|{remainder:,.2f}|",
+                      f"|総費用差|{difference:,.2f}|"]
+            if abs(remainder) > 1e-6:
+                lines.append("未分解の費目差が1e-6円を超えています。丸め誤差とみなさず、原会計の残る費目を確認してください。上記5費目だけでは総費用差の全額を説明できません。")
+        else:
+            lines.append("比較対象の費目に未記録値があるため、費用差の完全な内訳は算出していません。")
+    lines.append("")
+    for key, label, unit in [("grid_import_kwh", "買電量", "kWh"),
+                             ("pv_to_bus_kwh", "PVからバスへの直接供給", "kWh"),
+                             ("pv_to_bess_kwh", "PVからBESSへの充電", "kWh"),
+                             ("pv_curtailed_kwh", "PV抑制量", "kWh"),
+                             ("peak_grid_kw", "受電ピーク", "kW"),
+                             ("used_vehicle_day_count", "車両日数", "車両日")]:
+        values = [r[key] for r in rows if finite(r, key)]
+        if values:
+            lines.append(f"- {label}：{min(values):,.2f}〜{max(values):,.2f} {unit}（記録あり{len(values)}/{len(rows)}週）。")
+    lines += ["", "費目差の分解は算術的な説明です。PVだけを変えた対照実験ではなく、日付別入力・配車・充電・探索到達度の差を含みます。",
+              "総費用と買電・燃料費を分けて読むことで、車両日費や契約超過モデル費の変化を電力利用の効果と取り違えずに確認できます。",
+              "BESS初終端差は別表を参照してください。在庫取り崩しを翌週以降も続く節約とせず、月額・年額への単純換算も行いません。"]
+    return lines
+
+
 def publish(result: dict, output: Path) -> Path:
     """Create an immutable report revision, then atomically publish its pointer."""
-    revision = digest(canonical({"report_format": 2, "comparison": result}))
+    revision = digest(canonical({"report_format": 3, "comparison": result}))
     destination = output / "revisions" / revision
     if (destination / "manifest.json").exists():
         manifest = read(destination / "manifest.json")
@@ -253,6 +300,7 @@ def publish(result: dict, output: Path) -> Path:
             fig.savefig(destination / "monthly_cost.png", dpi=140)
             plt.close(fig)
             lines += ["", "![週次費用](monthly_cost.png)"]
+        lines += descriptive_findings(result["rows"], len(result["cases"]))
         lines += comparison_tables(result["rows"])
         lines += ["", "費目・電力量・車両台帳は各週の元resultsを参照。電費一定条件であり空調負荷差は未評価。",
                   "BESS初終端はcomparison.jsonのbess_terminalに原記録を保存。在庫取り崩しを恒常的節約やPV効果としない。",
