@@ -11446,3 +11446,11 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - Claude Sonnet読取レビュー済み。V2G非対応を明記。境界slot集合所属の助言は実装契約と既存回帰に照らして不採用。native比較未実施を明記、速度向上は未主張。
 - 関連71件合格、CLI help確認。初回system Pythonはpytest未導入、controller-venvで再実行。テストはnative Gurobi性能の証明ではない。
 - docs/notes/CHARGING_START_DIAGNOSTIC_20260927.mdに測定値・呼出経路・比較条件・採用条件を記載。証拠output/charging_start_review_20260927。新規求解、再投入、稼働controller/workerへの配置なし。通常画面の既定は変更なし。
+
+## 2026-09-27：保存済み毎時ウィンドウの比較入力をスクリプト化
+
+- tools/research/prepare_charging_replay.pyを追加。回収時のZIP SHAを読取前後で照合、対象窓と直前stateの時刻・シナリオ/Prepared/日付を照合。effective scenario/PVと既存の全入力fingerprintを検査し、本番RollingReoptimizerで実SOC/BESS/燃料/所在地/接続/受電ピークを復元する。求解境界で捕捉し、初期候補なし/ありの2経路を比較。
+- 実原本：3月step12と最遅step61（元610.85秒）で復元通過。1698行の前日充電候補。step61は2経路の問題/設定比較も通過。保護scope内Env/Model/optimize/禁止呼出0。元計画・会計・固定f524eca2を変更せず、新規求解・ジョブ投入なし。証拠output/charging_start_review_20260927/*preflight.json。
+- 初回実行ではPVのファイルhashをcanonical JSON hashと取り違えて停止。既存ローダーの仕様を確認し、原バイトSHA照合へ修正して通過。未知/欠損/非有限/真偽値の探索設定、別時刻、予測更新やBESS overrideの未対応条件は事前拒否する。
+- 関連44テスト通過。Claude初回レビューを受け2経路の実変換を比較するよう改善。ZIP全体hashによる原本保護と到達しない入出力pathの根拠を提示し、再レビューでP0/P1指摘は撤回。残るP2（mutable値比較の一般性/将来入力への保証範囲）は記録し、nativeモデル同値や速度向上を未検証と明記。
+- 親機はDRAINING、11月は同一PID8976で76/174保存時点を確認済み。ライセンス2枠中1枠予約・他の32GB機READYは確認したが、今回のプリフライトはライセンスも使用しない。通常求解の復旧や台帳を迂回する比較実行は開始していない。

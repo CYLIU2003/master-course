@@ -49,3 +49,19 @@ CLIのhelpから引数の実在も確認済み。native Gurobiでの比較実験
 
 同一PC・threads・予算・seed・料金・PV・BESS方策を保持し、Start以外の変数・制約・目的のモデル一致、候補採用のnative記録、可行性、目的値/gap、呼出/求解時間、メモリを比較する。候補構築や採否確認時間も含める。枠を確保できなければ待ち、既存予約を解除して始めない。
 初期候補が遅い・却下される場合は無効のまま維持する。実測前に高速化率は約束しない。12週の既存成果をこの新設定の成果として再ラベルしない。
+
+## 保存窓の復元を求解前に確認する
+
+`tools/research/prepare_charging_replay.py` は元の回収ZIPと回収時SHAを読み、日付付きの入力・前日配車・直前の実行状態を復元する。時刻表取得・Prepareの再生成・ジョブ投入は行わない。出力は原本とは別の新規JSONだけ。
+
+```powershell
+output/cluster-deployment/controller-venv/Scripts/python.exe -X utf8 tools/research/prepare_charging_replay.py --archive output/executed_soc_20260926/remaining_campaign/2025-03-03/state/b5023143-6887-5d46-8a3d-8015649c5bff.zip --archive-sha256 13cd365f16278330a861ffb9dba6c41e8199a92f738caa7c129ee00d1766262f --step 61 --output output/charging_replay_next/preflight.json
+```
+
+SHAはその場で新しく作って承認扱いにせず、既存月別comparisonの当該caseの`archive_sha256`を使用する。アーカイブの読取前後に照合し、内部の参照した各原本hashも出力する。`canonical_solver_result.json`もZIP全体のhashで保護される。
+
+3月step12および最も遅かったstep61（元の呼出610.85秒）を実原本で復元し、1698行の前日充電候補と実状態を確認した。Gurobi禁止scope内の再構築でEnv起動・Model生成・求解・禁止呼出はいずれも0。これは求解性能・物理検算の再実施ではない。
+
+初期候補なし／ありで本番の状態変換をそれぞれ通し、復元問題と実効設定の差がpolicyだけであることを確認する。nativeモデルの変数・制約・目的の同一性は、後続の実求解比較で別に確認する。更新PV予測、BESS下限override、初回窓の暗黙状態は未対応として停止し、別条件へ黙って変換しない。
+
+Claudeレビューへの対応：2経路の状態変換比較を追加。solver結果の個別hash未照合との指摘にはZIP全体hashで原本が固定されることを説明した。`RollingChainRequest`は設定抽出のみに使い、空の入出力パスを読む`run_rolling_chain`は呼び出さない。元の固定SHAは出力へ残すが、この汎用ツールをf524eca2だけへハードコードしない。レビューは実機性能承認とは区別する。

@@ -4548,3 +4548,5 @@ Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/S
 ### 毎時充電の初期候補再利用（試験機能・既定無効）
 
 毎時CLIに `--stage2-charging-start-policy fixed_assignment_binary` を追加。実SOC・制約は維持し、前日計画の充電バイナリだけを初期候補へ使います。通常は `none` のままです。実行中の12週へは適用せず、速度効果は未検証。[測定・比較手順](docs/notes/CHARGING_START_DIAGNOSTIC_20260927.md)を参照してください。
+
+保存済みの週から比較入力だけを復元するには `tools/research/prepare_charging_replay.py` を使用します。回収時ZIPのSHA、対象step、直前の実行状態を照合し、Gurobiを起動せず候補あり/なしの状態変換を確認します。[実行例と未対応条件](docs/notes/CHARGING_START_DIAGNOSTIC_20260927.md#保存窓の復元を求解前に確認する)。これは速度比較の求解完了を意味しません。
