@@ -11543,3 +11543,13 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 独立レビュー：Claude Code Sonnet（tools無効）の静的レビューを実施。運用呼出し・文書移行のP1指摘についてtracked tools/scripts/bff/docsを検索し、`weekly_operator.resume_command` が保存済みworkersを常に明示することを確認。新規用手順例をautoへ更新し、既存operation/固定release/bindingを変更しない再開方法をREADMEと実行ノートへ記載して解消。コード上の追加P0/P1指摘なし。自己レビューと独立静的レビューは実機承認ではない。追加CI・課金機能は有効化しない。
 - 証拠：`output/charging_start_review_20260927/weekly-auto-default-review.json`、同tests.txt。11月同一PID8976を22:51 JSTに直接照会し104/174保存・104可行、現在1.432 GiB/最大13.162 GiB、週全体未受入を確認。`november-auto-default-probe.json` に記録。11/12集計のまま。
 - 正式ソースmainへ同期する対象は次回新規実行のCLI・テスト・手順のみ。稼働中コントローラー/workerのf524eca2を更新・再起動せず、同じattemptと予約を維持。毎時探索設定の週全体比較は、新しいclean SHAでPrepare・前日計画から揃える必要があり未実施。旧SHA前日計画と新版rollingを混ぜて一致ゲートを回避しない。
+
+
+## 2026-09-27 23:02 JST — 実データの処理時間計測と料金辞書の重複構築削減
+
+- 前turnの自動割当修正は4b1c688bとしてmain/originへ同期済み。今回は完了済み3月の保存窓step75を元ZIP SHA13cd365f…とmember SHAで照合し、solver禁止scopeで可行性・費用・台帳をcProfile計測。価格参照を34,092回呼び、その都度全料金辞書を作っていたため該当箇所だけを軽量化。到着・回送・SOC・電力検査は省略しない。
+- `CostEvaluator` に最大1系列のbuy/sell辞書を保持。exact tupleとfrozen `EnergyPriceSlot` の組だけをidentityで再利用し、強参照でID再利用を防ぐ。別系列・可変list/recordは古い値を使わない。単一entryを作成後公開し、各呼出はローカルsnapshotを使う。近傍slotの同距離順序・重複slotの最後優先・0/負価格・空系列は従来どおり。円/kWh単価参照のみで費用式、kW/kWh換算、需要料金、物理条件・比較条件は不変。
+- 同じ復元入力で旧関数と新関数を実行し、費用86項目、車両日台帳420行、日別台帳7行が完全一致。ソルバーEnv/Model/optimizeは0、可行性判定もtrue。計測は4.731秒→4.026秒だがcProfile overhead込み・1窓の順次測定で、週間求解の高速化率ではない。復元の約69秒はアーカイブ照合/再構築であり本番毎時の追加時間とは扱わない。
+- 原週の会計再監査とは区別：再構築は診断configで、元のresearch実行とreturn-leg bonusの扱いが異なり、元objectiveとの差がある。今回の一致判定は同一診断入力上の旧/新評価処理間であり、原週の採用判定・実会計を上書きしない。証拠は `output/charging_start_review_20260927/price-lookup-comparison.json`、`postsolve-profile*/summary.json` とprofile.pstats。比較JSONに旧/新evaluatorのhashを保存。
+- 回帰44 passed（lookup、既存cost/CO2/provisional/ledger、strict coverage、engine postsolve）。コマンドと実行記録は `price-lookup-tests.txt`。Claude Code Sonnet静的レビューは承認可。新constructorを継承する既存クラスはsrc/tests検索でなし。Claudeの「異なるproblemを順次扱うと効果ゼロ」は採用せず、各1回のevaluate/ledger内部でも同じ料金tupleを数万回引く実測を根拠に修正。週全体での効果未検証という指摘は維持。`price-lookup-review.json`に原レビュー保存。独立レビューは実機/研究承認ではない。
+- 23:01 JST、11月の同一PID8976が生存、105/174保存・105可行、現在1.393GiB/最大13.162GiB。週全体未受入。月別集計・詳細進捗publisherの実プロセスも生存確認。新版へ差し替えず固定f524eca2継続。追加の求解・予約解放・再投入なし。

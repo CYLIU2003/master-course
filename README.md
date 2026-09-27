@@ -4575,3 +4575,8 @@ CLIは `scripts/run_hourly_charging_reoptimization.py --help` の `--charging-se
 
 `tools/research/weekly_campaign.py run` は、`--workers` を省略すると既存schedulerの自動割当（`auto`）を使います。登録・配置確認、Gurobiの32 GB以上要件、端末の空きRAMとメモリ予算、CPU、共有ライセンス枠の検査を通ったPCへ割り当てます。固定配置は `--workers <worker-id> local` のように明示できます。
 既存キャンペーンは保存済みoperationと固定releaseで再開してください。`weekly_operator.py` はoperationのworkersを明示して渡すため、今回の既定値変更で配布先は変わりません。凍結済みbindingと異なるworkersではPrepare・投入前に停止します。進行中のf524eca2の11月分には配置・コード変更を適用していません。
+
+
+### 料金参照の軽量化（2026-09-27）
+
+新版の費用評価では、変更不能な料金系列の参照辞書を評価器内で一つだけ再利用します。料金系列が変わると作り直し、可変形式の入力は従来どおり照合します。価格・費用式・SOC条件は変更しません。保存済み窓の旧処理との費用86項目・車両日台帳420行・日別台帳7行の一致を確認済みです。1窓のプロファイル測定であり、週全体の速度改善率は未検証。実行中の固定版には適用せず、次のclean版から利用します。

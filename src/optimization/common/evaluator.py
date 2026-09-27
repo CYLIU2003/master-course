@@ -14,6 +14,7 @@ from .problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
     DailyCostLedgerEntry,
+    EnergyPriceSlot,
     ProblemTrip,
     VehicleCostLedgerEntry,
     classify_peak_slots,
@@ -211,6 +212,26 @@ _DRIVER_OVERTIME_FACTOR: float = 1.25
 
 
 class CostEvaluator:
+    def __init__(self) -> None:
+        # Keep at most one immutable price series. A new rolling problem can
+        # share this tuple, but a changed tariff must get its own lookup.
+        self._price_lookup_cache: tuple[
+            Tuple[EnergyPriceSlot, ...], Dict[int, float], Dict[int, float]
+        ] | None = None
+
+    def _price_maps(self, problem: CanonicalOptimizationProblem) -> tuple[Dict[int, float], Dict[int, float]]:
+        slots = problem.price_slots
+        cached = self._price_lookup_cache
+        if cached is not None and cached[0] is slots:
+            return cached[1], cached[2]
+        buy = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in slots}
+        sell = {slot.slot_index: slot.grid_sell_yen_per_kwh for slot in slots}
+        # Legacy duck-typed/mutable inputs retain the uncached behavior.
+        # Publish one complete entry, so concurrent evaluations cannot mix maps.
+        if type(slots) is tuple and all(type(slot) is EnergyPriceSlot for slot in slots):
+            self._price_lookup_cache = (slots, buy, sell)
+        return buy, sell
+
     def evaluate(
         self,
         problem: CanonicalOptimizationProblem,
@@ -2212,7 +2233,7 @@ class CostEvaluator:
         return max(float(trip.fuel_l or 0.0), 0.0)
 
     def _slot_buy_price(self, problem: CanonicalOptimizationProblem, slot_index: int) -> float:
-        price_map = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
+        price_map, _ = self._price_maps(problem)
         selected_price = price_map.get(slot_index)
         if selected_price is None and problem.price_slots:
             nearest_slot = min(problem.price_slots, key=lambda slot: abs(slot.slot_index - slot_index))
@@ -2220,7 +2241,7 @@ class CostEvaluator:
         return selected_price or 0.0
 
     def _slot_sell_price(self, problem: CanonicalOptimizationProblem, slot_index: int) -> float:
-        price_map = {slot.slot_index: slot.grid_sell_yen_per_kwh for slot in problem.price_slots}
+        _, price_map = self._price_maps(problem)
         selected_price = price_map.get(slot_index)
         if selected_price is None and problem.price_slots:
             nearest_slot = min(problem.price_slots, key=lambda slot: abs(slot.slot_index - slot_index))
