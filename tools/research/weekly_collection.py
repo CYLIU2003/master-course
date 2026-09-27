@@ -31,6 +31,14 @@ def collect_week(prepared: dict, item: dict, directory: Path, audit: dict) -> di
         original = directory / "original"
         original.mkdir(exist_ok=True)
         archive.extractall(original)
+    return export_executed_week(prepared, item, directory, audit, accounting, plan, physical, inputs)
+
+
+def export_executed_week(prepared: dict, item: dict, directory: Path, audit: dict,
+                         accounting: dict, plan: dict, physical: dict, inputs: dict) -> dict:
+    """Export a verified execution, including an explicitly audited reporting recovery."""
+    if audit["unverified"] or len(audit["tasks"]) != 1 or not audit["tasks"][0].get("physical_feasibility_claim_eligible"):
+        raise ValueError("Verified physical evidence is required before export")
     slots = 672 + int(prepared["overnight"]["extra_slots"])
     if (not accounting["eligible"] or not physical["accepted"] or physical["failed_checks"]
             or accounting["executed_slot_count"] != slots or accounting["missing_slots"] or accounting["duplicate_slots"]):

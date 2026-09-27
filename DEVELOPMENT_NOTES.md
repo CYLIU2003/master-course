@@ -11355,3 +11355,12 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 Python36件、画面14件、型検査、本番build通過。Claude Sonnet 5の限定レビューと外部Originの追加拒否テストを実施。
 別管理先からのGETは意図した監視要件のため維持し、POSTだけ同一ポートに制限。再ログオン実機試験と研究採用は未確認。
 [変更・レビュー詳細](docs/notes/SUPERVISOR_FRONTEND_20260927.md)、[利用手順](docs/guides/weekly_operations.md)。
+
+
+## 2026-09-27 1月の報告失敗を原計算から復旧
+
+同日時刻CO2図表衝突でFAILEDだった1月の原ZIPを保全し、別出力のrun_manifest.filesを修復。717必須成果物・1704便・697区間・会計を再照合し、週次費用4,860,462.656698648円を取得。
+recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明示的な--reporting-recoveryを受け、REPORTING_RECOVEREDを通常完了と分ける。
+関連82ケース（80件実行後、追加2件を含む変更対象28件再確認）、Claude限定レビュー・原本改変拒否検査、実図表示を確認。
+比較可能結果10/12週。自動集計プロセスだけ更新し、求解器・controller・原queue状態は変更なし。
+[根拠・レビュー判断・未達範囲](docs/notes/JANUARY_REPORTING_RECOVERY_20260927.md)。

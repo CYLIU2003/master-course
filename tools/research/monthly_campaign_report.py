@@ -73,8 +73,57 @@ def collect_verified(case: Path, week: str, operation: dict) -> tuple[dict, list
     return row, [{"week": week, **d} for d in daily], evidence
 
 
-def snapshot(operations: list[Path]) -> dict:
+def collect_reporting_recovery(folder: Path, case: Path, week: str, operation: dict) -> tuple[dict, list[dict], dict]:
+    """Include a reporting repair as a separate evidence class, never job completion."""
+    from tools.research.recover_weekly_reporting import verify_source
+    receipt = read(folder / "recovery.json")
+    if (receipt["status"] != "REPORTING_RECOVERED_CONDITIONAL_EVALUATION"
+            or receipt["week"] != week or receipt["solver_git_sha"] != operation["git_sha"]
+            or Path(receipt["case"]).resolve() != case.resolve() or receipt["original_worker_state"] != "FAILED"):
+        raise ValueError("Reporting recovery binding mismatch")
+    for name, expected in receipt["files_sha256"].items():
+        target = (folder / name).resolve()
+        if not target.is_relative_to(folder.resolve()) or sha(target) != expected:
+            raise ValueError("Reporting recovery content changed: " + name)
+    # Compare the distributed copy directly with the original ZIP. Do not follow
+    # the historical output_run path in the figure receipt to another directory.
+    evidence = verify_source(case, folder / "run", repaired_manifest=True)
+    prepared = evidence["prepared"]
+    if (prepared["parent_id"] != operation["parent"] or prepared["source_git"] != {"sha": operation["git_sha"], "dirty": False}
+            or receipt["source_archive_sha256"] != evidence["source_archive_sha256"]):
+        raise ValueError("Reporting recovery source differs from operation")
+    audit = read(folder / "artifact-audit.json")
+    if not audit["accepted"] or not evidence["original_claim"].get("physical_feasibility_claim_eligible"):
+        raise ValueError("Reporting recovery artifact or physical gate failed")
+    row = read(folder / "results/weekly_summary.json")
+    account = read(folder / "run/rolling_hourly_chain/executed_day_accounting.json")
+    slots = 672 + prepared["overnight"]["extra_slots"]
+    if (row["week"] != week or row["job_id"] != evidence["item"]["job_id"] or row["git_sha"] != operation["git_sha"]
+            or not account["eligible"] or account["missing_slots"] or account["duplicate_slots"]
+            or account["executed_slot_count"] != slots or row["executed_slots_including_overnight"] != slots):
+        raise ValueError("Recovered weekly identity or accounting coverage differs")
+    for key, value in account["cost_breakdown"].items():
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if not math.isfinite(float(value)) or not math.isfinite(float(row[key])):
+                raise ValueError("Non-finite recovery accounting")
+            require_close(row[key], value, "recovered " + key)
+    with (folder / "results/daily_summary.csv").open(encoding="utf-8-sig", newline="") as stream:
+        daily = list(csv.DictReader(stream))
+    require_close(math.fsum(float(d["total_cost_jpy"]) for d in daily), row["total_cost"], "recovered daily total")
+    proof = {"case": str(case.resolve()), "parent_hash": prepared["parent_hash"],
+             "recovery": str(folder.resolve()), "recovery_receipt_sha256": sha(folder / "recovery.json"),
+             "archive_sha256": evidence["source_archive_sha256"], "original_worker_state": "FAILED"}
+    return row, [{"week": week, **d} for d in daily], proof
+
+
+def snapshot(operations: list[Path], reporting_recoveries: list[Path] | None = None) -> dict:
     index, rows, daily, evidence = [], [], [], []
+    repaired = {}
+    for folder in reporting_recoveries or []:
+        week = read(folder / "recovery.json")["week"]
+        if week in repaired:
+            raise ValueError("Duplicate reporting recovery: " + week)
+        repaired[week] = folder
     identity, seen, parent_hash = None, set(), None
     for path in operations:
         operation = read(path)
@@ -98,10 +147,14 @@ def snapshot(operations: list[Path]) -> dict:
             recovered = recovery.get("cases", {}).get(week, {})
             recovery_verified = (recovery.get("solver_git_sha") == operation["git_sha"]
                                   and recovered.get("state") == "VERIFIED" and recovered.get("job_id"))
-            if recorded == "VERIFIED" or recovery_verified:
+            if recorded == "VERIFIED" or recovery_verified or week in repaired:
                 try:
-                    row, days, proof = collect_verified(campaign / week, week, operation)
-                    if recorded != "VERIFIED":
+                    if week in repaired:
+                        row, days, proof = collect_reporting_recovery(repaired[week], campaign / week, week, operation)
+                        entry.update(state="REPORTING_RECOVERED", original_state=recorded, collection="reporting_recovery")
+                    else:
+                        row, days, proof = collect_verified(campaign / week, week, operation)
+                    if recorded != "VERIFIED" and week not in repaired:
                         if row["job_id"] != recovered["job_id"]:
                             raise ValueError("Recovery receipt belongs to another attempt")
                         entry.update(state="VERIFIED", original_state=recorded, collection="operator_recovery")
@@ -115,6 +168,8 @@ def snapshot(operations: list[Path]) -> dict:
             index.append(entry)
     if not index:
         raise ValueError("No declared representative weeks")
+    if set(repaired) - seen:
+        raise ValueError("Reporting recovery is not a declared representative week")
     return {"source_sha": identity[0], "parent": identity[1], "parent_hash": parent_hash,
             "cases": sorted(index, key=lambda r: r["week"]), "rows": sorted(rows, key=lambda r: r["week"]),
             "daily": daily, "evidence": evidence, "complete": len(rows) == len(index)}
@@ -140,6 +195,7 @@ def publish(result: dict, output: Path) -> Path:
                  "各週は独立した連続7日間と最終翌朝の充電・受電・費用。月平均・年間連続運用ではない。",
                  "原本hashと記録済み物理判定、実行会計との一致を再確認した集計。新しい物理再求解ではない。",
                  "統合最適性・正式研究採用は別判定。未完了・検算不通過は費用比較へ含めない。", "",
+                 "REPORTING_RECOVEREDは原試行の図表生成失敗を残した別出力での再検算済み集計。原ジョブの完了への変更ではない。", "",
                  "|代表週開始日|状態|週次費用 [円]|", "|---|---|---:|"]
         for case in result["cases"]:
             amount = f"{case['total_cost_jpy']:,.2f}" if case["included"] else "未確定"
@@ -169,15 +225,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--operation", type=Path, nargs="+", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--reporting-recovery", type=Path, action="append", default=[])
     parser.add_argument("--watch", action="store_true", help="Republish on campaign-state changes, without AI or job submission")
     args = parser.parse_args()
     previous = None
     while True:
         states = [campaign_path(p) / "state.json" for p in args.operation]
         recovery = [campaign_path(p) / "operations/collection.json" for p in args.operation]
-        fingerprint = digest(canonical({str(p): sha(p) if p.exists() else None for p in [*args.operation, *states, *recovery]}))
+        repaired = [p / "recovery.json" for p in args.reporting_recovery]
+        fingerprint = digest(canonical({str(p): sha(p) if p.exists() else None for p in [*args.operation, *states, *recovery, *repaired]}))
         if fingerprint != previous:
-            result = snapshot(args.operation)
+            result = snapshot(args.operation, args.reporting_recovery)
             print(publish(result, args.output), flush=True)
             previous = fingerprint
             failed = any(p.exists() and read(p).get("status") == "PARTIAL_OR_FAILED" for p in states)

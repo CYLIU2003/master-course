@@ -143,6 +143,25 @@ $root = 'C:/master-course/output/executed_soc_20260926'
 メール送信のPC単独認証は未設定です。AIなしでは画面、STATUS、未送信.emlで確認します。
 過去のGmailコネクタ経由送信はこのツール単独の機能ではありません。既存email_receipt.jsonと送信済みを確認し、二重送信しません。
 
+### 計算後の図表生成だけが失敗した週
+
+原試行のFAILEDをCOMPLETEDへ書き換えません。今回の1月は同じ時刻名を別日に使ったCO2図表の衝突が原因で、
+修正済みの図表生成から別出力を作成済みです。次で原ZIP・Prepared・物理判定・会計・図表を照合し、
+未使用の出力先へ週次CSVと図を再生成できます。別の失敗理由をこの経路で通すことはできません。
+
+```powershell
+& $py -X utf8 C:/master-course/tools/research/recover_weekly_reporting.py `
+  --case "$root/remaining_campaign/2025-01-06" `
+  --rebuilt "$root/report_recovery/2025-01-06" `
+  --output '<まだ存在しない再検算出力先>'
+```
+
+今回の再検算出力先は`$root/report_recovery/january-weekly-v2`です。既存成功9週との比較に含めるときは、
+`monthly_campaign_report.py`に`--reporting-recovery "$root/report_recovery/january-weekly-v2"`を追加します。
+比較表ではREPORTING_RECOVEREDと表示し、元ジョブの失敗・正式研究判定は残します。
+画面の通常ジョブ完了数と、この再検算結果を含む比較可能週数は異なります。
+このPCの比較表監視は当該引数を付けて稼働しています。二重に同じ出力先へ監視を起動しないでください。
+
 ## 次の実験でも入口を作る
 
 既存の確定済みoperationファイルを指定して、未使用のフォルダへ生成します。

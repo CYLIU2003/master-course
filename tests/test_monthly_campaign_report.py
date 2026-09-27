@@ -56,6 +56,30 @@ def test_pending_costs_are_not_zero_and_duplicate_weeks_are_rejected(tmp_path):
     assert "未確定" in (destination / "report.md").read_text(encoding="utf-8")
 
 
+def test_reporting_recovery_has_separate_status_and_preserves_failed_campaign(tmp_path, monkeypatch):
+    path, case, _ = operation(tmp_path, status="FAILED_OR_UNVERIFIED")
+    folder = tmp_path / "repaired"
+    save(folder / "recovery.json", {"week": "2025-02-03"})
+    monkeypatch.setattr(report, "collect_reporting_recovery", lambda *a: (
+        {"week": "2025-02-03", "job_id": "original-job", "total_cost": 123}, [], {"parent_hash": "p"}))
+    result = report.snapshot([path], [folder])
+    assert result["complete"] and result["cases"][0]["state"] == "REPORTING_RECOVERED"
+    assert result["cases"][0]["original_state"] == "FAILED_OR_UNVERIFIED"
+    assert report.read(case.parent / "state.json")["cases"]["2025-02-03"]["state"] == "FAILED_OR_UNVERIFIED"
+
+
+def test_invalid_reporting_recovery_is_excluded(tmp_path, monkeypatch):
+    path, _, _ = operation(tmp_path, status="FAILED_OR_UNVERIFIED")
+    folder = tmp_path / "repaired"
+    save(folder / "recovery.json", {"week": "2025-02-03"})
+    def reject(*args):
+        raise ValueError("changed archive")
+    monkeypatch.setattr(report, "collect_reporting_recovery", reject)
+    result = report.snapshot([path], [folder])
+    assert not result["complete"] and not result["rows"]
+    assert result["cases"][0]["error"] == "changed archive"
+
+
 def test_multiple_campaigns_keep_declared_months_and_accept_only_verified(tmp_path, monkeypatch):
     path, _ = verified_case(tmp_path, monkeypatch)
     pending, _, _ = operation(tmp_path, "remaining", "2025-03-03", "NOT_STARTED")

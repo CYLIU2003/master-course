@@ -4495,3 +4495,10 @@ Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/S
 通常操作にAIやターミナルは不要です。無効化は自動復旧だけを止め、求解を終了しません。
 別の監視先は閲覧専用です。初回設置・画面が開けない場合は[運用手順](docs/guides/weekly_operations.md)、
 配置と検証は[実装記録](docs/notes/SUPERVISOR_FRONTEND_20260927.md)を参照してください。
+
+
+### 図表生成で失敗した週の再集計（2026-09-27）
+
+原ZIPと計画・会計を保持したまま、`recover_weekly_reporting.py`で図表修復後の週を別出力へ再検算できます。
+今回の1月を含め比較可能結果は10/12週（9件通常完了＋1件図表復旧）。元ジョブのFAILEDと研究判定は残します。
+[操作手順](docs/guides/weekly_operations.md)、[結果と検証記録](docs/notes/JANUARY_REPORTING_RECOVERY_20260927.md)。

@@ -12,6 +12,7 @@
 |週次回収・検算|`weekly_collection.py`（operatorから使用）|
 |月別費用比較|`monthly_campaign_report.py`（検算済み原本から集計）|
 |既存計算の図表修復|`rebuild_literature_figures.py`（別出力、元の失敗判定は保持）|
+|図表失敗した週の再検算・集計|`recover_weekly_reporting.py`（原ZIP照合、別出力。求解なし）|
 
 引数は各Pythonの`--help`で確認します。最適化の物理条件・出典検査・同時枠を迂回する入口ではありません。
 この整理では呼出先を維持し、稼働中スクリプトや日付付き証拠は移動していません。
