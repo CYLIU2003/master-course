@@ -11437,3 +11437,12 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 配置：8891は静的asset index-fToHUCnM.jsのみ更新。controller PID52332（16:12:17起動）は不変。f524eca2の実行中ソースは変更せず。月別report watcherのみ同じ2operationと1月/12月復旧receiptで再起動、PID64560。新規投入・メールなし。実画面で11/12集計と注意表示を確認。11月は20:34:29時点で74/174窓、プロセス生存・同一予約を保持。
 - 資料：最新バス研究資料9/19版へ6枚の現版11週更新を先頭追加し、旧24枚を非表示の履歴として保持。別名PPTXと6ページPDF、編集可能な月別費用表・電力量グラフ、原値/出典をoutcome/2026-09-27_monthly_progressへ保存。元PPTX SHA不変、PowerPointによる追加6枚の実レンダリングを目視確認。11月は未収録と明示。
 - AI不要の追加集計→資料更新CLIをtools/thesis_authoring/build_monthly_live_update.mjsとmerge_monthly_update.ps1に実装。hash/同一SHA/検算済み/1704便/有限値/費目合計を検査。PowerPoint原本上書き不可。現行条件用の途中更新であり、天候カーブを含む最終発表本文の統合は12週確定後に残る。
+
+## 2026-09-27 20:50 JST：毎時求解の実測と初期候補診断の準備
+
+- 11月同一attempt/PID8976をSSH読取で生存確認。75/174保存・75可行、現在1.39GiB/ピーク13.16GiB、16GiB予算。予約・固定f524eca2・稼働コードは維持。
+- 既存rolling_timing_reportで11月75窓と12月174窓を原ログ照合。呼出内native比率97.481%/90.681%。主因はこの測定範囲では求解時間。キュー等の未計測工程を0と扱わない。
+- 未適用のStage2 binary MIP-start実装をレビュー・回帰。CLI/Config/rolling/adapterへpolicyと監査を伝達。default none、SOC/電力/制約はコピーせず、物理条件は不変。全候補省略時をSUBMITTEDと誤表示しない修正。
+- Claude Sonnet読取レビュー済み。V2G非対応を明記。境界slot集合所属の助言は実装契約と既存回帰に照らして不採用。native比較未実施を明記、速度向上は未主張。
+- 関連71件合格、CLI help確認。初回system Pythonはpytest未導入、controller-venvで再実行。テストはnative Gurobi性能の証明ではない。
+- docs/notes/CHARGING_START_DIAGNOSTIC_20260927.mdに測定値・呼出経路・比較条件・採用条件を記載。証拠output/charging_start_review_20260927。新規求解、再投入、稼働controller/workerへの配置なし。通常画面の既定は変更なし。

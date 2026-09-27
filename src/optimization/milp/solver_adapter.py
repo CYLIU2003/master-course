@@ -44,6 +44,7 @@ from src.optimization.milp.pv_execution_reserve import add_pv_execution_reserve_
 from src.optimization.milp.auxiliary_bess import add_auxiliary_bess_constraints
 from src.optimization.milp.charging_window_support import ChargingWindowSupportEvents
 from src.optimization.milp.charging_session_relaxation import add_session_time_relaxation
+from src.optimization.milp.charging_mip_start import apply_charging_mip_start
 from src.optimization.milp.depot_connection_factors import (
     ArcDomain, SuccessorRow, FactoredConnectionVariables,
     add_factor_soc_terms, connection_windows, create_factor_variables, factor_depot_connections,
@@ -23252,6 +23253,16 @@ class GurobiMILPAdapter:
             objective2 += problem.scenario.demand_charge_on_peak_horizon_yen_per_kw * w_on_var
             objective2 += problem.scenario.demand_charge_off_peak_horizon_yen_per_kw * w_off_var
         stage2.setObjective(objective2, GRB.MINIMIZE)
+        charging_start_audit = apply_charging_mip_start(
+            stage2, policy=config.stage2_charging_start_policy,
+            warm_start=config.warm_start,
+            charging_slots=stage1_plan.charging_slots,
+            charge_on_vars=charge_on_var,
+            charger_vars=physical_charger_assignment_var,
+            window_start_slot=slot_indices[0] if slot_indices else None,
+            connected_chargers=config.rolling_connected_charger_by_vehicle,
+            active_session_vehicle_ids=config.rolling_active_charge_session_vehicle_ids,
+        )
         optimize_model(stage2)
 
         if stage2.Status == GRB.INF_OR_UNBD:
@@ -23475,6 +23486,7 @@ class GurobiMILPAdapter:
             metadata = {
                 **dict(stage1_plan.metadata or {}),
                 "stage2_solver_status": stage2_status,
+                "stage2_charging_start": charging_start_audit,
                 "stage1_mip_gap": stage1_gap,
                 "stage1_objective_value": stage1_objective_value,
                 "stage2_mip_gap": stage2_gap,
@@ -23824,6 +23836,7 @@ class GurobiMILPAdapter:
             **dict(stage1_plan.metadata or {}),
             "status": solver_status,
             "stage2_solver_status": stage2_status,
+            "stage2_charging_start": charging_start_audit,
             "stage2_exact_optimality_certified": stage2_exact_optimality_certified,
             "stage1_mip_gap": stage1_gap,
             "stage2_mip_gap": stage2_gap,

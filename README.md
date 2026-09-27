@@ -4544,3 +4544,7 @@ Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/S
 
 図表用CO₂係数の同一区間不一致は、該当点を空欄にしWARNINGを記録します。原データ・計算済み費用・排出量・物理検証は変更しません。旧固定版の図表例外は進捗画面で「図表の注意」とし、原FAILEDは詳細に保持します。
 12月は原本から図表のみ復旧し、検算済み集計は11/12週です。更新資料とAI不要の再生成手順は[outcomeのREADME](outcome/2026-09-27_monthly_progress/README.md)を参照してください。11月未収録、正式研究採用とは別判定です。
+
+### 毎時充電の初期候補再利用（試験機能・既定無効）
+
+毎時CLIに `--stage2-charging-start-policy fixed_assignment_binary` を追加。実SOC・制約は維持し、前日計画の充電バイナリだけを初期候補へ使います。通常は `none` のままです。実行中の12週へは適用せず、速度効果は未検証。[測定・比較手順](docs/notes/CHARGING_START_DIAGNOSTIC_20260927.md)を参照してください。

@@ -1268,6 +1268,7 @@ class RollingChainRequest:
     # Preserve the caller's execution class. CLI defaults remain formal; a
     # diagnostic BFF run must not silently become a formal research run.
     research_run: bool = True
+    stage2_charging_start_policy: str = "none"
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "RollingChainRequest":
@@ -1291,6 +1292,7 @@ class RollingChainRequest:
             pv_forecast_updates_json=getattr(args, "pv_forecast_updates_json", None),
             lookahead_hours=getattr(args,'lookahead_hours',None),
             pv_actuals_json=getattr(args, 'pv_actuals_json', None),
+            stage2_charging_start_policy=getattr(args, "stage2_charging_start_policy", "none"),
             bess_terminal_policy=str(args.bess_terminal_policy),
             bess_terminal_min_kwh=(
                 None if args.bess_terminal_min_kwh is None else float(args.bess_terminal_min_kwh)
@@ -1312,10 +1314,13 @@ def rolling_step_minutes(current_min: int, end_min: int | None,
 
 
 def rolling_solver_config(request: RollingChainRequest) -> OptimizationConfig:
+    from src.optimization.milp.charging_mip_start import validate_charging_start_policy
+    validate_charging_start_policy(request.stage2_charging_start_policy)
     return OptimizationConfig(
         mode=OptimizationMode.MILP,
         time_limit_sec=int(request.time_limit_sec),
         stage2_time_limit_sec=int(request.time_limit_sec),
+        stage2_charging_start_policy=request.stage2_charging_start_policy,
         mip_gap=float(request.mip_gap),
         random_seed=int(request.random_seed),
         gurobi_threads=(None if request.gurobi_threads is None else int(request.gurobi_threads)),
@@ -1342,6 +1347,8 @@ def run_rolling_chain(
     builds the request and forwards ``args`` for provenance capture.
     """
 
+    # Reject unknown experimental policy before any license availability probe.
+    config = rolling_solver_config(request)
     if not is_gurobi_available():
         raise RuntimeError(
             "Gurobi is unavailable; hourly research runs do not allow fallback"
@@ -1379,7 +1386,6 @@ def run_rolling_chain(
         audited_bev_terminal_policy
     ).value
 
-    config = rolling_solver_config(request)
     if request.day_ahead_problem is not None:
         # The frontend production path must use the very same canonical object
         # that generated the persisted assignment. Rebuilding duties or input
@@ -1654,6 +1660,7 @@ def run_rolling_chain(
                 "execution_minutes": step_execution_minutes,
                 "feasible": False,
                 "solver_status": "execution_error",
+                "stage2_charging_start_policy": request.stage2_charging_start_policy,
                 "elapsed_seconds": elapsed,
                 "execution_error": f"{type(exc).__name__}: {exc}",
             }
@@ -1727,6 +1734,7 @@ def run_rolling_chain(
             "trip_count_unserved": len(result.plan.unserved_trip_ids),
             "stage2_solver_status": metadata.get("stage2_solver_status"),
             "stage2_runtime_seconds": metadata.get("stage2_runtime_seconds"),
+            "stage2_charging_start": metadata.get("stage2_charging_start"),
             "stage2_time_limit_sec_effective": metadata.get(
                 "stage2_time_limit_sec_effective"
             ),
@@ -1890,6 +1898,7 @@ def run_rolling_chain(
         if executed_day_accounting.get("reason"):
             rejection_reasons.append(str(executed_day_accounting["reason"]))
         chain_summary = {
+            "stage2_charging_start_policy": request.stage2_charging_start_policy,
             "schema_version": "rolling_chain_summary_v1",
             "research_run": request.research_run,
             "scenario_id": request.scenario_id,
@@ -2036,6 +2045,8 @@ def main() -> int:
     parser.add_argument("--mip-gap", type=float, default=0.1)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--gurobi-threads", type=int, default=None)
+    parser.add_argument("--stage2-charging-start-policy", choices=("none", "fixed_assignment_binary"),
+                        default="none", help="Opt-in diagnostic binary start from the persisted day-ahead charging plan")
     parser.add_argument("--depot-id", default="tsurumaki")
     parser.add_argument("--service-id", default="WEEKDAY")
     parser.add_argument("--state-json", default=None)

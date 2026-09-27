@@ -1,0 +1,51 @@
+# 毎時充電の初期候補再利用：測定と診断用実装
+
+2026-09-27。現在の12代表週の計算固定版は f524eca2 のまま。本機能は既定無効であり、実行中の11月へ配置していない。
+
+## 測定した範囲
+
+既存 `tools/research/rolling_timing_report.py` を使用し、保存済み窓の呼出時間と、対応するnative logの求解終了行を照合した。根LPの途中時間は加算しない。
+
+|対象|保存済み窓|native求解合計 秒|native外の合計 秒|呼出内native比率|optimal / time_limit|
+|---|---:|---:|---:|---:|---:|
+|11月・途中|75|23,221.58|599.95|97.481%|43 / 32|
+|12月・完了|174|17,882.93|1,837.77|90.681%|150 / 24|
+
+これはソルバー呼出内の測定であり、キュー・Prepare・Stage1・転送・実行会計・図表を含む端から端までの所要時間ではない。native外には構築・抽出・検証が混在する。月とPCが異なるのでPC性能比較には使わない。
+
+原本SHA付き証拠は `output/charging_start_review_20260927/{november,december}-timing.json`。11月は同じattempt 490483ef、PID8976の生存を2026-09-27 20:42 JSTに読み取り照合。75窓が保存され、全75窓が可行。現在working set約1.39GiB、観測ピーク13.16GiB、予算16GiB。週全体の検算完了ではない。
+
+## 追加した機能
+
+既存毎時CLIの `--stage2-charging-start-policy` は `none`（既定）と `fixed_assignment_binary` を受け付ける。
+`RollingChainRequest → rolling_solver_config → RollingReoptimizer → OptimizationEngine → MILPOptimizer → Stage2 adapter` に実効設定を保持する。
+
+- 固定前日計画の絶対slot indexを使い、充電ON/OFF・物理充電器選択のバイナリ変数だけに `Start` を渡す。
+- SOC、充電電力、PV/BESSフロー、価格、目的関数、上下限、制約は変更しない。過去のSOCを再利用しない。
+- 実接続と衝突する開始slotは候補から除く。全変数が除かれた場合は `NOT_APPLIED` とし、空の提案を「投入済み」にしない。
+- 異なる電源の充電行を合算してから正電力を判定する。非有限値、負電力、表現不能な充電器、同時複数充電器では提案を書き込まない。
+- V2Gの放電行は今回の候補生成に非対応。元モデルの通常求解は維持する。
+- `SUBMITTED` は候補の提出であり、可行解の発見や採用を意味しない。native採用判定は `NOT_OBSERVED` と記録する。候補の却下と物理検証違反を混同しない。
+- 未知のpolicyはライセンスprobeより前に拒否。Gurobiの共有枠・機器別RAM制限は従来どおり。
+
+現行フロントやキャンペーンの要求はこの試験機能を自動選択しない。比較で有効性を確認するまで、通常実行の既定値を変更しない。
+
+## レビューと検証
+
+Claude Sonnetへ差分・helper・テストを読取専用で提示。回答は `output/charging_start_review_20260927/claude-review.json`。
+V2G非対応をdocstringへ明記。境界slotは実ウィンドウから渡しており、最初の充電変数から推測しない。充電変数が境界に存在しない場合の回帰も既存テストにあるため、Claudeが提案した変数集合への一律所属制約は追加しなかった。候補の全省略時の誤表示は自己レビューで修正した。
+
+変更後は次の関連71テストが通過。システムPythonにpytestがないため、既存controller-venvを使用した。
+
+```powershell
+output/cluster-deployment/controller-venv/Scripts/python.exe -m pytest tests/test_charging_mip_start.py tests/test_multiday_rolling_contract.py tests/test_rolling_timing_report.py tests/test_optimization_engine_postsolve.py tests/test_cluster_solver_policy.py -q
+```
+
+CLIのhelpから引数の実在も確認済み。native Gurobiでの比較実験・速度向上・週次通過は未検証。単体テストの通過をそれらの証拠にしない。
+
+## 次の比較と採用条件
+
+現在の11月を同じ試行のまま完了させることを優先する。その後、保存された同一窓・同一入力・同一実状態を使い、noneとfixed_assignment_binaryを別attemptで比較する。遅い候補は11月step15/26/14、12月step46/12/104。これに典型的な短い窓を加え、改善例だけを選ばない。
+
+同一PC・threads・予算・seed・料金・PV・BESS方策を保持し、Start以外の変数・制約・目的のモデル一致、候補採用のnative記録、可行性、目的値/gap、呼出/求解時間、メモリを比較する。候補構築や採否確認時間も含める。枠を確保できなければ待ち、既存予約を解除して始めない。
+初期候補が遅い・却下される場合は無効のまま維持する。実測前に高速化率は約束しない。12週の既存成果をこの新設定の成果として再ラベルしない。

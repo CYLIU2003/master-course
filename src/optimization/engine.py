@@ -43,6 +43,7 @@ from src.optimization.common.time_axis import service_minute
 from src.optimization.ga.engine import GAOptimizer
 from src.optimization.hybrid.hybrid_engine import HybridOptimizer
 from src.optimization.milp.engine import MILPOptimizer
+from src.optimization.milp.charging_mip_start import validate_charging_start_policy
 
 
 _PHASE4_SEED_MIN_COMPOSITION_CANDIDATE_LIMIT = 21
@@ -939,6 +940,7 @@ class OptimizationEngine:
         config: OptimizationConfig,
     ) -> OptimizationEngineResult:
         from src.solver_policy import solver_policy_scope, validate_no_gurobi_inputs, usage_record
+        validate_charging_start_policy(config.stage2_charging_start_policy)
         validate_no_gurobi_inputs(
             config.execution_profile, mode=config.mode.value,
             research_run=bool(getattr(config, "research_run", False)),
