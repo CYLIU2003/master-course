@@ -7,7 +7,7 @@ from bff.services.optimization_run.rolling_chain import (
 )
 
 
-def _manifest(*, turnaround_buffer_min: int) -> dict:
+def _manifest(*, turnaround_buffer_min: int, controls: dict | None = None) -> dict:
     problem = SimpleNamespace(
         depot_energy_assets={},
         price_slots=(),
@@ -24,7 +24,7 @@ def _manifest(*, turnaround_buffer_min: int) -> dict:
         scenario={"simulation_config": {}},
         problem=problem,
         input_audit={"service_id": "WEEKDAY"},
-        chain={"service_date": "2025-08-05"},
+        chain={"service_date": "2025-08-05", **(controls or {})},
         physical_validation={},
         executed_day={"cost_breakdown": {}},
         optimization_result={"solver_settings": {}},
@@ -45,3 +45,17 @@ def test_comparison_control_hash_includes_turnaround_and_route_band_semantics() 
     assert zero_buffer["comparison_control_hash"] != (
         fifteen_minute_buffer["comparison_control_hash"]
     )
+
+
+def test_search_and_start_policies_change_comparison_hash_not_runtime():
+    controls = {"charging_search_requested": "feasibility_first", "stage2_charging_start_policy": "none"}
+    baseline = _manifest(turnaround_buffer_min=0, controls=controls)
+    for changed in ({"charging_search_requested": "bound_first"},
+                    {"stage2_charging_start_policy": "fixed_assignment_binary"}):
+        other = _manifest(turnaround_buffer_min=0, controls={**controls, **changed})
+        assert other["comparison_control_hash"] != baseline["comparison_control_hash"]
+    telemetry = _manifest(turnaround_buffer_min=0, controls={**controls, "runtime_seconds": 900})
+    assert telemetry["comparison_control_hash"] == baseline["comparison_control_hash"]
+    legacy = _manifest(turnaround_buffer_min=0)
+    assert legacy["comparison_control_payload"]["rolling_solver_controls"]["charging_search_requested"] is None
+    assert legacy["comparison_control_hash"] != baseline["comparison_control_hash"]

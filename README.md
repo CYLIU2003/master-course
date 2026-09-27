@@ -4563,3 +4563,6 @@ Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/S
 新版の「運行・計算設定」から毎時充電の探索方針を保存でき、実行画面にも表示します。既定は従来の実行可能解重視（MIPFocus1）。下界改善重視（MIPFocus3）は明示選択する比較用で、速くなる保証はありません。保存後は新しいPrepareが必要です。前日計画の探索やSOC/BESS条件は変えません。
 
 CLIは `scripts/run_hourly_charging_reoptimization.py --help` の `--charging-search feasibility_first|bound_first` を使用します。各区間に要求方針と実効値を記録します。実測3窓と操作・検証範囲は[比較記録](docs/notes/ROLLING_SEARCH_COMPARISON_20260927.md)を参照してください。現行11月f524eca2は旧設定のまま継続し、この新設定の全週通過・稼働コントローラー配置はまだ確認していません。
+
+
+毎時探索設定を変えた対照比較では、求解条件hash（v3）が探索方針と充電開始方針を含みます。旧v2記録は変更せず、新旧を同一条件として直接比較する操作は拒否します。設定を変えた比較は新しいPrepareと実行記録を使用してください。既存12週の記述的集計は継続します。

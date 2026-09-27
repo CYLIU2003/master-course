@@ -67,6 +67,25 @@ def test_rolling_search_is_saved_versioned_and_rejects_unknown(editable):
             PrepareSimulationSettingsBody(rolling_charging_search=invalid)
 
 
+def test_rolling_search_http_roundtrip_and_stale_revision(editable):
+    app = FastAPI()
+    app.include_router(desktop.router)
+    client = TestClient(app)
+    url = f"/desktop/scenarios/{editable}/configuration"
+    before = client.get(url).json()
+    response = client.put(url, json={"revision": before["revision"],
+                                    "changes": {"rollingChargingSearch": "bound_first"}})
+    assert response.status_code == 200
+    saved = client.get(url).json()
+    assert saved["values"]["rollingChargingSearch"] == "bound_first"
+    assert saved["revision"] != before["revision"]
+    assert client.put(url, json={"revision": before["revision"],
+                                "changes": {"rollingChargingSearch": "feasibility_first"}}).status_code == 409
+    assert client.put(url, json={"revision": saved["revision"],
+                                "changes": {"rollingChargingSearch": "bound_frist"}}).status_code == 422
+    assert client.get(url).json()["values"]["rollingChargingSearch"] == "bound_first"
+
+
 def test_route_pattern_selection_keeps_exact_ids_and_invalidates_prepared_scope(editable):
     from bff.services.run_preparation import _scenario_hash
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -65,6 +66,7 @@ def _case(
     comparison_requested: bool = True,
     mip_gap_target_met: bool = True,
     objective_preset: str = "scalar_total_cost_v1",
+    control_payload: dict | None = None,
 ) -> None:
     service_date = "2025-08-05"
     pv_source_date = (
@@ -77,7 +79,10 @@ def _case(
             "comparison_type": "same_service_date_pv_counterfactual",
             "comparison_role": role,
             "comparison_control_hash": control_hash,
-            "comparison_control_payload": {"service_date": service_date},
+            "comparison_control_payload": (
+                control_payload if control_payload is not None
+                else {"service_date": service_date}
+            ),
             "pv_profile_hash": pv_hash,
             "pv_source_date": pv_source_date,
             "assignment_hash": "assignment-1",
@@ -709,6 +714,43 @@ def test_pair_manifest_rejects_control_hash_mismatch(tmp_path: Path) -> None:
         (output_dir / "pair_manifest.json").read_text(encoding="utf-8")
     )
     assert rejected["accepted_for_controlled_pv_sensitivity_comparison"] is False
+
+
+def test_pair_manifest_rejects_v2_v3_control_contract_mix(tmp_path: Path) -> None:
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    legacy = {
+        "schema_version": "frontend_pv_control_contract_v2",
+        "service_date": "2025-08-05",
+        "rolling_solver_controls": {},
+    }
+    current = {
+        **legacy,
+        "schema_version": "frontend_pv_control_contract_v3",
+        "rolling_solver_controls": {
+            "charging_search_requested": "feasibility_first",
+            "stage2_charging_start_policy": "none",
+        },
+    }
+    for directory, role, payload, pv in (
+        (baseline, "baseline", legacy, 1.0),
+        (counterfactual, "pv_curve_counterfactual", current, 0.1),
+    ):
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        _case(
+            directory, role=role, control_hash=hashlib.sha256(encoded).hexdigest(),
+            control_payload=payload, pv_hash=str(pv), pv_values=[pv], total_cost=100.0,
+        )
+    original = (baseline / "comparison_case_manifest.json").read_bytes()
+    with pytest.raises(ValueError, match="fixed_controls_match"):
+        build_frontend_pv_pair_artifacts(
+            baseline_run_dir=baseline, counterfactual_run_dir=counterfactual,
+            output_dir=output_dir,
+        )
+    rejected = json.loads((output_dir / "pair_manifest.json").read_text())
+    assert rejected["accepted_for_controlled_pv_sensitivity_comparison"] is False
+    assert (baseline / "comparison_case_manifest.json").read_bytes() == original
 
 
 def test_pair_manifest_rejects_implicit_legacy_comparison(

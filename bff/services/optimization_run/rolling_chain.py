@@ -967,7 +967,7 @@ def _comparison_case_manifest(
         optimization_result.get("solver_settings") or {}
     )
     control_payload = {
-        "schema_version": "frontend_pv_control_contract_v2",
+        "schema_version": "frontend_pv_control_contract_v3",
         "service_date": service_date,
         "service_id": input_audit.get("service_id"),
         "trip_input_hash": chain.get("trip_input_hash"),
@@ -996,6 +996,10 @@ def _comparison_case_manifest(
             solver_settings
         ),
         "rolling_solver_controls": {
+            # Missing legacy evidence stays unknown; never infer an effective
+            # search setting from today's default or an observed runtime.
+            "charging_search_requested": chain.get("charging_search_requested"),
+            "stage2_charging_start_policy": chain.get("stage2_charging_start_policy"),
             "gurobi_threads": chain.get("gurobi_threads"),
             "mip_gap": chain.get("mip_gap"),
             "time_limit_sec": chain.get("time_limit_sec"),
