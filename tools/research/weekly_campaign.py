@@ -279,7 +279,7 @@ def main() -> None:
     parser.add_argument("--parent", default=PARENT)
     parser.add_argument("--weeks", nargs="+", default=list(WEEKS))
     parser.add_argument("--period-plan", type=Path, help="Frozen scenario_periods export; determines parent and weeks")
-    parser.add_argument("--workers", nargs="+", default=["desktop-6ae0mir", "local"],
+    parser.add_argument("--workers", nargs="+", default=["auto"],
                         help="Verified worker IDs assigned in order, or auto for resource-aware placement")
     args = parser.parse_args()
     if args.period_plan:

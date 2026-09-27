@@ -11534,3 +11534,12 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 一部のブラウザ自動クリックが表示位置と一致せず遷移しなかったため、画面確認後の座標操作とキーボードEnterで検査した。アプリ側の保存エラーではなく、保存APIは200。検査用サーバーとタブを終了した。
 - 証拠：output/charging_start_review_20260927/ui-save-check/verification.json、run-screen.png、serverログ、隔離scenario。ソースSHAと配信asset/画像hashを保存。新規求解なし。Claude静的レビューは前項の記録を再利用し、新たなコード変更はない。
 - 残る確認は新版の本番配置と新探索設定での全週評価。3窓の実測は高速化が一様でないため、既定1を維持し比較用3を自動採用しない。
+
+
+## 2026-09-27 22:53 JST — 新規週次CLIの自動割当を標準化
+
+- 原因：既存auto経路はあるが `weekly_campaign.py` のCLI既定値は特定2台の固定配置だった。空いている適格PCへ任せるため既定値だけを `["auto"]` に変更。明示workers、scheduler、RAM・CPU・ライセンス判定、数理条件、求解予算は不変。PC差による探索到達度の差は従来どおり記録する。
+- 回帰：実CLI引数解析の省略/明示指定、旧bindingとworkersが異なる場合のPrepare前拒否・原本不変を追加。`python -X utf8 -m pytest tests/test_weekly_operator.py -q` は45 passed（4.48秒）。SSH/実求解の試験ではない。
+- 独立レビュー：Claude Code Sonnet（tools無効）の静的レビューを実施。運用呼出し・文書移行のP1指摘についてtracked tools/scripts/bff/docsを検索し、`weekly_operator.resume_command` が保存済みworkersを常に明示することを確認。新規用手順例をautoへ更新し、既存operation/固定release/bindingを変更しない再開方法をREADMEと実行ノートへ記載して解消。コード上の追加P0/P1指摘なし。自己レビューと独立静的レビューは実機承認ではない。追加CI・課金機能は有効化しない。
+- 証拠：`output/charging_start_review_20260927/weekly-auto-default-review.json`、同tests.txt。11月同一PID8976を22:51 JSTに直接照会し104/174保存・104可行、現在1.432 GiB/最大13.162 GiB、週全体未受入を確認。`november-auto-default-probe.json` に記録。11/12集計のまま。
+- 正式ソースmainへ同期する対象は次回新規実行のCLI・テスト・手順のみ。稼働中コントローラー/workerのf524eca2を更新・再起動せず、同じattemptと予約を維持。毎時探索設定の週全体比較は、新しいclean SHAでPrepare・前日計画から揃える必要があり未実施。旧SHA前日計画と新版rollingを混ぜて一致ゲートを回避しない。

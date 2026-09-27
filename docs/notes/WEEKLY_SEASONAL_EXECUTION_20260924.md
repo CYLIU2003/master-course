@@ -52,10 +52,14 @@ python tools/research/weekly_campaign.py freeze --source output/shibu21_23_exact
 ユーザーの基本シナリオを月ごとに書き換えない。
 
 ```powershell
-python tools/research/weekly_campaign.py run --settings <controller-settings.json> --output <campaign-directory> --workers desktop-6ae0mir local
+python tools/research/weekly_campaign.py run --settings <controller-settings.json> --output <campaign-directory> --workers auto
 ```
 
-`--workers`はその時点で実ライセンス試験とRAM要件を満たす端末を指定する。
+2026-09-27更新：新規キャンペーンでは省略時も `--workers auto` と同じで、既存schedulerが
+登録・配置・空きRAM・CPU・ライセンス条件に合う端末を選ぶ。固定配置が必要なら
+`--workers desktop-6ae0mir local` 等を明示する。既存キャンペーンの再開は保存済みoperationと
+固定releaseを使い、`binding.json` のworkersを変更しない。新版で異なるworkersを指定すると
+Prepare・投入前に拒否される。保存済みoperationを使う `weekly_operator.py` はworkersを常に明示する。
 各週を独立投入し、1件の失敗で他の週を取消さない。PC不明/SSH切断は既存attempt照合を継続する。
 既存brokerを共有し、別コントローラーで同じライセンス枠を二重管理しない。
 親機にも週次計算を割り当てるが、OS等の余裕と最低空きRAMをschedulerで検査する。

@@ -74,6 +74,50 @@ def test_operation_rejects_changed_frozen_case_selection(tmp_path):
         op.load_operation(tmp_path / "operation.json")
 
 
+@pytest.mark.parametrize("arguments,expected", [
+    ([], ["auto"]),
+    (["--workers", "worker-a", "local"], ["worker-a", "local"]),
+])
+def test_weekly_cli_defaults_to_auto_but_preserves_explicit_workers(
+    tmp_path, monkeypatch, arguments, expected,
+):
+    from tools.research import weekly_campaign as campaign
+    captured = []
+    monkeypatch.setattr(campaign, "run", lambda settings, output, parent, weeks, workers:
+                        captured.append(workers) or {"status": "TEST_ONLY"})
+    monkeypatch.setattr(sys, "argv", ["weekly_campaign.py", "run",
+        "--settings", str(tmp_path / "settings.json"),
+        "--output", str(tmp_path / "campaign"), *arguments])
+    campaign.main()
+    assert captured == [expected]
+
+
+def test_auto_default_cannot_rebind_an_existing_fixed_campaign(tmp_path, monkeypatch):
+    from tools.research import weekly_campaign as campaign
+    directory = tmp_path / "campaign"
+    directory.mkdir()
+    settings = tmp_path / "settings.json"
+    frozen = {"sha": "a" * 40, "dirty": False}
+    write_json(settings, {"git_sha": frozen["sha"], "release": str(tmp_path),
+                          "outputs": str(tmp_path)})
+    monkeypatch.setattr(campaign, "git_state", lambda _: frozen)
+    monkeypatch.setattr(campaign.output_paths, "outputs_root", lambda: tmp_path)
+    monkeypatch.setattr(campaign.scenario_store, "_load", lambda *a, **k: {})
+    monkeypatch.setattr(campaign, "sha", lambda _: "source-hash")
+    binding = {"git": frozen, "parent": "parent", "parent_hash": campaign.parent_hash({}),
+               "weeks": [campaign.WEEKS[0]], "workers": ["worker-a", "local"],
+               "request": campaign.request("declared"), "source_manifest_sha256": "source-hash"}
+    write_json(directory / "binding.json", binding)
+    before = (directory / "binding.json").read_bytes()
+    def no_prepare(*args):
+        pytest.fail("Changed binding must be rejected before Prepare or submission")
+    monkeypatch.setattr(campaign, "prepare_week", no_prepare)
+    with pytest.raises(ValueError, match="different frozen controls"):
+        campaign.run(settings, directory, "parent", [campaign.WEEKS[0]], ["auto"])
+    assert (directory / "binding.json").read_bytes() == before
+    assert not (directory / "state.json").exists()
+
+
 def test_auto_campaign_uses_scheduler_without_pinning_busy_parent(tmp_path):
     from tools.research.weekly_campaign import placement_worker
     from tools.cluster.batch import validate_batch

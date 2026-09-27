@@ -4569,3 +4569,9 @@ CLIは `scripts/run_hourly_charging_reoptimization.py --help` の `--charging-se
 
 
 毎時探索方針は新版の隔離ブラウザ環境で、保存・再読込み・実行前表示まで確認済みです。本番8891は進行中の固定版を維持しています。新版の配置完了や全週高速化とは区別してください。
+
+
+### 週次CLIの新規割当（2026-09-27）
+
+`tools/research/weekly_campaign.py run` は、`--workers` を省略すると既存schedulerの自動割当（`auto`）を使います。登録・配置確認、Gurobiの32 GB以上要件、端末の空きRAMとメモリ予算、CPU、共有ライセンス枠の検査を通ったPCへ割り当てます。固定配置は `--workers <worker-id> local` のように明示できます。
+既存キャンペーンは保存済みoperationと固定releaseで再開してください。`weekly_operator.py` はoperationのworkersを明示して渡すため、今回の既定値変更で配布先は変わりません。凍結済みbindingと異なるworkersではPrepare・投入前に停止します。進行中のf524eca2の11月分には配置・コード変更を適用していません。
