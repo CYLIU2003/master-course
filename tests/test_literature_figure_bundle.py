@@ -564,3 +564,67 @@ def test_rejects_unaccepted_physical_schedule(tmp_path: Path) -> None:
         match="accepted physical schedule",
     ):
         generate_literature_figure_bundle(run_dir)
+
+
+def test_weekly_energy_signals_keep_dates_and_three_digit_hours(tmp_path: Path) -> None:
+    hourly = [
+        {"current_time": time, "bess_end_soc_kwh_by_depot": "{}"}
+        for time in ("05:45", "29:45", "100:00", "101:00")
+    ]
+    co2 = [
+        {"timestamp": "2025-01-06T05:45:00", "grid_emission_factor_kg_per_kwh": 0.5},
+        {"timestamp": "2025-01-07T05:45:00", "grid_emission_factor_kg_per_kwh": 0.0},
+        {"timestamp": "2025-01-10T04:00:00", "grid_emission_factor_kg_per_kwh": 0.3},
+    ]
+    costs = [
+        {"date": "2025-01-06", "time": "05:45", "grid_energy_price_yen_per_kwh": 30},
+        {"date": "2025-01-07", "time": "05:45", "grid_energy_price_yen_per_kwh": 40},
+    ]
+    _, source, _ = literature_figures._energy_management_figure(
+        hourly_rows=hourly, co2_rows=co2, cost_rows=costs, output_dir=tmp_path
+    )
+    with source.open(encoding="utf-8-sig") as stream:
+        rows = list(csv.DictReader(stream))
+    assert [r["time"] for r in rows] == ["05:45", "29:45", "100:00", "101:00"]
+    assert [r["grid_emission_factor_kg_per_kwh"] for r in rows] == ["0.5", "0.0", "0.3", ""]
+    assert [r["grid_energy_price_yen_per_kwh"] for r in rows] == ["30.0", "40.0", "", ""]
+
+
+@pytest.mark.parametrize("signal", ["co2", "price"])
+def test_same_dated_interval_still_rejects_conflicting_signals(tmp_path: Path, signal: str) -> None:
+    field = "grid_emission_factor_kg_per_kwh" if signal == "co2" else "grid_energy_price_yen_per_kwh"
+    rows = [{"timestamp": "2025-01-06T05:45:00", field: value} for value in (0.3, 0.5)]
+    with pytest.raises(LiteratureFigureError, match="Conflicting"):
+        literature_figures._energy_management_figure(
+            hourly_rows=[], co2_rows=rows if signal == "co2" else [],
+            cost_rows=rows if signal == "price" else [], output_dir=tmp_path,
+        )
+
+
+def test_rebuild_preserves_failed_attempt_and_original_evidence(tmp_path: Path) -> None:
+    from tools.research.rebuild_literature_figures import inventory, rebuild
+
+    run = _fixture_run(tmp_path)
+    state = tmp_path / "state.json"
+    _write_json(state, {"id": "failed-attempt", "state": "FAILED"})
+    _write_json(run / "final_cost_reconciliation.json", {"status": "OK"})
+    before = inventory(run)
+    receipt = rebuild(run, state, tmp_path / "rebuild")
+    assert receipt["status"] == "FIGURES_REBUILT_ONLY"
+    assert receipt["original_worker_state"] == "FAILED"
+    assert receipt["new_solver_run"] is False
+    assert receipt["campaign_status_changed"] is False
+    assert inventory(run) == before
+    assert json.loads(state.read_bytes())["state"] == "FAILED"
+    with pytest.raises(ValueError, match="new directory"):
+        rebuild(run, state, tmp_path / "rebuild")
+
+
+def test_rebuild_rejects_active_worker(tmp_path: Path) -> None:
+    from tools.research.rebuild_literature_figures import rebuild
+
+    state = tmp_path / "state.json"
+    _write_json(state, {"state": "RUNNING"})
+    with pytest.raises(ValueError, match="terminal"):
+        rebuild(tmp_path / "run", state, tmp_path / "rebuild")
+    assert not (tmp_path / "rebuild").exists()

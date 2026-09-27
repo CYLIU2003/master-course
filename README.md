@@ -4463,3 +4463,14 @@ VERIFIEDの週だけ、既存archive監査、Prepared hash、attempt、実行会
 現在の固定版は `f524eca2`、操作設定は `output/executed_soc_20260926/operation.local.json`（2月）と `operation.remaining.local.json`（残り11週）です。上記の `daily_soc_20260926` は旧試行の記録として保持します。親機は最初の週の求解と並行して残り週を一つずつPrepareし、`remaining_campaign/prepare-only-state.json` に準備状況を保存します。追加の求解は最初の週の検算通過後に共有キューへ投入します。準備済みは計算完了を意味しません。
 
 32GB機の予算は16GiB程度、64GB機は32GiB程度までとし、現時点の空きRAM・OS用余裕・Windowsコミット余裕も必要です。ライセンス期限切れの機器は、更新と共有枠内の実機試験が通るまで投入対象へ戻しません。状態確認は既存 `weekly_operator.py status --operation <対象JSON>`、詳細は分散計算画面と `output/executed_soc_20260926/high_ram_allocation_receipt.json`（取得時点の記録）で確認できます。重複起動せず同じ試行を照合してください。
+
+
+### 終了済み計算の図表だけを再生成する
+
+週次図表の時刻結合は日付を保持し、100時間以上の経過時刻にも対応します。欠測した料金・CO2表示値は0や他日の値で補完しません。求解済み原本を変えずに再生成する場合は、次を実行します（`python` はプロジェクト環境のPython）。
+
+```powershell
+python tools/research/rebuild_literature_figures.py --run-dir <回収済みrunディレクトリ> --worker-state <回収済みstate.json> --output-dir <未作成の別出力先>
+```
+
+workerがFAILED/COMPLETEDで、原本の最終費用照合がOKの場合だけ実行します。原本をコピーして既存の物理・会計ゲートを適用し、図表のhashと原本不変を検査します。求解・再投入は行いません。`figure_rebuild_receipt.json` は `FIGURES_REBUILT_ONLY` であり、元ジョブのFAILEDや月別監査状態をCOMPLETEDへ変更しません。全runをコピーするため原本相当の空きディスクが必要です。

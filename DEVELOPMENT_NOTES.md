@@ -11293,3 +11293,19 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - 成果物archive SHA 05326806df70f1509fe77456893e4bc68665a723172f5cfc35dbb3f30bdae167と内部7ファイルのhashを照合。output/executed_soc_20260926/a709-license-verification.jsonに保存。小規模のライセンス・転送試験であり、7日間完走/研究承認の証拠ではない。64GB機の期限切れ対応は引き続き資格情報配置の確認待ち。
 - 先行Prepareした1月・3月の原本ファイルhash、固定git、親シナリオ/hash、instance、共通要求、翌朝延長、fleet handoffを読取照合し不一致0。prepared_binding_audit.jsonへ検査範囲を保存（求解/物理/会計の監査ではない）。その後4月Prepare完了・5月準備中を確認。2月の同一実PID11688/identity31280570:251952698は生存しCPU時間とnative logの進行を確認。
 - 読取確認でPowerShell Get-Processのメモリ値が4GiBに張り付いたため、その値は破棄。正式な監視は既存64bit Windows APIのexecution-detailを使用する。計算コード・予算・入力条件への変更なし。
+
+
+## 2026-09-27: 1日進捗資料と12代表週のパラメータ照合
+
+旧1日Preparedの出典hashと現在12/12週の投入用原本hashを照合。60台の主要車両値・初期SOC、充電器、対象路線ID、主要設備値、基本費用係数は一致した。一方、BESS復元なし・翌朝BEV上限SOC・PV計測境界/予測・期間/求解予算は異なる。後のユーザー指示を取り消す変更はせず、実行中入力・ソース・ジョブには変更なし。資料の200kW表記、旧実験説明文字列、最新1日資料の特定は説明上の残件として記録。詳細は docs/notes/DAY_WEEK_PARAMETER_COMPARISON_20260927.md、原本照合結果は output/executed_soc_20260926/parameter_comparison_20260927/comparison.json。全結果再検算や研究承認を意味しない。
+
+
+## 2026-09-27: 週次図表の異なる日付の時刻衝突を修正・1月保存結果へ適用
+
+- 経路: cluster worker → BFF optimization reporting finalizer → generate_literature_figure_bundle → energy_management_figure。1月c094649eの175 rolling区間の保存後、日付を捨てる時刻結合で別日の05:45にあるCO2値0/0.5が競合扱いとなり、図表生成が失敗した。メモリ停止ではない。
+- literature_figures.py: 日付を基準日からの経過時間へ対応させ、100:00等を切り詰めない。同日同時刻の真の競合は拒否継続。料金はdateを含めて照合。欠測は空欄/図の欠線とし、時刻目盛を間引いて週次図を可読化。数理条件・目的関数・会計金額は変更なし。
+- tools/research/rebuild_literature_figures.py: 終了済みworkerの原本を別ディレクトリへコピーし、既存物理・会計ゲート付き図表再生成、hash検査と原本不変確認を実装。再求解なし。元FAILEDは保存し、再生成をジョブ成功や研究承認に読み替えない。
+- 実データ: 元ZIPのcollected SHAと1236展開ファイルを照合。1月は物理accepted、実行会計eligible、697区間（7日672区間＋翌朝25区間）、費用照合OK。既存会計の総費用4,860,462.656698648円。output/executed_soc_20260926/report_recovery/2025-01-06 に5図を再生成し、図表整合検査0件、175区間の需給図を実表示確認。入力・元成果物不変。
+- 残件: 元graphのCO2行・料金行は週全体を網羅しない（表示対象175区間のうちCO2欠測94、料金欠測151）。欠測を埋めて週全体の料金・CO2信号と主張しない。正本費用はexecuted_day_accountingのまま。1月は図表のみ回復し、campaignのFAILED_OR_UNVERIFIEDを解除していない。
+- 適用範囲: 開発版と再集計側へ適用。稼働中の固定f524eca2とworkerソースは不変。既存スクリプトの他月計算を継続（確認時は2～8月の7週VERIFIED、9月rolling、10月Stage1、11・12月待機）。
+- 検証: focused pytest（図表・日付境界・100時間超・真の競合・原本保持・稼働中拒否）10件通過。自己レビューでは物理/会計ゲートを維持し、元失敗状態の上書きなしを確認。独立レビューと1月のcampaign全体再監査は未完了。

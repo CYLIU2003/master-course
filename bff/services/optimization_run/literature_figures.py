@@ -597,11 +597,28 @@ def _soc_figure(
     )
 
 
-def _time_key(value: Any) -> str:
+def _time_key(
+    value: Any, *, service_date: str = "", origin_date: str = ""
+) -> str:
+    """Join dated rows and rolling elapsed hours without folding different days."""
     text = str(value or "").strip()
     if "T" in text:
-        text = text.split("T", 1)[1]
-    return text[:5]
+        service_date, text = text.split("T", 1)
+    parts = text.split(":")
+    if len(parts) < 2:
+        raise LiteratureFigureError(f"Invalid timeline time: {value!r}")
+    try:
+        hour, minute = int(parts[0]), int(parts[1])
+        if service_date and origin_date:
+            hour += 24 * (
+                datetime.fromisoformat(service_date).date()
+                - datetime.fromisoformat(origin_date).date()
+            ).days
+    except ValueError as exc:
+        raise LiteratureFigureError(f"Invalid timeline time: {value!r}") from exc
+    if hour < 0 or not 0 <= minute < 60:
+        raise LiteratureFigureError(f"Invalid timeline time: {value!r}")
+    return f"{hour:02d}:{minute:02d}"
 
 
 def _json_number_sum(value: Any) -> float:
@@ -630,9 +647,27 @@ def _energy_management_figure(
     cost_rows: Sequence[Mapping[str, Any]],
     output_dir: Path,
 ) -> tuple[list[Path], Path, dict[str, Any]]:
+    dates = {
+        str(row.get("service_date") or row.get("date") or "")
+        for row in [*hourly_rows, *co2_rows, *cost_rows]
+    }
+    for row in [*hourly_rows, *co2_rows, *cost_rows]:
+        for field in ("timestamp", "current_time", "time"):
+            value = str(row.get(field) or "")
+            if "T" in value:
+                dates.add(value.split("T", 1)[0])
+    origin_date = min(dates - {""}, default="")
+
+    def time_key(row: Mapping[str, Any], *fields: str) -> str:
+        return _time_key(
+            next((row[field] for field in fields if row.get(field)), ""),
+            service_date=str(row.get("service_date") or row.get("date") or ""),
+            origin_date=origin_date,
+        )
+
     co2_by_time: dict[str, float] = {}
     for row in co2_rows:
-        time = _time_key(row.get("timestamp") or row.get("time"))
+        time = time_key(row, "timestamp", "time")
         value = _float(row.get("grid_emission_factor_kg_per_kwh"))
         if time in co2_by_time and not math.isclose(
             co2_by_time[time],
@@ -647,7 +682,7 @@ def _energy_management_figure(
         co2_by_time[time] = value
     price_by_time_and_depot: dict[str, dict[str, float]] = {}
     for row in cost_rows:
-        time = _time_key(row.get("time") or row.get("timestamp"))
+        time = time_key(row, "timestamp", "time")
         depot_id = str(row.get("depot_id") or "unspecified").strip()
         value = _float(row.get("grid_energy_price_yen_per_kwh"))
         depot_prices = price_by_time_and_depot.setdefault(time, {})
@@ -671,7 +706,7 @@ def _energy_management_figure(
     )
     normalized: list[dict[str, Any]] = []
     for index, row in enumerate(hourly_rows):
-        time = _time_key(row.get("current_time") or row.get("time"))
+        time = time_key(row, "current_time", "timestamp", "time")
         depot_prices = dict(price_by_time_and_depot.get(time) or {})
         price_values = list(depot_prices.values())
         normalized.append(
@@ -692,7 +727,7 @@ def _energy_management_figure(
                 "bess_soc_total_kwh": _json_number_sum(
                     row.get("bess_end_soc_kwh_by_depot")
                 ),
-                "grid_emission_factor_kg_per_kwh": co2_by_time.get(time, 0.0),
+                "grid_emission_factor_kg_per_kwh": co2_by_time.get(time),
                 "grid_energy_price_yen_per_kwh": (
                     price_values[0] if len(price_values) == 1 else None
                 ),
@@ -731,7 +766,11 @@ def _energy_management_figure(
         [float(row["grid_import_kwh"]) for row in normalized]
     )
     grid_ci = np.array(
-        [float(row["grid_emission_factor_kg_per_kwh"]) for row in normalized]
+        [
+            np.nan if row["grid_emission_factor_kg_per_kwh"] is None
+            else float(row["grid_emission_factor_kg_per_kwh"])
+            for row in normalized
+        ]
     )
     figure, axes = plt.subplots(4, 1, figsize=(14.5, 12.5), sharex=True)
     axis = axes[0]
@@ -859,16 +898,18 @@ def _energy_management_figure(
         frameon=False,
         loc="upper left",
     )
-    axes[-1].set_xticks(x_values)
-    axes[-1].set_xticklabels(labels, rotation=45, ha="right")
+    tick_indices = list(range(0, len(normalized), max(1, math.ceil(len(normalized) / 24))))
+    axes[-1].set_xticks(x_values[tick_indices])
+    axes[-1].set_xticklabels([labels[i] for i in tick_indices], rotation=45, ha="right")
     axes[-1].set_xlabel("Rolling execution interval")
-    figure.suptitle("Executed-day energy management profile", fontsize=14)
+    figure.suptitle("Executed-period energy management profile", fontsize=14)
     figure.text(
         0.01,
         0.008,
         (
             "Canonical source: accepted hourly rolling prefixes. Inspired by "
-            "No61 Figs. 7-9 and the IEEJ rolling study Figs. 2-3; newly rendered."
+            "No61 Figs. 7-9 and the IEEJ rolling study Figs. 2-3; newly rendered.\n"
+            "Time is elapsed hours from the first service date; missing signals remain gaps."
         ),
         fontsize=8,
         color="#59636A",
@@ -908,6 +949,13 @@ def _energy_management_figure(
             "grid_import_kwh": float(grid_import.sum()),
             "price_depot_count": len(price_depot_ids),
             "price_depot_ids": price_depot_ids,
+            "timeline_origin_date": origin_date or None,
+            "missing_grid_co2_signal_intervals": sum(
+                row["grid_emission_factor_kg_per_kwh"] is None for row in normalized
+            ),
+            "missing_grid_price_intervals": sum(
+                row["grid_energy_price_min_yen_per_kwh"] is None for row in normalized
+            ),
         },
     )
 
