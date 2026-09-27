@@ -65,3 +65,14 @@ SHAはその場で新しく作って承認扱いにせず、既存月別comparis
 初期候補なし／ありで本番の状態変換をそれぞれ通し、復元問題と実効設定の差がpolicyだけであることを確認する。nativeモデルの変数・制約・目的の同一性は、後続の実求解比較で別に確認する。更新PV予測、BESS下限override、初回窓の暗黙状態は未対応として停止し、別条件へ黙って変換しない。
 
 Claudeレビューへの対応：2経路の状態変換比較を追加。solver結果の個別hash未照合との指摘にはZIP全体hashで原本が固定されることを説明した。`RollingChainRequest`は設定抽出のみに使い、空の入出力パスを読む`run_rolling_chain`は呼び出さない。元の固定SHAは出力へ残すが、この汎用ツールをf524eca2だけへハードコードしない。レビューは実機性能承認とは区別する。
+
+
+## 実求解の比較コマンド
+
+clean checkoutから次を実行する。親機がdraining/disabledなら停止し、CLIが自動解除しない。既存controllerの設定を指定し、ライセンスauthorityと同じqueueを使う。現在値からメモリ余裕を検査する。
+
+```powershell
+C:/master-course/output/cluster-deployment/controller-venv/Scripts/python.exe -X utf8 tools/research/run_charging_replay_pair.py --settings C:/master-course/output/executed_soc_20260926/controller-settings.json --archive C:/master-course/output/executed_soc_20260926/remaining_campaign/2025-03-03/state/b5023143-6887-5d46-8a3d-8015649c5bff.zip --archive-sha256 13cd365f16278330a861ffb9dba6c41e8199a92f738caa7c129ee00d1766262f --step 61 --memory-gib 8 --output C:/master-course/output/charging_replay_pair_next
+```
+
+この8GiBは両条件共通の診断予算で、過去の16GiB週と同条件の再現という意味ではない。state.jsonに段階・資源判定・比較結果、各policy配下に元の結果構造・native log・MPSとhashを残す。単一窓のエンジン可行判定であり、独立した週間実行監査ではない。MPS一致だけでも実行パラメータや初期候補の採用を保証しないため、native log/設定/結果も確認する。

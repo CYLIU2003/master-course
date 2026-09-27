@@ -11454,3 +11454,11 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 初回実行ではPVのファイルhashをcanonical JSON hashと取り違えて停止。既存ローダーの仕様を確認し、原バイトSHA照合へ修正して通過。未知/欠損/非有限/真偽値の探索設定、別時刻、予測更新やBESS overrideの未対応条件は事前拒否する。
 - 関連44テスト通過。Claude初回レビューを受け2経路の実変換を比較するよう改善。ZIP全体hashによる原本保護と到達しない入出力pathの根拠を提示し、再レビューでP0/P1指摘は撤回。残るP2（mutable値比較の一般性/将来入力への保証範囲）は記録し、nativeモデル同値や速度向上を未検証と明記。
 - 親機はDRAINING、11月は同一PID8976で76/174保存時点を確認済み。ライセンス2枠中1枠予約・他の32GB機READYは確認したが、今回のプリフライトはライセンスも使用しない。通常求解の復旧や台帳を迂回する比較実行は開始していない。
+
+
+## 2026-09-27 保存充電窓の実求解比較入口
+
+- `tools/research/run_charging_replay_pair.py`を追加。監査済みZIPから同一窓を復元し、none/fixed_assignment_binaryを同一親機・同一Envで逐次求解する診断専用CLI。各optimize直前にMPSを保存し、候補側のhash/求解数が異なれば比較を拒否。原週の実績費用・物理条件・入力・稼働f524eca2は変更しない。
+- 既存authorityと同じqueueのLocalResources/LicenseBrokerを使用。32GB以上・active・現在空きRAM/commit・OS予備をresource_fitで検査、予約後も再確認。共有2枠と330秒解放待ちを維持。別ライセンスpoolは作らない。通常週と同じ16GiBを取れない親機では、同一8GiB枠の小窓診断を別条件として明記できる。
+- Claude Sonnetの読取レビューで予約後・try前の初期化例外による解放漏れを修正。並行claimは既存トランザクションで防ぎ、実RAMはclaim後再確認。別queueを使う助言は共有ライセンス迂回になるため不採用。releaseの例外は伝播し、未解放を黙認しない。レビュー原文output/charging_start_review_20260927/pair-executor-review.json。
+- 関連46テスト通過（資源拒否・事前入力再生・初期候補）。これは実測の前段。実求解の費用・可行性・速度の結果は別途state.json/native logに保存し、単体テストから速度向上を主張しない。
