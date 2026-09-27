@@ -126,3 +126,46 @@ def test_watch_updates_on_terminal_failure_without_submitting_jobs(tmp_path, mon
     assert latest["included"] == 0 and not latest["complete"]
     final = report.read(Path(latest["directory"]) / "comparison.json")
     assert final["cases"][0]["state"] == "FAILED_OR_UNVERIFIED"
+
+
+@pytest.mark.parametrize("sha,job,included", [("fixed-sha", "job", True), ("old", "job", False),
+                                              ("fixed-sha", "wrong-attempt", False)])
+def test_operator_recovery_requires_archive_audit_and_same_attempt(tmp_path, monkeypatch, sha, job, included):
+    path, case = verified_case(tmp_path, monkeypatch)
+    original = {"git_sha": "fixed-sha", "cases": {"2025-02-03": {"state": "SUBMITTED"}}}
+    save(case.parent / "state.json", original)
+    save(case.parent / "operations/collection.json", {"solver_git_sha": sha,
+        "cases": {"2025-02-03": {"state": "VERIFIED", "job_id": job}}})
+    result = report.snapshot([path])
+    assert result["complete"] is included
+    assert report.read(case.parent / "state.json") == original
+    if included:
+        assert result["cases"][0]["original_state"] == "SUBMITTED"
+        monkeypatch.setattr(report, "audit_batch", lambda *a: {"unverified": 1, "tasks": []})
+        assert not report.snapshot([path])["complete"]
+
+
+def test_report_relative_campaign_does_not_depend_on_cwd(tmp_path, monkeypatch):
+    path, _, op = operation(tmp_path, status="SUBMITTED")
+    save(path, {**op, "campaign": "campaign"})
+    monkeypatch.chdir(tmp_path.parent)
+    assert report.campaign_path(path) == tmp_path / "campaign"
+    assert report.snapshot([path])["cases"][0]["state"] == "SUBMITTED"
+
+
+def test_watch_publishes_recovered_result_without_rewriting_campaign(tmp_path, monkeypatch):
+    path, case = verified_case(tmp_path, monkeypatch)
+    original = {"git_sha": "fixed-sha", "cases": {"2025-02-03": {"state": "SUBMITTED"}}}
+    save(case.parent / "state.json", original)
+    monkeypatch.setattr(report.sys, "argv", ["report", "--operation", str(path),
+                        "--output", str(tmp_path / "report"), "--watch"])
+    sleeps = []
+    def recover(seconds):
+        sleeps.append(seconds)
+        assert len(sleeps) == 1
+        save(case.parent / "operations/collection.json", {"solver_git_sha": "fixed-sha",
+            "cases": {"2025-02-03": {"state": "VERIFIED", "job_id": "job"}}})
+    monkeypatch.setattr(report.time, "sleep", recover)
+    report.main()
+    assert report.read(tmp_path / "report/latest.json")["complete"]
+    assert report.read(case.parent / "state.json") == original

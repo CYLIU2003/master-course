@@ -42,8 +42,18 @@ def job_error(row: dict) -> str | None:
 
 
 def load_operation(path: Path) -> tuple[dict, dict, Path]:
+    path = path.resolve()
     operation = read(path)
+    # Resolve against the declaration, never Explorer's or a shell's cwd.
+    for key in ("settings", "campaign"):
+        value = Path(operation[key])
+        operation[key] = str((path.parent / value).resolve())
     settings = read(Path(operation["settings"]))
+    # Frozen controller versions resolve these paths themselves. Do not silently
+    # rewrite their settings or let a different cwd select another queue.
+    for key in ("python", "release", "config", "frontend", "queue", "outputs", "scenarios"):
+        if key in settings and not Path(settings[key]).is_absolute():
+            raise ValueError(f"Controller setting '{key}' must be an absolute path: {operation['settings']}")
     campaign = Path(operation["campaign"]).resolve()
     if settings["git_sha"] != operation["git_sha"]:
         raise ValueError("Operator and controller SHA differ")
@@ -340,7 +350,7 @@ def execute(operation: dict, settings: dict, campaign: Path) -> dict:
     return {"status": "CAMPAIGN_EXITED", "returncode": result.returncode}
 
 
-def main() -> int:
+def run_cli() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("check", "controller", "status", "run", "collect", "watch"))
     parser.add_argument("--operation", type=Path, required=True)
@@ -364,14 +374,16 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False))
         return int(result.get("returncode", 0))
     if args.command == "collect":
-        print(json.dumps(collect_campaign(operation, campaign), ensure_ascii=False, indent=2))
-        return 0
+        result = collect_campaign(operation, campaign)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result["status"] == "COMPLETED" else 3
     try:
         lock = ControllerLock(campaign / "operations")
     except RuntimeError:
         if args.command == "status":
-            print(render_status(snapshot(operation, settings, campaign)))
-            return 0
+            report = snapshot(operation, settings, campaign)
+            print(render_status(report))
+            return 0 if report["connection"] == "CONNECTED" else 3
         raise
     try:
         while True:
@@ -384,10 +396,23 @@ def main() -> int:
             print(render_status(report) if args.command == "status" else json.dumps({
                 "at": report["observed_at_utc"], "progress": report["progress"], "notification": notice}), flush=True)
             if args.command == "status" or notice == "PENDING_MANUAL_SEND":
-                return 0
+                return 0 if report["connection"] == "CONNECTED" else 3
             time.sleep(30)
     finally:
         lock.close()
+
+
+def main() -> int:
+    try:
+        return run_cli()
+    except KeyboardInterrupt:
+        print("Operator interrupted. Existing worker attempts may still be running; check status before resuming.", file=sys.stderr)
+        return 130
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as exc:
+        print(json.dumps({"status": "OPERATOR_ERROR", "error_type": type(exc).__name__,
+                          "error": str(exc), "action": "Check operation/settings and existing attempt status; do not create a replacement."},
+                         ensure_ascii=False), file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

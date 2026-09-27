@@ -11314,3 +11314,15 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 ## 2026-09-27: 12代表週完了後の9月進捗発表資料を予約
 
 ユーザーのMTGメモを受け、7日連続運用・月別費用/季節差・2025年の季節4区分×天候3分類の標準カーブとばらつきを中心とする資料作成依頼を記録。9月19日用語統一版PPTXのhashを取得し、Slackの9月16日/19日指摘を実読。2025年Solcast原本12か月のhash一致を再確認。完了状態を6時間ごとに静かに軽量確認し、12/12の実データ検算後に作成する自動確認ID12を登録。現在PPT完成ではない。依頼・編集元・前提・用語/翌朝の期間区分・出力・完了後削除条件は docs/notes/SEPTEMBER_PRESENTATION_REQUEST_20260927.md。新規求解、Solcast再取得、Slack/メール送信は行っていない。
+
+
+## 2026-09-27: AIなしの操作入口・復旧と参照先整理
+
+- 起点は268ed5ab。ユーザーの起動・運用・整理指示に対応し、既存weekly_operations→weekly_operator→凍結controller/campaign、GET回収→既存監査/会計→月別集計の経路だけを修正。
+- 起動CWD依存のoperation settings/campaign解決をJSON基準へ修正。旧固定controller側の曖昧な相対パスは起動前に拒否し、設定を勝手に変えない。PowerShell UTF-8読取とPython欠落時の説明を追加。未完了回収・切断STATUSが成功コード0になる問題を3へ修正。設定エラー2、中断130を記録。
+- install_operator_kit.py / operator_console.ps1を追加。複数operation選択、状態・事前検査・管理起動・同一試行の続行・回収・監視、画面/手順/結果の入口を生成。既存フォルダ上書き拒否、生成時の求解/AI/外部取得0。現在の2月と残り11週をoutput/operations/weekly_20260927へ設置。
+- 月別集計がoperator代理回収のcollection.jsonを読まず、親機再起動後の検算済み成果を取り落とす問題を修正。同じSHA/attempt、原本archive/Prepared/物理判定/実行会計の再照合を条件に採用し、元campaign stateは変更しない。監視fingerprintへ回収記録を含め、相対campaignもJSON基準に統一。数理条件・料金・物理許容差は不変。
+- 実機16:10 JST: 8891管理サーバーと当該監視群が不在、最後の出力更新15:52。停止原因はログで確定できず、別用途8868は生存。凍結f524eca2のCHECK PASS後、同設定・同キューで管理を復旧。既存54ジョブのID集合不変、新規投入0、Gurobi予約2を維持。11・12月はLOST（照合中）を保ちながら子機側ROLLING進行を詳細読取で確認。残り11週の代理回収WATCH、12週の詳細配信、月別比較の監視をAIなしのスクリプトで復旧。元solver release/実行中workerソースは不変。
+- 文書正本をdocs/guides/weekly_operations.mdへ集約。README先頭・docs/README・旧日付runbook・tools/research/READMEから誘導。操作フォルダ、原本、Prepared、queue、結果、PPTの保管区分を明記。過去日付にlive参照があるため物理移動・削除なし。Solcast、SQLite WAL、別チャットのPPT編集は未変更。
+- 検証: 関連78件（Windows別CWD/日本語空白&パスの実PowerShell起動、通信断の終了コード、重複拒否、原本保持、回収から比較への反映を含む）。実際の設定で別CWDからSTATUS=3（切断時）、CHECK=0、復旧後STATUS=0を確認。詳細配信12件/errors0。証跡は操作フォルダVERIFICATION.mdと各ログ。
+- 自己レビュー: この変更範囲の未解決P0/P1なし。原本を保持する復旧経路を維持。独立レビュー、意図的PC再起動試験、AIなしメール自動送信は未実施。単独メール認証未設定につき.emlは未送信。研究正式採用・全18台無故障・12/12完了の承認ではない。Windowsでテスト継続中に原資料を移動していない。

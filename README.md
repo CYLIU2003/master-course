@@ -1,3 +1,5 @@
+> **AIなしで運転する方へ:** [現在の起動・復旧・回収手順](docs/guides/weekly_operations.md)。このPCの入口は `output/operations/weekly_20260927/00_MENU.cmd`。以下の日付付き記録は履歴を含むため、操作先はこの手順で確認してください。
+
 ## 月別計算の復旧（2026-09-25）
 
 稼働controllerは固定版 **22ef0e0d** に切替済みです。新しい12週は `output/monthly_recovery_20260925/operation.local.json` の設定でPrepareから実行中。画面は「仮・正式用 → 期間別計画」で最新試行と過去の失敗を分けて確認できます。14:39 JST時点は新規入力準備中で、12週の求解・検算完了ではありません。

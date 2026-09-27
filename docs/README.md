@@ -2,6 +2,7 @@
 
 | 探したい内容 | 入口 |
 |---|---|
+| AIなしの週次運転・復旧・ファイル保管 | [現在の操作手順](guides/weekly_operations.md) |
 | セットアップ・アプリ起動 | [ルートREADME](../README.md) |
 | 操作・トラブル対応 | [運用ガイド](guides/operations.md) |
 | 教員向け説明 | [レビューガイド](guides/professor_review.md)、[モデル説明](guides/professor_system_model_guide.md) |

@@ -1,5 +1,8 @@
 import json
 from pathlib import Path
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -45,7 +48,7 @@ def fixture(tmp_path):
     operation = {"settings": str(tmp_path / "settings.json"), "campaign": str(tmp_path / "campaign"),
         "git_sha": "a" * 40, "parent": "parent", "weeks": ["2025-05-12"], "workers": ["local"]}
     settings = {"git_sha": "a" * 40, "port": 8890, "config": str(tmp_path / "workers.json"),
-        "release": str(tmp_path / "release with spaces"), "python": "python.exe"}
+        "release": str(tmp_path / "release with spaces"), "python": str(tmp_path / "python.exe")}
     write_json(Path(operation["settings"]), settings)
     write_json(Path(settings["config"]), {"workers": []})
     write_json(tmp_path / "operation.json", operation)
@@ -253,3 +256,83 @@ def test_local_summary_alone_does_not_prove_verification(tmp_path):
     report = op.snapshot(operation, settings, campaign, Online())
     assert report["progress"]["completed_percent"] == 100
     assert report["progress"]["verified_percent"] == 0
+
+
+def test_operation_relative_paths_are_bound_to_file_not_working_directory(tmp_path, monkeypatch):
+    operation, _, campaign, _ = fixture(tmp_path)
+    operation.update(settings="settings.json", campaign="campaign")
+    write_json(tmp_path / "operation.json", operation)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    actual, _, destination = op.load_operation(tmp_path / "operation.json")
+    assert Path(actual["settings"]) == tmp_path / "settings.json"
+    assert destination == campaign
+
+
+def test_relative_frozen_controller_queue_is_rejected_not_redirected(tmp_path):
+    operation, settings, _, _ = fixture(tmp_path)
+    settings["queue"] = "queue"
+    write_json(Path(operation["settings"]), settings)
+    with pytest.raises(ValueError, match="queue.*absolute"):
+        op.load_operation(tmp_path / "operation.json")
+
+
+@pytest.mark.parametrize("status,exitcode", [("COMPLETED", 0), ("INCOMPLETE", 3), ("PARTIAL_OR_FAILED", 3)])
+def test_collect_exit_code_is_not_success_for_uncollected_results(tmp_path, monkeypatch, status, exitcode):
+    fixture(tmp_path)
+    monkeypatch.setattr(op.sys, "argv", ["operator", "collect", "--operation", str(tmp_path / "operation.json")])
+    monkeypatch.setattr(op, "collect_campaign", lambda *args: {"status": status})
+    assert op.main() == exitcode
+
+
+def test_cli_configuration_error_explains_failure_without_success(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(op.sys, "argv", ["operator", "status", "--operation", str(tmp_path / "missing.json")])
+    assert op.main() == 2
+    assert "OPERATOR_ERROR" in capsys.readouterr().err
+
+
+def test_kit_install_never_starts_work_and_preserves_existing_folder(tmp_path, monkeypatch):
+    from tools.research.install_operator_kit import install
+    operation, settings, _, _ = fixture(tmp_path)
+    Path(settings["python"]).touch()
+    monkeypatch.setattr(op.subprocess, "run", lambda *a, **kw: pytest.fail("No process may start during install"))
+    destination = tmp_path / "操作 & spaces"
+    result = install([tmp_path / "operation.json"], destination)
+    registry = op.read(result / "registry.local.json")
+    assert registry["operations"][0]["path"] == str(tmp_path / "operation.json")
+    assert registry["operations"][0]["url"].endswith("8890/#cluster")
+    assert (result / "start.ps1").read_bytes().startswith(b"\xef\xbb\xbf")
+    contents = (result / "01_STATUS.cmd").read_bytes()
+    with pytest.raises(FileExistsError):
+        install([tmp_path / "operation.json"], destination)
+    assert (result / "01_STATUS.cmd").read_bytes() == contents
+    assert op.read(tmp_path / "operation.json") == operation
+
+
+def test_kit_bad_operation_leaves_no_partial_folder(tmp_path):
+    from tools.research.install_operator_kit import install
+    fixture(tmp_path)
+    destination = tmp_path / "kit"
+    with pytest.raises(ValueError, match="Python is missing"):
+        install([tmp_path / "operation.json"], destination)
+    assert not destination.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows operator launcher integration")
+def test_windows_kit_status_from_another_cwd_with_relative_operation(tmp_path):
+    from tools.research.install_operator_kit import install
+    operation, settings, _, _ = fixture(tmp_path)
+    settings.update(python=sys.executable, port=1)
+    write_json(Path(operation["settings"]), settings)
+    operation.update(settings="settings.json", campaign="campaign")
+    path = tmp_path / "operation.json"
+    write_json(path, operation)
+    kit = install([path], tmp_path / "操作 & spaces")
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-File", str(kit / "start.ps1"),
+                             "-Action", "status", "-OperationIndex", "1"], cwd=kit,
+                            capture_output=True, timeout=30)
+    assert result.returncode == 3, (result.stdout, result.stderr)
+    assert b"CONNECTION_UNKNOWN" in result.stdout
+    assert b"Traceback" not in result.stderr
+    assert op.read(path) == operation

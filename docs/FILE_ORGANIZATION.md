@@ -1,5 +1,13 @@
 # 2026-09-05 ファイル整理記録
 
+## 2026-09-27: 日常操作と履歴の入口を整理
+
+日常運用の正本を [guides/weekly_operations.md](guides/weekly_operations.md) にまとめ、
+docs案内と旧runbookから誘導しました。[tools/researchの用途別案内](../tools/research/README.md)を追加し、
+このPCの操作入口は `output/operations/weekly_20260927/` に集約しています。
+古い日付の出力に現在のqueue・snapshot参照が残るため、原本・実行中release・DB・PPTは移動していません。
+削除による容量削減は未実施です。今後の安全な保管単位も上記運用ガイドに記載しました。
+
 ## 追加の構成簡略化（現在の配置）
 
 - ルートの操作・教員ガイドを `docs/guides/`、デザインを `docs/frontend/`、

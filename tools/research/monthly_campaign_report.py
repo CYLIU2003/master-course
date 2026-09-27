@@ -25,6 +25,10 @@ def read(path: Path) -> dict:
     return json.loads(path.read_bytes())
 
 
+def campaign_path(path: Path) -> Path:
+    return (path.resolve().parent / read(path)["campaign"]).resolve()
+
+
 def collect_verified(case: Path, week: str, operation: dict) -> tuple[dict, list[dict], dict]:
     """Recheck the archive binding; compare exported amounts to canonical accounting."""
     prepared, spec = read(case / "prepared.json"), read(case / "batch.json")
@@ -78,8 +82,10 @@ def snapshot(operations: list[Path]) -> dict:
         if identity is not None and current != identity:
             raise ValueError("Cannot combine different source versions or parent scenarios")
         identity = current
-        campaign = Path(operation["campaign"])
+        campaign = campaign_path(path)
         state = read(campaign / "state.json") if (campaign / "state.json").exists() else {}
+        recovery_path = campaign / "operations/collection.json"
+        recovery = read(recovery_path) if recovery_path.exists() else {}
         if state and state.get("git_sha") != operation["git_sha"]:
             raise ValueError("Campaign source differs from operation")
         for week in operation["weeks"]:
@@ -89,9 +95,16 @@ def snapshot(operations: list[Path]) -> dict:
             seen.add(week)
             recorded = state.get("cases", {}).get(week, {}).get("state", "NOT_STARTED")
             entry = {"week": week, "state": recorded, "campaign": str(campaign), "included": False}
-            if recorded == "VERIFIED":
+            recovered = recovery.get("cases", {}).get(week, {})
+            recovery_verified = (recovery.get("solver_git_sha") == operation["git_sha"]
+                                  and recovered.get("state") == "VERIFIED" and recovered.get("job_id"))
+            if recorded == "VERIFIED" or recovery_verified:
                 try:
                     row, days, proof = collect_verified(campaign / week, week, operation)
+                    if recorded != "VERIFIED":
+                        if row["job_id"] != recovered["job_id"]:
+                            raise ValueError("Recovery receipt belongs to another attempt")
+                        entry.update(state="VERIFIED", original_state=recorded, collection="operator_recovery")
                     if parent_hash is not None and proof["parent_hash"] != parent_hash:
                         raise ValueError("Parent input hash differs between weeks")
                     parent_hash = proof["parent_hash"]
@@ -160,8 +173,9 @@ def main() -> None:
     args = parser.parse_args()
     previous = None
     while True:
-        states = [Path(read(p)["campaign"]) / "state.json" for p in args.operation]
-        fingerprint = digest(canonical({str(p): sha(p) if p.exists() else None for p in [*args.operation, *states]}))
+        states = [campaign_path(p) / "state.json" for p in args.operation]
+        recovery = [campaign_path(p) / "operations/collection.json" for p in args.operation]
+        fingerprint = digest(canonical({str(p): sha(p) if p.exists() else None for p in [*args.operation, *states, *recovery]}))
         if fingerprint != previous:
             result = snapshot(args.operation)
             print(publish(result, args.output), flush=True)
