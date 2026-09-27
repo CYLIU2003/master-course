@@ -4529,3 +4529,8 @@ Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/S
 新しい標準回収では `results/figure_status.json` の `numerical_status` と `figure_status` を分けます。数値VERIFIED・図表FAILEDなら、`python -m tools.research.weekly_figures --results <resultsディレクトリ> --output <新規ディレクトリ>` で図だけ再出力できます（数値hashの一致が必要）。検算不合格・receiptなしの旧成果物には使えません。原ジョブの状態・研究採用判定は維持します。
 
 月別比較監視は独立した全キャンペーンの終端まで継続します。費目別・電力量別・BESS在庫表はフロントの `report.md`、図は「費用グラフを表示」から確認できます。比較表の集計完了と原試行の終了、図表出力、正式研究採用は別です。
+
+
+### 照合中の子機の表示
+
+「実行開始・進捗」では、親機のLOST/STATE_UNKNOWNと、子機の同一試行プロセスの生存確認を分けて表示します。接続・取得時刻・プロセス照合が新鮮な場合だけ生存確認済みと表示し、古い値や取得失敗は現在の稼働として表示しません。計算終了・週全体の検算とは別です。

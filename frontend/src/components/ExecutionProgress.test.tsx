@@ -99,3 +99,24 @@ it("shows queued memory and license cause without opening details", async () => 
   expect(screen.queryByText("old failure")).toBeNull();
   expect(screen.getByText(/入力準備 1\/1週/)).toBeTruthy();
 });
+
+for (const mode of ["fresh", "old", "future", "probe_error", "wrong_identity"] as const) {
+  it(`only shows a live child observation while reconciling when evidence is fresh: ${mode}`, async () => {
+    const now = new Date().toISOString();
+    const observed = new Date(Date.now() + (mode === "old" ? -300000 : mode === "future" ? 300000 : 0)).toISOString();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ schema_version: "execution_detail_v1", observed_at: now, errors: [], cases: [{
+      parent: "p", campaign: "c", week: "2025-11-10", state: "LOST", prepared: true, verified: false, connection: "CONNECTED",
+      solver_git_sha: "frozen", job_id: "same", placement: [], expected_windows: 174,
+      probe_error: mode === "probe_error" ? "SSH timeout" : undefined,
+      execution: { observed_at: observed, phase: "ROLLING", rolling_saved: 55, rolling_feasible: 55, chain_accepted: false,
+        memory: { status: mode === "wrong_identity" ? "IDENTITY_MISMATCH" : "OBSERVED" } }
+    }] }))));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><ExecutionProgress scenarioId="p" /></QueryClientProvider>);
+    await screen.findByText("55/174窓（31.6%）");
+    expect(!!screen.queryByText(/子機の計算プロセスは生存確認済み/)).toBe(mode === "fresh");
+    expect(!!screen.queryByText("メモリ実測")).toBe(mode === "fresh");
+    expect(screen.getByText(/計算終了 0\/1週/)).toBeTruthy();
+    client.clear();
+  });
+}

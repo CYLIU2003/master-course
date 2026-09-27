@@ -65,7 +65,11 @@ export default function ExecutionProgress({ scenarioId, origin = "", controllerS
     {data?.errors.map(e => <p role="alert" key={e.operation}>{e.operation}：取得失敗（{e.error}）。計算失敗とは別です。</p>)}
     <div className="execution-progress-list">{rows.map(c => {
         const ex = c.execution;
-        const live = !stale && c.connection === "CONNECTED" && (c.state !== "RUNNING" || !ex || (now - Date.parse(ex.observed_at) < 120000 && now - Date.parse(ex.observed_at) >= -30000));
+        const executionAge = ex ? now - Date.parse(ex.observed_at) : NaN;
+        const freshExecution = !stale && c.connection === "CONNECTED" && !c.probe_error && executionAge >= -30000 && executionAge < 120000;
+        const observedProcess = freshExecution && ex?.memory?.status === "OBSERVED"
+          && ["RUNNING", "LOST", "STATE_UNKNOWN"].includes(c.state);
+        const live = !stale && c.connection === "CONNECTED" && (!["RUNNING", "LOST", "STATE_UNKNOWN"].includes(c.state) || !ex || freshExecution);
         const phase = c.verified ? "検算・集計済み" : live && c.state === "RUNNING" && ex ? phases[ex.phase] ?? ex.phase : states[c.state] ?? c.state;
         const n = ex?.rolling_feasible ?? 0, total = c.expected_windows;
         return <article className="execution-progress-case" key={`${c.campaign}-${c.week}`} aria-label={`${c.week}の計算進捗`}>
@@ -73,8 +77,11 @@ export default function ExecutionProgress({ scenarioId, origin = "", controllerS
             <div><small>担当PC</small><p>{c.worker ?? "未割当"}</p></div>
             <div><small>毎時の計算</small><p>{ex && total ? <><progress aria-label={`${c.week}の保存済み可行窓`} value={Math.min(n, total)} max={total}/><br/>{n}/{total}窓（{(100*n/total).toFixed(1)}%）<br/><small>保存済み可行窓。週全体の検算は別。</small></> : "未取得・未着手"}</p></div></div>
           {c.error && <p role="alert">{reasons[c.error] ?? c.error}</p>}{c.probe_error && <p>{c.probe_error}</p>}
+          {observedProcess && c.state !== "RUNNING" && <p role="status">子機の計算プロセスは生存確認済み（{stamp(ex?.observed_at)}）。
+            親機の管理状態は照合中です。直近工程：{ex ? phases[ex.phase] ?? ex.phase : "未確認"}。
+            予約を保持し、同じ試行を確認しています。完了・検算済みという意味ではありません。</p>}
           {ex?.memory && <div className="execution-memory" aria-label="計算プロセスのメモリ">
-            <strong>{live && c.state === "RUNNING" ? "メモリ実測" : "メモリの最終記録"}</strong>
+            <strong>{observedProcess ? "メモリ実測" : "メモリの最終記録"}</strong>
             {ex.memory.status === "OBSERVED" ? <p>使用中RAM {ex.memory.working_set_gib?.toFixed(2)} GiB ／ 起動後のRAM最大 {ex.memory.peak_working_set_gib?.toFixed(2)} GiB<br/>
               専用コミット {ex.memory.private_commit_gib?.toFixed(2)} GiB ／ 計算予算 {c.memory_budget_gib ?? "未確認"} GiB<br/>
               <small>計算プロセス単体の値。専用コミットと使用中RAMは合算しません。読取：{stamp(ex.observed_at)}</small></p>

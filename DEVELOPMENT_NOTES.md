@@ -11407,3 +11407,11 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 比較出力形式v2：既存10週を再求解せず、総費用と車両日費、買電/燃料在庫評価/契約超過モデル費、PV各流れ、受電ピーク、車両日数、単位費用、BESS初終端を分離。未記録をゼロにしない。PV→BESSとBESS→バスは合算しない。設備費未計上・電費一定・実料金未保証・統合最適性未証明を保持。出力revisionに形式版を含め旧報告を保持。
 - 検証：関連Python78件通過、CLI help確認。新10週比較図を実表示確認（日本語・単位・重なりなし）。原実行f524eca2、元attemptのまま。今回の標準collector分離は開発版/以後の回収用であり、実行中の凍結worker/キャンペーンを変更しない。
 - 配置：旧report watcher PID20976/80740だけを終了し、同じ2operation・同じ1月復旧出力を渡してread-only watcher PID35584を起動。controller8891 PID52332継続、求解再起動/投入/メールなし。最新report revision c79c858900a18cd8518099c9ea626ffed0c8bf189123d89bd3bdc6ec92ae19a1、10/12週。通常更新にAIを使わない。
+
+
+## 2026-09-27 20:03 JST — 実行画面の照合状態と子機の生存表示
+
+- 問題：親機のLOSTは同じ試行と予約を保持して照合する状態だが、子機が生存していても停止と受け取られ得た。ExecutionProgressで親機の管理状態を保持し、新鮮な子機観測（接続正常・probe_errorなし・時刻差-30〜120秒・memory.status=OBSERVED）がある時だけ生存確認と工程・メモリ実測を併記する。予約や完了数を変更しない。
+- 検証：ExecutionProgressの14テストとTypeScriptを含む本番build通過。fresh/old/future/probe_error/identity_mismatchの表示回帰を追加。自己レビューで対象差分のP0/P1なし。前段の実行画面統合はClaude Sonnet差分レビュー済み、本追補単独の外部レビューは未実施。
+- 実画面：8891で設定確認・保存の欄、保存条件と入力準備/開始ボタン、研究室依頼の受付欄を確認。20:01読取の11月55/174窓・12月136/174窓で、LOSTを残した生存確認の表示を確認。比較は10/12週で、完了へ書換えない。表示確認のためのシナリオ保存・Prepare・新規求解は実施していない。
+- 配置：静的frontend index-DIMOZRFT.jsだけ更新、controller PID52332は継続。固定f524eca2の求解・物理条件・attempt・予約は変更なし。証拠はoutput/reconciliation_display_20260927/。未適用の充電MIP-start変更と他作業の文書追記は本commitに含めない。
