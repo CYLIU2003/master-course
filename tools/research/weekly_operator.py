@@ -224,7 +224,8 @@ def collect_existing(directory: Path, *, client=None) -> dict:
             ) and receipt.get("outputs"):
                 return receipt["result"]
         result = collect_week(prepared, state["tasks"][prepared["week"]], directory, audit)
-        outcome = {"state": "VERIFIED", "total_cost_jpy": result["total_cost"], "job_id": result["job_id"]}
+        outcome = {"state": "VERIFIED", "total_cost_jpy": result["total_cost"], "job_id": result["job_id"],
+                   "figure_status": result.get("figure_status", "NOT_RECORDED")}
         write_json(receipt_path, {"binding": binding, "result": outcome,
             "outputs": {p.relative_to(directory).as_posix(): sha(p) for p in (directory / "results").glob("*") if p.is_file()}})
         return outcome

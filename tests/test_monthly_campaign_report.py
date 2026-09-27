@@ -193,3 +193,40 @@ def test_watch_publishes_recovered_result_without_rewriting_campaign(tmp_path, m
     report.main()
     assert report.read(tmp_path / "report/latest.json")["complete"]
     assert report.read(case.parent / "state.json") == original
+
+@pytest.mark.parametrize("other,expected", [("RUNNING", False), ("UNKNOWN", False), (None, False), ("COMPLETED", True), ("PARTIAL_OR_FAILED", True)])
+def test_report_watcher_waits_for_all_independent_campaigns(tmp_path, other, expected):
+    failed, peer = tmp_path / "failed.json", tmp_path / "peer.json"
+    save(failed, {"status": "PARTIAL_OR_FAILED"})
+    if other is not None:
+        save(peer, {"status": other})
+    assert report.all_campaigns_terminal([failed, peer]) is expected
+    assert report.read(failed)["status"] == "PARTIAL_OR_FAILED"
+    assert not report.all_campaigns_terminal([])
+
+
+def test_component_tables_keep_unknowns_and_inventory_separate():
+    text = "\n".join(report.comparison_tables([{"week": "2025-01-06", "total_cost": 123.0,
+        "bess_terminal": {"depot": {"initial_soc_kwh": 3000, "terminal_soc_kwh": 1200, "terminal_soc_delta_kwh": -1800}}}]))
+    assert "123.00" in text and "未記録" in text
+    assert "3,000.00|1,200.00|-1,800.00" in text
+    assert "在庫評価" in text and "合計をPV利用量としない" in text
+
+
+def test_failure_of_one_campaign_does_not_exit_watch_with_live_peer(tmp_path, monkeypatch):
+    failed, _, _ = operation(tmp_path, "failed", "2025-01-06", "FAILED_OR_UNVERIFIED")
+    peer, _, _ = operation(tmp_path, "peer", "2025-02-03", "SUBMITTED")
+    a, b = report.campaign_path(failed) / "state.json", report.campaign_path(peer) / "state.json"
+    save(a, {"status": "PARTIAL_OR_FAILED", "cases": {}})
+    save(b, {"status": "RUNNING", "cases": {}})
+    monkeypatch.setattr(report.sys, "argv", ["report", "--operation", str(failed), str(peer), "--output", str(tmp_path / "out"), "--watch"])
+    monkeypatch.setattr(report, "snapshot", lambda *args: {"complete": False})
+    published = []
+    monkeypatch.setattr(report, "publish", lambda *args: published.append(args))
+    def finish_peer(seconds):
+        assert len(published) == 1
+        save(b, {"status": "COMPLETED", "cases": {}})
+    monkeypatch.setattr(report.time, "sleep", finish_peer)
+    report.main()
+    assert len(published) == 2
+    assert report.read(a)["status"] == "PARTIAL_OR_FAILED"

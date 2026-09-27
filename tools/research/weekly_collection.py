@@ -8,7 +8,8 @@ import math
 from pathlib import Path
 import zipfile
 
-from tools.research.weekly_results import FLOWS, require_close, require_coverage, render_week, write_csv, write_json
+from tools.research.weekly_results import FLOWS, require_close, require_coverage, write_csv, write_json
+from tools.research.weekly_figures import hashes, render_verified_week
 
 
 def collect_week(prepared: dict, item: dict, directory: Path, audit: dict) -> dict:
@@ -91,5 +92,5 @@ def export_executed_week(prepared: dict, item: dict, directory: Path, audit: dic
            "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION", "original_research_verdict": audit["tasks"][0],
            "figure_title": f"渋21〜23 / {prepared['week']} / 7日間＋最終翌朝の充電・受電・費用\n電費一定・BESS補助運用・翌朝運用SOC上限（統合最適性は未証明）"}
     write_json(output / "weekly_summary.json", row)
-    render_week(output, row, times, soc)
-    return row
+    figures = render_verified_week(output, row, times, soc, hashes(output))
+    return {**row, "figure_status": figures["figure_status"]}

@@ -257,6 +257,7 @@ def run(settings_path: Path, directory: Path, parent: str, weeks: list[str], wor
                 if passed:
                     summary = collect_week(read(case_dir / "prepared.json"), batch_state["tasks"][week], case_dir, audit)
                     state["cases"][week]["total_cost_jpy"] = summary["total_cost"]
+                    state["cases"][week]["figure_status"] = summary["figure_status"]
                 state["cases"][week].update(state="VERIFIED" if passed else "FAILED_OR_UNVERIFIED", audit=str(case_dir / "artifact-audit.json"))
             except Exception as exc:
                 state["cases"][week].update(state="STATE_UNKNOWN", error=str(exc))

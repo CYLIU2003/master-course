@@ -175,9 +175,41 @@ def snapshot(operations: list[Path], reporting_recoveries: list[Path] | None = N
             "daily": daily, "evidence": evidence, "complete": len(rows) == len(index)}
 
 
+def comparison_tables(rows: list[dict]) -> list[str]:
+    """Keep recorded components separate; absent amounts are never free costs."""
+    def number(row: dict, key: str) -> str:
+        value = row.get(key)
+        return f"{value:,.2f}" if isinstance(value, (int, float)) and math.isfinite(value) else "未記録"
+    sections = [
+        ("週次費用の分解 [円/週＋最終翌朝]", [
+            ("total_cost", "総費用"), ("vehicle_usage_cost", "車両日費"),
+            ("electricity_cost", "買電費"), ("fuel_cost", "燃料費・在庫評価"),
+            ("contract_overage_cost", "契約超過モデル費"), ("co2_cost", "CO₂費"),
+            ("cost_per_service_km_jpy", "円/営業km"), ("cost_per_trip_jpy", "円/便")]),
+        ("電力利用・車両運用（最終翌朝を含む）", [
+            ("grid_import_kwh", "買電 kWh"), ("pv_to_bus_kwh", "PV→バス kWh"),
+            ("pv_to_bess_kwh", "PV→BESS kWh"), ("pv_curtailed_kwh", "PV抑制 kWh"),
+            ("bess_to_bus_kwh", "BESS→バス kWh"), ("peak_grid_kw", "受電ピーク kW"),
+            ("used_vehicle_day_count", "車両日数"), ("ice_fuel_consumed_l", "燃料 L")])]
+    lines = []
+    for title, fields in sections:
+        lines += ["", "## " + title, "", "|代表週|" + "|".join(label for _, label in fields) + "|",
+                  "|---|" + "---:|" * len(fields)]
+        lines += ["|" + row["week"] + "|" + "|".join(number(row, key) for key, _ in fields) + "|" for row in rows]
+    lines += ["", "## BESSの在庫 [kWh]", "", "|代表週|営業所|初期|終端|差（終端−初期）|", "|---|---|---:|---:|---:|"]
+    for row in rows:
+        for depot, values in row.get("bess_terminal", {}).items():
+            lines.append("|" + row["week"] + "|" + depot + "|" + "|".join(number(values, key) for key in
+                ("initial_soc_kwh", "terminal_soc_kwh", "terminal_soc_delta_kwh")) + "|")
+    lines += ["", "PV→BESSとBESS→バスは別時点の流れで、合計をPV利用量としない。BESS初期在庫の由来も当該週のPVとはしない。",
+              "契約超過モデル費は実際の電気料金の保証ではない。設備投資・保守・劣化等は原モデルの未計上範囲を引き継ぐ。",
+              "燃料費は消費距離に基づく在庫評価を含む。総費用を現金支出だけと解釈しない。"]
+    return lines
+
+
 def publish(result: dict, output: Path) -> Path:
     """Create an immutable report revision, then atomically publish its pointer."""
-    revision = digest(canonical(result))
+    revision = digest(canonical({"report_format": 2, "comparison": result}))
     destination = output / "revisions" / revision
     if (destination / "manifest.json").exists():
         manifest = read(destination / "manifest.json")
@@ -202,14 +234,26 @@ def publish(result: dict, output: Path) -> Path:
             lines.append(f"|{case['week']}|{case['state']}|{amount}|")
         if result["rows"]:
             plt = plotting()
-            fig, ax = plt.subplots(figsize=(11, 5), constrained_layout=True)
-            ax.bar([r["week"] for r in result["rows"]], [r["total_cost"] for r in result["rows"]])
-            ax.set_ylabel("実行会計の費用 [円/週＋最終翌朝]")
-            ax.tick_params(axis="x", rotation=35)
-            ax.set_title("仮・正式用：検算済み代表週（未完了週は除外）")
+            fig, axes = plt.subplots(4, 1, figsize=(12, 14), constrained_layout=True)
+            for ax, fields, label in zip(axes, [
+                [("total_cost", "総費用"), ("vehicle_usage_cost", "車両日費")],
+                [("electricity_cost", "買電費"), ("fuel_cost", "燃料費・在庫評価"), ("contract_overage_cost", "契約超過モデル費")],
+                [("grid_import_kwh", "買電"), ("pv_to_bus_kwh", "PV→バス"), ("pv_to_bess_kwh", "PV→BESS"), ("pv_curtailed_kwh", "PV抑制")],
+                [("used_vehicle_day_count", "車両日数")]], ["円/週＋最終翌朝", "円/週＋最終翌朝", "kWh/週＋最終翌朝", "車両日"]):
+                for key, title in fields:
+                    values = [r for r in result["rows"] if isinstance(r.get(key), (int, float)) and math.isfinite(r[key])]
+                    if values:
+                        ax.plot([r["week"] for r in values], [r[key] for r in values], marker="o", label=title)
+                ax.set_ylabel(label)
+                ax.tick_params(axis="x", rotation=35)
+                ax.grid(alpha=.15)
+                if ax.lines:
+                    ax.legend()
+            fig.suptitle("仮・正式用：検算済み代表週の費用・電力・車両利用（未記録値は除外）")
             fig.savefig(destination / "monthly_cost.png", dpi=140)
             plt.close(fig)
             lines += ["", "![週次費用](monthly_cost.png)"]
+        lines += comparison_tables(result["rows"])
         lines += ["", "費目・電力量・車両台帳は各週の元resultsを参照。電費一定条件であり空調負荷差は未評価。",
                   "BESS初終端はcomparison.jsonのbess_terminalに原記録を保存。在庫取り崩しを恒常的節約やPV効果としない。",
                   "設備費等の未計上項目、受電設備・距離・fleetの仮定、元の研究判定は引き継ぐ。"]
@@ -219,6 +263,14 @@ def publish(result: dict, output: Path) -> Path:
                "complete": result["complete"], "included": len(result["rows"]), "declared": len(result["cases"]),
                "observed_at_utc": datetime.now(timezone.utc).isoformat()})
     return destination
+
+
+def all_campaigns_terminal(states: list[Path]) -> bool:
+    """A failed independent campaign must not stop collection of its live peers."""
+    return bool(states) and all(
+        path.exists() and read(path).get("status") in {"COMPLETED", "PARTIAL_OR_FAILED"}
+        for path in states
+    )
 
 
 def main() -> None:
@@ -238,8 +290,7 @@ def main() -> None:
             result = snapshot(args.operation, args.reporting_recovery)
             print(publish(result, args.output), flush=True)
             previous = fingerprint
-            failed = any(p.exists() and read(p).get("status") == "PARTIAL_OR_FAILED" for p in states)
-            if result["complete"] or failed:
+            if result["complete"] or all_campaigns_terminal(states):
                 return
         if not args.watch:
             return
