@@ -4,3 +4,4 @@ evidence.json text eol=lf
 README.md text eol=lf
 *.pptx binary
 *.pdf binary
+twelve_week_evidence/** -text whitespace=cr-at-eol

@@ -1,0 +1,13 @@
+﻿week,state,campaign,included,original_state,collection,job_id,total_cost_jpy
+2025-01-06,REPORTING_RECOVERED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,FAILED_OR_UNVERIFIED,reporting_recovery,c094649e-5a99-5ba6-b043-f2b832b76066,4860462.656698648
+2025-02-03,VERIFIED,C:\master-course\output\executed_soc_20260926\february_campaign,True,,,ca61928c-800a-5c76-8cab-d4993dc9fcda,4776386.715806569
+2025-03-03,VERIFIED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,,,b5023143-6887-5d46-8a3d-8015649c5bff,6126515.171577275
+2025-04-07,VERIFIED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,,,bf3a6405-a814-5e28-83ce-f6a300942cf6,4235093.705434697
+2025-05-12,VERIFIED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,,,d62bf0be-b57d-52c8-83ff-a4a2c3e3fd2c,4811474.5594100775
+2025-06-02,VERIFIED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,,,e786d4e9-9d76-5c4b-903c-67df62f862de,4577588.887209395
+2025-07-07,VERIFIED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,,,51f0cada-6042-51b0-af0a-0d8df5be4663,4185894.598136911
+2025-08-04,VERIFIED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,,,37625d9c-03d5-5a71-8118-fbc8e83a2b8c,4178455.309118559
+2025-09-01,VERIFIED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,,,54a75e38-53bb-5e8d-a62f-61fc2222d505,4966232.138003672
+2025-10-06,VERIFIED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,,,506b76c1-cd53-5f63-ba17-58300c999675,4663508.587713766
+2025-11-10,REPORTING_RECOVERED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,SUBMITTED,reporting_recovery,490483ef-eb66-5c89-ae52-dd8bfbbc108f,5110163.394481636
+2025-12-01,REPORTING_RECOVERED,C:\master-course\output\executed_soc_20260926\remaining_campaign,True,SUBMITTED,reporting_recovery,ccf82c9c-bfc5-5ab8-847c-a0570ec11857,4992623.661348696

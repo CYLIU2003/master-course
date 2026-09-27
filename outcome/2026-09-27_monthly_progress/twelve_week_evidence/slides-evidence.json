@@ -1,0 +1,9 @@
+{
+  "report_revision": "6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd",
+  "comparison_sha256": "bd7df17312343b0d0e682630d46f65292c43051913fceb4d2bb5e3c1ca8395aa",
+  "source_sha": "f524eca2552a4386bd033a15bbe046c14dc09281",
+  "included": 12,
+  "declared": 12,
+  "missing": "",
+  "generated_slides": 6
+}

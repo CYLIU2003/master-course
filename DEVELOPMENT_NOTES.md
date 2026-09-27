@@ -11591,3 +11591,26 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 証拠: output/cluster-deployment/package-next-267e33eb/staging/{preflight.json,evidence/report.json,verified.private.json}、prepare-march/{verification.json,input-copy.json,input-comparison.json,sqlite-backup-review-check.json}、prepare-review.json。private設定・元データは公開Gitへ追加しない。
 - 23:36 JSTの原worker読取: 11月同PID8976、169/174保存・169可行、peak working set13.162GiB、chain未承認。旧試行を継続し、残区間と回収・最終会計を待つ。
 - 本番controller切替、新版の1週求解・会計検証・週次短縮率は未完了。詳しい配置手順と証拠範囲はNEXT_WEEKLY_RELEASE_20260927.mdを更新。
+
+## 2026-09-27 23:55 JST — 全12代表週の回収と受電差の説明
+
+- 11月の元ジョブ490483efは174/174 rolling保存後に終了。旧f524のCO2図表照合が失敗原因。
+  旧FAILEDを残し、原ZIP SHA a6c8945318909dfe0da30774843d0b9bfd290832a0d6d9df043618603583e5eaを照合。
+  既存rebuild/recoverで別出力november-weekly-v1を作成。714必須項目、物理判定、翌朝を含む会計検算通過。
+  再求解なし、週費用5,110,163.394481636円。
+- 所有する旧集計watcher PID64560/24436のコマンドを照合して停止し、Jan/Nov/Decの復旧receiptを全て指定して再集計。
+  latestは12/12 complete=true、revision6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd。
+  コントローラー・元ジョブ・実行コードは変更/再起動していない。
+- tools/research/monthly_power_evidence.pyを追加。原ZIP/Preparedのhash、7日・15分・翌朝区間、買電積算・ピーク・
+  超過電力量を原会計へ1e-6以内で照合。営業168h平均と翌朝を含む評価期間平均を分離。
+  全12週の原本再集計と回帰9件が通過。計算条件・制約・最適化費用の変更なし。
+- 3月はピーク630kW、200kW超過21.75h/3319.01kWh。11月は732.21kW、11.75h/1499.77kWh。
+  最大値が大きい週ほど超過モデル費が大きいとは限らない。15分平均であり瞬時値ではない。
+- Claude Sonnet静的レビューにより証拠キー重複拒否とPrepared期間検査を追加。
+  672営業区間と可変の翌朝区間は別であり、Claudeの瞬時値表現・翌朝長さによる営業区間変化の指摘は採用しなかった。
+  レビュー原文はoutput/monthly_slides_12weeks_20260927/claude-review.json。正式研究承認とは別。
+- PPT生成で復旧月を固定文字列にせず原case状態から表示。全12週版6枚をPowerPointで描画確認、PDF6ページ、
+  元24枚は非表示で保持、9/19原本hash不変。編集可能な表・チャート・埋め込みブック検査通過。
+  outcome/2026-09-27_monthly_progress/README_12weeks.mdに再生成手順と原値を保存。
+- Slack再読で用語統一/3月11月/費用内訳の指摘を再確認。メール・Slack送信なし。
+  最終発表版の天候カーブ/SOC本文統合は未完了、自動確認12は維持。新版267の1週求解・本番切替も未完了。

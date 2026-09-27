@@ -1,0 +1,67 @@
+# 12週集計更新の発表者ノート
+
+## スライド1
+
+出典：C:\master-course\output\executed_soc_20260926\monthly_report\revisions\6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd/comparison.json
+SHA256 bd7df17312343b0d0e682630d46f65292c43051913fceb4d2bb5e3c1ca8395aa
+計算固定版 f524eca2552a4386bd033a15bbe046c14dc09281
+グラフはMWh小数6桁に表示用丸め。原値は同梱comparison.json。
+元の実行会計と物理検証を照合した週だけ収録。図表復旧と原FAILEDは別記録。
+仮・正式用 ／ 渋21・22・23 ／ 2025年の各月から連続7日間
+各日の日付別ダイヤ・PVを使用し、車両と蓄電池の状態を引き継ぐ
+現版 f524eca2 の全12週の集計更新。以降の旧24枚は履歴として非表示で保管。
+
+## スライド2
+
+出典：C:\master-course\output\executed_soc_20260926\monthly_report\revisions\6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd/comparison.json
+SHA256 bd7df17312343b0d0e682630d46f65292c43051913fceb4d2bb5e3c1ca8395aa
+計算固定版 f524eca2552a4386bd033a15bbe046c14dc09281
+グラフはMWh小数6桁に表示用丸め。原値は同梱comparison.json。
+元の実行会計と物理検証を照合した週だけ収録。図表復旧と原FAILEDは別記録。
+単位：万円。営業7日間と最終翌朝までの実行会計を集計
+車両日費と、買電・燃料・契約超過モデル費を分けて読む
+燃料は消費在庫の評価を含む。超過モデル費は実契約の請求額ではない。設備投資費は未計上。
+
+## スライド3
+
+出典：C:\master-course\output\executed_soc_20260926\monthly_report\revisions\6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd/comparison.json
+SHA256 bd7df17312343b0d0e682630d46f65292c43051913fceb4d2bb5e3c1ca8395aa
+計算固定版 f524eca2552a4386bd033a15bbe046c14dc09281
+グラフはMWh小数6桁に表示用丸め。原値は同梱comparison.json。
+元の実行会計と物理検証を照合した週だけ収録。図表復旧と原FAILEDは別記録。
+単位：万円。営業7日間と最終翌朝までの実行会計を集計
+車両日費と、買電・燃料・契約超過モデル費を分けて読む
+燃料は消費在庫の評価を含む。超過モデル費は実契約の請求額ではない。設備投資費は未計上。
+
+## スライド4
+
+出典：C:\master-course\output\executed_soc_20260926\monthly_report\revisions\6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd/comparison.json
+SHA256 bd7df17312343b0d0e682630d46f65292c43051913fceb4d2bb5e3c1ca8395aa
+計算固定版 f524eca2552a4386bd033a15bbe046c14dc09281
+グラフはMWh小数6桁に表示用丸め。原値は同梱comparison.json。
+元の実行会計と物理検証を照合した週だけ収録。図表復旧と原FAILEDは別記録。
+単位：MWh。収録済みの各月1週を比較（営業7日間＋最終翌朝）
+月平均・年間合計ではなく、それぞれの代表週の結果を示す
+電費・燃費は一定。PVだけの因果効果や、冷暖房負荷を含む季節差とは解釈しない。
+
+## スライド5
+
+出典：C:\master-course\output\executed_soc_20260926\monthly_report\revisions\6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd/comparison.json
+SHA256 bd7df17312343b0d0e682630d46f65292c43051913fceb4d2bb5e3c1ca8395aa
+計算固定版 f524eca2552a4386bd033a15bbe046c14dc09281
+グラフはMWh小数6桁に表示用丸め。原値は同梱comparison.json。
+元の実行会計と物理検証を照合した週だけ収録。図表復旧と原FAILEDは別記録。
+収録12週の最高額 3月と最低額 8月の差。最適費用の順位ではない
+週次費用差は 194.81万円。費目と入力条件を併せて解釈する
+差は観測した計画間の記述値。PVの効果・手法の削減効果・年間節約額を直接示さない。
+
+## スライド6
+
+出典：C:\master-course\output\executed_soc_20260926\monthly_report\revisions\6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd/comparison.json
+SHA256 bd7df17312343b0d0e682630d46f65292c43051913fceb4d2bb5e3c1ca8395aa
+計算固定版 f524eca2552a4386bd033a15bbe046c14dc09281
+グラフはMWh小数6桁に表示用丸め。原値は同梱comparison.json。
+元の実行会計と物理検証を照合した週だけ収録。図表復旧と原FAILEDは別記録。
+週次運行・経済性・月別の違いを、原本に対応する数値で説明する
+図表の注意と、運行・会計の不整合を区別して結果を積み上げる
+DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS。独立した正式研究採用承認は別途必要。
