@@ -38,6 +38,38 @@ CHECKのSHA/依存/入力不一致は、固定releaseや元設定を保全して
 
 ## 停止・取消・通信障害
 
+### 管理サーバーの自動復旧（明示的に有効化する）
+
+`tools/research/install_controller_supervisor.ps1` は同じ固定版・設定・既存キューの管理サーバーを監督します。
+求解の再実行や新しいbatch/attemptの作成は行いません。ただし復旧したschedulerは、**既存キューのQUEUEDの割当も再開**します。
+これは回収専用モードではありません。適格PC、RAM、ライセンスの既存判定は維持します。
+
+```powershell
+# まず登録内容を検査（起動・登録なし）
+& .\tools\research\install_controller_supervisor.ps1 -Operation .\output\executed_soc_20260926\operation.remaining.local.json -CheckOnly
+# 登録・有効化。同じ利用者のログオン後にも起動する
+& .\tools\research\install_controller_supervisor.ps1 -Operation .\output\executed_soc_20260926\operation.remaining.local.json -Start
+```
+
+稼働中のコントローラーはPID・生成時刻・実行引数で識別し、そのまま継続します。
+API応答時間では停止を判定しません。照会権限不足、他のポート所有者、キューロック保持、複数管理プロセスはHOLDです。
+停止を確認した場合だけ固定版の`--check`を実行し、同じ管理サーバーを起動します。
+再起動枠は永続記録で最大3回、間隔は60/180/600秒。設定・監督コードの変更、事前検査失敗、起動結果不明ではBLOCKEDになり、人間の確認まで停止します。
+全ジョブが終了した状態で管理サーバーが終了しても再起動しません。稼働中の管理画面は閉じません。
+
+**管理サーバーを意図して止める前に、次を実行します。** `disable`は計算やサーバーを強制終了しません。
+
+```powershell
+& .\output\cluster-deployment\controller-venv\Scripts\python.exe -X utf8 .\tools\research\controller_supervisor.py disable --operation .\output\executed_soc_20260926\operation.remaining.local.json
+```
+
+状態と起動ログは設定のqueue配下`controller-supervision/state.json`と`controller.log`です。
+`status`/`tick`の終了コードは0=正常、3=HOLD（状態確認待ち）、2=BLOCKEDまたはエラーです。
+停止原因を直した後もBLOCKEDが残る場合は、その記録を別名へ保管したうえで、同じ設定の`-Start`で再有効化します。
+不明なPIDを終了させたり、ジョブやライセンス予約を削除して復旧してはいけません。
+タスクは同じ利用者のInteractive/Limited権限で動作します。ログオン前の起動や停電からのPC電源復旧は対象外です。
+この監督は管理サーバーのみです。回収・図表監視には既存の06_WATCH等を使います。
+
 - STATUSは読取です。WATCHのCtrl+Cは監視のみの停止で、遠隔計算を停止しません。
 - コントローラー窓のCtrl+Cで管理を終了すると、新規割当は止まります。受理済みworkerは継続し得ます。
   戻るときは上の復旧手順で照合します。PIDだけを見て別計算を投入しません。

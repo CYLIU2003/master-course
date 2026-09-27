@@ -11336,3 +11336,12 @@ weekly_operator/publish_execution_detail/ExecutionProgressで準備専用状態�
 - docs/notes/STABLE_FAST_WEEKLY_CONFIGURATION_20260927.mdへ構成・実測・次の受入試験を記録。docs/reviews/CLAUDE_WEEKLY_CAPACITY_20260927.mdへ訂正後原文を保存。証拠・応答JSON・hashはoutput/claude_capacity_design_20260927。重い3月step61/10月step14と通常8月step160のMPS未保存を確認し、同一問題復元が診断開始前の残件。
 - 現行固定版・実行中worker・シナリオ・Threads・時間上限は変更せず、新規求解/再投入なし。Task Scheduler監督と4対2threads比較は設計段階で未配置・未実行。管理停止原因/commit不足原因/64GB利用許可/1月再監査/11・12月完走が未解決。設計レビューを正式研究承認や高速化実証へ読み替えない。
 - 検証は保存数値の再集計、リンク、diff、応答モデル/成功フラグ/ツール0、証拠hashを確認。文書変更だけなのでソルバーテスト再実行は対象外。今後もAIなしで起動・照合・回収する既存CLIを基礎とし、新しい分散基盤は導入しない。
+
+## 2026-09-27 固定controllerのOS監督を実装・配置
+
+- controller_supervisor.pyとinstall_controller_supervisor.ps1を追加。PID生成時刻・実行引数・ポート・OSキューロックを確認し、同じ固定設定だけを復旧。
+- 起動予約を永続化し、3回上限・バックオフ・不明時HOLD/BLOCKED・意図的disableを実装。enqueue/retry/cancel経路なし。既存キューの割当は復旧後に再開。
+- Windows venvの親子を二重controllerと誤判定する問題を実試験で修正。Claude Code sonnet-5と2回レビューし、起動直前再照合・HOLD終了コード3を追加。
+- 関連73件通過、最後のhash固定後に対象19件再通過。専用Scheduled Taskで試験用controllerの停止→1回復旧→disableを実測。試験タスクを解除、証拠保全。
+- 18:15 JSTにMasterCourseControllerSupervisor8891を配置。既存PID52332を継続、監督起動0回、job ID54件一致。固定f524eca2の実計算は変更なし。
+- 詳細: docs/notes/CONTROLLER_SUPERVISION_20260927.md。全helper監督・再ログオン・12週完走・求解高速化は未完了。

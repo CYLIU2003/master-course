@@ -4481,3 +4481,9 @@ workerがFAILED/COMPLETEDで、原本の最終費用照合がOKの場合だけ�
 ## 安定性・計算時間の構成検討（2026-09-27）
 
 Claude Codeと実測・実装を突き合わせた[構成判断書](docs/notes/STABLE_FAST_WEEKLY_CONFIGURATION_20260927.md)。現行12代表週の結果を優先し、同じattemptの復旧、共有枠内の配置、重い毎時窓の限定診断の順で進めます。OSによる管理プロセス監督とThreads比較は計画段階で、高速化・無人完走を実証済みとはしていません。
+
+### 管理サーバーの自動復旧（2026-09-27）
+
+同じ固定版・既存キューのcontrollerを、AIなしで監督する手順を追加しました。
+[操作・停止方法](docs/guides/weekly_operations.md)と[実機検証・配置記録](docs/notes/CONTROLLER_SUPERVISION_20260927.md)を参照してください。
+求解再投入は行いません。復旧後は既存QUEUEDの割当も再開します。
