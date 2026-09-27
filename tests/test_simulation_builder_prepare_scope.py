@@ -65,6 +65,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             deadhead_speed_kmh=18.0,
             objective_preset="cost",
             planning_days=2,
+            rolling_charging_search="bound_first",
             multi_day_input_mode='repeat_day_diagnostic',
             service_dates=["2025-08-01", "2025-08-02"],
             fixed_route_band_mode=True,
@@ -138,6 +139,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["simulation_config"]["milp_max_successors_per_trip"] == 24
     assert updated["simulation_config"]["enable_vehicle_diagram_output"] is True
     assert updated["simulation_config"]["planning_days"] == 2
+    assert updated["simulation_config"]["rolling_charging_search"] == "bound_first"
     assert updated["simulation_config"]["service_dates"] == ["2025-08-01", "2025-08-02"]
     assert updated["simulation_config"]["planning_horizon_hours"] == 48.0
     assert updated["simulation_config"]["weather_mode"] == "solcast_avg_2025_08_60min"

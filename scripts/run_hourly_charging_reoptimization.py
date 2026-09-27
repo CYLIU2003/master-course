@@ -1269,6 +1269,7 @@ class RollingChainRequest:
     # diagnostic BFF run must not silently become a formal research run.
     research_run: bool = True
     stage2_charging_start_policy: str = "none"
+    charging_search: str = "feasibility_first"
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "RollingChainRequest":
@@ -1293,6 +1294,7 @@ class RollingChainRequest:
             lookahead_hours=getattr(args,'lookahead_hours',None),
             pv_actuals_json=getattr(args, 'pv_actuals_json', None),
             stage2_charging_start_policy=getattr(args, "stage2_charging_start_policy", "none"),
+            charging_search=getattr(args, "charging_search", "feasibility_first"),
             bess_terminal_policy=str(args.bess_terminal_policy),
             bess_terminal_min_kwh=(
                 None if args.bess_terminal_min_kwh is None else float(args.bess_terminal_min_kwh)
@@ -1316,11 +1318,16 @@ def rolling_step_minutes(current_min: int, end_min: int | None,
 def rolling_solver_config(request: RollingChainRequest) -> OptimizationConfig:
     from src.optimization.milp.charging_mip_start import validate_charging_start_policy
     validate_charging_start_policy(request.stage2_charging_start_policy)
+    # Gurobi MIPFocus 1 favors incumbents; 3 emphasizes the objective bound.
+    search_modes = {"feasibility_first": 1, "bound_first": 3}
+    if request.charging_search not in search_modes:
+        raise ValueError("Unknown rolling charging search: " + str(request.charging_search))
     return OptimizationConfig(
         mode=OptimizationMode.MILP,
         time_limit_sec=int(request.time_limit_sec),
         stage2_time_limit_sec=int(request.time_limit_sec),
         stage2_charging_start_policy=request.stage2_charging_start_policy,
+        stage2_gurobi_mip_focus=search_modes[request.charging_search],
         mip_gap=float(request.mip_gap),
         random_seed=int(request.random_seed),
         gurobi_threads=(None if request.gurobi_threads is None else int(request.gurobi_threads)),
@@ -1661,6 +1668,8 @@ def run_rolling_chain(
                 "feasible": False,
                 "solver_status": "execution_error",
                 "stage2_charging_start_policy": request.stage2_charging_start_policy,
+                "charging_search_requested": request.charging_search,
+                "stage2_gurobi_mip_focus_effective": None,
                 "elapsed_seconds": elapsed,
                 "execution_error": f"{type(exc).__name__}: {exc}",
             }
@@ -1735,6 +1744,8 @@ def run_rolling_chain(
             "stage2_solver_status": metadata.get("stage2_solver_status"),
             "stage2_runtime_seconds": metadata.get("stage2_runtime_seconds"),
             "stage2_charging_start": metadata.get("stage2_charging_start"),
+            "charging_search_requested": request.charging_search,
+            "stage2_gurobi_mip_focus_effective": metadata.get("stage2_gurobi_mip_focus"),
             "stage2_time_limit_sec_effective": metadata.get(
                 "stage2_time_limit_sec_effective"
             ),
@@ -1899,6 +1910,7 @@ def run_rolling_chain(
             rejection_reasons.append(str(executed_day_accounting["reason"]))
         chain_summary = {
             "stage2_charging_start_policy": request.stage2_charging_start_policy,
+            "charging_search_requested": request.charging_search,
             "schema_version": "rolling_chain_summary_v1",
             "research_run": request.research_run,
             "scenario_id": request.scenario_id,
@@ -2045,6 +2057,8 @@ def main() -> int:
     parser.add_argument("--mip-gap", type=float, default=0.1)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--gurobi-threads", type=int, default=None)
+    parser.add_argument("--charging-search", choices=("feasibility_first", "bound_first"),
+                        default="feasibility_first", help="Hourly charging search only; bound_first is an opt-in comparison")
     parser.add_argument("--stage2-charging-start-policy", choices=("none", "fixed_assignment_binary"),
                         default="none", help="Opt-in diagnostic binary start from the persisted day-ahead charging plan")
     parser.add_argument("--depot-id", default="tsurumaki")

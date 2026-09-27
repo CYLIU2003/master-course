@@ -280,6 +280,8 @@ export default function RunPanel({
         <p className="subtle">
           条件の変更は「運行・計算設定」、車両・設備の変更は各画面から保存します。
         </p>
+        <p className="subtle">毎時充電の探索方針：{value.rollingChargingSearch === "bound_first"
+          ? "下界改善重視（設定3・比較用）" : "実行可能解重視（設定1・従来）"}。毎時処理を選んだ実行で適用します。</p>
         {blocked && (
           <p className="warning">
             未保存の変更があります。保存または破棄してから実行してください。

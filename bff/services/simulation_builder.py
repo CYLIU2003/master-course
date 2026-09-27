@@ -943,6 +943,7 @@ def apply_builder_configuration(
         "service_dates": list(service_dates),
         "planning_days": planning_days,
         "rolling_lookahead_hours": getattr(settings, 'rolling_lookahead_hours', None),
+        "rolling_charging_search": getattr(settings, "rolling_charging_search", "feasibility_first"),
         "bess_balance_period": getattr(settings, 'bess_balance_period', 'daily'),
         "pv_information_mode": getattr(settings, 'pv_information_mode', 'historical_perfect_information'),
         "multi_day_input_mode": (

@@ -147,6 +147,10 @@ export const settingGroups: {
       ]),
       num("timeLimitSeconds", "計算時間上限（秒）", 1),
       num("mipGap", "目標MIP gap（比率）", 0, 1),
+      { ...select("rollingChargingSearch", "毎時充電の探索方針", [
+        ["feasibility_first", "従来：実行可能解重視（設定1）"],
+        ["bound_first", "比較用：下界改善重視（設定3）"],
+      ]), hint: "毎時再最適化だけに適用。速くなる保証はありません。変更後は入力を準備し直します。" },
       num("randomSeed", "乱数seed"),
       num("stage1Stage2CandidateLimit", "二段階候補数", 1, 50),
       num("stage1CompositionSearchRadius", "車両構成の探索範囲", 0, 5),

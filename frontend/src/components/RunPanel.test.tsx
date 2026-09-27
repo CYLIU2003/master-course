@@ -21,6 +21,7 @@ const overview: Overview = {
     diesel_price_per_l: 140,
     random_seed: 17,
     rolling_lookahead_hours: 24,
+    rolling_charging_search: "bound_first",
   },
   result: { available: false, source: null, values: {} },
 };
@@ -35,6 +36,7 @@ const configuration = {
     timeLimitSeconds: 465,
     randomSeed: 17,
     mipGap: 0.02,
+    rollingChargingSearch: "bound_first",
   },
   revision: "original",
 };

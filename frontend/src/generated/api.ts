@@ -348,6 +348,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/desktop/scenarios/{scenario_id}/periods": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Scenario Periods */
+    get: operations["scenario_periods_api_desktop_scenarios__scenario_id__periods_get"];
+    /** Edit Scenario Periods */
+    put: operations["edit_scenario_periods_api_desktop_scenarios__scenario_id__periods_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/route-catalog/full": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Full Route Catalog */
+    get: operations["full_route_catalog_api_desktop_route_catalog_full_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/route-catalog/odpt": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Odpt Route Catalog */
+    get: operations["odpt_route_catalog_api_desktop_route_catalog_odpt_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/desktop/scenarios/{scenario_id}/simulation-summary": {
     parameters: {
       query?: never;
@@ -528,6 +580,23 @@ export interface paths {
     };
     /** Overview */
     get: operations["overview_api_desktop_scenarios__scenario_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/desktop/scenarios/{scenario_id}/route-catalog": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Route Catalog */
+    get: operations["route_catalog_api_desktop_scenarios__scenario_id__route_catalog_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1807,6 +1876,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/cluster/workers/{worker_id}/role/{role}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Set Worker Job Role */
+    post: operations["set_worker_job_role_api_cluster_workers__worker_id__role__role__post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/cluster/workers/{worker_id}/diagnostic": {
     parameters: {
       query?: never;
@@ -2657,6 +2743,30 @@ export interface components {
       [key: string]: unknown;
     };
     JsonValue: unknown;
+    /** Period */
+    Period: {
+      /** Id */
+      id: string;
+      /** Label */
+      label: string;
+      /**
+       * Start
+       * Format: date
+       */
+      start: string;
+      /**
+       * Days
+       * @default 7
+       */
+      days: number;
+    };
+    /** PeriodEdit */
+    PeriodEdit: {
+      /** Revision */
+      revision: number;
+      /** Periods */
+      periods: components["schemas"]["Period"][];
+    };
     /** PrepareFleetTemplateBody */
     PrepareFleetTemplateBody: {
       /** Vehicle Template Id */
@@ -2947,6 +3057,12 @@ export interface components {
       date_series_source_id?: string | null;
       /** Rolling Lookahead Hours */
       rolling_lookahead_hours?: (24 | 48 | 72 | 168) | null;
+      /**
+       * Rolling Charging Search
+       * @default feasibility_first
+       * @enum {string}
+       */
+      rolling_charging_search: "feasibility_first" | "bound_first";
       /**
        * Bess Balance Period
        * @default daily
@@ -3666,6 +3782,12 @@ export interface components {
       expected_git_sha?: string | null;
       /** Worker Id */
       worker_id?: string | null;
+      /** Batch Id */
+      batch_id?: string | null;
+      /** Task Id */
+      task_id?: string | null;
+      /** Batch Task Count */
+      batch_task_count?: number | null;
       /**
        * Minimum Ram Gb
        * @default 16
@@ -4047,6 +4169,8 @@ export interface components {
       bessBalancePeriod?: ("daily" | "evaluation_period") | null;
       /** Rollingbessterminalpolicy */
       rollingBessTerminalPolicy?: ("scenario" | "minimum_only") | null;
+      /** Rollingchargingsearch */
+      rollingChargingSearch?: ("feasibility_first" | "bound_first") | null;
     };
     /** UpdateRouteBody */
     UpdateRouteBody: {
@@ -5171,6 +5295,112 @@ export interface operations {
       };
     };
   };
+  scenario_periods_api_desktop_scenarios__scenario_id__periods_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  edit_scenario_periods_api_desktop_scenarios__scenario_id__periods_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PeriodEdit"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  full_route_catalog_api_desktop_route_catalog_full_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+    };
+  };
+  odpt_route_catalog_api_desktop_route_catalog_odpt_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+    };
+  };
   simulation_summary_api_desktop_scenarios__scenario_id__simulation_summary_get: {
     parameters: {
       query?: never;
@@ -5507,6 +5737,7 @@ export interface operations {
         offset?: number;
         limit?: number;
         route_group?: "all" | "shibu24" | "shibu21_24" | "shibu21_23" | "other";
+        period_kind?: "all" | "reusable" | "dated_history";
       };
       header?: never;
       path?: never;
@@ -5552,6 +5783,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ScenarioOverview"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  route_catalog_api_desktop_scenarios__scenario_id__route_catalog_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */
@@ -8676,6 +8938,38 @@ export interface operations {
       header?: never;
       path: {
         worker_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  set_worker_job_role_api_cluster_workers__worker_id__role__role__post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        worker_id: string;
+        role: string;
       };
       cookie?: never;
     };

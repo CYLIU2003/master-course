@@ -11506,3 +11506,14 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 両案engine可行、同じ元ZIP/直前実状態/Prepared設備に対するBESS96区間検算通過。物理/会計/週間独立監査の全面通過とは言わない。結果集計・両BESS検査は起動スクリプトで自動実行しterminal statusを保存。
 - Claudeへ実測値を提示。一般化防止と通常窓検査は採用。中央値からtime_limitを推定、330秒がペア内待ち、週の窓目的値合算、といった誤読は明示的に不採用。output/charging_start_review_20260927/bound-focus-review-decisions.md参照。
 - 3月step12の通常窓を同じ固定版・8GiBで予約解放待ち後に診断するスクリプトを起動。11月は22:04 JST時点で同一PID8976、99/174保存・全99可行、最大13.16GiB。正式版の既定値変更・進行週の再投入はなし。
+
+
+## 2026-09-27 22:30 JST：毎時探索の反例と画面からの設定経路
+
+- 実測追加：固定50260755・同一MPSで3月step12はMIPFocus1→3で56.743→106.544秒（悪化）、事前選定step75は6.925→5.828秒。step61の600.043→42.301秒だけから一律採用しない。全6案engine可行とBESS各96区間収支通過。個別窓であり全週実行の保証ではない。
+- step75のnative目的値は同じだが別評価window_objectiveは760.933075円違い、終端BESSも10.662988kWh違う。週間実績の削減にしない。call_wallにはMPS書出し等の診断費用を含む。step12を短時間の代表とした表現は訂正、代表はstep75。
+- 発見した運用欠落：診断のMIPFocus3が通常フロント→毎時経路に渡せなかった。rollingChargingSearch（feasibility_first/bound_first）を保存・Prepare・canonical metadata・BFF引継ぎ・CLI・実効値記録まで実装。既定1と前日処理は維持し、比較用3を明示選択。保存はrevision/CAS・scenario hashの対象。再診断もrequested/effective不一致を拒否する。
+- 検証：初回backend79件中78通過、追加テストがfrozen dataclassを書換えたため1件失敗。replaceへ修正後当該8件通過。追加のnative setParam・再診断引継ぎ等を含む関連48件通過、既存rolling/evidence/search回帰72件通過（重複を総数へ足さない）。フロント22件、型検査・本番build通過。最初の画面テストはlabel内hintを含む名前の完全一致で失敗し正規表現へ修正。OpenAPIを実コードから再生成し、既存periods/route-catalog等の未反映型も同期。
+- Claude Sonnetでモデル制御だけでなく保存/API/画面経路を静的レビュー。二重既定値の将来リスクは旧metadata互換とテストで扱う。毎時以外への影響は呼出し検索と変更field単独検査で確認。UIは比較用・速度保証なし。レビューの誤読と独立確認範囲は比較ノートに記録。モデル全体の承認ではない。
+- 22:23:19実機確認：11月同一PID8976が生存、101/174窓保存・101可行、RAM1.56GiB/ピーク13.16GiB。チェーン未完了、元LOSTは照合前に成功へ変えず予約維持。診断3組は終了し親機をdrain。新規週次投入なし、実行固定版・controller PID52332は変更なし。
+- 新版ソースへ反映したが、新設定の週全体と新UIの稼働controller配置は未実施。現11月完了回収後の更新対象。完了11週の再求解、物理条件変更、メール送信なし。

@@ -169,6 +169,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     multi_day_input_mode: Optional[Literal['single_day','dated_timetable_and_pv_v1','repeat_day_diagnostic']] = None
     date_series_source_id: Optional[str] = None
     rolling_lookahead_hours: Optional[Literal[24,48,72,168]] = None
+    rolling_charging_search: Literal["feasibility_first", "bound_first"] = "feasibility_first"
     bess_balance_period: Literal['daily','evaluation_period'] = 'daily'
     pv_information_mode: Literal['historical_perfect_information','training_only_forecast_proxy'] = 'historical_perfect_information'
     # The paired clock values are binding only when this explicit flag is on.

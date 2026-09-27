@@ -50,7 +50,7 @@ def saved_window(summary: dict, state: dict, audit: dict) -> RollingChainRequest
         raise ValueError("Missing or invalid saved control: mip_gap")
     # Only rolling_solver_config consumes this request. This preflight never
     # calls run_rolling_chain or uses the required path placeholders as files.
-    return RollingChainRequest(
+    request = RollingChainRequest(
         scenario_id=summary["scenario_id"], prepared_input_id=summary["prepared_input_id"],
         expected_service_date=summary["service_date"], day_ahead_result_path="", output_dir="",
         current_time=summary["current_time"], execution_minutes=summary["execution_minutes"],
@@ -58,7 +58,13 @@ def saved_window(summary: dict, state: dict, audit: dict) -> RollingChainRequest
         random_seed=summary["random_seed"], gurobi_threads=summary["gurobi_threads"],
         service_id=audit["service_id"], lookahead_hours=summary["lookahead"],
         bess_terminal_policy=summary["bess_terminal_policy"], research_run=False,
+        charging_search=summary.get("charging_search_requested", "feasibility_first"),
     )
+    config = rolling_solver_config(request)
+    if ("stage2_gurobi_mip_focus_effective" in summary
+            and summary["stage2_gurobi_mip_focus_effective"] != config.stage2_gurobi_mip_focus):
+        raise ValueError("Saved charging search differs from its effective native focus")
+    return request
 
 
 def capture_window(problem, plan, request, state):

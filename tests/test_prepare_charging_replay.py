@@ -24,6 +24,15 @@ def test_saved_controls_preserved_and_diagnostic_only():
     assert request.stage2_charging_start_policy == "none"
 
 
+def test_saved_search_and_native_evidence_must_agree():
+    summary, state, audit = inputs()
+    summary.update(charging_search_requested="bound_first", stage2_gurobi_mip_focus_effective=3)
+    assert saved_window(summary, state, audit).charging_search == "bound_first"
+    for wrong in (None, 1, 2):
+        with pytest.raises(ValueError, match="effective native focus"):
+            saved_window({**summary, "stage2_gurobi_mip_focus_effective": wrong}, state, audit)
+
+
 @pytest.mark.parametrize("change", [
     {"scenario_id": "other"}, {"prepared_input_id": "other"}, {"service_date": "2025-03-04"},
     {"current_absolute_min": 780}, {"pv_forecast_update": {}}, {"bess_terminal_min_kwh_override": 1200},

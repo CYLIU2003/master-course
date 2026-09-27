@@ -45,6 +45,28 @@ def test_configuration_preserves_scope_syncs_soc_and_dates(editable):
     assert error.value.status_code == 409
 
 
+def test_rolling_search_is_saved_versioned_and_rejects_unknown(editable):
+    from bff.routers.simulation import PrepareSimulationSettingsBody
+    from bff.services.run_preparation import _scenario_hash
+    from pydantic import ValidationError
+
+    before = config.configuration(editable)
+    assert before["values"]["rollingChargingSearch"] == "feasibility_first"
+    old_hash = _scenario_hash(scenario_store.get_scenario_document_shallow(editable))
+    after = config.save_configuration(editable, {"rollingChargingSearch": "bound_first"}, before["revision"])
+    saved = scenario_store.get_field(editable, "simulation_config")
+    assert saved["rolling_charging_search"] == "bound_first"
+    assert after["values"]["rollingChargingSearch"] == "bound_first"
+    assert after["revision"] != before["revision"]
+    assert _scenario_hash(scenario_store.get_scenario_document_shallow(editable)) != old_hash
+    assert PrepareSimulationSettingsBody(**saved).rolling_charging_search == "bound_first"
+    for invalid in ("bound_frist", 3, True):
+        with pytest.raises(ValidationError):
+            scenarios.UpdateQuickSetupBody(rollingChargingSearch=invalid)
+        with pytest.raises(ValidationError):
+            PrepareSimulationSettingsBody(rolling_charging_search=invalid)
+
+
 def test_route_pattern_selection_keeps_exact_ids_and_invalidates_prepared_scope(editable):
     from bff.services.run_preparation import _scenario_hash
 

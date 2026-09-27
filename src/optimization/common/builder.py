@@ -1453,6 +1453,7 @@ class ProblemBuilder:
                 "date_series_contract": date_contract,
                 "daily_return_depot_id": str(input_config.get("daily_return_depot_id") or ""),
                 "rolling_lookahead_hours": input_config.get('rolling_lookahead_hours'),
+                "rolling_charging_search": input_config.get("rolling_charging_search", "feasibility_first"),
                 "rolling_window_terminal_policy": input_config.get('rolling_window_terminal_policy','return_to_evaluation_initial'),
                 "rolling_bess_terminal_policy": input_config.get('rolling_bess_terminal_policy', 'scenario'),
                 "bess_balance_period": input_config.get('bess_balance_period', 'evaluation_period'),

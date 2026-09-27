@@ -67,6 +67,15 @@ def _scenario() -> dict:
     }
 
 
+@pytest.mark.parametrize("search", ["feasibility_first", "bound_first"])
+def test_rolling_search_survives_canonical_build_without_day_ahead_override(search):
+    scenario = _scenario()
+    scenario["simulation_config"]["rolling_charging_search"] = search
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    assert problem.metadata["rolling_charging_search"] == search
+    assert "stage2_gurobi_mip_focus" not in problem.metadata
+
+
 def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
     problem = ProblemBuilder().build_from_scenario(_scenario(), depot_id="dep-1", service_id="WEEKDAY")
     asset = problem.depot_energy_assets["dep-1"]

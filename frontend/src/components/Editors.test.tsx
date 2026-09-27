@@ -38,6 +38,7 @@ const values: Row = {
   depotEnergyAssets: [asset],
   bessBalancePeriod: "daily",
   rollingBessTerminalPolicy: "scenario",
+  rollingChargingSearch: "feasibility_first",
 };
 let calls: { url: string; method: string; body: Row }[] = [];
 beforeEach(() => {
@@ -87,6 +88,16 @@ function mount(component: React.ReactNode) {
     <QueryClientProvider client={client}>{component}</QueryClientProvider>,
   );
 }
+it("saves hourly search explicitly without changing the default solver", async () => {
+  mount(<SettingsPanel id="s" onSaved={vi.fn()} onDirty={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("設定を検索"), { target: { value: "毎時充電" } });
+  const field = await screen.findByLabelText(/毎時充電の探索方針/);
+  await waitFor(() => expect((field as HTMLSelectElement).value).toBe("feasibility_first"));
+  fireEvent.change(field, { target: { value: "bound_first" } });
+  fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+  await waitFor(() => expect(calls.some((call) => call.method === "PUT")).toBe(true));
+  expect(calls.find((call) => call.method === "PUT")!.body.changes).toEqual({ rollingChargingSearch: "bound_first" });
+});
 it("applies the free BESS band through both asset and rolling configuration", async () => {
   mount(<EnergyPanel id="s" onSaved={vi.fn()} onDirty={vi.fn()} />);
   fireEvent.click(await screen.findByRole("button", { name: "20〜80%を適用" }));

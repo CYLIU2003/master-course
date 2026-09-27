@@ -1295,6 +1295,132 @@
         }
       }
     },
+    "/api/desktop/scenarios/{scenario_id}/periods": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Scenario Periods",
+        "operationId": "scenario_periods_api_desktop_scenarios__scenario_id__periods_get",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Edit Scenario Periods",
+        "operationId": "edit_scenario_periods_api_desktop_scenarios__scenario_id__periods_put",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeriodEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/route-catalog/full": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Full Route Catalog",
+        "operationId": "full_route_catalog_api_desktop_route_catalog_full_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/route-catalog/odpt": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Odpt Route Catalog",
+        "operationId": "odpt_route_catalog_api_desktop_route_catalog_odpt_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/desktop/scenarios/{scenario_id}/simulation-summary": {
       "get": {
         "tags": [
@@ -1828,6 +1954,21 @@
               "default": "all",
               "title": "Route Group"
             }
+          },
+          {
+            "name": "period_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "reusable",
+                "dated_history"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Period Kind"
+            }
           }
         ],
         "responses": {
@@ -1880,6 +2021,46 @@
                 "schema": {
                   "$ref": "#/components/schemas/ScenarioOverview"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/desktop/scenarios/{scenario_id}/route-catalog": {
+      "get": {
+        "tags": [
+          "desktop"
+        ],
+        "summary": "Route Catalog",
+        "operationId": "route_catalog_api_desktop_scenarios__scenario_id__route_catalog_get",
+        "parameters": [
+          {
+            "name": "scenario_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scenario Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -6672,6 +6853,55 @@
         }
       }
     },
+    "/api/cluster/workers/{worker_id}/role/{role}": {
+      "post": {
+        "tags": [
+          "cluster"
+        ],
+        "summary": "Set Worker Job Role",
+        "operationId": "set_worker_job_role_api_cluster_workers__worker_id__role__role__post",
+        "parameters": [
+          {
+            "name": "worker_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Worker Id"
+            }
+          },
+          {
+            "name": "role",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cluster/workers/{worker_id}/diagnostic": {
       "post": {
         "tags": [
@@ -8708,6 +8938,65 @@
         "title": "JobReply"
       },
       "JsonValue": {},
+      "Period": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start"
+          },
+          "days": {
+            "type": "integer",
+            "maximum": 366.0,
+            "minimum": 1.0,
+            "title": "Days",
+            "default": 7
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "start"
+        ],
+        "title": "Period"
+      },
+      "PeriodEdit": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "periods": {
+            "items": {
+              "$ref": "#/components/schemas/Period"
+            },
+            "type": "array",
+            "maxItems": 366,
+            "title": "Periods"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "periods"
+        ],
+        "title": "PeriodEdit"
+      },
       "PrepareFleetTemplateBody": {
         "properties": {
           "vehicle_template_id": {
@@ -9478,6 +9767,15 @@
               }
             ],
             "title": "Rolling Lookahead Hours"
+          },
+          "rolling_charging_search": {
+            "type": "string",
+            "enum": [
+              "feasibility_first",
+              "bound_first"
+            ],
+            "title": "Rolling Charging Search",
+            "default": "feasibility_first"
           },
           "bess_balance_period": {
             "type": "string",
@@ -11115,6 +11413,41 @@
               }
             ],
             "title": "Worker Id"
+          },
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "batch_task_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Task Count"
           },
           "minimum_ram_gb": {
             "type": "number",
@@ -12930,6 +13263,21 @@
               }
             ],
             "title": "Rollingbessterminalpolicy"
+          },
+          "rollingChargingSearch": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "feasibility_first",
+                  "bound_first"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollingchargingsearch"
           }
         },
         "type": "object",
