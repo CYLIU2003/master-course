@@ -11489,3 +11489,12 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 21:40 JSTの実機読取り：11月同一PID8976、84/174保存、全84可行。現在1.17GiB/最大13.16GiB。週次監査は未完了。旧診断PID終了済み、ローカルはdraining、既存11月の予約を保持。
 
 - Claude差分レビューの指摘へ対応：profile名と実際のcharging policy/focusを求解前に照合し、誤表示を拒否。config由来はdeclared_profile_configs、native実測はeffective_parametersと命名を分離。修正後29テスト通過。レビュー原文はoutput/charging_start_review_20260927/bound-focus-code-review.json。
+
+
+## 2026-09-27：11週の実時間を原本から分解
+
+- 固定f524eca2の1〜10月/12月、全1917毎時窓のsummary・solver result・native logを回収ZIP SHAとmember hashへ照合。native終了行だけを数え、root LP時間は重複加算しない。再求解なし。
+- 呼出合計88502.91秒、native71347.26秒（80.62%）、構築/抽出/検査等17155.65秒。67時間切れ窓（3.50%）がnative時間の56.34%。6〜8月は時間切れ0。11月途中の97%を全月へ外挿しない。
+- 工程別CSV/JSON・日本語図PNG/PDFをoutput/charging_start_review_20260927/monthly-timings-v2へ保存し図の実表示確認。11月・queue・Prepare・前日計画・実行再現・回収・図表時間は対象外。月/PC差があるためPC性能や手法速度比較ではない。
+- 初回集計はraw配下のcanonicalコピーも候補に入り2件で停止。単一の最終executed_day_accountingからprefixを選ぶ修正で全件照合通過。失敗側の空ディレクトリは残した。測定スクリプトも同親outputに保存。
+- 診断50260755は親機PID69672で継続。8GiB/4threads、共有2枠の残り1枠を使用。ローカルは受理後drainingに戻し追加投入なし。11月の同じ試行・固定f524eca2を保持。

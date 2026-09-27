@@ -101,3 +101,10 @@ C:/master-course/output/cluster-deployment/controller-venv/Scripts/python.exe -X
 目的は同じ終了基準へ早く到達するかの確認であり、下界改善を費用削減と扱わない。まずstep61、改善の兆しがあれば既に復元済みの通常窓step12も確認する。可行性、費用、gap、時間、メモリを並記する。600秒未達・費用悪化・可行性不明なら高速化の採用根拠にしない。単一窓で週次安定性を主張しない。既存11月のattempt・予約・固定版は変更しない。
 
 Claudeの提案はMIPFocus3。ただし「Startが劣る」「改善する可能性が高い」は証明されておらず採用理由にしない。根拠はログ上38秒以降のincumbent、75秒以降のbound停滞と、Gurobi公式の[パラメータ定義](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parameter-MIPFocus)。実測で判断する。
+
+
+## 11週全体の毎時所要時間（原本照合、再求解なし）
+
+1〜10月・12月の1917窓を照合した。時間切れ67窓（3.50%）がnative求解時間の56.34%を占める。呼出合計88502.91秒のうちnative71347.26秒（80.62%）、それ以外17155.65秒。11月途中のnative約97%だけを全月へ外挿しない。6〜8月は時間切れ0で、構築/抽出/検査も相対的に大きい。
+
+測定元は `output/charging_start_review_20260927/monthly-timings-v2/{summary.json,comparison.csv,README.md}`、再現スクリプトは同親ディレクトリの `collect_monthly_timings.py`。各窓のsummary/result/native logを回収ZIP SHAおよびmember hashと照合した。求解打切りと物理失敗は別。queue、Prepare、前日計画、実行再現、回収・図表はこの時間に含まず、月・PC差があるのでPC速度比較にもしない。
