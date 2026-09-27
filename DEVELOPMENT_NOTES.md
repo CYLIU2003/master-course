@@ -11364,3 +11364,15 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 関連82ケース（80件実行後、追加2件を含む変更対象28件再確認）、Claude限定レビュー・原本改変拒否検査、実図表示を確認。
 比較可能結果10/12週。自動集計プロセスだけ更新し、求解器・controller・原queue状態は変更なし。
 [根拠・レビュー判断・未達範囲](docs/notes/JANUARY_REPORTING_RECOVERY_20260927.md)。
+
+
+## 2026-09-27 全18台の可視化・計算依頼受付・月別結果のフロント統合
+
+- 実APIで8868の親機1＋子機17＝18台と8891の計算用5台を照合。端末削除ではなく別controllerの対象差だった。LabConsoleへ全台帳と今回の対象・割当・RAM・接続環境を併記。監視先は登録設定で指定し、18台や特定シナリオをコードに固定しない。
+- supervisor_uiの独立サービスに研究室の受付簿を追加。Pydanticで依頼を検査しSQLiteへ永続保存。依頼者・テーマ・solver依存・RAM/threads/時間・ライセンス申告・入力名/size/hashを残す。重複IDは同一内容のみ再利用、同時競合はBEGIN IMMEDIATEで排他。全件REVIEW_REQUIREDで、求解・キュー・Env・任意コード実行の呼出しは追加していない。
+- Claude Code sonnetの読取レビューで同時受付競合と直接ダウンロードのSHA照合不足を指摘。両方を修正し並行衝突・改変・別SHAの回帰を追加。元reviewはoutput/lab_frontend_20260927/claude-review.json。独立研究採用の承認ではない。
+- 10/12週の既存検算済み比較をフロントに表示。January REPORTING_RECOVEREDは元FAILEDを保持。CSV/図の取得はmanifest hashと固定計算SHAを照合し、未完了を0円・完了にしない。
+- 検証: Python48件（受付・HTTP境界・既存supervisor）、画面25件、型検査・本番build通過。追加のナビ変更後は該当画面18件を再確認。実ブラウザーで全18台/対象5台、10/12比較、費用図、テスト依頼保存を確認。テスト依頼は「【テスト】受付保存のみ・求解禁止」と明示して証拠として保持。
+- 配置: 共有静的frontendのみ更新、受付/監督UIサービスのみ再起動。計算controller PID52332、54件のjob ID集合を維持。計算固定版f524eca2と2件のLOST予約・実行ソースは変更していない。新規求解・worker更新・ライセンス追加取得なし。
+- 未対応: 他者の実モデル/ライセンスは未受領。受付と実ジョブの自動連結、任意Pythonランナー、複数利用者認証/遠隔ポータルは未実装。通常の修論シナリオは既存実行画面から検査・Prepare後に投入する。詳細手順はdocs/guides/lab_compute_intake.md。
+- 追加確認: Claudeの修正後レビューは両指摘の解消・新規P0/P1なし。実ブラウザー再読込後も受付テスト1件を保持、CSV配信hash照合通過。画面証拠はoutput/lab_frontend_20260927/frontend-inventory.png。

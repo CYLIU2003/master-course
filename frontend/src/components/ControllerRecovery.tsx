@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-type Discovery = { schema_version: "supervisor_discovery_v1"; controller_port: number;
+export type Discovery = { schema_version: "supervisor_discovery_v1"; controller_port: number;
   solver_git_sha: string; control_origin: string; token: string };
 type Status = { schema_version: "supervisor_ui_v1"; controller_port: number; solver_git_sha: string;
   enabled: boolean; status: string; binding_matches: boolean; starts: number; max_starts: number;
@@ -17,7 +17,7 @@ const labels: Record<string, string> = {
 };
 const stamp = (value?: string) => value ? new Date(value).toLocaleString("ja-JP") : "未確認";
 
-async function discovery(origin: string): Promise<Discovery | null> {
+export async function discovery(origin: string): Promise<Discovery | null> {
   const target = new URL(origin || window.location.origin);
   const response = await fetch(`${origin}/supervisor-control-${target.port || 80}.json`, { cache: "no-store" });
   if (response.status === 404) return null;

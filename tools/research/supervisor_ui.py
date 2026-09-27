@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import secrets
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -21,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 from bff.services.cluster.store import ControllerLock
 from tools.research import controller_supervisor as supervisor
 from tools.research.weekly_operator import load_operation
+from tools.research import lab_console
 
 
 def utc_now() -> str:
@@ -142,6 +144,28 @@ def handler_for(controls: Controls):
             if not self.allowed():
                 self.send_json(403, {"error": "許可されていない操作元です"})
                 return
+            if self.path == "/lab":
+                try:
+                    self.send_json(200, lab_console.view(controls.root, controls.settings))
+                except (OSError, ValueError, KeyError, sqlite3.Error):
+                    self.send_json(503, {"error": "受付・結果の記録を確認できません"})
+                return
+            if self.path.startswith("/lab/report/"):
+                try:
+                    _, _, _, revision, name = self.path.split("/")
+                    config = json.loads((controls.root / "lab-config.json").read_bytes())
+                    data = lab_console.report_file(Path(config["report_root"]), revision, name, controls.settings["git_sha"])
+                    self.send_response(200)
+                    self.send_header("Access-Control-Allow-Origin", self.headers["Origin"])
+                    self.send_header("Vary", "Origin")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Type", "image/png" if name.endswith(".png") else "application/octet-stream")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                except (OSError, ValueError, KeyError):
+                    self.send_json(409, {"error": "結果ファイルの整合性を確認できません"})
+                return
             if self.path != "/status":
                 self.send_json(404, {"error": "Not found"})
                 return
@@ -153,6 +177,18 @@ def handler_for(controls: Controls):
         def do_POST(self):
             if not self.allowed(write=True):
                 self.send_json(403, {"error": "この管理サーバーの画面から操作してください"})
+                return
+            if self.path == "/lab/requests":
+                try:
+                    size = int(self.headers.get("Content-Length", "0"))
+                    if self.headers.get("Transfer-Encoding") or not 0 < size <= 65536:
+                        raise ValueError("Invalid request size")
+                    self.connection.settimeout(5)
+                    payload = json.loads(self.rfile.read(size))
+                    result = lab_console.receive(controls.root / "lab-intake", payload)
+                    self.send_json(200, result)
+                except (ValueError, OSError, sqlite3.Error):
+                    self.send_json(400, {"error": "依頼を保存できません。同一IDの内容・必須項目・データ容量を確認してください。"})
                 return
             if self.path not in {"/enable", "/disable"}:
                 self.send_json(404, {"error": "Not found"})

@@ -8,6 +8,7 @@ import BatchProgress from "./BatchProgress";
 import CampaignProgress from "./CampaignProgress";
 import ExecutionProgress from "./ExecutionProgress";
 import ControllerRecovery from "./ControllerRecovery";
+import LabConsole from "./LabConsole";
 export type { ClusterWorkers } from "./WorkerNodes";
 type ClusterJob = {
   id: string;
@@ -161,13 +162,18 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
   );
   return (
     <>
+      <nav className="panel actions" aria-label="計算管理の移動">
+        {[["lab-inventory", "全端末の所在"], ["lab-results", "月別の結果"], ["lab-intake", "研究室の計算依頼"], ["cluster-assignment", "今回のPC割当"]].map(([id, label]) =>
+          <button key={id} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })}>{label}</button>)}
+      </nav>
       {validPort && <ControllerRecovery key={monitorOrigin} origin={monitorOrigin} readOnly={remoteMonitor} controllerSha={controllerSha} />}
       <ExecutionProgress origin={monitorOrigin} controllerSha={controllerSha} scenarioId={jobScope === "scenario" ? scenarioId : undefined} />
+      {validPort && <LabConsole key={monitorOrigin} origin={monitorOrigin} readOnly={remoteMonitor} controllerSha={controllerSha} workers={workers.data} workersUnconfirmed={refreshStopped} scenarioId={jobScope === "scenario" ? scenarioId : undefined} />}
       {jobScope === "all" && <details className="panel"><summary>全試行のバッチ履歴（旧版・取消済みを含む）</summary><BatchProgress jobs={jobs.data ?? []} /></details>}
       {jobScope === "all" && controllerSha && (
         <CampaignProgress origin={monitorOrigin} controllerSha={controllerSha} />
       )}
-      <section className="panel">
+      <section id="cluster-assignment" className="panel">
         <h2>分散計算</h2>
         {(window.location.protocol === "http:" ||
           window.location.protocol === "https:") && (
@@ -244,7 +250,7 @@ export default function ClusterPanel({ scenarioId }: { scenarioId?: string }) {
             }}
           />
         </label>
-        <h3>全シナリオ共通の計算端末</h3>
+        <h3>この計算サーバーの割当対象端末</h3>
         <WorkerNodes
           data={workers.data}
           pending={action.isPending || remoteMonitor}

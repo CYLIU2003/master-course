@@ -25,8 +25,9 @@ class FakeControls:
 
 
 @pytest.fixture
-def service():
+def service(tmp_path):
     controls = FakeControls()
+    controls.root = tmp_path
     controls.calls = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(controls))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -118,3 +119,15 @@ def test_cli_action_has_fixed_program_and_operation(monkeypatch, tmp_path):
     with pytest.raises(ValueError):
         controls.action("run")
     assert len(calls) == 1
+
+
+def test_lab_intake_is_durable_but_does_not_start_or_control_solver(service):
+    from tests.test_lab_console import payload
+    data = json.dumps(payload())
+    assert request(service, "POST", "/lab/requests", body=data)[1]["solver_submitted"] is False
+    service[1].settings = {"port": 8891, "git_sha": "a" * 40}
+    assert len(request(service, "GET", "/lab")[1]["requests"]) == 1
+    assert service[1].calls == []
+    assert request(service, "POST", "/lab/requests", origin="http://127.0.0.1:8868", body=data)[0] == 403
+    assert request(service, "POST", "/lab/requests", token="invalid", body=data)[0] == 403
+    assert request(service, "POST", "/lab/requests", body='{}')[0] == 400
