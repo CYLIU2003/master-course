@@ -284,6 +284,37 @@ def test_daily_return_energy_is_spent_before_night_charging_and_all_days_carry()
     assert not validate_physical_event_schedule(problem=problem,serialized_result=ResultSerializer.serialize_plan(premature))["accepted"]
 
 
+def test_resource_check_reuses_one_timeline_but_rechecks_changed_problem(monkeypatch):
+    from src.optimization.common import vehicle_timeline
+    problem = daily_problem()
+    plan = replace(_fixed_plan(problem), charging_slots=(
+        ChargingSlot("bev-1", 23, "chg-1", 37 / .95, charging_depot_id="DEPOT"),
+        ChargingSlot("bev-1", 47, "chg-1", 37 / .95, charging_depot_id="DEPOT")))
+    original = vehicle_timeline.build_vehicle_timeline
+    calls = []
+    def counted(current, decisions):
+        calls.append(current)
+        return original(current, decisions)
+    monkeypatch.setattr(vehicle_timeline, "build_vehicle_timeline", counted)
+    checker = FeasibilityChecker()
+    assert checker._evaluate_daily_return_resources(problem, plan) == []
+    assert len(calls) == 1
+    changed = replace(problem, dispatch_context=replace(problem.dispatch_context,
+        deadhead_rules={key: value for key, value in problem.dispatch_context.deadhead_rules.items()
+                        if key != ("B", "DEPOT")}))
+    assert checker._evaluate_daily_return_resources(changed, plan)
+    assert len(calls) == 2
+
+
+def test_timeline_projection_matches_public_fixed_path_helper():
+    from src.optimization.common.vehicle_timeline import slot_loads_from_vehicle_timeline
+    problem = daily_problem()
+    plan = _fixed_plan(problem)
+    timelines = build_vehicle_timeline(problem, plan)
+    for slots in ([], list(range(48)), list(range(20, 30))):
+        assert slot_loads_from_vehicle_timeline(problem, timelines, slots) == fixed_path_slot_loads(problem, plan, slots)
+
+
 def test_next_morning_energy_horizon_checks_paid_final_charge_and_each_deadline():
     problem = daily_problem()
     problem = replace(problem, vehicles=tuple(replace(v, maximum_soc_kwh=80.0) for v in problem.vehicles))

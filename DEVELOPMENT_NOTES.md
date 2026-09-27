@@ -11561,3 +11561,11 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - `tests/conftest.py::admitted_gurobi_session` を追加。current_sessionがないとprobe前にskip。明示的managed scopeがある場合だけ既存availability経路を使い、環境を再利用してacquire側で枠を確保する。acquire例外は隠さず失敗とする。日帰庫・複数日・SOC roundtrip・finite ICE fuel・CO2関連の到達経路へ適用。モデル本体/ライセンス上限/本番要求は変更なし。
 - 失敗注入：is_gurobi_available/Facade.Env/Modelを呼ぶと例外にする同一pytestプロセスで関連全8ファイルを収集・実行。55 passed/24 skipped、禁止呼出0（`timeline-reuse-no-license-tests.txt`/同json）。この件数は次の時系列差分テストも含み、前の件数と加算しない。24件は実機未実施として残す。fixture単体で未管理時のprobe禁止・managed内probe・admission例外伝播の3件を確認（上の55件に包含）。
 - Claude Code Sonnet静的レビューは関連2変更を承認。review中のcurrent_session確認への回答：src/gurobi_session.pyがContextVarへmanaged scopeを登録し、environment()がacquire後にEnv.startを行い、同scope内は既存Envを再利用する。scope終了時はモデル/Env破棄とreleaseを行う。テストfixture自体に資格情報や独立枠を作らない。証拠 `output/charging_start_review_20260927/timeline-reuse-review.json`。未変更nativeテストの全経路を監査済みとはしない。
+
+
+## 2026-09-27 23:12 JST — 同一物理検算内の時系列再構築を1回削減
+
+- 関連経路はMILP/OptimizationEngineの後処理→FeasibilityChecker→daily_return_resources。ここでbuild_vehicle_timeline後のfixed_path_slot_loadsが同じ時系列を再構築していた。後者の射影だけを `slot_loads_from_vehicle_timeline` に分離し、直前に構築したlocal変数を渡す。公開fixed_path_slot_loadsは従来どおり構築・射影を行い、求解器からの既存呼出しも不変。ウィンドウ間・計画間・実状態間のキャッシュは追加しない。物理式・許容差・エネルギー計上slot・SOC期限は不変。
+- 保存済み3月step75の同一復元診断問題で旧二重構築経路を再現し、FeasibilityReport全体が完全一致。費用86項目、車両日台帳420行、日別台帳7行も一致。timeline呼出8→7回、cProfile込み合計4.026→3.661秒。逐次1窓測定であり週間速度向上・元研究SHAの会計再監査ではない。原本SHA照合とsolver禁止scopeでEnv/Model/optimize0。証拠 `output/charging_start_review_20260927/postsolve-profile-timeline/`、`timeline-reuse-comparison.json`。
+- 前項の55 passed/24 skippedに、同一検算1回構築・別問題で欠落回送を再検出する回帰、空/全域/部分slotの従来helperとの一致テストを包含。Claude静的レビュー承認済み。新しいnative solveはこの等価性診断では実行していない。
+- 23:11 JST、11月同一PID8976が生存し106/174保存・106可行、現在1.545 GiB/最大13.162 GiB。chainは未受入。予約・実行固定版f524eca2・旧成果物は維持。今回の2commitは開発branch/mainへ同期する次回用修正で、実行中workerの差替えなし。

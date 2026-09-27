@@ -4585,3 +4585,6 @@ CLIは `scripts/run_hourly_charging_reoptimization.py --help` の `--charging-se
 ### 回帰テストのGurobi枠（2026-09-27）
 
 日帰庫・複数日SOC・ICE燃料/CO₂の関連native回帰は、既存の共有枠を確保する `managed_gurobi_session` 内だけで実行します。通常のpytestでは該当nativeケースを明示的にskipし、テスト収集だけでライセンスprobeを呼びません。skipを実機通過件数には含めません。既存 `tools/research/verify_weekly_soc.py` の選択済みSOC検証は共有枠付きの入口です。リポジトリ全nativeテストの網羅的な入口監査を完了したという意味ではありません。
+
+
+検算の時系列構築も、同一検算内の重複を1回削減しました（2026-09-27）。次のローリング窓や別計画へ時系列を使い回さず、毎回その問題と配車から検算します。原本を使った変更前後の可行性レポート・費用・台帳一致を確認済みですが、週間求解の高速化率は未検証です。

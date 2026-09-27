@@ -714,7 +714,7 @@ class FeasibilityChecker:
         self, problem: CanonicalOptimizationProblem, plan: AssignmentPlan,
     ) -> List[str]:
         """Replay each vehicle once, across native duties and operating dates."""
-        from .vehicle_timeline import build_vehicle_timeline, complete_home_slots, fixed_path_slot_loads, fixed_path_soc_target_slots
+        from .vehicle_timeline import build_vehicle_timeline, complete_home_slots, slot_loads_from_vehicle_timeline, fixed_path_soc_target_slots
         from .soc_helpers import is_electric_vehicle, vehicle_capacity_kwh
 
         errors: List[str] = []
@@ -726,7 +726,7 @@ class FeasibilityChecker:
         slots = list(range(start_slot, stop_slot))
         try:
             timelines = build_vehicle_timeline(problem, plan)
-            loads = fixed_path_slot_loads(problem, plan, slots)
+            loads = slot_loads_from_vehicle_timeline(problem, timelines, slots)
         except (KeyError, ValueError) as exc:
             return [f"[DAILY_RETURN] {exc}"]
         charges: Dict[tuple[str, int], float] = {}

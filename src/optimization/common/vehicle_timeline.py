@@ -210,6 +210,17 @@ class FixedPathSlotLoads:
 def fixed_path_slot_loads(problem: Any, plan: Any, slot_indices: list[int]) -> FixedPathSlotLoads:
     """Post return consumption before any later home charging can supply it."""
     timelines = build_vehicle_timeline(problem, plan)
+    return slot_loads_from_vehicle_timeline(problem, timelines, slot_indices)
+
+
+def slot_loads_from_vehicle_timeline(
+    problem: Any, timelines: dict[str, tuple[VehicleEvent, ...]], slot_indices: list[int],
+) -> FixedPathSlotLoads:
+    """Project an already materialized timeline from the same problem into slots.
+
+    Callers must build the timeline from their current problem and plan. This
+    function keeps no cache across plans, rolling windows, or actual states.
+    """
     start = horizon_start_min(problem)
     step = int(problem.scenario.timestep_min)
     energy, service, movement, home, departure = {}, {}, {}, {}, {}
