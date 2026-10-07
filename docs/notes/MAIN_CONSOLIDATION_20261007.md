@@ -60,3 +60,12 @@ Git同期は正式な研究採用・教員承認の判定とは別。整理の�
 資料・手順書337ファイルの同期commitは`209b20ebcd5c9c8a6c42a893a96c199a6ef1a78c`。別履歴の集約commitは`73410619ce39d250c416590f7a76cf95b16397f2`で、その前後のファイルtreeは一致した。整理前の70ローカル枝の元commitはすべてmainから到達可能になった。
 
 枝をチェックアウトしていた他の60worktreeを元SHAのdetached HEADへ変更し、HEAD不変と追跡済みファイルの差分なしを確認した。既にdetachedだった18worktreeと現在の作業場所を含む全79フォルダを保持。現在の`C:/master-course`はmainをチェックアウトしている。
+
+## 同期・削除の完了確認
+
+- `ddfe6a5c7f7591a13aac719b9cbb6d5a3c4ba010`をmainへpushし、GitHubのmain SHAとの一致を確認してから削除した。
+- GitHubのmain以外の5ブランチを期待SHA付きlease・atomic pushで削除。ローカルのmain以外の69ブランチは、mainからの到達を再確認して`git branch -d`で削除した。履歴を捨てる強制削除は使っていない。
+- remote追跡参照をpruneし、`git for-each-ref refs/heads`と`git ls-remote --heads origin`でローカル・GitHubともmainのみを確認した。整理後のこの追記もmainへ同期する。
+- 現在の作業場所はmain、他の78worktreeは元SHAのdetached HEAD。作業場所・元HEAD・研究出力を保持。実行中のコード更新や新規実験はない。
+
+今後の基準は最新main。既存の固定計算SHAと元成果物を開発mainの実験結果へ読み替えない。旧枝のcommitはこの記録またはバックアップのinventoryで特定できる。必要になれば`git branch codex/recovered-<用途> <元SHA>`で別の枝として戻し、旧設定をmainへ丸ごと適用しない。

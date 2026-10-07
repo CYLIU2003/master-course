@@ -11858,3 +11858,12 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - 新しい再生成ツールの回帰10件、JSON構文89ファイル、Office ZIP構造20ファイルが通過。新規公開テキスト・Office XML 313ファイルの資格情報パターン検査に該当なし。新規Solcast4か月のraw SHAをmanifestと照合。新規327ファイルのGitステージと原本のbyte一致を検査。対象ソース・説明文書のgit diff --check通過。既存の生成SVGの空白と保存済みスクリプト末尾空行は原本hashを守るため変更しない。
 - mainと別履歴の12ブランチを差分確認。固定計画ストレス、手動ODPT snapshot、session-time、契約超過回帰は現行版へ反映済みまたは拡張済み。古い渋24段階専用メール監視は現行weekly_terminal_observerへ運用が移っており、旧CLIを復活させない。旧内容を最新版へ上書きせず、commitを履歴へ集約してから枝を削除する方針。
 - GitHub ActionsはAPI再照会でenabled=false。CI/自動AI/課金機能を有効化しない。今回の範囲はGit同期・資料保全。ソルバーや研究条件・既存結果の採用判定を変更せず、新規求解、稼働workerのコード更新、controller再起動は行わない。最終同期・削除の実施結果は後段に追記する。
+
+
+## 2026-10-07 — main同期・ブランチ整理の実施結果
+
+- 現在のローカル資料・手順書等337ファイルを209b20ebで保存し、12旧枝の履歴を73410619へ集約。履歴集約前後のファイルtreeが同一で、全70元ローカル枝のtipがmainから到達可能であることを確認。旧数理条件・CLIを再導入していない。
+- 他の60worktreeを同じ元SHAのdetached HEADへ切り替え、HEAD不変・追跡差分なしを確認。元からdetachedの18箇所と現在の場所を合わせた79フォルダを保持。
+- ddfe6a5cをGitHub mainへpushしSHA一致後、GitHub5枝を期待SHA付きlease/atomic pushで削除。ローカル69枝はmainからの到達を再確認してgit branch -dで削除。強制ブランチ削除・worktree削除・ファイル移動なし。origin追跡参照をpruneし、ローカル/GitHubともmainのみを確認。
+- 改行問題はステージの再取り込みと.gitattributesで修正し、新規327ファイルのステージbyte一致に加え、Windows git checkout-index書出し327ファイルの原本byte一致を実測。原資料のhashを変える正規化はしていない。
+- main集約・旧枝の扱い・復元位置はdocs/notes/MAIN_CONSOLIDATION_20261007.mdへ記録。最終SHA・全worktree照合・clean/remote一致はoutput/git_sync_20261007/final-verification.jsonへ保存する。今回の同期は研究採用・教員承認・新版での正式実験を意味しない。
