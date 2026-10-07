@@ -1,0 +1,25 @@
+{
+  "requested_model": "opus",
+  "effort": "high",
+  "tools_enabled": false,
+  "safe_mode": true,
+  "calls": [
+    {
+      "source": "C:\\master-course\\output\\presentation_finish_20261005\\claude_outline.json",
+      "sha256": "321bc54fc828b129c5ebd30b85467b585e0df684eab9d05521adf2875e23e8ef",
+      "is_error": false,
+      "modelUsage_keys": [
+        "claude-opus-5-5"
+      ]
+    },
+    {
+      "source": "C:\\master-course\\output\\presentation_finish_20261005\\claude_final.json",
+      "sha256": "a1b72033b87f588341ffa52fb08e73208e7d33bdd18ab8183e74b33544df8f2d",
+      "is_error": false,
+      "modelUsage_keys": [
+        "claude-opus-5-5"
+      ]
+    }
+  ],
+  "scope": "provided text and evidence summaries; no images or independent source audit"
+}

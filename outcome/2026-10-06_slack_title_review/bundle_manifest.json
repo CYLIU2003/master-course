@@ -1,0 +1,45 @@
+{
+  "as_of_jst": "2026-10-06",
+  "files": [
+    {
+      "path": "claude_final_review.md",
+      "sha256": "3a01737e8c1b3f349df502387099339fe42a4688edcf7d71b2b6a0044b337b9b"
+    },
+    {
+      "path": "claude_initial_review.md",
+      "sha256": "681e6ea9bece3e1dd035bdc9326be1f42920d9b636a64e86d27887b3bd3fd1d9"
+    },
+    {
+      "path": "CLAUDE_REVIEW_DECISIONS.md",
+      "sha256": "942f450b6bc9db52191eff29590e241853245b9ba43e244d85cc742b85b9c370"
+    },
+    {
+      "path": "claude_settings.json",
+      "sha256": "0a2c7db23c09ec480c929d0363c1efc7a9009224c06b4607e57ef5303cceef5a"
+    },
+    {
+      "path": "README.md",
+      "sha256": "eaae052d810f7ad6a81efec44b792d6cd84facec02410b1ef9351a9394b9b84a"
+    },
+    {
+      "path": "RESEARCH_TITLE_AND_REPLY.md",
+      "sha256": "db41c0c4f0cff1e8bdf5c47fdc0fc545c2bae5f5a247feffac3b3115e34f3ed8"
+    },
+    {
+      "path": "SLACK_REPLY_DRAFT.md",
+      "sha256": "8f601947ef9772ae60b5c0e9094338fd7f391dabfd4bf865d3e09292f24cbbac"
+    },
+    {
+      "path": "source_manifest.json",
+      "sha256": "de70bb124ce5c91a85a549d75b91dd708ed548c7f6881972695c47e4e85cafeb"
+    },
+    {
+      "path": "TEACHER_RESPONSE_MATRIX.md",
+      "sha256": "a0f6b8cc5c03e6ef6d721aa75ea2c589a0c3b649f3ba167cf22b1f43d0ad788d"
+    },
+    {
+      "path": "validation.json",
+      "sha256": "3dc6a5e83d5f62e5bd6168e7a773a18cb96f54afe42a3745d73dff67d45bda57"
+    }
+  ]
+}

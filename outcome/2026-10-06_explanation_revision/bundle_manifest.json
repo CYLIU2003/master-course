@@ -1,0 +1,15 @@
+{
+  "claude_collaboration.md": "44248a110768f5a9c29a8a5186d387b3f6472d2be6adf0934cb31592bdf6eae1",
+  "explanation_and_hypotheses.md": "20f573f6bbdbd68766d5ee907c1187bcc18c95f0cb9f4a05671c971481693fac",
+  "README.md": "50cde4efdeebd8d04a37dfd6895a542abc2f9716cb673b2eda9217f3b4487790",
+  "REBUILD.ps1": "7fb54935fd7c9af769e42fd12506f022068211ce559069d1c14d5cd2779a54fd",
+  "research_progress_20261006_explained_v2.pdf": "6137f8a18dfdfe21481439d8623782ad457d2808e683e4062b575ba0b5a14854",
+  "research_progress_20261006_explained_v2.pptx": "a9ef1cf836d71dede0503fea4512cb0f0f2d8d258b17ed82e463a3b6f2fe7a5c",
+  "sources.json": "1fbdde6b9783ab3c519855f18fe77946757ec46d827fd3f2f7ae330561ceb91e",
+  "speaker_notes.md": "43968b50e8af0d84547db44c96e2b168158b8a16880dc54d9ed9d9fba5e8d55a",
+  "reproduction/build_edits.mjs": "ad89ab4fc53b93d87fe4f21269148f8a57660fc49e483fbe0eb53c940663b03b",
+  "reproduction/edits.json": "28574e8f5300ec54af8094b02d8edd6bf5fb0c8486426fac6af15d689f2c36eb",
+  "reproduction/finalize.mjs": "975e33e327504fc64c6c8bc32ead8d4bc09c9b732b43e563d254a7bbf5ed913c",
+  "reproduction/merge_edits.py": "cefa53a3f0afce3c4a7287e8f0d3feb58d7a7d28c4fdb2c95d170e3a9fd64ab2",
+  "reproduction/render.ps1": "c827dc69244620451b445a356f77d30b330afd21d07a0be6f3cae65a6662b2ad"
+}

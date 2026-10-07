@@ -1,0 +1,19 @@
+{
+  "analysis_verification.json": "131397051542aa9d06449a55608cd0101d6884bdb34413e7f05d230a0ea6bc58",
+  "analyze_existing_weeks.py": "3c362aaf9abcc21c54f2a4ba6bcb343abd4df7fd07fef90e63279a778613c4c2",
+  "april_may_comparison.json": "827d88b346411c05a333cd9d4caea0fe08b1a905ab12c1dadeba87b81a5e2455",
+  "build_mechanism_figure.py": "429af1e23d1ff1d4d2432b048010616d41357bb4825b4f34c184098c590ff15f",
+  "claude_discussion.md": "4250769de53016b17893b9ad76d5a4a0aa53dbcd07f308aedb3715001f880b61",
+  "claude_round1.md": "43fa49378ac33bda936b29bab2d9686c7b5bd1b1964ffbb309bf0081fed5cc38",
+  "claude_round2.md": "be79e62b46029548f642bac242d2b5eee28db1a3157d11b783b3e4f76959b0c0",
+  "claude_round3.md": "7f2c6b32b0be3269e700a986c5ca7b6db285060bc8d88fc1a4f57e711b77f7d8",
+  "daily_mechanism_metrics.csv": "cd266bf1959f5d169525eb4cff0147bea96134ffe89da9d0b031adbaa0b6f85f",
+  "may_time_mismatch.png": "64e55c1f37a34a81fd919578b2b97f22e3f01cd6f0363437680d0bd5c9fdd60a",
+  "may_time_mismatch.svg": "af849528276ea7343f2ead7e59864f31e9c57f2dde865a6ea1ff4b1f99afa5ed",
+  "monthly_mechanism_metrics.csv": "5aa90d43154c054f081dc4bd5c7cabaed557b50132feb0450b00aac795652a85",
+  "night_energy_relaxation.csv": "3e674ce0f57585072c616b6f1e9a3e64c61224fa881e759ac595117db03f4ee5",
+  "README.md": "341b416e629b713c54c058be6e169058dbe3e7e09683d7945c17289596562e87",
+  "RESEARCH_MEANING_AND_TEACHER_RESPONSE.md": "790f96f770ac98aeb5c6cc1b9f6dadbe6e85120ec56402fed307c1bb8779c0e6",
+  "source_manifest.json": "a191eea36d12bc992e74ca3077fc5e2a47a7ef70e21ac0ec3117d985b1ed9c0e",
+  "validation.json": "4c16d4e625660a3eb6fe1f02c7fb830ce7ccf5fbe54d21b0377fd1c4188dbefd"
+}

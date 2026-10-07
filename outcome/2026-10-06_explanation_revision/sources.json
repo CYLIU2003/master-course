@@ -1,0 +1,14 @@
+{
+  "source_pptx": "../2026-10-05_teacher_ready/research_progress_20261005_teacher_ready.pptx",
+  "source_pptx_sha256": "af5be0f3460aa0e3d16c3cd633ff8fab22396cf9196d680daae7ce0895f77b31",
+  "fixed_solver_sha": "f524eca2552a4386bd033a15bbe046c14dc09281",
+  "evidence_manifest": "../2026-09-28_september_presentation/evidence/manifest.json",
+  "evidence_manifest_sha256": "52f6b6288ecf9295bad622a4f71de16b2e1cac0094934326e382cecd4de6dd87",
+  "march_energy": "../2026-09-28_september_presentation/evidence/2025-03-03/energy_15min.csv",
+  "november_energy": "../2026-09-28_september_presentation/evidence/2025-11-10/energy_15min.csv",
+  "weather_labels": "../2026-09-28_september_presentation/evidence/weather/weather_labels.csv",
+  "prepared_cost_parameters_checked": "../../output/explanation_revision_20261006/effective_cost_parameters.json",
+  "energy_identity": "../../output/explanation_revision_20261006/energy_difference.json",
+  "original_manifest_files_checked": 102,
+  "package_scope": "Referenced evidence snapshot, not a copy of the complete original optimization archives"
+}

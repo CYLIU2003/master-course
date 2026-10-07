@@ -1,0 +1,47 @@
+{
+  "source_sha256": "c708bf7a887e17e7b55599822cb6959d20e6eca858c9ae1ca1287ac11f0b5a79",
+  "source_preserved": true,
+  "final_pptx_sha256": "c08580588af9ea513907200dd80676ddb2ae42e2793c74d0e49255ceeeadeb64",
+  "slides": 39,
+  "original_comments_retained": 11,
+  "original_workbook_hashes_retained": 44,
+  "existing_evidence_manifest_files_verified": 102,
+  "saved_physical_reports_accepted": [
+    "2025-01-06",
+    "2025-02-03",
+    "2025-03-03",
+    "2025-04-07",
+    "2025-05-12",
+    "2025-06-02",
+    "2025-07-07",
+    "2025-08-04",
+    "2025-09-01",
+    "2025-10-06",
+    "2025-11-10",
+    "2025-12-01"
+  ],
+  "new_solver_run": false,
+  "native_powerpoint_exported_slides": 39,
+  "unchanged_slide_render_identical": 26,
+  "changed_slides_visual_inspected": [
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    15,
+    17,
+    20,
+    24,
+    37,
+    38,
+    39
+  ],
+  "claude_review_scope": "text and supplied evidence summary, not slide rendering or full raw audit",
+  "unresolved_technical_work": [
+    "tilted-plane PV calculation and fresh-input reevaluation",
+    "counterfactual test of shifting night charging"
+  ],
+  "ai_free_rebuild_executed": true
+}

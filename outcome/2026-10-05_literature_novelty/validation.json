@@ -1,0 +1,40 @@
+{
+  "date_jst": "2026-10-05",
+  "status": "PASS",
+  "checks": {
+    "unique_13_ids_and_dois": true,
+    "required_bibliography_and_scope_fields": true,
+    "reading_level_counts": true,
+    "publication_status_counts": true,
+    "csv_13_matches_json": true,
+    "bibtex_13_unique_records": true,
+    "opus_two_verified_responses": true,
+    "all_json_parse": true,
+    "all_document_local_links_exist": true,
+    "no_generated_text_trailing_whitespace": true,
+    "current_title_links_in_root_readme": true,
+    "current_two_titles_present": true,
+    "referenced_analysis_files_match_manifest": true,
+    "frozen_evidence_manifest_matches": true
+  },
+  "paper_count": 13,
+  "reading_levels": {
+    "relevant_fulltext_sections": 6,
+    "publisher_preview": 5,
+    "abstract": 2
+  },
+  "local_links_checked": 28,
+  "missing_links": [],
+  "trailing_whitespace": [],
+  "scope": "Bibliography, documentation, referenced analysis hashes, and recorded Claude settings. Not native solver, fleet, full 12-week physical audit, or research acceptance.",
+  "not_run": [
+    "new optimization",
+    "repository full regression",
+    "frontend build",
+    "native Gurobi checks",
+    "new controller/worker deployment",
+    "PPT rendering"
+  ],
+  "reason_not_run": "Only literature/title/documentation outputs changed.",
+  "tracked_diff_whitespace_check": "git diff --check exit 0; existing LF/CRLF notices only"
+}

@@ -1,0 +1,1502 @@
+{
+  "eligible": true,
+  "reason": null,
+  "rejection_reasons": [],
+  "accounting_basis": "executed_hourly_energy_flows_plus_inventory_valuation_for_unrefueled_fuel",
+  "objective_aggregation": "executed_prefixes_stitched_then_recalculated_once",
+  "expected_slot_count": 697,
+  "executed_slot_count": 697,
+  "missing_slots": [],
+  "duplicate_slots": [],
+  "terminal_energy_balanced": true,
+  "bev_terminal_energy_balanced": true,
+  "bev_executed_target_audit": {
+    "satisfied": true,
+    "basis": "stitched_executed_soc_original_evaluation_policy",
+    "numeric_contract": {
+      "scientific_tolerance_kwh": 1e-06,
+      "numeric_comparison_margin_kwh": 1e-09,
+      "gurobi_feasibility_tol_kwh": 1e-09,
+      "contract_source_keys": [
+        "bev_terminal_soc_scientific_tolerance_kwh",
+        "bev_terminal_soc_numeric_margin_kwh",
+        "bev_terminal_soc_equality_tolerance_kwh"
+      ],
+      "legacy_equality_tolerance_kwh": 1e-06
+    },
+    "vehicles": {
+      "0549a411-fd2a-4339-b4a3-45a3b7d37898": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 119.674506,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 162.92549400000001,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "0c9b7317-11ce-4340-ad98-a702eaacaaa4": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 235.73707,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6000000000002,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 46.862930000000205,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6000000000002,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "1804ab20-a2a0-475c-b4d0-71d8a72c192f": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 139.502036,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 143.09796400000002,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "35f95479-c68e-40bc-b31a-1f0a5490227c": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 159.971696,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 122.62830400000001,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 600,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "3acd650a-ca8c-4114-9922-f514a915f460": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 135.272456,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 147.32754400000002,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "3e38e74f-191a-4b72-8061-59f0020151e3": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 200.36026,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 82.23974000000001,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "4159394a-daba-42d9-aa73-3474613ab9f1": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 210.569028,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 72.03097200000002,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "4f5a4c1d-cac3-4fd2-87a8-cf0049c71ebe": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 131.315428,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 151.28457200000003,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "8270c9a2-ed1f-4508-81a0-0903ddc4924c": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 160.416948,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 122.18305200000003,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "a645e188-64a8-4244-9882-49f00eeb8a62": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 119.75080799999999,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 162.84919200000002,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "befc4670-e889-45d9-bd65-23118c02e196": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 223.35762,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 59.242380000000026,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "builder-bev-tsurumaki-004": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 169.708522,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 112.89147800000003,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "builder-bev-tsurumaki-005": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 145.549362,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 137.05063800000002,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "builder-bev-tsurumaki-006": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 146.965502,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6000000000002,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 135.6344980000002,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6000000000002,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "builder-bev-tsurumaki-007": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 233.39934,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 49.20066000000003,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "builder-bev-tsurumaki-008": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 243.13961999999998,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 39.46038000000004,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "builder-bev-tsurumaki-009": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 222.732446,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 59.86755400000001,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "builder-bev-tsurumaki-010": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 214.50847199999998,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 68.09152800000004,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "ca16a2ca-147b-4359-92db-913031d5faff": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 236.96324,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 45.63676000000001,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "ce309a0b-8c0b-49dc-a839-171db28e76a4": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 154.48329,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 128.11671,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "cf7b771e-a6ac-4e0b-9738-ad3901a68307": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 231.30370399999998,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 51.29629600000004,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "d10aa797-db07-40a2-b52b-d4caf02ff33b": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 171.205674,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 111.39432600000004,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "6": {
+            "boundary_slot": 697,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "d225af48-8eec-47b7-abb1-34cfe83e31f0": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 136.5743,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 146.02570000000003,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "5": {
+            "boundary_slot": 601,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "e0772317-52e2-4e70-bfc8-1eb486f0f75c": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 219.080626,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 63.51937400000003,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "e56620e3-804c-41a3-9441-b054b74c1392": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 218.14836,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 64.45164000000003,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      },
+      "ff03ad3a-409a-43ef-9c63-384bacb5f9d2": {
+        "policy": "fixed_target",
+        "initial_soc_kwh": 208.434142,
+        "terminal_boundary_slot": 697,
+        "terminal_soc_kwh": 282.6,
+        "target_soc_kwh": 282.6,
+        "floor_kwh": 62.800000000000004,
+        "ceiling_kwh": 282.6,
+        "inventory_change_kwh": 74.16585800000001,
+        "daily_deadlines": {
+          "0": {
+            "boundary_slot": 119,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "1": {
+            "boundary_slot": 215,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "2": {
+            "boundary_slot": 311,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "3": {
+            "boundary_slot": 407,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          },
+          "4": {
+            "boundary_slot": 503,
+            "soc_kwh": 282.6,
+            "target_kwh": 282.6,
+            "satisfied": true
+          }
+        },
+        "satisfied": true,
+        "failures": []
+      }
+    },
+    "errors": []
+  },
+  "lookahead_bev_inventory_balance_all_windows": false,
+  "bess_terminal_energy_balanced": true,
+  "bess_daily_energy_balanced": true,
+  "bess_terminal_soc_by_depot": {
+    "tsurumaki": {
+      "policy": "minimum_only",
+      "initial_soc_kwh": 3000.0,
+      "target_soc_kwh": null,
+      "terminal_soc_kwh": 1577.5425715570952,
+      "terminal_soc_delta_kwh": -1422.4574284429048,
+      "terminal_soc_floor_kwh": 1200.0,
+      "terminal_soc_ceiling_kwh": 4800.0,
+      "absolute_deviation_kwh": null,
+      "balanced": true
+    }
+  },
+  "contract_overage_accounting": {
+    "consistent": true,
+    "charge_enabled": true,
+    "executed_overage_kwh": 714.5867225287797,
+    "reported_overage_kwh": 714.5867225287797,
+    "penalty_yen_per_kwh": 500.0,
+    "expected_cost_jpy": 357293.3612643898,
+    "reported_cost_jpy": 357293.3612643898,
+    "cost_difference_jpy": 0.0,
+    "quantity_difference_kwh": 0.0
+  },
+  "cost_breakdown": {
+    "energy_cost": 202814.1930703375,
+    "electricity_cost": 166496.31449732868,
+    "pv_self_consumption_cost_jpy": 0.0,
+    "pv_marginal_charge_cost_yen_per_kwh": 0.0,
+    "fuel_cost": 36317.878573008806,
+    "ice_fuel_consumed_l": 242.11919048672567,
+    "demand_cost": 0.0,
+    "vehicle_cost": 0.0,
+    "vehicle_usage_cost": 4100000.0,
+    "vehicle_usage_cost_jpy": 4100000.0,
+    "vehicle_usage_cost_jpy_per_used_bus": 20000.0,
+    "used_vehicle_day_count": 205,
+    "driver_cost": 0.0,
+    "unserved_penalty": 0.0,
+    "switch_cost": 0.0,
+    "degradation_cost": 0.0,
+    "deviation_cost": 0.0,
+    "co2_cost": 3401.0333790392124,
+    "total_co2_kg": 3401.0333790392124,
+    "ice_co2_kg": 626.0948040836705,
+    "ice_bus_co2_kg": 626.0948040836705,
+    "grid_electricity_co2_kg": 2774.9385749555418,
+    "pv_co2_kg": 0.0,
+    "pv_operational_co2_kg": 0.0,
+    "bess_storage_operational_co2_kg": 0.0,
+    "engine_bus_co2_kg": 626.0948040836705,
+    "power_generation_co2_kg": 2774.9385749555418,
+    "utilization_score": 0.5333333333333333,
+    "pv_generated_kwh": 17270.725,
+    "pv_used_direct_kwh": 727.044441027297,
+    "pv_used_total_kwh": 17270.725000000002,
+    "pv_curtailed_kwh": 0.0,
+    "pv_curtail_kwh": 0.0,
+    "pv_curtail_balance_kwh": 0.0,
+    "grid_import_kwh": 5549.877149911082,
+    "peak_grid_kw": 435.9936432229956,
+    "grid_to_bus_kwh": 5549.877149911082,
+    "pv_to_bus_kwh": 727.044441027297,
+    "bess_to_bus_kwh": 16282.006261493614,
+    "pv_to_bess_kwh": 16543.680558972705,
+    "grid_to_bess_kwh": 0.0,
+    "contract_over_limit_kwh": 714.5867225287797,
+    "electricity_cost_final": 166496.31449732868,
+    "electricity_cost_provisional_leftover": 0.0,
+    "fuel_cost_final": 36317.878573008806,
+    "fuel_cost_provisional": 36317.878573008806,
+    "fuel_cost_refueled": 0.0,
+    "fuel_cost_realized": 0.0,
+    "fuel_cost_provisional_leftover": 36317.87857300885,
+    "provisional_ev_drive_cost": 566145.1774742348,
+    "realized_ev_charge_cost": 166496.31449733253,
+    "leftover_ev_provisional_cost": 0.0,
+    "provisional_ice_drive_cost": 36317.878573008806,
+    "realized_ice_refuel_cost": 0.0,
+    "leftover_ice_provisional_cost": 36317.87857300885,
+    "operating_cost_provisional_total": 602463.0560472436,
+    "operating_cost_realized_total": 166496.31449733253,
+    "operating_cost_leftover_total": 36317.87857300885,
+    "energy_cash_purchase_cost_jpy": 166496.31449733253,
+    "energy_inventory_valuation_cost_jpy": 36317.87857300885,
+    "electricity_inventory_valuation_cost_jpy": 0.0,
+    "fuel_inventory_valuation_cost_jpy": 36317.87857300885,
+    "ev_unreplenished_drive_energy_kwh": 0.0,
+    "ev_energy_inventory_balanced": true,
+    "energy_cost_basis": "realized_supply_plus_inventory_valuation",
+    "grid_purchase_cost": 166496.31449733253,
+    "bess_discharge_cost": 0.0,
+    "pv_to_bus_cost_jpy": 0.0,
+    "pv_to_bess_cost_jpy": 0.0,
+    "pv_curtail_cost_jpy": 0.0,
+    "bess_to_bus_cost_jpy": 0.0,
+    "bess_total_flow_cost_jpy": 0.0,
+    "bess_to_bus_unit_cost_yen_per_kwh": 0.0,
+    "bess_pv_cost_policy": "pv_marginal_cost_applies_to_pv_flows_bess_cycle_cost_applies_to_bess_discharge",
+    "contract_overage_cost": 357293.3612643898,
+    "stationary_battery_degradation_cost": 0.0,
+    "pv_asset_cost": 0.0,
+    "bess_asset_cost": 0.0,
+    "total_cost_with_assets": 4663508.587713766,
+    "total_cost": 4663508.587713766,
+    "objective_value": 4663508.587713766,
+    "evaluation_feasible": 1.0,
+    "return_leg_bonus": 0.0,
+    "weather_strategy_objective_term_jpy_equivalent": 0.0,
+    "fuel_cost_final_source": "provisional_distance_based",
+    "objective_is_actual_cost": false
+  },
+  "executed_refuel_liters": 0,
+  "executed_energy_flow_hash": "72551a078471172a764ac0a067b6f2cc29dd08d4b39714b963a79f29d08af90f"
+}

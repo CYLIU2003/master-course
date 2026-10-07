@@ -1,0 +1,169 @@
+{
+  "date_jst": "2026-10-05",
+  "literature_matrix_sha256": "dd4131d88aef0d31e9cde89645c9a58015468c15c7080dc49bf05a17960d4ed3",
+  "primary_sources": [
+    {
+      "id": "L01",
+      "url": "https://doi.org/10.1016/j.rser.2022.112276",
+      "fulltext_url": "https://ris.utwente.nl/ws/portalfiles/portal/295734445/1_s2.0_S1364032122001964_main.pdf",
+      "reading_level": "relevant_fulltext_sections",
+      "status": "journal",
+      "evidence_locator": "pp. 4-5, Sections 3-4; PDF SHA in private download_manifest.json"
+    },
+    {
+      "id": "L02",
+      "url": "https://doi.org/10.1016/j.rser.2023.113319",
+      "fulltext_url": null,
+      "reading_level": "publisher_preview",
+      "status": "journal",
+      "evidence_locator": "publisher abstract and Introduction contributions"
+    },
+    {
+      "id": "L03",
+      "url": "https://doi.org/10.1016/j.tre.2024.103572",
+      "fulltext_url": null,
+      "reading_level": "publisher_preview",
+      "status": "journal",
+      "evidence_locator": "publisher abstract, highlights, Introduction"
+    },
+    {
+      "id": "L04",
+      "url": "https://www.nature.com/articles/s44333-024-00008-2",
+      "fulltext_url": null,
+      "reading_level": "relevant_fulltext_sections",
+      "status": "journal",
+      "evidence_locator": "Methods: Optimising depot charging; weekly demonstration; Eq. 11; publication 2024-11-06"
+    },
+    {
+      "id": "L05",
+      "url": "https://doi.org/10.1016/j.apenergy.2025.125714",
+      "fulltext_url": null,
+      "reading_level": "publisher_preview",
+      "status": "journal",
+      "evidence_locator": "publisher abstract and Introduction; Crossref author metadata"
+    },
+    {
+      "id": "L06",
+      "url": "https://arxiv.org/abs/2509.05940v2",
+      "fulltext_url": "https://arxiv.org/pdf/2509.05940",
+      "reading_level": "relevant_fulltext_sections",
+      "status": "preprint_source; journal publication not verified",
+      "evidence_locator": "pp. 7-8 assumptions/event horizon; pp. 16-18 case settings"
+    },
+    {
+      "id": "L07",
+      "url": "https://arxiv.org/abs/2504.20790v2",
+      "fulltext_url": "https://arxiv.org/html/2504.20790v2",
+      "reading_level": "relevant_fulltext_sections",
+      "status": "preprint_source; journal publication not verified",
+      "evidence_locator": "Sections 4 assumptions, Eq. 25, Section 5.1, Sections 5.2-5.3"
+    },
+    {
+      "id": "L08",
+      "url": "https://doi.org/10.1016/j.trc.2026.105539",
+      "fulltext_url": null,
+      "reading_level": "publisher_preview",
+      "status": "journal",
+      "evidence_locator": "publisher abstract; Crossref March 2026 issue"
+    },
+    {
+      "id": "L09",
+      "url": "https://doi.org/10.1016/j.apenergy.2025.127307",
+      "fulltext_url": null,
+      "reading_level": "publisher_preview",
+      "status": "journal",
+      "evidence_locator": "publisher abstract, Methodology preview, Recommendations; author institution metadata"
+    },
+    {
+      "id": "L10",
+      "url": "https://arxiv.org/abs/2609.29998v1",
+      "fulltext_url": "https://arxiv.org/html/2609.29998v1",
+      "reading_level": "relevant_fulltext_sections",
+      "status": "preprint_source; journal publication not verified",
+      "evidence_locator": "Section 2: scenario-based charging, local PV model; Section 4.4; Discussion"
+    },
+    {
+      "id": "L11",
+      "url": "https://arxiv.org/abs/2601.11751v1",
+      "fulltext_url": "https://arxiv.org/html/2601.11751v1",
+      "reading_level": "relevant_fulltext_sections",
+      "status": "preprint_source; journal publication not verified",
+      "evidence_locator": "Section 3 problem definition; Section 4 complete daily columns; case-study abstract"
+    },
+    {
+      "id": "L12",
+      "url": "https://www.jstage.jst.go.jp/article/jscejj/80/20/80_24-20020/_article/-char/ja",
+      "fulltext_url": null,
+      "reading_level": "abstract",
+      "status": "journal",
+      "evidence_locator": "一次掲載ページの書誌・抄録。PDF取得済みだが全日本語本文の確認は未了"
+    },
+    {
+      "id": "L13",
+      "url": "https://www.jstage.jst.go.jp/article/jjser/46/1/46_1/_article/-char/ja",
+      "fulltext_url": null,
+      "reading_level": "abstract",
+      "status": "journal",
+      "evidence_locator": "一次掲載ページの書誌・抄録。PDF取得済みだが全日本語本文の確認は未了"
+    }
+  ],
+  "official_pdf_acquisition_records": [
+    {
+      "id": "zaneti2022",
+      "url": "https://ris.utwente.nl/ws/portalfiles/portal/295734445/1_s2.0_S1364032122001964_main.pdf",
+      "pages": 22,
+      "sha256": "c27f91a3ba2c422a8bf4ce3b6f0fa88075f11dd80b2b2439f0de9c090b862525",
+      "status": "downloaded"
+    },
+    {
+      "id": "caustur2026",
+      "url": "https://arxiv.org/pdf/2509.05940v2",
+      "status": "HTTPError"
+    },
+    {
+      "id": "nath2026",
+      "url": "https://arxiv.org/pdf/2504.20790v2",
+      "status": "HTTPError"
+    },
+    {
+      "id": "ihara2025",
+      "url": "https://www.jstage.jst.go.jp/article/jscejj/80/20/80_24-20020/_pdf/-char/ja",
+      "pages": 8,
+      "sha256": "24a7f08e3f5d33a93f58a46d38bb679f2b0e6282ea42829399947beeee094bb4",
+      "status": "downloaded"
+    },
+    {
+      "id": "abe2025",
+      "url": "https://www.jstage.jst.go.jp/article/jjser/46/1/46_1/_pdf/-char/ja",
+      "pages": 8,
+      "sha256": "67e9bb76a4d906d5cc01fccbc36fc834402952062b039883a9508f5a2ba0ac5f",
+      "status": "downloaded"
+    }
+  ],
+  "referenced_local_analysis": [
+    {
+      "path": "outcome/2026-10-03_research_review/RESEARCH_MEANING_AND_TEACHER_RESPONSE.md",
+      "sha256": "790f96f770ac98aeb5c6cc1b9f6dadbe6e85120ec56402fed307c1bb8779c0e6"
+    },
+    {
+      "path": "outcome/2026-10-03_research_review/analysis_verification.json",
+      "sha256": "131397051542aa9d06449a55608cd0101d6884bdb34413e7f05d230a0ea6bc58"
+    },
+    {
+      "path": "outcome/2026-10-03_research_review/april_may_comparison.json",
+      "sha256": "827d88b346411c05a333cd9d4caea0fe08b1a905ab12c1dadeba87b81a5e2455"
+    },
+    {
+      "path": "outcome/2026-10-03_research_review/monthly_mechanism_metrics.csv",
+      "sha256": "5aa90d43154c054f081dc4bd5c7cabaed557b50132feb0450b00aac795652a85"
+    }
+  ],
+  "frozen_evidence_manifest": {
+    "path": "outcome/2026-09-28_september_presentation/evidence/manifest.json",
+    "sha256": "52f6b6288ecf9295bad622a4f71de16b2e1cac0094934326e382cecd4de6dd87",
+    "solve_commit": "f524eca2552a4386bd033a15bbe046c14dc09281",
+    "inspection_scope": "Existing 10/03 reaggregation and saved validation records referenced; no fresh native audit of all 12 solver runs today."
+  },
+  "private_record_directory": "output/literature_novelty_20261005",
+  "external_credentials_or_messages_included": false
+}

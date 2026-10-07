@@ -1,0 +1,26 @@
+{
+  "selection_owner": "Claude",
+  "verification_owner": "Codex",
+  "effort": "high",
+  "requested_model": "opus",
+  "reviews": [
+    {
+      "modelUsage_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false
+    },
+    {
+      "modelUsage_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false
+    }
+  ],
+  "recommended_title": "営業所の電力条件を考慮した電気バスの配車・充電計画の最適化と運用費評価",
+  "title_length": 35,
+  "fallback_title": "電気バスの配車・充電計画の最適化と運用費評価",
+  "fallback_length": 22,
+  "research_main": "EV bus dispatch and charging feasibility, operation and operational cost",
+  "PV_role": "one power supply condition"
+}

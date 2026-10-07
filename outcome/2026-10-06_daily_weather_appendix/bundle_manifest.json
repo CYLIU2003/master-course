@@ -1,0 +1,70 @@
+{
+  "daily_weather_84days.csv": {
+    "sha256": "740212555b8cfa45abfe8954fa3fe895e2ad507c71464eaf34e1c634d74cef82",
+    "bytes": 20612
+  },
+  "README.md": {
+    "sha256": "42f96858d257fb9ad90e50403d455eb7e9d65f4637498b317e6d36462cf98bbe",
+    "bytes": 3717
+  },
+  "REBUILD.ps1": {
+    "sha256": "f57ef6a273ab0ef7a08f7970636f0710b8c37ca698f3dfe02655d8486076b9d2",
+    "bytes": 1786
+  },
+  "reproduction/append_native.ps1": {
+    "sha256": "c36d9dd32e924ff2985ce363ce0a780407dfce575842d45271a4d02ff6a7db77",
+    "bytes": 1056
+  },
+  "reproduction/build_appendix.mjs": {
+    "sha256": "0efa1c153f321fc204f1d90239b9e0fa19cc96a3805d242d2b348da04bd06308",
+    "bytes": 1889
+  },
+  "reproduction/finalize.mjs": {
+    "sha256": "edcff4bf5086d73ec6b9a86418c0b2209e70bb75b85ff4b38dbae2a805242893",
+    "bytes": 1999
+  },
+  "reproduction/prepare_weather.py": {
+    "sha256": "939ec321d9b4bce53494faf93c87569e5363bb9096d7ee7f3c685fa334e96151",
+    "bytes": 11671
+  },
+  "reproduction/render.ps1": {
+    "sha256": "8f34c6be4f36bb6676faf770dba9791d0174eb38c1d0409dddc502be1ff75469",
+    "bytes": 1144
+  },
+  "reproduction/revision_inventory.json": {
+    "sha256": "80e4e1db80d13d22acd6e1a591d7eabbe5a7b2db200cf435693bcdd6f5854122",
+    "bytes": 1028
+  },
+  "reproduction/solcast_15min_selected.csv": {
+    "sha256": "448433d0278056bd1384772003eb8236114e0d66e072d8f0e22a6e7824e947de",
+    "bytes": 431021
+  },
+  "reproduction/source_base.pptx": {
+    "sha256": "7d7e72f2887d9dfa0fc6d1b604f54e2f8eb19e8307aa19840efb31d17fe181e7",
+    "bytes": 1920028
+  },
+  "reproduction/sync_chart_caches.py": {
+    "sha256": "a1b974c16b83f8c4cb5f8181d7da165a6a43870a6f40dd3831dcfdc262110315",
+    "bytes": 3150
+  },
+  "reproduction/verify_delivery.py": {
+    "sha256": "36fec29177fad49bf4a2d7adf065ca6466b3aa27e945ee48f5e9890492257835",
+    "bytes": 4288
+  },
+  "reproduction/weather_inputs.json": {
+    "sha256": "07d9f924bce70f009398ecea48336c1b28670385a3526584a7e9e87d017ef4e7",
+    "bytes": 58377
+  },
+  "research_progress_20261006_daily_weather.pdf": {
+    "sha256": "30b58dcf78410001b395906a22a36a75a69d0c75c4a770cec5bc84af83581a21",
+    "bytes": 3311177
+  },
+  "research_progress_20261006_daily_weather.pptx": {
+    "sha256": "dd94c64e681fa89ef163dc0468130af870a7c779af0bae67054244f5f340d6a1",
+    "bytes": 1703256
+  },
+  "sources.json": {
+    "sha256": "9895abd5d926dc94a54dd0b36212a542f901729c054d814678ce8f9b880fa7be",
+    "bytes": 4603
+  }
+}

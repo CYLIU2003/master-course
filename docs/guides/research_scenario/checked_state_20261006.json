@@ -1,0 +1,434 @@
+{
+  "schema": "research_scenario_documentation_snapshot_v1",
+  "checked_at_utc": "2026-10-06T10:36:27.244267+00:00",
+  "scope": "Saved metadata, one Prepared file hash, frozen DB hash/counts and current documentation source. Not a fresh 12-week solver or physical audit.",
+  "development": {
+    "branch": "codex/research-gates-20260923",
+    "head": "57e959173635643394bc694a4773404bf0976b49",
+    "dirty": true
+  },
+  "calculation_sha": "f524eca2552a4386bd033a15bbe046c14dc09281",
+  "parent_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+  "parent_hash": "64492aaefb20ee8af56ab4df76af0bd75484142e6d0948a43f70a03b62aa688b",
+  "latest_report": {
+    "revision": "6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd",
+    "directory": "C:\\master-course\\output\\executed_soc_20260926\\monthly_report\\revisions\\6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd",
+    "complete": true,
+    "included": 12,
+    "declared": 12,
+    "observed_at_utc": "2026-09-27T14:44:30.145167+00:00"
+  },
+  "operations": [
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/operation.local.json",
+      "weeks": [
+        "2025-02-03"
+      ],
+      "workers": [
+        "auto"
+      ]
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/operation.remaining.local.json",
+      "weeks": [
+        "2025-01-06",
+        "2025-03-03",
+        "2025-04-07",
+        "2025-05-12",
+        "2025-06-02",
+        "2025-07-07",
+        "2025-08-04",
+        "2025-09-01",
+        "2025-10-06",
+        "2025-11-10",
+        "2025-12-01"
+      ],
+      "workers": [
+        "auto"
+      ]
+    }
+  ],
+  "saved_campaigns": [
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/february_campaign",
+      "saved_status": "COMPLETED",
+      "saved_cases": {
+        "2025-02-03": "VERIFIED"
+      }
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/remaining_campaign",
+      "saved_status": "RUNNING",
+      "saved_cases": {
+        "2025-01-06": "FAILED_OR_UNVERIFIED",
+        "2025-03-03": "VERIFIED",
+        "2025-04-07": "VERIFIED",
+        "2025-05-12": "VERIFIED",
+        "2025-06-02": "VERIFIED",
+        "2025-07-07": "VERIFIED",
+        "2025-08-04": "VERIFIED",
+        "2025-09-01": "VERIFIED",
+        "2025-10-06": "VERIFIED",
+        "2025-11-10": "SUBMITTED",
+        "2025-12-01": "SUBMITTED"
+      }
+    }
+  ],
+  "reporting_recovery_receipts": [
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/report_recovery/january-weekly-v2/recovery.json",
+      "sha256": "aec584996d5e0ab4130c7bcd402d6bf0a3859454d0f8be00e7c5e2f4511bed99",
+      "week": "2025-01-06",
+      "original_worker_state": "FAILED"
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/report_recovery/november-weekly-v1/recovery.json",
+      "sha256": "7fa777b3d070a52c9178c68f75f7cfbd1fba09419e825dde030a790a5d600876",
+      "week": "2025-11-10",
+      "original_worker_state": "FAILED"
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/report_recovery/december-weekly-v1/recovery.json",
+      "sha256": "6e34148d01db95df46c1cd202612602be7327806993728b171e10612694124d4",
+      "week": "2025-12-01",
+      "original_worker_state": "FAILED"
+    }
+  ],
+  "parameter_map_sha256": "da8918a833941dce6153811dbbda662fc114e0167efdf773f27ead4ae918773b",
+  "cases": [
+    {
+      "week": "2025-01-06",
+      "state": "REPORTING_RECOVERED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "original_state": "FAILED_OR_UNVERIFIED",
+      "collection": "reporting_recovery",
+      "job_id": "c094649e-5a99-5ba6-b043-f2b832b76066",
+      "total_cost_jpy": 4860462.656698648
+    },
+    {
+      "week": "2025-02-03",
+      "state": "VERIFIED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\february_campaign",
+      "included": true,
+      "job_id": "ca61928c-800a-5c76-8cab-d4993dc9fcda",
+      "total_cost_jpy": 4776386.715806569
+    },
+    {
+      "week": "2025-03-03",
+      "state": "VERIFIED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "job_id": "b5023143-6887-5d46-8a3d-8015649c5bff",
+      "total_cost_jpy": 6126515.171577275
+    },
+    {
+      "week": "2025-04-07",
+      "state": "VERIFIED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "job_id": "bf3a6405-a814-5e28-83ce-f6a300942cf6",
+      "total_cost_jpy": 4235093.705434697
+    },
+    {
+      "week": "2025-05-12",
+      "state": "VERIFIED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "job_id": "d62bf0be-b57d-52c8-83ff-a4a2c3e3fd2c",
+      "total_cost_jpy": 4811474.5594100775
+    },
+    {
+      "week": "2025-06-02",
+      "state": "VERIFIED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "job_id": "e786d4e9-9d76-5c4b-903c-67df62f862de",
+      "total_cost_jpy": 4577588.887209395
+    },
+    {
+      "week": "2025-07-07",
+      "state": "VERIFIED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "job_id": "51f0cada-6042-51b0-af0a-0d8df5be4663",
+      "total_cost_jpy": 4185894.598136911
+    },
+    {
+      "week": "2025-08-04",
+      "state": "VERIFIED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "job_id": "37625d9c-03d5-5a71-8118-fbc8e83a2b8c",
+      "total_cost_jpy": 4178455.309118559
+    },
+    {
+      "week": "2025-09-01",
+      "state": "VERIFIED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "job_id": "54a75e38-53bb-5e8d-a62f-61fc2222d505",
+      "total_cost_jpy": 4966232.138003672
+    },
+    {
+      "week": "2025-10-06",
+      "state": "VERIFIED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "job_id": "506b76c1-cd53-5f63-ba17-58300c999675",
+      "total_cost_jpy": 4663508.587713766
+    },
+    {
+      "week": "2025-11-10",
+      "state": "REPORTING_RECOVERED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "original_state": "SUBMITTED",
+      "collection": "reporting_recovery",
+      "job_id": "490483ef-eb66-5c89-ae52-dd8bfbbc108f",
+      "total_cost_jpy": 5110163.394481636
+    },
+    {
+      "week": "2025-12-01",
+      "state": "REPORTING_RECOVERED",
+      "campaign": "C:\\master-course\\output\\executed_soc_20260926\\remaining_campaign",
+      "included": true,
+      "original_state": "SUBMITTED",
+      "collection": "reporting_recovery",
+      "job_id": "ccf82c9c-bfc5-5ab8-847c-a0570ec11857",
+      "total_cost_jpy": 4992623.661348696
+    }
+  ],
+  "rows": [
+    {
+      "week": "2025-01-06",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 697,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-02-03",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 695,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-03-03",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 695,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-04-07",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 695,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-05-12",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 695,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-06-02",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 695,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-07-07",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 695,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-08-04",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 697,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-09-01",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 695,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-10-06",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 697,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-11-10",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 695,
+      "integrated_weekly_gap": null
+    },
+    {
+      "week": "2025-12-01",
+      "trips": 1704,
+      "evaluation_status": "VERIFIED_CONDITIONAL_WEEKLY_EVALUATION",
+      "executed_slots_including_overnight": 695,
+      "integrated_weekly_gap": null
+    }
+  ],
+  "frozen_database": {
+    "directory": "C:/master-course/output/cluster-deployment/release-executed-soc-20260926/data/optimization/shibu21_23_frozen_20260924",
+    "sha256": "70b99fca42d70a408d39f1b00e9768ce51b71f4cbfec1eb8e794c06d52738286",
+    "table_counts": {
+      "selected_routes": 16,
+      "timetable_rows": 648,
+      "stop_sequences": 16586,
+      "stops": 77
+    },
+    "development_copy_exists": false
+  },
+  "prepared_example": {
+    "record": "C:/master-course/output/executed_soc_20260926/february_campaign/2025-02-03/prepared.json",
+    "path": "C:/master-course/output/executed_soc_20260926/controller/prepared_inputs/b9bea9d4-747c-49fd-904d-0fdf7b218a1c/prepared-45296fd9606f0814-b5946363562a5b3f-8acc7b3a.json",
+    "sha256": "6291d0f049c0315edb970b33259c8e811c2ce0d501578c03ed27bb14145b9525",
+    "overnight": {
+      "next_service_date": "2025-02-10",
+      "extra_slots": 23,
+      "forecast_model_sha256": "d7b6b15172e4267e07d5f8846943b08199f102915dd14d77ecff540b4f22b8cd",
+      "next_day_pv_sha256": "718e4c0a08f7b7be9a2259089aff9bbb2e83689904f03efed489e8f4cd0e52ef",
+      "next_day_timetable_rows_sha256": "a8d8961c53d5fc5b3c61e49216acec24498770128785ff1bb1546d7dda69dd0a"
+    },
+    "fleet_handoff": {
+      "schema_version": "scenario_fleet_contract_v3",
+      "fleet_contract_hash": "d09cea1dd2e60416132636fc8b9e8176ef8698053f1265586e53ff7b0d29fff4",
+      "status": "INPUT_HANDOFF_VALIDATED_NOT_RESEARCH_APPROVAL"
+    },
+    "request": {
+      "execution_profile": "existing_solver_v1",
+      "mode": "mode_milp_only",
+      "prepared_input_id": "prepared-45296fd9606f0814-b5946363562a5b3f-8acc7b3a",
+      "rebuild_dispatch": false,
+      "use_existing_duties": false,
+      "research_run": false,
+      "random_seed": 42,
+      "gurobi_threads": 4,
+      "run_profile": "day_ahead_and_hourly_rolling",
+      "run_hourly_rolling": true,
+      "rolling_execution_minutes": 60,
+      "time_limit_seconds": 7200,
+      "stage1_time_limit_seconds": 1800,
+      "stage2_time_limit_seconds": 600,
+      "stage1_gurobi_search_profile": "bounded_presolve_dual",
+      "stage1_fragment_transition_cut_mode": "lazy",
+      "mip_gap": 0.01,
+      "timestep_min": 15
+    }
+  },
+  "live_observation": {
+    "controller_workers_api": "http://127.0.0.1:8891/api/cluster/workers",
+    "result": "Response not confirmed during earlier read-only check in this documentation turn (URLError). No restart performed.",
+    "worker_execution_status": "NOT_OBSERVED",
+    "new_jobs_submitted": 0
+  },
+  "source_files": [
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/monthly_report/latest.json",
+      "sha256": "85fddc14221b31edc10ea4063a5fef6c97a1f5b407c1ccf9e6078646b4de21af",
+      "bytes": 358
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/monthly_report/revisions/6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd/comparison.json",
+      "sha256": "bd7df17312343b0d0e682630d46f65292c43051913fceb4d2bb5e3c1ca8395aa",
+      "bytes": 180244
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/monthly_report/revisions/6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd/manifest.json",
+      "sha256": "06d1b30b35ac160f5752fd0233fb4b39879b217e4859a7032379df9985195dd5",
+      "bytes": 542
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/monthly_report/revisions/6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd/report.md",
+      "sha256": "5376b39aa017a2d6f1f5428fc77f89d7e5c9c3443597133ea964d4f231687837",
+      "bytes": 7132
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/controller-settings.json",
+      "sha256": "1cabe5ee9a87680ef03c3cf2577cca4b021f78e2b59f4f5dee45cbf37c1f38b9",
+      "bytes": 1075
+    },
+    {
+      "path": "C:/master-course/output/cluster-deployment/release-executed-soc-20260926/data/optimization/shibu21_23_frozen_20260924/manifest.json",
+      "sha256": "9c3e4161712322c03b108745acb18f41fca9fb3a83870f420f5ff687e3e202ba",
+      "bytes": 1822
+    },
+    {
+      "path": "C:/master-course/output/cluster-deployment/release-executed-soc-20260926/data/optimization/shibu21_23_frozen_20260924/source.sqlite3",
+      "sha256": "70b99fca42d70a408d39f1b00e9768ce51b71f4cbfec1eb8e794c06d52738286",
+      "bytes": 6545408
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/february_campaign/2025-02-03/prepared.json",
+      "sha256": "b598d58c7c701dc64976c5ae5a78a4afa1d7d08e05cc2b11cbc1c5f08517e52f",
+      "bytes": 2018
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/controller/prepared_inputs/b9bea9d4-747c-49fd-904d-0fdf7b218a1c/prepared-45296fd9606f0814-b5946363562a5b3f-8acc7b3a.json",
+      "sha256": "6291d0f049c0315edb970b33259c8e811c2ce0d501578c03ed27bb14145b9525",
+      "bytes": 51284201
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/report_recovery/january-weekly-v2/recovery.json",
+      "sha256": "aec584996d5e0ab4130c7bcd402d6bf0a3859454d0f8be00e7c5e2f4511bed99",
+      "bytes": 173086
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/report_recovery/november-weekly-v1/recovery.json",
+      "sha256": "7fa777b3d070a52c9178c68f75f7cfbd1fba09419e825dde030a790a5d600876",
+      "bytes": 172366
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/report_recovery/december-weekly-v1/recovery.json",
+      "sha256": "6e34148d01db95df46c1cd202612602be7327806993728b171e10612694124d4",
+      "bytes": 172366
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/operation.local.json",
+      "sha256": "92fa25f1e275b26951b545dcc544d2032ddedf61d72a7881a08b1d5cafd06211",
+      "bytes": 365
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/february_campaign/binding.json",
+      "sha256": "b80dfd7dc766b8fadbffd774d1b5e8275ccae65b59edf566cedd8b8dda39f738",
+      "bytes": 1051
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/february_campaign/state.json",
+      "sha256": "31b8c503927df303bf4b1206f91bbae7209e8944771aaef009a5a1ef2950ea2e",
+      "bytes": 423
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/operation.remaining.local.json",
+      "sha256": "07282d6ea097a8ef72c821acc5654c9326a8ad7132f7af6cefbf4211c08d7072",
+      "bytes": 556
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/remaining_campaign/binding.json",
+      "sha256": "8a3cdef6fcd9645d3b4e4ee718f4098e9ff53d0d2b5dfcbd592803e9958cde1d",
+      "bytes": 1231
+    },
+    {
+      "path": "C:/master-course/output/executed_soc_20260926/remaining_campaign/state.json",
+      "sha256": "d8709103870b7ae31397ae0e389a427e5d7835a156ee729cb40f25cf01e6ccd6",
+      "bytes": 2660
+    }
+  ]
+}

@@ -3,6 +3,8 @@
 日常操作は [AIなし運用ガイド](../../docs/guides/weekly_operations.md) から始めます。
 日付付き診断スクリプトを新しい本番入口と取り違えないでください。
 
+別agent・研究者への詳しい引き継ぎは[研究シナリオガイド](../../docs/guides/research_scenario/README.md)と[開始メッセージ](../../docs/guides/research_scenario/AGENT_START_PROMPT.md)を使います。今回の入力・パラメータ・12代表週、操作対象の選択、結果の検算と集計、通信・メモリ・描画失敗の切り分けを記載しています。開発版と計算固定版を分け、資料を読んだだけで新規計算を開始しないでください。
+
 |用途|既存の実行入口|
 |---|---|
 |操作フォルダ生成|`install_operator_kit.py`（既存operationを指定、新規ジョブなし）|

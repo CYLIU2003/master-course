@@ -1,0 +1,107 @@
+{
+  "as_of_jst": "2026-10-06",
+  "scope": "Relevant adviser messages actually read via Slack connector; saved report confirmation and existing analysis, not fresh whole-solver audit",
+  "calculation_git_sha": "f524eca2552a4386bd033a15bbe046c14dc09281",
+  "raw_relevant_slack_evidence_kept_in_local_work_output": true,
+  "raw_relevant_slack_evidence_sha256": "88d88f6dafcac19a048797b02b9731caddf128ad24ddd431de686213d92e5933",
+  "adviser_messages": [
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-10-06 17:38:58 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1791275938973259",
+      "message_ts": "1791275938.973259"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-10-06 16:25:10 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1791271510440109",
+      "message_ts": "1791271510.440109"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-10-06 14:48:46 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1791265726924479",
+      "message_ts": "1791265726.924479"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-10-06 14:21:13 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1791264073663149",
+      "message_ts": "1791264073.663149"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-10-05 18:16:53 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1791191813812339",
+      "message_ts": "1791191813.812339"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-10-05 13:15:45 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1791173745476619",
+      "message_ts": "1791173745.476619"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-10-01 18:39:03 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1790847543977909",
+      "message_ts": "1790847543.977909"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-09-26 12:52:11 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1790394731745649",
+      "message_ts": "1790394731.745649"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-09-26 12:28:08 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1790393288103459",
+      "message_ts": "1790393288.103459"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-09-19 07:23:58 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1789770238278919",
+      "message_ts": "1789770238.278919"
+    },
+    {
+      "author": "Chiyori T. Urabe",
+      "time_jst": "2026-09-16 12:23:59 JST",
+      "url": "https://urabelab.slack.com/archives/D0AHW83UK17/p1789529039703949",
+      "message_ts": "1789529039.703949"
+    }
+  ],
+  "workspace_sources": [
+    {
+      "path": "../../output/executed_soc_20260926/monthly_report/latest.json",
+      "sha256": "85fddc14221b31edc10ea4063a5fef6c97a1f5b407c1ccf9e6078646b4de21af"
+    },
+    {
+      "path": "../../outcome/2026-10-03_research_review/april_may_comparison.json",
+      "sha256": "827d88b346411c05a333cd9d4caea0fe08b1a905ab12c1dadeba87b81a5e2455"
+    },
+    {
+      "path": "../../outcome/2026-10-03_research_review/monthly_mechanism_metrics.csv",
+      "sha256": "5aa90d43154c054f081dc4bd5c7cabaed557b50132feb0450b00aac795652a85"
+    },
+    {
+      "path": "../../outcome/2026-10-03_research_review/README.md",
+      "sha256": "341b416e629b713c54c058be6e169058dbe3e7e09683d7945c17289596562e87"
+    },
+    {
+      "path": "../../outcome/2026-10-02_teacher_comments/README.md",
+      "sha256": "08ae585c4592f9a13646b9ceb866db953dec8cb9a9b282c745cb498ea08a603a"
+    },
+    {
+      "path": "../../先行文献/2026-10-06_配車充電・運用導入評価/文献比較表.md",
+      "sha256": "141adde9d49a4357002619474b089b5835d1b3ffe94224aa265eac0a7c3fbf12"
+    },
+    {
+      "path": "../../先行文献/2026-10-06_配車充電・運用導入評価/literature_catalog.json",
+      "sha256": "6bc8298852d2a26c0db2a1fa7143329dccff7bfa7cf2df101ace2310c4c673cf"
+    }
+  ],
+  "solver_outputs_modified": false,
+  "external_messages_sent": false
+}

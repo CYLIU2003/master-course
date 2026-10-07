@@ -1,0 +1,32 @@
+{
+  "date_jst": "2026-10-05",
+  "requested_model": "opus",
+  "requested_effort": "high",
+  "tools_enabled": false,
+  "safe_mode": true,
+  "strict_mcp_config": true,
+  "session_persistence": false,
+  "rounds": [
+    {
+      "round": 1,
+      "actual_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false,
+      "prompt_sha256": "9bd9a616d33e1842b3541c12a81ccca4b2f947c56b2f1d9844b218862e32a5e2",
+      "response_sha256": "1be034daed351827c9ffa07981c824d67411a3f5364e97516daf0b33850406d2",
+      "published_result_sha256": "f5ef476f4ffa124cf219b80afba4745a5373606d7198558416ab04a6b384606d"
+    },
+    {
+      "round": 2,
+      "actual_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false,
+      "prompt_sha256": "314fd71ba575a280c83f8215b7ae54dccd0fe996ad5fa710043ecaf13873df61",
+      "response_sha256": "359827ba2f15eb2e67b23c732ca49cbf0cc13b5d27d7b351e2782b1c3cca5cfa",
+      "published_result_sha256": "67486ae0f76a3dbbfa19a1e4b27c8e621cab9797e8a4fc349b4bedebd4ae6701"
+    }
+  ],
+  "scope": "Title scope and wording review using provided facts and teacher feedback; no new literature browsing, native audit, advisor approval, or solver run."
+}

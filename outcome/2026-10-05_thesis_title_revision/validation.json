@@ -1,0 +1,31 @@
+{
+  "date_jst": "2026-10-05",
+  "status": "PASS",
+  "title_count": 5,
+  "character_counts": [
+    {
+      "title": "太陽光発電を活用した電気バスの運用に関する研究",
+      "characters": 23
+    },
+    {
+      "title": "太陽光発電を活用した電気バスの運用計画に関する研究",
+      "characters": 25
+    },
+    {
+      "title": "太陽光発電を考慮した電気バスの運行・充電計画",
+      "characters": 22
+    },
+    {
+      "title": "電気バスの運用とエネルギー利用に関する研究",
+      "characters": 21
+    },
+    {
+      "title": "太陽光発電を活用した電気バス営業所の運用計画",
+      "characters": 22
+    }
+  ],
+  "verified_opus_rounds": 2,
+  "local_links_checked": 4,
+  "missing_links": [],
+  "scope": "Document links, candidate text/length and review provenance. No optimization/model change."
+}

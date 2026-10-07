@@ -1,0 +1,310 @@
+[
+  {
+    "number": 1,
+    "title": "修士論文研究　進捗説明資料",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 0
+  },
+  {
+    "number": 2,
+    "title": "研究の問いと、今回の評価",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 3,
+    "title": "対象システムと用語",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 4,
+    "title": "車両・設備・境界条件",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 5,
+    "title": "計画・実行と、評価期間",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 6,
+    "title": "2025年の各月から選んだ12代表週",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 7,
+    "title": "12代表週の運行・充電・費用を確認",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 8,
+    "title": "月別代表週のPV供給と購入電力量",
+    "hidden": false,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 9,
+    "title": "週次費用は車両日費と電力関連費に分けて読む",
+    "hidden": false,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 10,
+    "title": "BESSの初期・終端在庫と解釈",
+    "hidden": false,
+    "native_charts": 1,
+    "native_tables": 0
+  },
+  {
+    "number": 11,
+    "title": "PV総量が近い4月・5月でも、費用は57.6万円違う",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 12,
+    "title": "翌未明に買電し、同日の日中にはPVを抑制する",
+    "hidden": false,
+    "native_charts": 3,
+    "native_tables": 0
+  },
+  {
+    "number": 13,
+    "title": "3月と11月の受電時系列",
+    "hidden": false,
+    "native_charts": 1,
+    "native_tables": 0
+  },
+  {
+    "number": 14,
+    "title": "受電ピークの周辺を同じ時間幅で確認",
+    "hidden": false,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 15,
+    "title": "3月と11月の費用差を費目へ分解",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 16,
+    "title": "天候カーブの分類とデータ範囲",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 17,
+    "title": "同じ天候分類でも、日射は日ごと・時刻ごとに異なる",
+    "hidden": false,
+    "native_charts": 1,
+    "native_tables": 0
+  },
+  {
+    "number": 18,
+    "title": "今回分かったことと、次に確かめること",
+    "hidden": false,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 19,
+    "title": "春（3～5月）の天候別日射カーブ",
+    "hidden": true,
+    "native_charts": 3,
+    "native_tables": 0
+  },
+  {
+    "number": 20,
+    "title": "夏（6～8月）の天候別日射カーブ",
+    "hidden": true,
+    "native_charts": 3,
+    "native_tables": 0
+  },
+  {
+    "number": 21,
+    "title": "秋（9～11月）の天候別日射カーブ",
+    "hidden": true,
+    "native_charts": 3,
+    "native_tables": 0
+  },
+  {
+    "number": 22,
+    "title": "冬（12～2月）の天候別日射カーブ",
+    "hidden": true,
+    "native_charts": 3,
+    "native_tables": 0
+  },
+  {
+    "number": 23,
+    "title": "3月と11月：購入量・時間・最大値の違い",
+    "hidden": true,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 24,
+    "title": "補足：3月・11月と天候分類の回答概要",
+    "hidden": true,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 25,
+    "title": "補足：費用と単位当たり費用（1～6月）",
+    "hidden": true,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 26,
+    "title": "補足：費用と単位当たり費用（7～12月）",
+    "hidden": true,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 27,
+    "title": "補足：代表週の日射量と、月全体との差",
+    "hidden": true,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 28,
+    "title": "補足：今回の結果を解釈するための前提",
+    "hidden": true,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 29,
+    "title": "補足：1月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 30,
+    "title": "補足：2月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 31,
+    "title": "補足：3月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 32,
+    "title": "補足：4月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 33,
+    "title": "補足：5月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 34,
+    "title": "補足：6月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 35,
+    "title": "補足：7月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 36,
+    "title": "補足：8月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 37,
+    "title": "補足：9月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 38,
+    "title": "補足：10月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 39,
+    "title": "補足：11月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 40,
+    "title": "補足：12月代表週の電力需給と車両SOC",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 41,
+    "title": "補足：雨分類でも日中に日射が高い日がある",
+    "hidden": true,
+    "native_charts": 2,
+    "native_tables": 0
+  },
+  {
+    "number": 42,
+    "title": "補足：水平面日射と、PVの設置面日射を分ける",
+    "hidden": true,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 43,
+    "title": "補足：夜間受電が増えた区間の供給と充電需要",
+    "hidden": true,
+    "native_charts": 0,
+    "native_tables": 1
+  },
+  {
+    "number": 44,
+    "title": "補足：同じ6時間内の平坦化だけでは収まらない",
+    "hidden": true,
+    "native_charts": 0,
+    "native_tables": 1
+  }
+]

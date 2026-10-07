@@ -1,0 +1,30 @@
+{
+  "date_jst": "2026-10-05",
+  "files": [
+    {
+      "path": "claude_round1.md",
+      "sha256": "f5ef476f4ffa124cf219b80afba4745a5373606d7198558416ab04a6b384606d",
+      "bytes": 3905
+    },
+    {
+      "path": "claude_round2.md",
+      "sha256": "67486ae0f76a3dbbfa19a1e4b27c8e621cab9797e8a4fc349b4bedebd4ae6701",
+      "bytes": 2533
+    },
+    {
+      "path": "review_settings.json",
+      "sha256": "f6d94c839642cde8d150b11cc87a9c5f7f19433f0d7fe961c2c1d7a0f053373a",
+      "bytes": 1211
+    },
+    {
+      "path": "THESIS_TITLE_CANDIDATES.md",
+      "sha256": "d4935cf8f32ab4f40f6a404a819e63064f094160250c4ebf0f46a4fc8701cb33",
+      "bytes": 5767
+    },
+    {
+      "path": "validation.json",
+      "sha256": "184b657e8b2500c33425e76d71a29e6b848ac6f7e1230945735b765946515131",
+      "bytes": 929
+    }
+  ]
+}

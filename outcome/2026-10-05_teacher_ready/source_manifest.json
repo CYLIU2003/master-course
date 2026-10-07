@@ -1,0 +1,21 @@
+[
+  {
+    "path": "../2026-10-02_teacher_comments/september_progress_20261002_v5_teacher_revised.pptx",
+    "sha256": "c08580588af9ea513907200dd80676ddb2ae42e2793c74d0e49255ceeeadeb64",
+    "role": "revision source with preserved teacher comments"
+  },
+  {
+    "path": "../2026-09-28_september_presentation/evidence/manifest.json",
+    "sha256": "52f6b6288ecf9295bad622a4f71de16b2e1cac0094934326e382cecd4de6dd87",
+    "role": "102 fixed evidence files"
+  },
+  {
+    "path": "../2026-10-05_literature_novelty/TITLE_PROPOSALS.md",
+    "sha256": "fd599a13edcebd0a937635ebfc6f8bd3b2eb2cabee9eedb2c1c93bf0de70bf83",
+    "role": "latest candidate title; teacher approval pending"
+  },
+  {
+    "solver_commit": "f524eca2552a4386bd033a15bbe046c14dc09281",
+    "role": "original experiment code, not current development HEAD"
+  }
+]

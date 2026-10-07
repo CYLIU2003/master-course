@@ -1,0 +1,90 @@
+[
+  {
+    "index": 1,
+    "slide": 7,
+    "id": "{7262CA16-960E-344F-BA0D-563AF7F2BD80}",
+    "text": "どのデータから降水量を持って来ていますか？",
+    "part": "ppt/comments/modernComment_106_623097D7.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{7262CA16-960E-344F-BA0D-563AF7F2BD80}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T06:27:35.626\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1647351767\" sldId=\"262\" /><ns1:graphicFrameMk id=\"12\" creationId=\"{00000000-0000-0000-0000-000000000000}\" /><ns1:tblMk /><ns1:tcMk rowId=\"10002\" colId=\"20001\" /><ns1:txMk cp=\"0\" len=\"13\"><ns1:context len=\"14\" hash=\"4136856352\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"6114113\" y=\"1839574\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>どのデータから降水量を持って来ていますか？</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 2,
+    "slide": 7,
+    "id": "{76EDC12B-EBB3-3E4A-A556-42805AEB3552}",
+    "text": "「雨以外で」は必要な条件ですか？何の何に対する比かが不明瞭な書き方のように見えます",
+    "part": "ppt/comments/modernComment_106_623097D7.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{76EDC12B-EBB3-3E4A-A556-42805AEB3552}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T06:28:50.375\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1647351767\" sldId=\"262\" /><ns1:graphicFrameMk id=\"12\" creationId=\"{00000000-0000-0000-0000-000000000000}\" /><ns1:tblMk /><ns1:tcMk rowId=\"10003\" colId=\"20001\" /><ns1:txMk cp=\"0\" len=\"26\"><ns1:context len=\"27\" hash=\"3305455914\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"8602480\" y=\"2454171\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>「雨以外で」は必要な条件ですか？何の何に対する比かが不明瞭な書き方のように見えます</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 3,
+    "slide": 7,
+    "id": "{5BC36084-E9ED-8846-9357-CD920738F487}",
+    "text": "これはどういう意味でしょうか？雪の日ですか？",
+    "part": "ppt/comments/modernComment_106_623097D7.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{5BC36084-E9ED-8846-9357-CD920738F487}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T06:29:19.101\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1647351767\" sldId=\"262\" /><ns1:graphicFrameMk id=\"12\" creationId=\"{00000000-0000-0000-0000-000000000000}\" /><ns1:tblMk /><ns1:tcMk rowId=\"10004\" colId=\"20000\" /><ns1:txMk cp=\"0\" len=\"7\"><ns1:context len=\"8\" hash=\"2190829128\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"1766966\" y=\"3083758\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>これはどういう意味でしょうか？雪の日ですか？</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 4,
+    "slide": 7,
+    "id": "{13A7ABCE-DAA3-FB49-A242-B44BFB9DEEE3}",
+    "text": "何がどう判別困難か不明瞭です",
+    "part": "ppt/comments/modernComment_106_623097D7.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{13A7ABCE-DAA3-FB49-A242-B44BFB9DEEE3}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T06:29:38.483\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1647351767\" sldId=\"262\" /><ns1:graphicFrameMk id=\"12\" creationId=\"{00000000-0000-0000-0000-000000000000}\" /><ns1:tblMk /><ns1:tcMk rowId=\"10004\" colId=\"20001\" /><ns1:txMk cp=\"0\" len=\"24\"><ns1:context len=\"25\" hash=\"330066693\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"8662441\" y=\"3083758\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>何がどう判別困難か不明瞭です</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 5,
+    "slide": 7,
+    "id": "{7357316B-C599-8C49-B207-6AFFE116F7B9}",
+    "text": "この項目全体が不明瞭です",
+    "part": "ppt/comments/modernComment_106_623097D7.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{7357316B-C599-8C49-B207-6AFFE116F7B9}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T06:30:00.153\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1647351767\" sldId=\"262\" /><ns1:graphicFrameMk id=\"12\" creationId=\"{00000000-0000-0000-0000-000000000000}\" /><ns1:tblMk /><ns1:tcMk rowId=\"10005\" colId=\"20001\" /><ns1:txMk cp=\"0\" len=\"24\"><ns1:context len=\"25\" hash=\"1942910432\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"8197746\" y=\"3698355\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>この項目全体が不明瞭です</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 6,
+    "slide": 9,
+    "id": "{32CCC769-3EA9-4740-A6CB-C694843BA4E5}",
+    "text": "P90はかなり大きな値に見えますが、日中は晴れていて午後に夕立があったというようなケースが多いのでしょうか",
+    "part": "ppt/comments/modernComment_108_5BE48309.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{32CCC769-3EA9-4740-A6CB-C694843BA4E5}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T09:27:23.503\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1541702409\" sldId=\"264\" /><ns1:spMk id=\"10\" creationId=\"{16BC15D0-C17A-4771-AE73-4A65509E9C74}\" /><ns1:txMk cp=\"0\" len=\"7\"><ns1:context len=\"8\" hash=\"2665060231\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"1593090\" y=\"506837\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>P90はかなり大きな値に見えますが、日中は晴れていて午後に夕立があったというようなケースが多いのでしょうか</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 7,
+    "slide": 11,
+    "id": "{6D8896CC-B1AE-0549-80B3-4680C56395ED}",
+    "text": "晴れの日で、夏と冬にこれだけの差があるとすると、さすがに傾斜面日射量を採用する必要があるように考えます。（事業者もこのような設置をするとは考えにくいため）",
+    "part": "ppt/comments/modernComment_10A_44D448FB.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{6D8896CC-B1AE-0549-80B3-4680C56395ED}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T09:28:54.232\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1154763003\" sldId=\"266\" /><ns1:spMk id=\"6\" creationId=\"{92B0952E-3CE8-42A3-AF87-1346B58DD138}\" /><ns1:txMk cp=\"0\" len=\"8\"><ns1:context len=\"9\" hash=\"3654011140\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"1840740\" y=\"506837\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>晴れの日で、夏と冬にこれだけの差があるとすると、さすがに傾斜面日射量を採用する必要があるように考えます。（事業者もこのような設置をするとは考えにくいため）</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 8,
+    "slide": 12,
+    "id": "{77E6885B-EFEE-1E42-A1A0-E372E68F53E5}",
+    "text": "意味が取れません。\n自分のメモ書きではなく、他の人に見せるものということを意識して、表などきちんと修正しましょう。他の行も同様です",
+    "part": "ppt/comments/modernComment_10B_635E1D8C.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{77E6885B-EFEE-1E42-A1A0-E372E68F53E5}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T09:29:58.025\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1667112332\" sldId=\"267\" /><ns1:graphicFrameMk id=\"12\" creationId=\"{00000000-0000-0000-0000-000000000000}\" /><ns1:tblMk /><ns1:tcMk rowId=\"10004\" colId=\"20001\" /><ns1:txMk cp=\"0\" len=\"30\"><ns1:context len=\"31\" hash=\"3918221766\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"9049018\" y=\"2996350\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>意味が取れません。\n自分のメモ書きではなく、他の人に見せるものということを意識して、表などきちんと修正しましょう。他の行も同様です</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 9,
+    "slide": 15,
+    "id": "{3528AA30-32BB-354E-A430-DACF192EBDD7}",
+    "text": "なぜそういう運用になっているかが重要ですが、この後のスライドでもその理由が論理立てて説明はできていないようにも思われます。人間が考えているでしょうか",
+    "part": "ppt/comments/modernComment_10E_5513B9AF.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{3528AA30-32BB-354E-A430-DACF192EBDD7}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T09:32:55.484\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1427356079\" sldId=\"270\" /><ns1:spMk id=\"3\" creationId=\"{3C9AFA02-5A6E-41A5-B5F3-5476F702DF4E}\" /><ns1:txMk cp=\"0\" len=\"30\"><ns1:context len=\"31\" hash=\"1378465831\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"6468146\" y=\"506032\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>なぜそういう運用になっているかが重要ですが、この後のスライドでもその理由が論理立てて説明はできていないようにも思われます。人間が考えているでしょうか</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 10,
+    "slide": 20,
+    "id": "{EBEF2F84-3C07-FB45-9727-6B323B89BDEE}",
+    "text": "これは、他の人に示すスライドには含めなくても良いものです。\n人間が取捨選択をしてください",
+    "part": "ppt/comments/modernComment_113_389B748A.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{EBEF2F84-3C07-FB45-9727-6B323B89BDEE}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T09:35:07.515\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"949712010\" sldId=\"275\" /><ns1:spMk id=\"7\" creationId=\"{D8CD51FD-45A5-42A2-B928-C128386B9CB0}\" /><ns1:txMk cp=\"0\" len=\"14\"><ns1:context len=\"15\" hash=\"931635319\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"5062202\" y=\"499325\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>これは、他の人に示すスライドには含めなくても良いものです。\n人間が取捨選択をしてください</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  },
+  {
+    "index": 11,
+    "slide": 24,
+    "id": "{44CDAC64-D806-F644-A8A2-63B9A27C54A5}",
+    "text": "これも、他の人に見せるスライドに入れる内容になっていません。人間が取捨選択してください",
+    "part": "ppt/comments/modernComment_117_4EF9F43A.xml",
+    "anchor_xml": "<ns0:cm xmlns:ns0=\"http://schemas.microsoft.com/office/powerpoint/2018/8/main\" xmlns:ns1=\"http://schemas.microsoft.com/office/drawing/2013/main/command\" xmlns:ns2=\"http://schemas.microsoft.com/office/powerpoint/2013/main/command\" xmlns:ns3=\"http://schemas.openxmlformats.org/drawingml/2006/main\" id=\"{44CDAC64-D806-F644-A8A2-63B9A27C54A5}\" authorId=\"{7EA59EE4-79A3-4AFB-BAA3-365A261A14E5}\" created=\"2026-10-01T09:35:52.921\"><ns1:txMkLst><ns2:docMk /><ns2:sldMk cId=\"1325003834\" sldId=\"279\" /><ns1:spMk id=\"7\" creationId=\"{2C5DAEFB-58BB-45EF-BD57-FBF70593AFC0}\" /><ns1:txMk cp=\"0\" len=\"13\"><ns1:context len=\"14\" hash=\"3712047050\" /></ns1:txMk></ns1:txMkLst><ns0:pos x=\"4714473\" y=\"499325\" /><ns0:txBody><ns3:bodyPr /><ns3:lstStyle /><ns3:p><ns3:r><ns3:rPr lang=\"ja-JP\" altLang=\"en-US\" /><ns3:t>これも、他の人に見せるスライドに入れる内容になっていません。人間が取捨選択してください</ns3:t></ns3:r></ns3:p></ns0:txBody></ns0:cm>"
+  }
+]

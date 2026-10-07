@@ -1,0 +1,25 @@
+{
+  "requested_model": "opus",
+  "effort": "high",
+  "rounds": [
+    {
+      "round": 1,
+      "modelUsage_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false
+    },
+    {
+      "round": 2,
+      "modelUsage_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false
+    }
+  ],
+  "recommended_title": "太陽光発電の時間変動と運行制約を考慮した電気バスの配車・充電最適化",
+  "title_length": 33,
+  "alternative": "太陽光発電の変動を考慮した電気バスの配車・充電計画と電力利用特性",
+  "alternative_length": 32,
+  "review_scope": "Provided research conditions and prior literature; no independent source retrieval by Claude"
+}

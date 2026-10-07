@@ -1,0 +1,118 @@
+# 近接文献比較表（2022〜2026）
+
+2026-10-05。対象を絞った一次資料調査。網羅的レビューではない。本文該当節は方法・仮定・結果の関係する節の確認であり、全数式の検証ではない。
+
+| ID | 年・原典 | 読取範囲 | 設定と期間 | 本研究との関係 |
+|---|---|---|---|---|
+| L01 | 2022 [Sustainable charging schedule of electric buses in a University Campus: A rolling horizon approach](https://doi.org/10.1016/j.rser.2022.112276)<br>Renewable and Sustainable Energy Reviews 161, 112276<br>査読誌掲載資料 | 本文該当節 | 28日間の実行、24時間窓・15分ごとの採用<br>大学構内の実バス・PVデータ、PV/BESSを含む充電、予測と実行のローリング | 複数日・PV・BESS・ローリングは既存<br>複数路線の混成車両、日別ダイヤ・有限充電器を含む対象事例へ拡張。ただし期間延長自体を新規性としない |
+| L02 | 2023 [Impacts of photovoltaic and energy storage system adoption on public transport: A simulation-based optimization approach](https://doi.org/10.1016/j.rser.2023.113319)<br>Renewable and Sustainable Energy Reviews 181, 113319<br>査読誌掲載資料 | 出版社公開抜粋 | 日々の運用を基に長期設備・年間影響を評価<br>北京の運行・気象データ、PV/BESS構成と充電・費用・排出の評価 | 運行・電力・経済性を一緒に評価することは既存<br>本研究は所与設備の連続7日間運用。設備最適容量・投資回収の研究とは区別する |
+| L03 | 2024 [Electric bus charging scheduling problem considering charging infrastructure integrated with solar photovoltaic and energy storage systems](https://doi.org/10.1016/j.tre.2024.103572)<br>Transportation Research Part E 187, 103572<br>査読誌掲載資料 | 出版社公開抜粋 | 日次充電計画<br>PV/BESS、異なる電池容量、可変充電電力、受電ピーク費、複数路線・営業所 | PVと充電需要の時間整合・複数路線・費用最小化は既存<br>連続週の境界と実行会計を含む事例評価へ焦点を絞る |
+| L04 | 2024 [An integrated model of electric bus energy consumption and optimised depot charging](https://www.nature.com/articles/s44333-024-00008-2)<br>npj Sustainable Mobility and Transport 1, 10<br>査読誌掲載資料 | 本文該当節 | 1週間、集約SOCの初期・終端90%<br>公開GTFS、気温を含む電費推定、営業所の充電負荷・ピーク・充電器配置 | 週次充電・公開時刻表・受電電力評価は既存<br>同論文はPVを対象外と明記し、公開データ由来の集約モデル。本研究の個別車両・PV・連続状態との対照になる |
+| L05 | 2025 [Optimal charging scheduling of an electric bus fleet with photovoltaic-storage-charging stations](https://doi.org/10.1016/j.apenergy.2025.125714)<br>Applied Energy 390, 125714<br>査読誌掲載資料 | 出版社公開抜粋 | 運行日1日<br>バスごとの充電時間・場所・量とPV蓄電充電所内配分、TOU、売電、分解解法 | 個別バスのPV充電と電力配分は既存<br>売電を行わない所与設備・PV余剰のみBESS充電という対象方策の週内評価 |
+| L06 | 2025/2026 [An Integrated Optimization Framework for Smart Charging of Electric Bus Fleets under Dynamic Electricity Prices with On-Site Solar Generation, Energy Storage, and V2G operations](https://arxiv.org/abs/2509.05940v2)<br>arXiv:2509.05940v2 (2026-02-15; first submitted 2025-09-07)<br>プレプリント掲載資料（査読誌掲載未確認） | 本文該当節 | 24時間のイベント型充電計画<br>所与配車、PV/ESS/V2G、TOU、需要料金、電池劣化、充電器 | 充電可能時間とPV・受電料金の協調は既存<br>本研究は連続7日間と毎時実行評価。新しいイベント型解法を提案したとはしない |
+| L07 | 2025/2026 [Charge Schedule Optimization and Infrastructure Planning for Solar-Integrated Electric Bus Transit Systems](https://arxiv.org/abs/2504.20790v2)<br>arXiv:2504.20790v2 (2026-07-27; first submitted 2025-04-29)<br>プレプリント掲載資料（査読誌掲載未確認） | 本文該当節 | 1/4/12/52シナリオ。週等で平均した気象に対応する日次運用<br>季節・気温・TOU、PV面積・BESS容量・受電契約の二段階設備計画 | 月別/週別の季節シナリオとPV/BESS評価は既存<br>本文は平日便の毎日反復、充電口数十分、日次BESS初終端同量。本研究は日別ダイヤ・有限充電器・週内状態継承を扱う。これは同論文に対する差分で分野全体の未実施証明ではない |
+| L08 | 2026 [Dynamic charging optimization for electric buses under photovoltaic-storage-grid energy supply mode](https://doi.org/10.1016/j.trc.2026.105539)<br>Transportation Research Part C 184, 105539<br>査読誌掲載資料 | 出版社公開抜粋 | 分単位の動的充電<br>複数路線PV/BESS/系統、供給需要の変動、深層強化学習と行動修正 | PV変動への動的再計画は既存<br>本研究はMILP等による週次運用評価。新しいリアルタイム制御・頑健性を主張しない |
+| L09 | 2026 [Charging electric buses with solar power under varying environmental temperatures and sunlight conditions](https://doi.org/10.1016/j.apenergy.2025.127307)<br>Applied Energy 407, 127307 (2026-03-15)<br>査読誌掲載資料 | 出版社公開抜粋 | 6都市の年間各日を求解、四季・環境条件の比較<br>気温・日射・TOUを反映したPV蓄電充電所と電気バスの充電・費用 | 季節・年間気象・PV電力利用・費用評価は既存<br>固定路線・設備下の連続週で運行要求と電力利用を評価する限定した応用問題 |
+| L10 | 2026 [Planning electric bus systems with solar photovoltaic integration using open transit data: A case study of the Dakar BRT](https://arxiv.org/abs/2609.29998v1)<br>arXiv:2609.29998v1 (2026-09-24)<br>プレプリント掲載資料（査読誌掲載未確認） | 本文該当節 | 日次運行の定常SOCと年間PV指標<br>公開GTFSを使うGTFS4EV、充電場所別比較、PV時間整合、費用・CO2 | 公開交通データとPVの導入評価・時間整合指標は既存<br>同事例は定常日次SOC・直接PV充電でsmart charging/定置電池を対象外。本研究は固定設備と週内PV/BESS/充電の計画・実行を追う |
+| L11 | 2026 [Integrated Optimization of Scheduling and Flexible Charging in Mixed Electric-Diesel Urban Transit Bus Systems](https://arxiv.org/abs/2601.11751v1)<br>arXiv:2601.11751v1 (2026-01-16)<br>プレプリント掲載資料（査読誌掲載未確認） | 本文該当節 | 営業所発着の日次車両計画<br>BEV/ディーゼル混成、車両構成・配車・部分充電、充電待ち、列生成 | 混成車両と配車・充電の同時検討は既存<br>固定台帳とPV入力に対する連続週の運用・電力評価 |
+| L12 | 2024/2025 [時間帯別CO₂排出係数を用いた電気バス導入時のCO₂削減効果とエネルギーコストの評価に関する研究](https://www.jstage.jst.go.jp/article/jscejj/80/20/80_24-20020/_article/-char/ja)<br>土木学会論文集 80(20), 24-20020; 巻表示2024、J-STAGE公開2025-07-01<br>査読誌掲載資料 | 抄録・書誌 | 現行仕業を維持する夜間/成行充電の比較<br>日本の電気バス、時間帯別CO2係数、充電パターンとエネルギー費 | 日本事例・充電時刻・環境/費用評価は既存<br>日別ダイヤの連続週とPV・BESS時系列を対象にする |
+| L13 | 2025 [市場価格連動契約における電気バスのV2Bを活用したデマンドレスポンスの事業性評価](https://www.jstage.jst.go.jp/article/jjser/46/1/46_1/_article/-char/ja)<br>エネルギー・資源学会論文誌 46(1), 1-8 (2025-01-10)<br>査読誌掲載資料 | 抄録・書誌 | 運行と年間費用を比較<br>日本の定路線電気バス、V2B、固定/市場連動契約、需要応答 | 電気系分野における運行・電力・経済性の接続は既存<br>本研究はV2B/市場取引を追加せず、所与設備の充電とPV利用を主題にする |
+
+## 書誌・確認箇所・未確認点
+
+### L01 — L. A. L. Zaneti; N. Bañol Arias; M. C. de Almeida; M. J. Rider
+
+Sustainable charging schedule of electric buses in a University Campus: A rolling horizon approach. Renewable and Sustainable Energy Reviews 161, 112276. DOI: [10.1016/j.rser.2022.112276](https://doi.org/10.1016/j.rser.2022.112276).
+
+- 確認箇所：pp. 4-5, Sections 3-4; PDF SHA in private download_manifest.json
+- 未確認・留保：本調査では全ケースの終端値・全数式を再検証していない
+- [本文の一次掲載先](https://ris.utwente.nl/ws/portalfiles/portal/295734445/1_s2.0_S1364032122001964_main.pdf)
+
+### L02 — X. Liu; X. C. Liu; C. Xie; X. Ma
+
+Impacts of photovoltaic and energy storage system adoption on public transport: A simulation-based optimization approach. Renewable and Sustainable Energy Reviews 181, 113319. DOI: [10.1016/j.rser.2023.113319](https://doi.org/10.1016/j.rser.2023.113319).
+
+- 確認箇所：publisher abstract and Introduction contributions
+- 未確認・留保：日境界の全状態継承・終端条件は公開抜粋では未確認
+
+### L03 — Xiaohan Liu; Sonia Yeh; Patrick Plötz; Wenxi Ma; Feng Li; Xiaolei Ma
+
+Electric bus charging scheduling problem considering charging infrastructure integrated with solar photovoltaic and energy storage systems. Transportation Research Part E 187, 103572. DOI: [10.1016/j.tre.2024.103572](https://doi.org/10.1016/j.tre.2024.103572).
+
+- 確認箇所：publisher abstract, highlights, Introduction
+- 未確認・留保：充電口占有・予測情報・日境界の詳細は本文入手前に欠如を断定しない
+
+### L04 — Johannes N. Hendriks; Björn C. P. Sturmberg
+
+An integrated model of electric bus energy consumption and optimised depot charging. npj Sustainable Mobility and Transport 1, 10. DOI: [10.1038/s44333-024-00008-2](https://www.nature.com/articles/s44333-024-00008-2).
+
+- 確認箇所：Methods: Optimising depot charging; weekly demonstration; Eq. 11; publication 2024-11-06
+- 未確認・留保：本研究の一定電費・代理距離は同論文より精緻とはいえない
+
+### L05 — Xiuyu Hu; Hailong Li; Chi Xie
+
+Optimal charging scheduling of an electric bus fleet with photovoltaic-storage-charging stations. Applied Energy 390, 125714. DOI: [10.1016/j.apenergy.2025.125714](https://doi.org/10.1016/j.apenergy.2025.125714).
+
+- 確認箇所：publisher abstract and Introduction; Crossref author metadata
+- 未確認・留保：日をまたぐ状態・終端・充電口の詳細は全本文未確認
+
+### L06 — Louise Caustur; Penelope Hertoghe; Tai-Yu Ma; Martina Vandebroek
+
+An Integrated Optimization Framework for Smart Charging of Electric Bus Fleets under Dynamic Electricity Prices with On-Site Solar Generation, Energy Storage, and V2G operations. arXiv:2509.05940v2 (2026-02-15; first submitted 2025-09-07). DOI: [10.48550/arXiv.2509.05940](https://arxiv.org/abs/2509.05940v2).
+
+- 確認箇所：pp. 7-8 assumptions/event horizon; pp. 16-18 case settings
+- 未確認・留保：v1とv2で題目が異なる。古い題目と最新v2を混同しない
+- [本文の一次掲載先](https://arxiv.org/pdf/2509.05940)
+
+### L07 — Rito Brata Nath; Madhusudan Baldua; Vivek Vasudeva; Tarun Rambha
+
+Charge Schedule Optimization and Infrastructure Planning for Solar-Integrated Electric Bus Transit Systems. arXiv:2504.20790v2 (2026-07-27; first submitted 2025-04-29). DOI: [10.48550/arXiv.2504.20790](https://arxiv.org/abs/2504.20790v2).
+
+- 確認箇所：Sections 4 assumptions, Eq. 25, Section 5.1, Sections 5.2-5.3
+- 未確認・留保：BESS方策・設備決定・電費が異なり、掲載費用との直接優劣比較は不可
+- [本文の一次掲載先](https://arxiv.org/html/2504.20790v2)
+
+### L08 — Yuting Ji; Yiming Bie; Dongfang Ma
+
+Dynamic charging optimization for electric buses under photovoltaic-storage-grid energy supply mode. Transportation Research Part C 184, 105539. DOI: [10.1016/j.trc.2026.105539](https://doi.org/10.1016/j.trc.2026.105539).
+
+- 確認箇所：publisher abstract; Crossref March 2026 issue
+- 未確認・留保：全実験期間・情報集合・終端の細部は公開抜粋では未確認
+
+### L09 — Jiacheng Liu; Xiuyu Hu; Chi Xie; Xiaolei Ma; Weihua Gu; Xiaowen Fu
+
+Charging electric buses with solar power under varying environmental temperatures and sunlight conditions. Applied Energy 407, 127307 (2026-03-15). DOI: [10.1016/j.apenergy.2025.127307](https://doi.org/10.1016/j.apenergy.2025.127307).
+
+- 確認箇所：publisher abstract, Methodology preview, Recommendations; author institution metadata
+- 未確認・留保：DOI中の2025と掲載年2026を区別。連続日状態引継ぎは全文未確認なので未実施と断定しない
+- [著者所属機関の書誌](https://research.polyu.edu.hk/en/publications/charging-electric-buses-with-solar-power-under-varying-environmen/)
+
+### L10 — Jérémy Dumoulin; Cheikh Mouhamed Fadel Kebe; Babacar M. Ndiaye; Noémie Jeannin; Christophe Ballif; Nicolas Wyrsch
+
+Planning electric bus systems with solar photovoltaic integration using open transit data: A case study of the Dakar BRT. arXiv:2609.29998v1 (2026-09-24). DOI: [10.48550/arXiv.2609.29998](https://arxiv.org/abs/2609.29998v1).
+
+- 確認箇所：Section 2: scenario-based charging, local PV model; Section 4.4; Discussion
+- 未確認・留保：単にODPTを使うこと、無AI運用やGUIだけは学術的新規性としない
+- [本文の一次掲載先](https://arxiv.org/html/2609.29998v1)
+
+### L11 — Sadjad Bazarnovi; Taner Cokyasar; Omer Verbas; Abolfazl (Kouros) Mohammadian
+
+Integrated Optimization of Scheduling and Flexible Charging in Mixed Electric-Diesel Urban Transit Bus Systems. arXiv:2601.11751v1 (2026-01-16). DOI: [10.48550/arXiv.2601.11751](https://arxiv.org/abs/2601.11751v1).
+
+- 確認箇所：Section 3 problem definition; Section 4 complete daily columns; case-study abstract
+- 未確認・留保：本研究は車両購入構成の最適化や新しい列生成法を開発していない
+- [本文の一次掲載先](https://arxiv.org/html/2601.11751v1)
+
+### L12 — 井原雄人; 紙屋雄史
+
+時間帯別CO₂排出係数を用いた電気バス導入時のCO₂削減効果とエネルギーコストの評価に関する研究. 土木学会論文集 80(20), 24-20020; 巻表示2024、J-STAGE公開2025-07-01. DOI: [10.2208/jscejj.24-20020](https://www.jstage.jst.go.jp/article/jscejj/80/20/80_24-20020/_article/-char/ja).
+
+- 確認箇所：一次掲載ページの書誌・抄録。PDF取得済みだが全日本語本文の確認は未了
+- 未確認・留保：本研究は時間帯別系統CO2係数をまだ評価していない
+
+### L13 — 阿部圭佑; 前匡鴻; 松橋隆治
+
+市場価格連動契約における電気バスのV2Bを活用したデマンドレスポンスの事業性評価. エネルギー・資源学会論文誌 46(1), 1-8 (2025-01-10). DOI: [10.24778/jjser.46.1_1](https://www.jstage.jst.go.jp/article/jjser/46/1/46_1/_article/-char/ja).
+
+- 確認箇所：一次掲載ページの書誌・抄録。PDF取得済みだが全日本語本文の確認は未了
+- 未確認・留保：掲載先・所属は題目の適切性の参考であり、本研究の新規性の証明ではない

@@ -1,0 +1,353 @@
+{
+  "schema_version": "seasonal_archive_v1",
+  "start": "2025-01-01",
+  "end_exclusive": "2026-01-01",
+  "record_count": 35040,
+  "day_count": 365,
+  "status": "DESCRIPTIVE_COMPLETE_NOT_FORECAST_VALIDATED",
+  "classification_policy": {
+    "version": "solcast_daylight_precip_clearsky_v1",
+    "daylight_clearsky_ghi_w_m2": 20.0,
+    "rainy_daylight_precip_mm": 1.0,
+    "sunny_clearsky_ratio": 0.7,
+    "suspected_solid_precip_temp_c": 2.0,
+    "minimum_days_per_cell": 10
+  },
+  "sources": [
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-01-01_ff30590cb003.json",
+      "sha256": "8e04be4d14b97a3f3c3aee31a5d40fd3880edee99c8a93b44f231adc8b43c07e",
+      "request_sha256": "ff30590cb003d547c0db784b01e0b79e58bdc566ea0351bf7c56cdfc28bf84c9",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-01-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-02-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2976,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-01-01T00:00:00+09:00",
+          "duration": "P31D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:45:49.899498+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-02-01_a6886adde421.json",
+      "sha256": "778a5ea9b89f66482e4352facc19b2a50acac1e905154c8521080fb3413ed105",
+      "request_sha256": "a6886adde4212c26dda22e82d2fadab54568b91e310a5f42e8d1d8b3de7cff29",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-02-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-03-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2688,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-02-01T00:00:00+09:00",
+          "duration": "P28D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:23.403670+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-03-01_b7e28357ef37.json",
+      "sha256": "9be616d925b5ec69cd702efbb0bf3564d5ec39a036bfcfbdb31c78a461731f0f",
+      "request_sha256": "b7e28357ef3775d82759b681932f559eaac7871e50e1c419548b5cd88bbe2d9f",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-03-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-04-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2976,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-03-01T00:00:00+09:00",
+          "duration": "P31D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:25.212383+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-04-01_337785df74a4.json",
+      "sha256": "7a705d4dcc430e880145403cff31bf3ab5a36a6d212966404fd3430e66ad882c",
+      "request_sha256": "337785df74a4f5863a2231a08381ba1d726d19c1e24c87a8daf9490a85b1470e",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-04-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-05-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2880,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-04-01T00:00:00+09:00",
+          "duration": "P30D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:26.556642+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-05-01_8c4b2161cd8a.json",
+      "sha256": "f406b095aeccbc4c1c24050f52a4f1e28a7d1933aefe76c6a7f781ab0ca4cadd",
+      "request_sha256": "8c4b2161cd8a11ef4be83d1b17d42cfdfdea5ef3652edee10967e3f403fb5b66",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-05-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-06-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2976,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-05-01T00:00:00+09:00",
+          "duration": "P31D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:27.981675+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-06-01_9a538fce13c3.json",
+      "sha256": "7f184f3480eb494c075c7bbbddfd78e1605fcc2a4c9ca41fb4f853f5067e5e06",
+      "request_sha256": "9a538fce13c3952c47004158f47cced05c8a7fa5175d76d7b3d4e877a9039ca2",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-06-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-07-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2880,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-06-01T00:00:00+09:00",
+          "duration": "P30D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:29.417028+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-07-01_df10ad7b921a.json",
+      "sha256": "368019e3265cc680e1dcf29ef8a55bc2ead7c1ccfd02e50d5bb1ba47394b0ba7",
+      "request_sha256": "df10ad7b921a54e7d56b1dfbc9c6befaf151829f5ac22ffe7ad9651be6be5e38",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-07-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-08-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2976,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-07-01T00:00:00+09:00",
+          "duration": "P31D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:32.175053+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-08-01_3b32591267b2.json",
+      "sha256": "b5a988f6f4c6b9a6fa460a998436b74c9c9ecdf6989dc4bdd16d2973aedd0bfb",
+      "request_sha256": "3b32591267b2c81348ec746781a01959e24b24786fa1caf11850aed049bfce64",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-08-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-09-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2976,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-08-01T00:00:00+09:00",
+          "duration": "P31D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:33.449357+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-09-01_a827c02d49e1.json",
+      "sha256": "93224540adb817203f6a0ba3fc5a5dfcb9d6346b25f20e12c0dc1a58e3298e46",
+      "request_sha256": "a827c02d49e1d12dedf4ba05a16f4b32f4493b81f3bf64ffdd149da316ced634",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-09-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-10-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2880,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-09-01T00:00:00+09:00",
+          "duration": "P30D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:34.684620+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-10-01_bd0dd3d73386.json",
+      "sha256": "3f50bc49d2413c415c797e4012cee1a232ca1b9d5d6c694ccd2846c735cb51b0",
+      "request_sha256": "bd0dd3d733860fe830bf2814319ac8352393c2c06c4b273bc1a40e72bc82774d",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-10-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-11-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2976,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-10-01T00:00:00+09:00",
+          "duration": "P31D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:36.374597+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-11-01_5213072819b6.json",
+      "sha256": "b525a4505d75dbba22db875a6292ce38ea45a053b04c34d759564a9b33341137",
+      "request_sha256": "5213072819b6a49f277bee0fa0f3623d5e3e554594d019fc399b56e7fff31f52",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-11-01T00:00:00+09:00",
+        "end_exclusive_jst": "2025-12-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2880,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-11-01T00:00:00+09:00",
+          "duration": "P30D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:37.557368+00:00"
+    },
+    {
+      "path": "data/external/solcast_raw/tsurumaki_2025_2026/tsurumaki_2025-12-01_de571f49d79e.json",
+      "sha256": "2bec652c53a592aa7c006f1d38fa2fcc1e9b242578c188f0683eabbde1d0323d",
+      "request_sha256": "de571f49d79e27c357162e72900bffecc7560d9d6173bb1719c31578aa9372be",
+      "request": {
+        "depot_id": "tsurumaki",
+        "start_jst": "2025-12-01T00:00:00+09:00",
+        "end_exclusive_jst": "2026-01-01T00:00:00+09:00",
+        "period_minutes": 15,
+        "expected_records": 2976,
+        "endpoint": "https://api.solcast.com.au/data/historic/radiation_and_weather",
+        "query": {
+          "latitude": 35.63514694444444,
+          "longitude": 139.6462427777778,
+          "start": "2025-12-01T00:00:00+09:00",
+          "duration": "P31D",
+          "period": "PT15M",
+          "time_zone": "utc",
+          "format": "json",
+          "output_parameters": "ghi,dni,dhi,air_temp,clearsky_ghi,cloud_opacity,precipitation_rate"
+        }
+      },
+      "retrieved_at_utc": "2026-09-10T04:46:40.211974+00:00"
+    }
+  ],
+  "artifacts": {
+    "irradiance_15min.csv": {
+      "sha256": "ea40ae054010f1d3e3633609b4988367429d4a2577e373d79898091f5420520f",
+      "bytes": 1874403
+    },
+    "irradiance_60min.csv": {
+      "sha256": "3d7f35592d54526049e1141b5f816d68feaa182a82e7be6244670dedc3ee0f80",
+      "bytes": 601994
+    },
+    "seasonal_curves.csv": {
+      "sha256": "2884718834adb9f2895d24ebf868686274ee29df06ac451f22e9e362d6613656",
+      "bytes": 95544
+    },
+    "seasonal_curves.json": {
+      "sha256": "48f47ffd3952196c58ee11ea322d6894a02dd6bedc6ac7d3745a26a4d486a064",
+      "bytes": 431127
+    },
+    "seasonal_ghi.pdf": {
+      "sha256": "9a2b74e275352255b8d6a469da01e8a2a1c37a81e6c2c63b526d121fa39acdc2",
+      "bytes": 42027
+    },
+    "seasonal_ghi.png": {
+      "sha256": "feeb71d2376001a03b26a0efbe0eb678a0cbc070e88f0f03dff676e11a357453",
+      "bytes": 382885
+    },
+    "seasonal_ghi.svg": {
+      "sha256": "4f3081cada54423b003863d0bebd1b132587a71a4359f7b100db10ea504ca2d3",
+      "bytes": 228283
+    },
+    "weather_labels.csv": {
+      "sha256": "4fc98ee7ad7ba3cf7c7a36b46d9ab90a364744ead34c320038190aabc715f3b2",
+      "bytes": 80864
+    }
+  },
+  "limitations": [
+    "Research weather proxies, not official daily weather observations.",
+    "Temperature-based suspected solid precipitation is excluded; snowfall is not measured here.",
+    "Finite-period reference, not a long-term climatological normal; contributing years and counts are explicit.",
+    "Pointwise empirical quantiles are not calibrated forecast intervals.",
+    "No historical forecast archive or validated forecast-error distribution.",
+    "GHI is horizontal irradiance; a PV conversion needs a separate explicit model."
+  ],
+  "implementation_sha256": {
+    "build_seasonal_archive.py": "cff082e30d04f67d3e4fb641e221f66fe239da592db6c8e2f546a11ec651c4a2",
+    "seasonal_irradiance.py": "74acd2b4701d0be81368ce34ffd44c065e46a6e0ce2770bce1c81a953bf6432f",
+    "solcast_archive.py": "3709639d19c6f599fcc9b44edb28466cbb6bbd620a35c991eeaf476f1f895378"
+  }
+}

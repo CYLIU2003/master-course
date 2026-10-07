@@ -1,0 +1,13 @@
+{
+  "date_jst": "2026-10-03",
+  "source_files_hash_verified": 102,
+  "weeks": 12,
+  "saved_physical_reports_accepted": 12,
+  "new_solver_run": false,
+  "scope": "CSV reaggregation and saved report inspection; not native run revalidation",
+  "normalized_timetable_hash_count": 1,
+  "fleet_parameter_hash_count": 1,
+  "night_relaxation_scope": "Each observed 00-06 segment holds executed grid energy fixed; relaxes charger, availability and SOC deadlines. Not a feasible alternative, solver bound, or weekly optimality bound.",
+  "efficiency_basis": "Frozen scenario eta_charge=eta_discharge=0.95, bus-side BESS discharge",
+  "source_manifest_sha256": "52f6b6288ecf9295bad622a4f71de16b2e1cac0094934326e382cecd4de6dd87"
+}

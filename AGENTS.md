@@ -98,6 +98,14 @@ priority over convenience or attractive output.
 
 ## Task scope and skill selection
 
+- When operating or reporting the current 「仮・正式用」渋21〜23 monthly
+  representative-week scenario, start with
+  [the research scenario handoff](docs/guides/research_scenario/README.md).
+  It records parameters, immutable-input provenance, existing operation tools,
+  result interpretation, and same-attempt recovery. Its dated snapshot is not
+  proof of current worker liveness, formal research acceptance, or permission
+  to launch a job. Use only the sections relevant to the user's request.
+
 - Apply a skill when the requested deliverable matches its scope or the user
   explicitly invokes it. Generic words such as "write", "analyze", or "review"
   alone do not require unrelated skills. Load only relevant supporting files.

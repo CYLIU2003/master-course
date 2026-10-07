@@ -1,0 +1,69 @@
+{
+  "schema": "research_scenario_handoff_documents_v1",
+  "generated_at_utc": "2026-10-06T10:38:23.261471+00:00",
+  "entrypoint": "README.md",
+  "start_prompt": "AGENT_START_PROMPT.md",
+  "scope": "Documentation with relative local links into the existing repository. Not a standalone input/result bundle.",
+  "files": [
+    {
+      "path": "01_CONTEXT.md",
+      "bytes": 6257,
+      "sha256": "b0513f62caafea073648a9af5e6c6b3bcd5fb14a406cbd9889fbd26d1e9ae9ff"
+    },
+    {
+      "path": "02_INPUTS_PARAMETERS.md",
+      "bytes": 9642,
+      "sha256": "b8b770d542060d473ca06193d6bdc2f96ace803eb368d0ae1261eb746038c077"
+    },
+    {
+      "path": "03_RUNBOOK.md",
+      "bytes": 11044,
+      "sha256": "75b7ef24844412dec92bf3354b04d601177645315761dc769473dedfb37fd73b"
+    },
+    {
+      "path": "04_RESULTS.md",
+      "bytes": 11157,
+      "sha256": "2b9fc0c5c4e41b70843e62171eed0b1773fd9595d876169db348d150fb1492af"
+    },
+    {
+      "path": "05_TROUBLESHOOTING.md",
+      "bytes": 9347,
+      "sha256": "9bec7a574da516aa0b62bf3958e55573f01320ab5b5ca4290f2e84680fadaa91"
+    },
+    {
+      "path": "AGENT_START_PROMPT.md",
+      "bytes": 7255,
+      "sha256": "3c1be924e467abd61dbb8d0b53110af83a4319ad318b9318628f55bb782c0fad"
+    },
+    {
+      "path": "checked_state_20261006.json",
+      "bytes": 16873,
+      "sha256": "7e5487a25a339d53aff5b85bc5d09458c8358fb398f154e1cd5f0d13f0b1c626"
+    },
+    {
+      "path": "CLAUDE_REVIEW.md",
+      "bytes": 2072,
+      "sha256": "a5fd2e54da90af7030aa3ca1c52336b132a9da431dde113ecd109059d8bceb17"
+    },
+    {
+      "path": "parameter_map_20261006.json",
+      "bytes": 6107,
+      "sha256": "da8918a833941dce6153811dbbda662fc114e0167efdf773f27ead4ae918773b"
+    },
+    {
+      "path": "powershell_validation.json",
+      "bytes": 925,
+      "sha256": "2b1e806899da4129f21c646ad9fc9f04e9478de43ae4b9fd93e1dfe082aa4bb6"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4201,
+      "sha256": "a044a6238dca2dc48fed5392bd7f022e964e236c21580dcf52ccd5038b1bac06"
+    },
+    {
+      "path": "validation.json",
+      "bytes": 9437,
+      "sha256": "30cb7a7ea4bef2f07dfc8aeacc47085ddfa9b85e70169b87804ad52befd02e2a"
+    }
+  ]
+}

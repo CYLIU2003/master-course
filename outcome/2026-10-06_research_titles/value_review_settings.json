@@ -1,0 +1,14 @@
+{
+  "requested_model": "opus",
+  "effort": "high",
+  "response_models": [
+    "claude-opus-5-5"
+  ],
+  "is_error": false,
+  "titles": {
+    "太陽光発電を活用した電気バスの配車・充電計画と週間運用評価": 29,
+    "太陽光発電を考慮した電気バスの週間配車・充電計画と電力・費用評価": 32,
+    "太陽光発電を活用した電気バスの週間配車・充電計画と電力利用評価": 31
+  },
+  "selected_by": "Codex; Claude recommendation differs as documented"
+}

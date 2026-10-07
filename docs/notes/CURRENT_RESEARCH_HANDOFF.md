@@ -1,5 +1,7 @@
 # Current research handoff
 
+> **Scope notice (2026-10-06):** This document preserves the older SUNNY/RAIN reporting handoff and its fixed `bb0c005` evidence. For the current 「仮・正式用」渋21〜23 monthly representative-week experiment, start with the [research scenario guide](../guides/research_scenario/README.md). Do not transfer the old scenario labels, parameters, release gates, or progress counts to the newer experiment simply because a scenario ID matches. The historical content below is retained.
+
 ## Scope
 
 This handoff covers the thesis-facing SUNNY/RAIN reporting branch only. The

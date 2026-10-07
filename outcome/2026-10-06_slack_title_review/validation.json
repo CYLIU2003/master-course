@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "as_of_jst": "2026-10-06",
+  "title_characters": 26,
+  "reply_characters": 229,
+  "local_links_checked": 51,
+  "source_hashes_recorded": 7,
+  "claude_calls_verified": 2,
+  "report_confirmation": {
+    "revision": "6729fc3bb239e8985c73f9ec537f6bd9d476794bc32391c1a68a996ff4d3a7fd",
+    "complete": true,
+    "included": 12,
+    "declared": 12,
+    "observed_at_utc": "2026-09-27T14:44:30.145167+00:00"
+  },
+  "existing_numeric_crosscheck": {
+    "total_cost_difference_jpy": 576380.8539753808,
+    "model_overage_share_percent": 91.06828938073072,
+    "pv_available_difference_percent": 1.0666344177046927
+  },
+  "scope_limits": [
+    "No new independent whole-solver audit",
+    "No new optimization",
+    "No PPT rendering or edits",
+    "No teacher acceptance",
+    "No Slack or email transmission"
+  ],
+  "errors": [],
+  "validation_record_present_before_link_check": true,
+  "git_diff_whitespace_check": "PASS; existing CRLF conversion warnings only"
+}

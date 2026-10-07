@@ -1,0 +1,76 @@
+{
+  "date_jst": "2026-10-05",
+  "scope": "Literature and title documents, no solver results or full paper copies",
+  "files": [
+    {
+      "path": "literature_matrix.csv",
+      "bytes": 11163,
+      "sha256": "095c2a90205ffd537ea291889b61ac6cbeb46d2d31bf666e15d6da6f5b394866"
+    },
+    {
+      "path": "literature_matrix.json",
+      "bytes": 14033,
+      "sha256": "dd4131d88aef0d31e9cde89645c9a58015468c15c7080dc49bf05a17960d4ed3"
+    },
+    {
+      "path": "literature_matrix.md",
+      "bytes": 15734,
+      "sha256": "a3375f44ba61b6c735ee0f736500328166605aa06e77fd2c52e4dd443e155d2d"
+    },
+    {
+      "path": "NOVELTY_AND_USEFULNESS.md",
+      "bytes": 16428,
+      "sha256": "bf4d211f021931c0e2f6c63f2dd709c85b0c2f1e0a2ffa294046404667d2367d"
+    },
+    {
+      "path": "opus_round1.md",
+      "bytes": 14179,
+      "sha256": "1c390904f003a44c4241e0a1596fb32f3374f3ab93503b0746198bf9ed0f614a"
+    },
+    {
+      "path": "opus_round2.md",
+      "bytes": 8542,
+      "sha256": "8358e67044799efa717367ed5871d9dce5127363f1055e71f0b708154caac606"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3140,
+      "sha256": "dcf2e11e7854f698ba776849996910ad66b4518899b42a887d6988b283c5346f"
+    },
+    {
+      "path": "references.bib",
+      "bytes": 6656,
+      "sha256": "3b53808ccc457ca76f27939cd2a8a87122dc4414c5ff83d0c54426a54dca1a7c"
+    },
+    {
+      "path": "REVIEW_ADOPTION.md",
+      "bytes": 4373,
+      "sha256": "1e55264700bdc7b9d77d51ac75388fde3df13d966fe9062b117cc2f79a45949c"
+    },
+    {
+      "path": "review_settings.json",
+      "bytes": 1278,
+      "sha256": "1b04ee3dba24a661ac92e53e60c06f94e836dc5a6c2d37e92fa79dcfaf5d96fe"
+    },
+    {
+      "path": "SEARCH_LOG.md",
+      "bytes": 4449,
+      "sha256": "092ce44091e3d1a978b296a5d58da745726e9ba8da82c72b162a0a04e1f4ede9"
+    },
+    {
+      "path": "source_manifest.json",
+      "bytes": 6900,
+      "sha256": "6063aaf438161c342b28bd5b0e219bbaa6b58a2f75bf57c8a24ad4e76c3a2e09"
+    },
+    {
+      "path": "TITLE_PROPOSALS.md",
+      "bytes": 5547,
+      "sha256": "fd599a13edcebd0a937635ebfc6f8bd3b2eb2cabee9eedb2c1c93bf0de70bf83"
+    },
+    {
+      "path": "validation.json",
+      "bytes": 1442,
+      "sha256": "57fdc6dc80188f38c78f608fcc5b1721440ae561fcfef2b75b87cc6f6c2c0d52"
+    }
+  ]
+}

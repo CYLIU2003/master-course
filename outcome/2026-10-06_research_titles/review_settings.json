@@ -1,0 +1,23 @@
+{
+  "requested_model": "opus",
+  "effort": "high",
+  "rounds": [
+    {
+      "modelUsage_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false
+    },
+    {
+      "modelUsage_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false
+    }
+  ],
+  "title_lengths": {
+    "太陽光発電を考慮した電気バスの週間配車・充電計画": 24,
+    "太陽光発電を考慮した電気バスの複数日配車・充電計画": 25,
+    "太陽光発電を考慮した電気バスの車両運用・充電計画": 24
+  }
+}

@@ -1,0 +1,323 @@
+{
+  "status": "PASS",
+  "checked_at_utc": "2026-10-06T10:38:23.260142+00:00",
+  "scope": "Documentation links, dates, selected original hashes/DB counts, and actual CLI help under blocked Env/Model constructors. Not a new solve, frontend E2E, SSH test, or formal research approval.",
+  "snapshot_sha256": "7e5487a25a339d53aff5b85bc5d09458c8358fb398f154e1cd5f0d13f0b1c626",
+  "local_links": [
+    {
+      "document": "01_CONTEXT.md",
+      "target": "../../../outcome/2026-10-06_slack_title_review/RESEARCH_TITLE_AND_REPLY.md",
+      "status": "PASS"
+    },
+    {
+      "document": "02_INPUTS_PARAMETERS.md",
+      "target": "../../notes/DAY_WEEK_PARAMETER_COMPARISON_20260927.md",
+      "status": "PASS"
+    },
+    {
+      "document": "02_INPUTS_PARAMETERS.md",
+      "target": "parameter_map_20261006.json",
+      "status": "PASS"
+    },
+    {
+      "document": "03_RUNBOOK.md",
+      "target": "04_RESULTS.md",
+      "status": "PASS"
+    },
+    {
+      "document": "03_RUNBOOK.md",
+      "target": "01_CONTEXT.md",
+      "status": "PASS"
+    },
+    {
+      "document": "03_RUNBOOK.md",
+      "target": "../../notes/NEXT_WEEKLY_RELEASE_20260927.md",
+      "status": "PASS"
+    },
+    {
+      "document": "03_RUNBOOK.md",
+      "target": "../weekly_operations.md",
+      "status": "PASS"
+    },
+    {
+      "document": "04_RESULTS.md",
+      "target": "03_RUNBOOK.md",
+      "status": "PASS"
+    },
+    {
+      "document": "04_RESULTS.md",
+      "target": "../../../outcome/2026-10-03_research_review/README.md",
+      "status": "PASS"
+    },
+    {
+      "document": "04_RESULTS.md",
+      "target": "../../../outcome/2026-10-02_teacher_comments/README.md",
+      "status": "PASS"
+    },
+    {
+      "document": "04_RESULTS.md",
+      "target": "../../../outcome/PPT-maker.md",
+      "status": "PASS"
+    },
+    {
+      "document": "04_RESULTS.md",
+      "target": "../../../outcome/2026-10-03_research_review/april_may_comparison.json",
+      "status": "PASS"
+    },
+    {
+      "document": "05_TROUBLESHOOTING.md",
+      "target": "03_RUNBOOK.md",
+      "status": "PASS"
+    },
+    {
+      "document": "05_TROUBLESHOOTING.md",
+      "target": "04_RESULTS.md",
+      "status": "PASS"
+    },
+    {
+      "document": "CLAUDE_REVIEW.md",
+      "target": "validation.json",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "../../../AGENTS.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "01_CONTEXT.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "02_INPUTS_PARAMETERS.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "04_RESULTS.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "03_RUNBOOK.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "05_TROUBLESHOOTING.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "AGENT_START_PROMPT.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "../weekly_operations.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "04_RESULTS.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "checked_state_20261006.json",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "04_RESULTS.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "validation.json",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "CLAUDE_REVIEW.md",
+      "status": "PASS"
+    }
+  ],
+  "link_count": 28,
+  "weeks_match_source_and_report": true,
+  "cli_help": [
+    {
+      "path": "tools/research/weekly_operator.py",
+      "status": "PASS",
+      "guard": {
+        "exit_code": 0,
+        "constructor_calls": []
+      },
+      "log": "C:/master-course/output/research_scenario_handoff_20261006/weekly_operator_help.txt",
+      "log_sha256": "8851a01e403760da87f1ec545421ecdeefabac7faf8fe09bdacd4b9051f17c4f",
+      "source_sha256": "7bfa6eb6fb830cc9bf38f5d13835df2f29d4a4d7e25d94f3828869116809a4c7"
+    },
+    {
+      "path": "tools/research/scenario_periods.py",
+      "status": "PASS",
+      "guard": {
+        "exit_code": 0,
+        "constructor_calls": []
+      },
+      "log": "C:/master-course/output/research_scenario_handoff_20261006/scenario_periods_help.txt",
+      "log_sha256": "f1a3484f3b5d0683ff533d599844bc180e359babac57068990c5cb196cf30c87",
+      "source_sha256": "f52e94896740d5eca113b5893c580fb7b1b831e6a5b5515cf18eb64644df1030"
+    },
+    {
+      "path": "tools/research/monthly_campaign_report.py",
+      "status": "PASS",
+      "guard": {
+        "exit_code": 0,
+        "constructor_calls": []
+      },
+      "log": "C:/master-course/output/research_scenario_handoff_20261006/monthly_campaign_report_help.txt",
+      "log_sha256": "61bb49d29166dae0d912f8ca045537dddd2627c44cad7d190d2e88c388433be5",
+      "source_sha256": "569fc9a2e11b408139617cc0fbca081e90136808ae7ecf5c967014c62f7393b8"
+    },
+    {
+      "path": "tools/research/install_operator_kit.py",
+      "status": "PASS",
+      "guard": {
+        "exit_code": 0,
+        "constructor_calls": []
+      },
+      "log": "C:/master-course/output/research_scenario_handoff_20261006/install_operator_kit_help.txt",
+      "log_sha256": "3fe2e81d706adbea1b0170c52ea8acc829f6cc5230b80febc4c39e88be41ffaa",
+      "source_sha256": "fb8d6f1858d8ec6357927c677c7b1572b9366ca3316551f30f480b49a3824ad7"
+    },
+    {
+      "path": "tools/thesis_authoring/prepare_september_evidence.py",
+      "status": "PASS",
+      "guard": {
+        "exit_code": 0,
+        "constructor_calls": []
+      },
+      "log": "C:/master-course/output/research_scenario_handoff_20261006/prepare_september_evidence_help.txt",
+      "log_sha256": "9242d539784715cb79c4099fcafbb45aff28007e8f20e88550f4cfc50ee6cae0",
+      "source_sha256": "639cdbcf62c509f478d132bfc82176a6196e3609f649b747affdd9f02057de27"
+    }
+  ],
+  "source_file_count": 18,
+  "powershell_examples": {
+    "mode": "PARSE_ONLY_NOT_EXECUTED",
+    "blocks": [
+      {
+        "document": "03_RUNBOOK.md",
+        "status": "PASS",
+        "lines": 10
+      },
+      {
+        "document": "03_RUNBOOK.md",
+        "status": "PASS",
+        "lines": 5
+      },
+      {
+        "document": "03_RUNBOOK.md",
+        "status": "PASS",
+        "lines": 5
+      },
+      {
+        "document": "03_RUNBOOK.md",
+        "status": "PASS",
+        "lines": 5
+      },
+      {
+        "document": "03_RUNBOOK.md",
+        "status": "PASS",
+        "lines": 8
+      },
+      {
+        "document": "03_RUNBOOK.md",
+        "status": "PASS",
+        "lines": 3
+      },
+      {
+        "document": "04_RESULTS.md",
+        "status": "PASS",
+        "lines": 6
+      },
+      {
+        "document": "04_RESULTS.md",
+        "status": "PASS",
+        "lines": 3
+      },
+      {
+        "document": "04_RESULTS.md",
+        "status": "PASS",
+        "lines": 1
+      }
+    ],
+    "count": 9
+  },
+  "claude_document_review": {
+    "status": "RECEIVED_AND_FACT_CHECKED_CHANGES_APPLIED",
+    "model": [
+      "claude-opus-5-5"
+    ],
+    "effort": "high",
+    "tools": "none",
+    "scope": "Provided documentation only. No repository tools, solver, SSH, frontend or original-plan independent audit.",
+    "response_sha256": "025bfcaa9c178cacf0fd45b7683665d21af86f18f34ba776f2893ffd8e560e33",
+    "decisions": "CLAUDE_REVIEW.md",
+    "claude_re_review_of_final_text": false
+  },
+  "parameter_map_sha256": "da8918a833941dce6153811dbbda662fc114e0167efdf773f27ead4ae918773b",
+  "navigation_links": [
+    {
+      "document": "AGENTS.md",
+      "target": "docs/guides/research_scenario/README.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "docs/guides/research_scenario/README.md",
+      "status": "PASS"
+    },
+    {
+      "document": "README.md",
+      "target": "docs/guides/research_scenario/AGENT_START_PROMPT.md",
+      "status": "PASS"
+    },
+    {
+      "document": "tools/research/README.md",
+      "target": "../../docs/guides/research_scenario/README.md",
+      "status": "PASS"
+    },
+    {
+      "document": "tools/research/README.md",
+      "target": "../../docs/guides/research_scenario/AGENT_START_PROMPT.md",
+      "status": "PASS"
+    },
+    {
+      "document": "docs/guides/weekly_operations.md",
+      "target": "research_scenario/README.md",
+      "status": "PASS"
+    },
+    {
+      "document": "docs/notes/CURRENT_RESEARCH_HANDOFF.md",
+      "target": "../guides/research_scenario/README.md",
+      "status": "PASS"
+    }
+  ],
+  "navigation_link_count": 7,
+  "json_examples": "PARSED",
+  "unchanged_checks_reused": "Five actual CLI --help checks; changes since those checks were documentation only.",
+  "not_performed": [
+    "new optimization",
+    "ODPT/Solcast acquisition",
+    "controller restart",
+    "worker SSH or memory cleanup",
+    "frontend E2E",
+    "new full physical audit",
+    "email/Slack delivery",
+    "Git synchronization",
+    "formal research approval"
+  ]
+}

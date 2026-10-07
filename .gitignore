@@ -72,6 +72,16 @@ NUL
 *.sqlite3
 *.sqlite
 *.db
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.db-wal
+*.db-shm
+
+# Temporary Office locks and chart extraction caches
+~$*
+.chart-data-*/
 
 # Misc
 *.log

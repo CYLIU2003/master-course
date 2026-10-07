@@ -1,0 +1,33 @@
+{
+  "date_jst": "2026-10-05",
+  "cli_version": "2.1.283",
+  "requested_model": "opus",
+  "requested_effort": "high",
+  "tools_enabled": false,
+  "safe_mode": true,
+  "strict_mcp_config": true,
+  "session_persistence": false,
+  "rounds": [
+    {
+      "round": 1,
+      "actual_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false,
+      "response_sha256": "1698b43a14521dc4be21dc4321136384a781f68dd1e750e053f64dbd0e7429d1",
+      "prompt_sha256": "6d0da4e466b9cb3a5ca4d2f735d31d47c0282fa58d6622b3f936377c7b5a7049",
+      "published_result_sha256": "1c390904f003a44c4241e0a1596fb32f3374f3ab93503b0746198bf9ed0f614a"
+    },
+    {
+      "round": 2,
+      "actual_models": [
+        "claude-opus-5-5"
+      ],
+      "is_error": false,
+      "response_sha256": "f46fb238578c91036b9525852618c658f1c7bb2a206cccdd880f77a3fbc0fe25",
+      "prompt_sha256": "e09fa305af2a97056b163b380c9685630609827534c28caadaeb27c04dfabfb3",
+      "published_result_sha256": "8358e67044799efa717367ed5871d9dce5127363f1055e71f0b708154caac606"
+    }
+  ],
+  "scope": "Review of provided matrix and research summaries; no Claude source browsing, native validation, advisor approval, or solver run. Final report contains additional root review corrections."
+}

@@ -1,0 +1,49 @@
+{
+  "date_jst": "2026-10-03",
+  "evidence": {
+    "relative_path": "../2026-09-28_september_presentation/evidence",
+    "manifest_sha256": "52f6b6288ecf9295bad622a4f71de16b2e1cac0094934326e382cecd4de6dd87",
+    "solver_git_sha": "f524eca2552a4386bd033a15bbe046c14dc09281",
+    "scope": "102 file hashes; saved physical reports; CSV supply, aggregate BESS and cost reaggregation. Not a fresh native-run audit."
+  },
+  "literature_search_scope": "Focused primary-source check for weekly bus charging, PV/BESS charging, and seasonal scenarios. Not a systematic or exhaustive novelty review.",
+  "literature": [
+    {
+      "title": "An integrated model of electric bus energy consumption and optimised depot charging",
+      "authors_label": "Hendriks and Sturmberg",
+      "year": 2024,
+      "doi": "10.1038/s44333-024-00008-2",
+      "url": "https://www.nature.com/articles/s44333-024-00008-2",
+      "read_scope": "Primary full-text page, relevant model and weekly charging sections",
+      "supports": "Weekly charging, vehicle availability, stationary battery and grid peak are already studied; the paper does not include onsite solar."
+    },
+    {
+      "title": "Electric bus charging scheduling problem considering charging infrastructure integrated with solar photovoltaic and energy storage systems",
+      "authors_label": "Liu et al.",
+      "year": 2024,
+      "doi": "10.1016/j.tre.2024.103572",
+      "url": "https://doi.org/10.1016/j.tre.2024.103572",
+      "read_scope": "Publisher search abstract only; direct full-text access unavailable",
+      "supports": "PV and energy storage are already considered in electric bus charging scheduling. Full mathematical comparison was not performed."
+    },
+    {
+      "title": "Charge Schedule Optimization and Infrastructure Planning for Solar-Integrated Electric Bus Transit Systems",
+      "authors_label": "Nath et al.",
+      "version": "arXiv:2504.20790v2",
+      "updated": "2026-07-27",
+      "publication_status": "preprint; peer-review status not inferred",
+      "url": "https://arxiv.org/abs/2504.20790v2",
+      "full_text_url": "https://arxiv.org/html/2504.20790v2",
+      "read_scope": "Primary abstract and relevant introduction passages; not complete mathematical audit",
+      "supports": "Seasonal irradiance, temperature-dependent consumption and multiple-period scenarios are already discussed."
+    }
+  ],
+  "claude_review": {
+    "rounds": 3,
+    "model": "claude-sonnet-5",
+    "mode": "tools disabled, read-only supplied evidence review",
+    "scope": "Not direct source-file, paper, Windows or solver audit; not teacher research approval",
+    "adoption_record": "claude_discussion.md"
+  },
+  "new_optimization": false
+}

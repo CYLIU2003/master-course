@@ -1,0 +1,27 @@
+{
+  "pair": [
+    "2025-04-07",
+    "2025-05-12"
+  ],
+  "scope": "Same normalized timetable and fleet parameters; observed monthly plans, not a PV-only controlled counterfactual",
+  "difference_may_minus_april": {
+    "total_cost": 576380.8539753808,
+    "vehicle_usage_cost_jpy": 0.0,
+    "electricity_cost": 56419.54867895904,
+    "fuel_cost": -5779.568827433592,
+    "co2_cost": 840.6900904292261,
+    "contract_overage_cost": 524900.1840334267,
+    "pv_available_kwh": 281.1375000000007,
+    "grid_import_kwh": 1880.6516226320034,
+    "pv_curtailed_kwh": 1697.9688112232652,
+    "bess_final_kwh": 289.240433399204,
+    "observed_overage_kwh": 1049.8003680668535
+  },
+  "overage_cost_share_of_total_difference_percent": 91.06828938073072,
+  "fixed_plan_cost_difference_formula": {
+    "intercept_jpy": 51480.66994195408,
+    "overage_difference_kwh": 1049.8003680668535,
+    "coefficient_jpy_per_overage_kwh": 500,
+    "scope": "Accounting identity for these fixed plans, not reoptimization under another coefficient"
+  }
+}

@@ -32,3 +32,29 @@ outcome/2026-09-05_literature_review/02_adoption_protocol.md text eol=lf
 # Completion bundle and emailed attachments bind these exact original bytes.
 docs/notes/SHIBU21_23_MONTHLY_AUXILIARY_PROOF_BUDGET_RESULTS_20260922.* -text
 docs/notes/figures/shibu21_23_monthly_auxiliary_proof_budget_20260922.* -text
+
+
+# October 2026 research handoff: preserve manifest-bound artifact bytes.
+outcome/2026-09-27_tcu_research_templates/** -text
+outcome/2026-09-27_tcu_research_templates_v2/** -text
+outcome/2026-09-27_tcu_research_templates_v3/** -text
+outcome/2026-09-28_september_presentation/** -text
+outcome/2026-10-02_teacher_comments/** -text
+outcome/2026-10-03_research_review/** -text
+outcome/2026-10-05_literature_novelty/** -text
+outcome/2026-10-05_research_titles/** -text
+outcome/2026-10-05_teacher_ready/** -text
+outcome/2026-10-05_thesis_title_revision/** -text
+outcome/2026-10-06_daily_weather_appendix/** -text
+outcome/2026-10-06_explanation_revision/** -text
+outcome/2026-10-06_research_titles/** -text
+outcome/2026-10-06_slack_title_review/** -text
+docs/guides/research_scenario/** -text
+tools/thesis_authoring/apply_calendar_axes.ps1 -text
+tools/thesis_authoring/build_september_final.mjs -text
+tools/thesis_authoring/export_presentation.ps1 -text
+tools/thesis_authoring/normalize_chart_cache.py -text
+tools/thesis_authoring/prepare_september_evidence.py -text
+outcome/PPT-maker.md -text
+docs/notes/THESIS_MIDTERM_IEEJ_ROADMAP_20261001.md text eol=lf
+tests/test_september_presentation_evidence.py text eol=lf
