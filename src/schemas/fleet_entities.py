@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 
 
 @dataclass
@@ -44,7 +45,7 @@ class VehicleType:
     purchase_cost_jpy: Optional[float] = None          # [JPY]
     fixed_om_cost_jpy_per_day: Optional[float] = None  # [JPY/day]
     fuel_cost_jpy_per_l: float = 145.0                  # [JPY/L] 軽油単価
-    co2_emission_factor_kg_per_l: float = 2.58          # [kgCO2/L]
+    co2_emission_factor_kg_per_l: float = DIESEL_CO2_KG_PER_L  # [kgCO2/L]
     battery_degradation_cost_coeff: float = 0.0         # [JPY/kWh]
 
 

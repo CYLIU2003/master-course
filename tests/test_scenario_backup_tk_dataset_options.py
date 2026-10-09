@@ -51,7 +51,7 @@ class DummyVar:
         ("dieselPricePerL", 145),
         ("gridCo2KgPerKwh", 0),
         ("co2PricePerKg", 0),
-        ("iceCo2KgPerL", 2.64),
+        ("iceCo2KgPerL", 2.62),
         ("degradationWeight", 0),
         ("depotPowerLimitKw", 500),
         ("initialIceFuelPercent", 100.0),

@@ -25,6 +25,7 @@ from src.objective_modes import (
 )
 from src.optimization.common.problem import resolve_service_coverage_mode
 from src.optimization.common.tou_pricing import price_for_minute
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 from src.preprocess.trip_converter import (
     build_vehicle_charger_compat,
     build_vehicle_task_compat,
@@ -868,7 +869,7 @@ def _build_vehicle(
     vehicle_type = str(vehicle_like.get("type") or "BEV").upper()
     battery_kwh = _safe_float(vehicle_like.get("batteryKwh"), 0.0) or None
     fuel_cost_coeff = _safe_float(vehicle_like.get("fuelCostPerL"), 145.0)
-    co2_emission_coeff = _safe_float(vehicle_like.get("co2EmissionKgPerL"), 2.58)
+    co2_emission_coeff = _safe_float(vehicle_like.get("co2EmissionKgPerL"), DIESEL_CO2_KG_PER_L)
     initial_soc_raw = vehicle_like.get("initialSoc")
     initial_soc_default_raw = _first_defined(
         simulation_cfg.get("initial_soc_percent"),

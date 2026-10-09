@@ -105,14 +105,21 @@ def classify_day(rows: Sequence[dict], policy: WeatherClassificationPolicy) -> d
 def build_seasonal_curves(records: list[dict], *, start: date, end_exclusive: date,
                           policy: WeatherClassificationPolicy = WeatherClassificationPolicy(),
                           excluded_dates: Mapping[str, str] | None = None,
-                          fit_before: date | None = None) -> dict:
-    """Build 12 cells and expose withheld days, unknown weather and small samples."""
+                          fit_before: date | None = None,
+                          extra_irradiance_fields: tuple[str, ...] = ()) -> dict:
+    """Build 12 cells and expose withheld days, unknown weather and small samples.
+
+    Weather classes are always decided from GHI.  ``extra_irradiance_fields``
+    (e.g. a pvlib plane-of-array column) are summarized for the same days.
+    """
+    if 'ghi' in extra_irradiance_fields or len(set(extra_irradiance_fields)) != len(extra_irradiance_fields):
+        raise ValueError('Extra irradiance fields must be distinct and exclude ghi')
     if not records:
         raise ValueError('Missing irradiance archive')
     minutes = period_minutes(records[0]['period'])
     lower, upper = (datetime.combine(day, datetime.min.time(), JST) for day in (start, end_exclusive))
     ordered = validate_records(records, lower, upper, minutes,
-                               ('ghi', 'clearsky_ghi', 'precipitation_rate', 'air_temp'))
+                               ('ghi', 'clearsky_ghi', 'precipitation_rate', 'air_temp', *extra_irradiance_fields))
     excluded = dict(excluded_dates or {})
     if any(not reason for reason in excluded.values()):
         raise ValueError('Every held-out day needs an exclusion reason')
@@ -121,6 +128,7 @@ def build_seasonal_curves(records: list[dict], *, start: date, end_exclusive: da
         raise ValueError('Held-out dates must fall within the archive range')
     slots = 1440 // minutes
     daily, curves_by_date = [], {}
+    extra_by_date = {field: {} for field in extra_irradiance_fields}
     for index in range(0, len(ordered), slots):
         rows = ordered[index:index+slots]
         label = classify_day(rows, policy)
@@ -131,6 +139,8 @@ def build_seasonal_curves(records: list[dict], *, start: date, end_exclusive: da
             label.update(quality_flag='excluded', exclusion_reason='not_available_before_fit_cutoff')
         daily.append(label)
         curves_by_date[day] = [float(row['ghi']) for row in rows]
+        for field in extra_irradiance_fields:
+            extra_by_date[field][day] = [float(row[field]) for row in rows]
     cells = []
     for season in SEASONS:
         for weather in WEATHER:
@@ -158,6 +168,19 @@ def build_seasonal_curves(records: list[dict], *, start: date, end_exclusive: da
                                'representative_real_day_curve': curves_by_date[representative],
                                'mean_daily_irradiation_kwh_m2': fmean(energy),
                                'daily_irradiation_distribution': [{'date': row['date'], 'kwh_m2': row['daily_irradiation_kwh_m2']} for row in labels]}
+            for field in extra_irradiance_fields:
+                cell[field] = None
+                if not count:
+                    continue
+                matrix = [extra_by_date[field][day] for day in dates]
+                means = [fmean(column) for column in zip(*matrix)]
+                energy = [math.fsum(row)*minutes/60/1000 for row in matrix]
+                cell[field] = {'mean': means,
+                               **{name: [quantile(column, p) for column in zip(*matrix)]
+                                  for name,p in (('p10',.1), ('p50',.5), ('p90',.9))},
+                               'population_std': [pstdev(column) for column in zip(*matrix)],
+                               'mean_daily_irradiation_kwh_m2': fmean(energy),
+                               'daily_irradiation_distribution': [{'date': day, 'kwh_m2': value} for day, value in zip(dates, energy)]}
             cells.append(cell)
     return {'schema_version': 'seasonal_irradiance_v1', 'timezone': 'Asia/Tokyo',
             'status': ('DESCRIPTIVE_WITH_EMPTY_CELLS' if any(c['ghi'] is None for c in cells)
@@ -169,6 +192,7 @@ def build_seasonal_curves(records: list[dict], *, start: date, end_exclusive: da
             'purpose': 'training_reference' if excluded or fit_before else 'all_period_descriptive_reference',
             'season_definition': {'spring':[3,4,5], 'summer':[6,7,8], 'autumn':[9,10,11], 'winter':[12,1,2]},
             'daily_labels': daily, 'curves': cells,
+            **({'extra_irradiance_fields': list(extra_irradiance_fields)} if extra_irradiance_fields else {}),
             'limitations': ['Research weather proxies, not official daily weather observations.',
                             'Temperature-based suspected solid precipitation is excluded; snowfall is not measured here.',
                             'Finite-period reference, not a long-term climatological normal; contributing years and counts are explicit.',

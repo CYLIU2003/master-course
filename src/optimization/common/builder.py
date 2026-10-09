@@ -52,6 +52,7 @@ from .fleet_contract import (
     vehicle_record_available,
 )
 from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 from src.preprocess.tariff_loader import build_electricity_prices_from_tariff, load_tariff_csv
 from src.objective_modes import (
     canonical_objective_weights_for_mode,
@@ -568,7 +569,7 @@ class ProblemBuilder:
         ice_co2_kg_per_l = float(
             self._first_present(
                 cost_cfg.get("ice_co2_kg_per_l"),
-                2.64,
+                DIESEL_CO2_KG_PER_L,
             )
         )
         weather_strategy_metadata = {}
@@ -760,7 +761,7 @@ class ProblemBuilder:
         demand_charge_on_peak_yen_per_kw: float = 0.0,
         demand_charge_off_peak_yen_per_kw: float = 0.0,
         co2_price_per_kg: float = 0.0,
-        ice_co2_kg_per_l: float = 2.64,
+        ice_co2_kg_per_l: float = DIESEL_CO2_KG_PER_L,
         fixed_route_band_mode: bool = False,
         fixed_route_band_mode_requested: Optional[bool] = None,
         allow_intra_depot_route_swap: Optional[bool] = None,

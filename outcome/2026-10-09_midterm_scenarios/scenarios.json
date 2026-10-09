@@ -1,0 +1,188 @@
+{
+ "schema_version": "midterm_scenarios_v1",
+ "store": "output\\monthly_latest_20260925\\controller\\scenarios",
+ "parent_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+ "parent_hash_at_copy": "815f3e4a86b8cd13a866b446484ed1897ed0f0292bef63209777921dcf47be9b",
+ "parent_unchanged": true,
+ "weeks": [
+  {
+   "season": "winter",
+   "label": "冬（1月代表週）",
+   "start": "2025-01-06"
+  },
+  {
+   "season": "spring",
+   "label": "春（4月代表週）",
+   "start": "2025-04-07"
+  },
+  {
+   "season": "summer",
+   "label": "夏（7月代表週）",
+   "start": "2025-07-07"
+  }
+ ],
+ "diesel_co2": {
+  "factor_kg_co2_per_l": 2.62,
+  "exact_product_kg_co2_per_l": 2.619466666666667,
+  "heat_value_gj_per_kl": 38.0,
+  "carbon_factor_tc_per_gj": 0.0188,
+  "co2_per_carbon": "44/12",
+  "boundary": "tank_to_wheel_combustion_co2_scope1",
+  "excluded": [
+   "well_to_tank_upstream",
+   "CH4",
+   "N2O"
+  ],
+  "publisher": "環境省 温室効果ガス排出量 算定・報告・公表制度",
+  "table": "算定方法・排出係数一覧（R5年度実績以降の排出量算定用）",
+  "url": "https://policies.env.go.jp/earth/ghg-santeikohyo/files/calc/itiran_2023_rev4.pdf",
+  "previous_factor_kg_co2_per_l": 2.58,
+  "previous_factor_derivation": "37.7 GJ/kL * 0.0187 tC/GJ * 44/12 (R4年度実績まで)"
+ },
+ "pv_plane": {
+  "pv_surface_tilt_deg": 30.0,
+  "pv_surface_azimuth_deg": 180.0
+ },
+ "grid_limit_semantics": "physical_grid_import_limit_kw = depot_power_limit_kw = limit",
+ "unchanged_from_parent": {
+  "co2_price_per_kg": 1.0,
+  "grid_co2_kg_per_kwh": 0.5
+ },
+ "scenarios": [
+  {
+   "key": "grid090",
+   "scenario_id": "37aa5fbe-c0bf-4b41-abe6-f805a7cebb90",
+   "name": "中間発表 柱A 受電上限90kW（仮・正式用コピー）",
+   "grid_limit_kw": 90,
+   "active_vehicles": {
+    "BEV": 35,
+    "ICE": 25
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 90.0,
+    "physical_grid_import_limit_kw": 90.0
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "06871a1ebc2014f3dba98f1480b3405557ab0a313744fc4d0b6e55d437632cf5"
+  },
+  {
+   "key": "grid200",
+   "scenario_id": "ec28f851-ed96-4851-9939-fe85dd390661",
+   "name": "中間発表 柱A 受電上限200kW（仮・正式用コピー）",
+   "grid_limit_kw": 200,
+   "active_vehicles": {
+    "BEV": 35,
+    "ICE": 25
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 200.0,
+    "physical_grid_import_limit_kw": 200.0
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "ce922c38e4f6a11f7141d14a0de69e859ecaacd6dccbba68295e2f2199f535a1"
+  },
+  {
+   "key": "grid400",
+   "scenario_id": "b94d231a-8af3-463a-a925-de22359d1c61",
+   "name": "中間発表 柱A 受電上限400kW（仮・正式用コピー）",
+   "grid_limit_kw": 400,
+   "active_vehicles": {
+    "BEV": 35,
+    "ICE": 25
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 400.0,
+    "physical_grid_import_limit_kw": 400.0
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "5341c4d1a0650324e5dc363676c0653b81fb3b7d8ccaacd5adadec03856b3744"
+  },
+  {
+   "key": "grid800",
+   "scenario_id": "c4665b17-cd70-4d3c-aabe-7c7b97923e8e",
+   "name": "中間発表 柱A 受電上限800kW（仮・正式用コピー）",
+   "grid_limit_kw": 800,
+   "active_vehicles": {
+    "BEV": 35,
+    "ICE": 25
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 800.0,
+    "physical_grid_import_limit_kw": 800.0
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "3d386de82992e2364571c8e3d22ba87e694fa21e63786e069fba3c33e102e4c9"
+  },
+  {
+   "key": "all_ice",
+   "scenario_id": "840f43d3-e603-49eb-85ee-ad16aac16327",
+   "name": "中間発表 比較 全車エンジンバス（仮・正式用コピー）",
+   "grid_limit_kw": null,
+   "active_vehicles": {
+    "BEV": 0,
+    "ICE": 60
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 200.0,
+    "physical_grid_import_limit_kw": null
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "9225c62d5b18b5a66fc8d522720630ecaa35a0e2c55eaf8ee4b8c86d9ff70c84"
+  }
+ ]
+}

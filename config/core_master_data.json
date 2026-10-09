@@ -33,7 +33,7 @@
         "fuel_tank_capacity_liter": 200,
         "fuel_cost_yen_per_liter": 145,
         "fuel_consumption_liter_per_km": 0.4,
-        "co2_emission_kg_per_liter": 2.58,
+        "co2_emission_kg_per_liter": 2.62,
         "fixed_use_cost_yen_per_day": 3000
       }
     },
@@ -60,7 +60,7 @@
         "fuel_tank_capacity_liter": 200,
         "fuel_cost_yen_per_liter": 145,
         "fuel_consumption_liter_per_km": 0.4,
-        "co2_emission_kg_per_liter": 2.58,
+        "co2_emission_kg_per_liter": 2.62,
         "fixed_use_cost_yen_per_day": 3000
       }
     },
@@ -87,7 +87,7 @@
         "fuel_tank_capacity_liter": 200,
         "fuel_cost_yen_per_liter": 145,
         "fuel_consumption_liter_per_km": 0.4,
-        "co2_emission_kg_per_liter": 2.58,
+        "co2_emission_kg_per_liter": 2.62,
         "fixed_use_cost_yen_per_day": 3000
       }
     },
@@ -114,7 +114,7 @@
         "fuel_tank_capacity_liter": 200,
         "fuel_cost_yen_per_liter": 145,
         "fuel_consumption_liter_per_km": 0.4,
-        "co2_emission_kg_per_liter": 2.58,
+        "co2_emission_kg_per_liter": 2.62,
         "fixed_use_cost_yen_per_day": 3000
       }
     }

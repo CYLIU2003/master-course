@@ -13,6 +13,7 @@ import math
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 
 pd = None
 
@@ -273,7 +274,7 @@ def load_vehicles(path: Path) -> List[Vehicle]:
             charge_efficiency=float(r.get("charge_efficiency") or 0.95),
             fuel_tank_capacity=_na(r.get("fuel_tank_capacity")),
             fuel_cost_coeff=float(r.get("fuel_cost_coeff") or 145.0),
-            co2_emission_coeff=float(r.get("co2_emission_coeff") or 2.58),
+            co2_emission_coeff=float(r.get("co2_emission_coeff") or DIESEL_CO2_KG_PER_L),
         )
         vehicles.append(v)
     return vehicles

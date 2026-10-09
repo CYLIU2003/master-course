@@ -17,6 +17,9 @@ from src.optimization.common.date_series import (
 from src.optimization.common.solcast_pv_profiles import _build_daily_profile
 from src.preprocess.weather.solcast_archive import JST, load_verified_archive, parse_timestamp
 from src.preprocess.weather.seasonal_forecast_proxy import predict_climatology_ghi
+from src.preprocess.weather.tilted_irradiance import (
+    SurfacePlane, plane_from_config, poa_for_solcast_rows, poa_from_ghi,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -60,29 +63,52 @@ def _verified_timetable(directory: Path) -> tuple[dict,dict]:
     return payload,manifest
 
 
-def _date_pv_rows(raw_directory: Path, dates: list[str], timestep_min: int, performance_ratio: float) -> tuple[list[dict],list[dict]]:
+def _conversion_metadata(plane: SurfacePlane | None, *, decomposition: str | None) -> dict:
+    if plane is None:
+        return {'irradiance_column':'ghi',
+                'conversion_model':'CF=min(1,GHI/1000*PR); horizontal-irradiance proxy'}
+    return {'irradiance_column':plane.label(),
+            'conversion_model':f'CF=min(1,POA/1000*PR); POA on a fixed {plane.tilt_deg:g} deg plane via pvlib',
+            'irradiance_plane':plane.describe(),'irradiance_decomposition':decomposition}
+
+
+def _site_coordinates(sources: list[dict]) -> tuple[float,float]:
+    coordinates = {(float(item['request']['query']['latitude']),float(item['request']['query']['longitude']))
+                   for item in sources}
+    if len(coordinates) != 1:
+        raise ValueError('Tilted irradiance requires exactly one archive site')
+    return coordinates.pop()
+
+
+def _date_pv_rows(raw_directory: Path, dates: list[str], timestep_min: int, performance_ratio: float,
+                  plane: SurfacePlane | None = None) -> tuple[list[dict],list[dict]]:
     start,end = date.fromisoformat(dates[0]),date.fromisoformat(dates[-1])+timedelta(days=1)
     rows,sources = load_verified_archive(raw_directory,start,end)
+    irradiance = [float(row['ghi']) for row in rows]
+    if plane is not None:
+        latitude, longitude = _site_coordinates(sources)
+        irradiance = poa_for_solcast_rows(rows, latitude=latitude, longitude=longitude, plane=plane)
     grouped = defaultdict(list)
-    for row in rows:
+    for row, value in zip(rows, irradiance):
         period_minutes = int(row['period'][2:-1])
         stamp = parse_timestamp(row['period_end']).astimezone(JST)
         day = (stamp-timedelta(minutes=period_minutes)).date().isoformat()
-        grouped[day].append((stamp,float(row['ghi']),period_minutes))
+        grouped[day].append((stamp,value,period_minutes))
     profiles = []
     for day in dates:
         profile = _build_daily_profile(grouped[day],target_date=day,slot_minutes=timestep_min,
                                       pv_capacity_kw=1,performance_ratio=performance_ratio,require_complete_day=True)
         profiles.append({'date':day,'slot_minutes':timestep_min,'capacity_factor_by_slot':profile['capacity_factor_by_slot'],
-                         'irradiance_column':'ghi','performance_ratio':performance_ratio,
-                         'conversion_model':'CF=min(1,GHI/1000*PR); horizontal-irradiance proxy',
+                         'performance_ratio':performance_ratio,
+                         **_conversion_metadata(plane, decomposition='solcast_dni_dhi' if plane else None),
                          'data_kind':'historical_estimated_actuals_not_forecasts'})
     return profiles,sources
 
 
 def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
                         performance_ratio: float, *,
-                        forecast_directory: Path | None = None) -> tuple[list[dict], dict]:
+                        forecast_directory: Path | None = None,
+                        plane: SurfacePlane | None = None) -> tuple[list[dict], dict]:
     """Build predictions without accepting any evaluation-period weather."""
     directory = forecast_directory or repo_root / 'data/derived/seasonal_irradiance/tsurumaki/forecast_holdouts'
     manifest = _read(directory / 'manifest.json')
@@ -114,18 +140,26 @@ def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
                          'manifest_sha256': _digest(directory / 'manifest.json'),
                          'weekly_profile_sha256': _digest(profile_path),
                          'weekly_profile_verified': True}
+    # The frozen forecast is a GHI climatology; a tilted plane is derived from
+    # those same predictions after the hash checks above (Erbs decomposition).
+    irradiance = [row['ghi_w_m2'] for row in predictions]
+    if plane is not None:
+        irradiance = poa_from_ghi([parse_timestamp(row['valid_end']) for row in predictions],
+                                  [model_step] * len(predictions), irradiance,
+                                  latitude=float(model['latitude']), longitude=float(model['longitude']),
+                                  plane=plane)
     profiles = []
     for day in dates:
-        values = [(parse_timestamp(row['valid_end']).astimezone(JST), row['ghi_w_m2'], model_step)
-                  for row in predictions if row['valid_start'][:10] == day]
+        values = [(parse_timestamp(row['valid_end']).astimezone(JST), value, model_step)
+                  for row, value in zip(predictions, irradiance) if row['valid_start'][:10] == day]
         profile = _build_daily_profile(values, target_date=day, slot_minutes=timestep_min,
                                       pv_capacity_kw=1, performance_ratio=performance_ratio,
                                       require_complete_day=True)
         profiles.append({'date': day, 'slot_minutes': timestep_min,
                          'capacity_factor_by_slot': profile['capacity_factor_by_slot'],
-                         'irradiance_column': 'ghi', 'performance_ratio': performance_ratio,
+                         'performance_ratio': performance_ratio,
                          'data_kind': 'training_only_climatology_proxy',
-                         'conversion_model': 'CF=min(1,GHI/1000*PR); horizontal-irradiance proxy'})
+                         **_conversion_metadata(plane, decomposition='pvlib_erbs_from_climatology_ghi' if plane else None)})
     return profiles, {'model_sha256': _digest(model_path),
                       'training_end_exclusive': model['training_end_exclusive'],
                       'issued_at': starts[0].isoformat(),
@@ -218,13 +252,16 @@ def prepare_date_series_scenario(scenario: dict[str,Any], *, repo_root: Path = R
         assets = [dict(value,depot_id=key) for key,value in assets.items()]
     asset = next((deepcopy(row) for row in assets if row.get('depot_id')=='tsurumaki'),{'depot_id':'tsurumaki'})
     step = int(cfg.get('timestep_min') or cfg.get('time_step_min') or 30)
-    profiles,sources = _date_pv_rows(repo_root/'data/external/solcast_raw/tsurumaki_2025_2026',dates,step,float(asset.get('performance_ratio') or .85))
+    plane = plane_from_config(asset)
+    profiles,sources = _date_pv_rows(repo_root/'data/external/solcast_raw/tsurumaki_2025_2026',dates,step,
+                                     float(asset.get('performance_ratio') or .85),plane)
     information_mode = cfg.get('pv_information_mode') or 'historical_perfect_information'
     forecast_audit = None
     execution_input = None
     if information_mode == 'training_only_forecast_proxy':
         execution_input = _persist_actual_profiles(repo_root, profiles, sources, dates, step)
-        profiles, forecast_audit = _date_forecast_rows(repo_root, dates, step, float(asset.get('performance_ratio') or .85))
+        profiles, forecast_audit = _date_forecast_rows(repo_root, dates, step, float(asset.get('performance_ratio') or .85),
+                                                       plane=plane)
     elif information_mode != 'historical_perfect_information':
         raise ValueError('Unknown PV information mode')
     # Dated profiles are a new explicit source; old single-day convenience
@@ -232,12 +269,13 @@ def prepare_date_series_scenario(scenario: dict[str,Any], *, repo_root: Path = R
     for key in ('capacity_factor_by_slot','pv_generation_kwh_by_slot','pv_generation_kwh_by_date',
                 'pv_case_id','pv_source_date'):
         asset.pop(key,None)
-    asset.update(pv_capacity_factor_by_date=profiles,pv_profile_source='verified_dated_solcast_ghi',
+    asset.update(pv_capacity_factor_by_date=profiles,
+                 pv_profile_source='verified_dated_solcast_ghi' if plane is None else f'verified_dated_solcast_{plane.label()}',
                  pv_profile_dates=dates,pv_slot_minutes=step,pv_input_semantics='gross_generation_before_depot_load',
                  depot_load_model='explicit_zero_nontraction_load',
                  depot_load_kwh_by_slot=[0.0] * (1440 // step * len(dates)))
     if forecast_audit is not None:
-        asset['pv_profile_source'] = 'training_only_climatology_proxy'
+        asset['pv_profile_source'] = 'training_only_climatology_proxy' if plane is None else f'training_only_climatology_proxy_{plane.label()}'
     asset['bess_balance_period'] = cfg.get('bess_balance_period') or 'daily'
     if asset['bess_balance_period'] not in ('daily','evaluation_period'):
         raise ValueError('Unsupported BESS balance period')
@@ -264,7 +302,8 @@ def prepare_date_series_scenario(scenario: dict[str,Any], *, repo_root: Path = R
                     price_calendar_policy='repeat_the_declared_fixed_daily_tariff',
                     solar_semantics='date_specific_historical_estimated_actuals_not_historical_forecasts')
     contract.update(pv_information_mode=information_mode, forecast_audit=forecast_audit,
-                    pv_execution_input=execution_input)
+                    pv_execution_input=execution_input,
+                    pv_irradiance_plane=None if plane is None else plane.describe())
     if cfg.get('daily_return_depot_id'):
         contract['bev_terminal_soc_policy'] = cfg.get('bev_terminal_soc_policy')
         contract['final_soc_target_tolerance_percent'] = cfg.get('final_soc_target_tolerance_percent')

@@ -3,13 +3,14 @@ from __future__ import annotations
 import pytest
 
 from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 
 
 def test_emission_factor_loader_prefers_vehicle_catalog_values() -> None:
     factor = lookup_ice_emission_factor("2KG-LV290N4")
 
     assert factor is not None
-    assert factor["co2EmissionKgPerL"] == 2.67
+    assert factor["co2EmissionKgPerL"] == DIESEL_CO2_KG_PER_L
     assert factor["fuelConsumptionLPerKm"] == 0.1869
     assert factor["fuelEfficiencyKmPerL"] == 5.35
 

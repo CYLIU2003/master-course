@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 
 
 
@@ -70,7 +71,7 @@ class Vehicle:
     # ------- ICE 固有 (§6.2.3) -------
     fuel_tank_capacity: Optional[float] = None     # [L]
     fuel_cost_coeff: float = 145.0                 # [円/L]
-    co2_emission_coeff: float = 2.58               # [kg-CO2/L]
+    co2_emission_coeff: float = DIESEL_CO2_KG_PER_L  # [kg-CO2/L]
 
     # ------- 共通運用 (§6.2.1) -------
     available_start: int = 0                       # 運用開始可能 time_idx

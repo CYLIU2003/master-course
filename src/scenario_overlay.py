@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 
 
 _DEFAULT_INPUT_TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "docs" / "constant" / "input_template.json"
@@ -69,7 +70,7 @@ class CostConfig(BaseModel):
     pv_enabled: bool = False
     pv_scale: float = Field(default=1.0, ge=0.0)
     diesel_price_per_l: float = Field(default=0.0, ge=0.0)
-    ice_co2_kg_per_l: float = Field(default=2.64, ge=0.0)
+    ice_co2_kg_per_l: float = Field(default=DIESEL_CO2_KG_PER_L, ge=0.0)
     grid_co2_kg_per_kwh: float = Field(default=0.0, ge=0.0)
     co2_price_per_kg: float = Field(default=1.0, ge=0.0)
     co2_emissions_cap_kg: Optional[float] = Field(default=None, ge=0.0)

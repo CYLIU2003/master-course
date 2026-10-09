@@ -1,5 +1,6 @@
 import math
 import json
+from contextlib import closing
 import sqlite3
 
 import pandas as pd
@@ -61,7 +62,9 @@ def _loop_database(tmp_path):
     _fixture(tmp_path)
     snapshot.build(tmp_path)
     database = tmp_path / snapshot.DATABASE
-    with sqlite3.connect(database) as connection:
+    # Close explicitly: a garbage-collected connection can touch the file after
+    # the caller has hashed it, making the source-hash assertion order-dependent.
+    with closing(sqlite3.connect(database)) as connection, connection:
         trip_id = connection.execute("SELECT trip_id FROM timetable_trips").fetchone()[0]
         connection.execute("UPDATE timetable_trips SET dest_stop_id=?, stop_count=3", (STOP_A,))
         connection.execute("INSERT INTO trip_stops(trip_id,seq,stop_id,arrival_hhmm,arr_min) VALUES (?,3,?,'10:30',630)", (trip_id, STOP_A))

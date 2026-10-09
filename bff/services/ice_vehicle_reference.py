@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 
 
 ICE_VEHICLE_REFERENCE: Dict[str, Dict[str, Any]] = {
@@ -128,9 +129,9 @@ def apply_ice_reference_defaults(vehicle_like: Dict[str, Any]) -> Dict[str, Any]
             payload["energyConsumption"] = round(1.0 / kmpl, 6)
 
     if _is_missing_number(payload.get("co2EmissionKgPerL")):
-        gpkm = _safe_float(payload.get("co2EmissionGPerKm"), 0.0)
-        lpkm = _safe_float(payload.get("energyConsumption"), 0.0)
-        if gpkm > 0 and lpkm > 0:
-            payload["co2EmissionKgPerL"] = round((gpkm / 1000.0) / lpkm, 6)
+        # Fuel combustion factor (環境省 算定・報告・公表制度, R5年度実績以降).
+        # Catalog g/km values are type-approval figures computed with the old
+        # 2.58 kg/L factor and are kept only as catalog references.
+        payload["co2EmissionKgPerL"] = DIESEL_CO2_KG_PER_L
 
     return payload

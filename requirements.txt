@@ -2,6 +2,7 @@
 pandas>=2.0.0
 pyarrow>=16.0.0
 scipy>=1.11.0
+pvlib>=0.13  # tilted-plane PV irradiance (src/preprocess/weather/tilted_irradiance.py)
 plotly>=5.18.0
 matplotlib>=3.8.0
 openpyxl>=3.1.0

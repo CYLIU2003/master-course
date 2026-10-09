@@ -7,6 +7,7 @@ import re
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from src.dispatch.models import VehicleDuty
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 from .bess_terminal_policy import (
     BESS_TERMINAL_POLICY_FIXED_TARGET,
     BESS_TERMINAL_POLICY_RETURN_TO_INITIAL,
@@ -303,7 +304,7 @@ class OptimizationScenario:
     demand_charge_on_peak_yen_per_kw: float = 0.0  # Monthly rate [yen/kW/month], converted to horizon in evaluator
     demand_charge_off_peak_yen_per_kw: float = 0.0  # Monthly rate [yen/kW/month], converted to horizon in evaluator
     co2_price_per_kg: float = 0.0
-    ice_co2_kg_per_l: float = 2.64
+    ice_co2_kg_per_l: float = DIESEL_CO2_KG_PER_L
     planning_days: int = 1
     allow_same_day_depot_cycles: bool = True
     max_depot_cycles_per_vehicle_per_day: int = 3

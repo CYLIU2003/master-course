@@ -34,6 +34,7 @@ from typing import Any
 from urllib import error, parse, request
 
 from src.objective_modes import normalize_objective_mode
+from src.fuel_emission_factors import DIESEL_CO2_KG_PER_L
 from src.optimization.common.cost_components import (
     COST_COMPONENT_DEFINITIONS,
     default_cost_component_flags,
@@ -2142,7 +2143,7 @@ class App:
         self.grid_sell_price_var = tk.StringVar(value="0")
         self.grid_co2_var = tk.StringVar(value="0")
         self.co2_price_var = tk.StringVar(value="0")
-        self.ice_co2_kg_per_l_var = tk.StringVar(value="2.64")
+        self.ice_co2_kg_per_l_var = tk.StringVar(value=str(DIESEL_CO2_KG_PER_L))
         self.degradation_weight_var = tk.StringVar(value="0")
         self.contract_penalty_coeff_var = tk.StringVar(value="1000000")
         self.unserved_penalty_var = tk.StringVar(value="10000")
@@ -2537,7 +2538,7 @@ class App:
         self._param_row2(
             co2_grp,
             "軽油CO2係数 [kg/L]", self.ice_co2_kg_per_l_var,
-            tip0="軽油 1L 燃焼時の CO₂排出量 [kg/L]。デフォルト 2.64（環境省係数）。",
+            tip0="軽油 1L 燃焼時の CO₂排出量 [kg/L]。デフォルト 2.62（環境省 算定・報告・公表制度、R5年度実績以降: 38.0 GJ/kL×0.0188 tC/GJ×44/12）。",
             label1="劣化重み", var1=self.degradation_weight_var,
             tip1=(
                 "電池劣化コストの重み係数。\n"
@@ -7271,7 +7272,7 @@ class App:
             self.co2_price_source_var.set(str(sim.get("co2PriceSource") or "manual"))
             self.co2_reference_date_var.set(str(sim.get("co2ReferenceDate") or ""))
             self.ice_co2_kg_per_l_var.set(
-                self._setting_text(sim, "iceCo2KgPerL", default=2.64)
+                self._setting_text(sim, "iceCo2KgPerL", default=DIESEL_CO2_KG_PER_L)
             )
             self.degradation_weight_var.set(
                 self._setting_text(sim, "degradationWeight", default=0)
@@ -7630,7 +7631,7 @@ class App:
             "touPricing": self._parse_tou_text(),
             "co2PriceSource": self.co2_price_source_var.get().strip() or "manual",
             "co2ReferenceDate": self.co2_reference_date_var.get().strip() or None,
-            "iceCo2KgPerL": self._parse_float(self.ice_co2_kg_per_l_var.get(), 2.64),
+            "iceCo2KgPerL": self._parse_float(self.ice_co2_kg_per_l_var.get(), DIESEL_CO2_KG_PER_L),
             "depotPowerLimitKw": self._parse_float(self.depot_power_limit_var.get(), 500.0),
             "degradationWeight": self._parse_float(self.degradation_weight_var.get(), 0.0),
             "initialSocPercent": self._main_initial_soc_ratio(),
@@ -9024,7 +9025,7 @@ class App:
                 "diesel_price_per_l": self._parse_float(self.diesel_price_var.get(), 145.0),
                 "grid_co2_kg_per_kwh": self._parse_float(self.grid_co2_var.get(), 0.0),
                 "co2_price_per_kg": self._parse_float(self.co2_price_var.get(), 0.0),
-                "ice_co2_kg_per_l": self._parse_float(self.ice_co2_kg_per_l_var.get(), 2.64),
+                "ice_co2_kg_per_l": self._parse_float(self.ice_co2_kg_per_l_var.get(), DIESEL_CO2_KG_PER_L),
                 "depot_power_limit_kw": self._parse_float(self.depot_power_limit_var.get(), 500.0),
                 "tou_pricing": self._parse_tou_text(),
                 "objective_weights": objective_weights,
@@ -10655,7 +10656,7 @@ class App:
 
 ■ CO₂・劣化（詳細パラメータ）
   grid_co2_kg_per_kwh     系統電力の CO₂排出係数 [kg/kWh]（例: 0.5）
-  ice_co2_kg_per_l        軽油の CO₂排出係数 [kg/L]。デフォルト: 2.64
+  ice_co2_kg_per_l        軽油の CO₂排出係数 [kg/L]。デフォルト: 2.62（環境省 算定・報告・公表制度）
   co2_price_per_kg        CO₂費単価 [円/kg]（total_cost モード用）
                           0 = CO₂費を目的関数に含まない
                           co2 モードでは 0 でも CO₂排出量そのものを最小化

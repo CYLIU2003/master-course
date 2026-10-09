@@ -30,6 +30,7 @@ from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import configure_doc,
 from scripts.benchmarks.shibu21_optimization_store import DATABASE_DIR, load_database
 from src.optimization.common.date_series import content_hash, materialize_dated_timetable, timetable_hash
 from src.optimization.common.next_morning import PRICE_POLICY, SCHEMA, resolve_next_morning_contract
+from src.preprocess.weather.tilted_irradiance import plane_from_config
 
 SELECTION = ROOT / "output/monthly_fair_weeks_20260914/week_selection.json"
 FORECAST = ROOT / "output/monthly_fair_weeks_20260914/forecast_holdouts"
@@ -135,14 +136,16 @@ def _overnight_contract(doc: dict, templates: list[dict]) -> dict:
     asset = next(row for row in config["depot_energy_assets"] if row["depot_id"] == "tsurumaki")
     step = int(config["timestep_min"])
     performance_ratio = float(asset.get("performance_ratio") or .85)
+    # The following morning must use the same module plane as the service days.
+    plane = plane_from_config(asset)
     predicted, forecast_audit = _date_forecast_rows(
-        ROOT, extended_dates, step, performance_ratio
+        ROOT, extended_dates, step, performance_ratio, plane=plane
     )
     if predicted[:day_count] != asset["pv_capacity_factor_by_date"]:
         raise ValueError("Next-morning model differs from the frozen service-day forecast")
     actual, actual_sources = _date_pv_rows(
         ROOT / "data/external/solcast_raw/tsurumaki_2025_2026",
-        extended_dates, step, performance_ratio,
+        extended_dates, step, performance_ratio, plane,
     )
     if not actual_sources or len(actual) != day_count + 1:
         raise ValueError("The final next morning has no verified Solcast source")

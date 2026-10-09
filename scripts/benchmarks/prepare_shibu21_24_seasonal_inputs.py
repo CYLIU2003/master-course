@@ -28,6 +28,7 @@ import unicodedata
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from src.preprocess.weather.tilted_irradiance import plane_from_config
 from bff.services.date_series_inputs import (
     _date_forecast_rows,
     _date_pv_rows,
@@ -449,20 +450,26 @@ def configure_doc(
         assets = [dict(value, depot_id=key) for key, value in assets.items()]
     asset = next((deepcopy(row) for row in assets if row.get("depot_id") == "tsurumaki"), {"depot_id": "tsurumaki"})
     step = int(cfg.get("timestep_min") or cfg.get("time_step_min") or 30)
+    # An explicit module plane (e.g. pv_surface_tilt_deg=30) applies to both the
+    # execution actuals and the planning forecast; absent, GHI is used as before.
+    plane = plane_from_config(asset)
     profiles, actual_sources = _date_pv_rows(ROOT / "data/external/solcast_raw/tsurumaki_2025_2026",
-                                               dates, step, float(asset.get("performance_ratio") or .85))
+                                               dates, step, float(asset.get("performance_ratio") or .85),
+                                               plane)
     execution_input = _persist_actual_profiles(ROOT, profiles, actual_sources, dates, step)
     forecast_directory = None
     if design and design.get("require_balanced_monthly_weeks"):
         forecast_directory = ROOT / design["forecast_holdouts_directory"]
     profiles, forecast_audit = _date_forecast_rows(
         ROOT, dates, step, float(asset.get("performance_ratio") or .85),
-        forecast_directory=forecast_directory,
+        forecast_directory=forecast_directory, plane=plane,
     )
     for key in ("capacity_factor_by_slot", "pv_generation_kwh_by_slot", "pv_generation_kwh_by_date",
                 "pv_case_id", "pv_source_date"):
         asset.pop(key, None)
-    asset.update(pv_capacity_factor_by_date=profiles, pv_profile_source="training_only_climatology_proxy",
+    asset.update(pv_capacity_factor_by_date=profiles,
+                 pv_profile_source=("training_only_climatology_proxy" if plane is None
+                                    else f"training_only_climatology_proxy_{plane.label()}"),
                  pv_profile_dates=dates, pv_slot_minutes=step,
                  pv_input_semantics="gross_generation_before_depot_load",
                  depot_load_model="explicit_zero_nontraction_load",
@@ -482,6 +489,7 @@ def configure_doc(
                     pv_capacity_factor_rows_sha256=content_hash(profiles),
                     pv_information_mode="training_only_forecast_proxy", forecast_audit=forecast_audit,
                     pv_execution_input=execution_input,
+                    pv_irradiance_plane=None if plane is None else plane.describe(),
                     bev_terminal_soc_policy="return_to_initial", final_soc_target_tolerance_percent=0.0,
                     solar_semantics="training_only_forecast_for_planning_separate_actuals_for_execution")
     contract.update(bess_controls)
