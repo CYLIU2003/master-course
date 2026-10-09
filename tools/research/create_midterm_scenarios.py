@@ -14,6 +14,7 @@ import argparse
 from copy import deepcopy
 import json
 import os
+import random
 from pathlib import Path
 import sys
 
@@ -51,6 +52,12 @@ def main() -> None:
     parser.add_argument("--grid-limit-mode", choices=("hard", "soft"), default="soft",
                         help="soft: import above the limit is allowed at the contract overage penalty; "
                              "hard: physical cap (2026-10-09 first attempt, Stage 2/rolling infeasible)")
+    parser.add_argument("--ice-initial-fuel-range", default=None,
+                        help="LOW,HIGH percent of the tank, e.g. 40,90: give each engine bus its own starting diesel "
+                             "(seeded uniform draw) and drop the scenario-wide initial_ice_fuel_percent override")
+    parser.add_argument("--ice-fuel-seed", type=int, default=42)
+    parser.add_argument("--key-prefix", default=None, help="Override the scenario key prefix")
+    parser.add_argument("--only-all-ice", action="store_true", help="Create only the all-engine-bus comparison")
     parser.add_argument("--skip-all-ice", action="store_true",
                         help="Create only the grid-limit variants (the all-ICE case does not depend on the mode)")
     args = parser.parse_args()
@@ -72,16 +79,27 @@ def main() -> None:
         raise SystemExit(f"Unexpected parent fleet: BEV {len(bev)}, ICE {len(ice)}")
 
     suffix = "（超過は罰金）" if args.grid_limit_mode == "soft" else "（物理上限）"
-    prefix = "soft" if args.grid_limit_mode == "soft" else "grid"
+    prefix = args.key_prefix or ("soft" if args.grid_limit_mode == "soft" else "grid")
+    fuel_range = None
+    if args.ice_initial_fuel_range:
+        low, high = (float(x) for x in args.ice_initial_fuel_range.split(","))
+        if not 0.0 < low < high <= 100.0:
+            raise SystemExit("--ice-initial-fuel-range must be LOW,HIGH with 0 < LOW < HIGH <= 100")
+        fuel_range = (low, high)
+        suffix += f"（軽油初期{low:g}〜{high:g}%）"
     variants = [{"key": f"{prefix}{limit:03d}", "grid_limit_kw": limit,
                  "name": f"中間発表 柱A 受電上限{limit}kW{suffix}（仮・正式用コピー）"} for limit in GRID_LIMITS_KW]
+    if args.only_all_ice:
+        variants = []
     if not args.skip_all_ice:
-        variants.append({"key": "all_ice", "grid_limit_kw": None,
-                         "name": "中間発表 比較 全車エンジンバス（仮・正式用コピー）"})
+        fuel_note = suffix.split("）", 1)[1] if fuel_range else ""
+        variants.append({"key": f"{args.key_prefix}_all_ice" if args.key_prefix else "all_ice", "grid_limit_kw": None,
+                         "all_ice": True,
+                         "name": f"中間発表 比較 全車エンジンバス{fuel_note}（仮・正式用コピー）"})
     created = []
     for variant in variants:
         identity = scenario_store.duplicate_scenario(PARENT, name=variant["name"])["id"]
-        if variant["key"] == "all_ice":
+        if variant.get("all_ice"):
             # Same 60-vehicle fleet: each BEV is replaced by a copy of the parent's ICE model.
             scenario_store.duplicate_vehicle_batch(identity, ice[0]["id"], len(bev))
         doc = scenario_store._load(identity, skip_graph_arcs=True)
@@ -114,6 +132,23 @@ def main() -> None:
                 f"受電上限 {variant['grid_limit_kw']} kW（契約閾値。超過分は {DEFAULT_CONTRACT_OVERAGE_PENALTY_YEN_PER_KWH:g} 円/kWh の罰金で受電可）。")
                if variant["grid_limit_kw"]
                else "BEV35台を無効化（enabled=false）し、同型ICE35台を追加。受電条件は親と同じ。"))
+        if fuel_range is not None:
+            # Per-bus starting diesel from a draw keyed by (seed, vehicle ID), so a
+            # bus gets the same level in every scenario regardless of fleet size.
+            # The scenario-wide percentage would otherwise override every bus.
+            sim = doc["simulation_config"]
+            max_pct = float(sim.get("max_ice_fuel_percent") or 100.0)
+            min_pct = float(sim.get("min_ice_fuel_percent") or 0.0)
+            if not (min_pct <= fuel_range[0] and fuel_range[1] <= max_pct):
+                raise SystemExit(f"Fuel range must lie within the tank limits {min_pct}-{max_pct}%")
+            sim["initial_ice_fuel_percent"] = None
+            for vehicle in doc["vehicles"]:
+                if str(vehicle.get("type")).upper() != "ICE":
+                    continue
+                pct = random.Random(f"{args.ice_fuel_seed}:{vehicle['id']}").uniform(*fuel_range)
+                vehicle["initialFuelL"] = round(float(vehicle["fuelTankL"]) * pct / 100.0, 1)
+                vehicle["initialFuelSource"] = (f"seeded_uniform_{fuel_range[0]:g}_{fuel_range[1]:g}_pct"
+                                                f"_seed{args.ice_fuel_seed}")
         scenario_store._save(doc)
         saved = scenario_store._load(identity, skip_graph_arcs=True)
         active = [v for v in saved["vehicles"] if v.get("enabled") is not False]
@@ -134,6 +169,9 @@ def main() -> None:
             "contract_overage": {k: saved["simulation_config"].get(k)
                                  for k in ("enable_contract_overage_penalty", "contract_overage_penalty_yen_per_kwh")},
             "pv_plane": {k: saved["scenario_overlay"]["depot_energy_assets"]["tsurumaki"].get(k) for k in PV_PLANE},
+            "ice_initial_fuel_l": sorted(v.get("initialFuelL") for v in active
+                                         if str(v.get("type")).upper() == "ICE" and v.get("initialFuelL") is not None),
+            "initial_ice_fuel_percent": saved["simulation_config"].get("initial_ice_fuel_percent"),
             "weeks": [start for _, _, start in WEEKS],
             "scenario_hash": parent_hash(saved),
         })
@@ -145,6 +183,8 @@ def main() -> None:
                 "weeks": [{"season": s, "label": l, "start": w} for s, l, w in WEEKS],
                 "diesel_co2": DIESEL_CO2_SOURCE, "pv_plane": PV_PLANE,
                 "grid_limit_mode": args.grid_limit_mode,
+                "ice_initial_fuel": ({"rule": "seeded_uniform_percent_of_tank", "range_percent": list(fuel_range),
+                                      "seed": args.ice_fuel_seed} if fuel_range else "scenario_wide_initial_ice_fuel_percent"),
                 "grid_limit_semantics": ("physical_grid_import_limit_kw = depot_power_limit_kw = limit"
                                          if args.grid_limit_mode == "hard" else
                                          "depot_power_limit_kw = limit; import above it priced by the contract overage penalty"),

@@ -1,0 +1,357 @@
+{
+ "schema_version": "midterm_scenarios_v1",
+ "store": "output\\monthly_latest_20260925\\controller\\scenarios",
+ "parent_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+ "parent_hash_at_copy": "815f3e4a86b8cd13a866b446484ed1897ed0f0292bef63209777921dcf47be9b",
+ "parent_unchanged": true,
+ "weeks": [
+  {
+   "season": "winter",
+   "label": "冬（1月代表週）",
+   "start": "2025-01-06"
+  },
+  {
+   "season": "spring",
+   "label": "春（4月代表週）",
+   "start": "2025-04-07"
+  },
+  {
+   "season": "summer",
+   "label": "夏（7月代表週）",
+   "start": "2025-07-07"
+  }
+ ],
+ "diesel_co2": {
+  "factor_kg_co2_per_l": 2.62,
+  "exact_product_kg_co2_per_l": 2.619466666666667,
+  "heat_value_gj_per_kl": 38.0,
+  "carbon_factor_tc_per_gj": 0.0188,
+  "co2_per_carbon": "44/12",
+  "boundary": "tank_to_wheel_combustion_co2_scope1",
+  "excluded": [
+   "well_to_tank_upstream",
+   "CH4",
+   "N2O"
+  ],
+  "publisher": "環境省 温室効果ガス排出量 算定・報告・公表制度",
+  "table": "算定方法・排出係数一覧（R5年度実績以降の排出量算定用）",
+  "url": "https://policies.env.go.jp/earth/ghg-santeikohyo/files/calc/itiran_2023_rev4.pdf",
+  "previous_factor_kg_co2_per_l": 2.58,
+  "previous_factor_derivation": "37.7 GJ/kL * 0.0187 tC/GJ * 44/12 (R4年度実績まで)"
+ },
+ "pv_plane": {
+  "pv_surface_tilt_deg": 30.0,
+  "pv_surface_azimuth_deg": 180.0
+ },
+ "grid_limit_mode": "soft",
+ "ice_initial_fuel": {
+  "rule": "seeded_uniform_percent_of_tank",
+  "range_percent": [
+   40.0,
+   90.0
+  ],
+  "seed": 42
+ },
+ "grid_limit_semantics": "depot_power_limit_kw = limit; import above it priced by the contract overage penalty",
+ "unchanged_from_parent": {
+  "co2_price_per_kg": 1.0,
+  "grid_co2_kg_per_kwh": 0.5
+ },
+ "scenarios": [
+  {
+   "key": "fsoft090",
+   "scenario_id": "19f722b9-5dfb-4b8e-b501-2464b4c68a48",
+   "name": "中間発表 柱A 受電上限90kW（超過は罰金）（軽油初期40〜90%）（仮・正式用コピー）",
+   "grid_limit_kw": 90,
+   "active_vehicles": {
+    "BEV": 35,
+    "ICE": 25
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 90.0,
+    "physical_grid_import_limit_kw": null
+   },
+   "contract_overage": {
+    "enable_contract_overage_penalty": true,
+    "contract_overage_penalty_yen_per_kwh": 500.0
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "ice_initial_fuel_l": [
+    64.0,
+    69.7,
+    71.8,
+    73.1,
+    74.5,
+    75.5,
+    79.0,
+    80.3,
+    81.8,
+    83.9,
+    87.6,
+    89.4,
+    102.0,
+    107.4,
+    109.0,
+    110.8,
+    111.2,
+    125.1,
+    128.0,
+    129.8,
+    134.2,
+    134.4,
+    135.0,
+    143.1,
+    143.2
+   ],
+   "initial_ice_fuel_percent": null,
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "f76e0255d9ab337a71a17c214844cadb8cfab92413e9798caf862b1a7f28590f"
+  },
+  {
+   "key": "fsoft200",
+   "scenario_id": "786261c1-1d46-4b58-927f-d7296ba172fb",
+   "name": "中間発表 柱A 受電上限200kW（超過は罰金）（軽油初期40〜90%）（仮・正式用コピー）",
+   "grid_limit_kw": 200,
+   "active_vehicles": {
+    "BEV": 35,
+    "ICE": 25
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 200.0,
+    "physical_grid_import_limit_kw": null
+   },
+   "contract_overage": {
+    "enable_contract_overage_penalty": true,
+    "contract_overage_penalty_yen_per_kwh": 500.0
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "ice_initial_fuel_l": [
+    64.0,
+    69.7,
+    71.8,
+    73.1,
+    74.5,
+    75.5,
+    79.0,
+    80.3,
+    81.8,
+    83.9,
+    87.6,
+    89.4,
+    102.0,
+    107.4,
+    109.0,
+    110.8,
+    111.2,
+    125.1,
+    128.0,
+    129.8,
+    134.2,
+    134.4,
+    135.0,
+    143.1,
+    143.2
+   ],
+   "initial_ice_fuel_percent": null,
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "b1ace17f84d72c565587de48f26b6c26aa2e456c8ab2c88bb2036c35cf93c106"
+  },
+  {
+   "key": "fsoft400",
+   "scenario_id": "e67df6b5-1218-4fa5-b7e8-74739d24af92",
+   "name": "中間発表 柱A 受電上限400kW（超過は罰金）（軽油初期40〜90%）（仮・正式用コピー）",
+   "grid_limit_kw": 400,
+   "active_vehicles": {
+    "BEV": 35,
+    "ICE": 25
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 400.0,
+    "physical_grid_import_limit_kw": null
+   },
+   "contract_overage": {
+    "enable_contract_overage_penalty": true,
+    "contract_overage_penalty_yen_per_kwh": 500.0
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "ice_initial_fuel_l": [
+    64.0,
+    69.7,
+    71.8,
+    73.1,
+    74.5,
+    75.5,
+    79.0,
+    80.3,
+    81.8,
+    83.9,
+    87.6,
+    89.4,
+    102.0,
+    107.4,
+    109.0,
+    110.8,
+    111.2,
+    125.1,
+    128.0,
+    129.8,
+    134.2,
+    134.4,
+    135.0,
+    143.1,
+    143.2
+   ],
+   "initial_ice_fuel_percent": null,
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "4513ef0fff1588a1903917d05156d669f8e22677cc64d111fcd68738110d5ab0"
+  },
+  {
+   "key": "fsoft800",
+   "scenario_id": "9143d12c-2235-49c0-8b44-3d04c6c39346",
+   "name": "中間発表 柱A 受電上限800kW（超過は罰金）（軽油初期40〜90%）（仮・正式用コピー）",
+   "grid_limit_kw": 800,
+   "active_vehicles": {
+    "BEV": 35,
+    "ICE": 25
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 800.0,
+    "physical_grid_import_limit_kw": null
+   },
+   "contract_overage": {
+    "enable_contract_overage_penalty": true,
+    "contract_overage_penalty_yen_per_kwh": 500.0
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "ice_initial_fuel_l": [
+    64.0,
+    69.7,
+    71.8,
+    73.1,
+    74.5,
+    75.5,
+    79.0,
+    80.3,
+    81.8,
+    83.9,
+    87.6,
+    89.4,
+    102.0,
+    107.4,
+    109.0,
+    110.8,
+    111.2,
+    125.1,
+    128.0,
+    129.8,
+    134.2,
+    134.4,
+    135.0,
+    143.1,
+    143.2
+   ],
+   "initial_ice_fuel_percent": null,
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "ff4fc01c4d20eff92bdd4f46b14c3e166ab6481023706200db0f8cb16a3f0f4f"
+  },
+  {
+   "key": "fsoft_all_ice",
+   "scenario_id": "85927e37-d28e-422e-a0e3-fbf5f03fb7c8",
+   "name": "中間発表 比較 全車エンジンバス（軽油初期40〜90%）（仮・正式用コピー）",
+   "grid_limit_kw": null,
+   "active_vehicles": {
+    "BEV": 0,
+    "ICE": 25
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 200.0,
+    "physical_grid_import_limit_kw": null
+   },
+   "contract_overage": {
+    "enable_contract_overage_penalty": null,
+    "contract_overage_penalty_yen_per_kwh": null
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "ice_initial_fuel_l": [
+    64.0,
+    69.7,
+    71.8,
+    73.1,
+    74.5,
+    75.5,
+    79.0,
+    80.3,
+    81.8,
+    83.9,
+    87.6,
+    89.4,
+    102.0,
+    107.4,
+    109.0,
+    110.8,
+    111.2,
+    125.1,
+    128.0,
+    129.8,
+    134.2,
+    134.4,
+    135.0,
+    143.1,
+    143.2
+   ],
+   "initial_ice_fuel_percent": null,
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "71531e5436ba3250bb4c86b7757420533cde752951a01fd98a438614702daa4a"
+  }
+ ]
+}

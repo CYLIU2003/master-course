@@ -1,0 +1,156 @@
+{
+ "schema_version": "midterm_scenarios_v1",
+ "store": "output\\monthly_latest_20260925\\controller\\scenarios",
+ "parent_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+ "parent_hash_at_copy": "815f3e4a86b8cd13a866b446484ed1897ed0f0292bef63209777921dcf47be9b",
+ "parent_unchanged": true,
+ "weeks": [
+  {
+   "season": "winter",
+   "label": "冬（1月代表週）",
+   "start": "2025-01-06"
+  },
+  {
+   "season": "spring",
+   "label": "春（4月代表週）",
+   "start": "2025-04-07"
+  },
+  {
+   "season": "summer",
+   "label": "夏（7月代表週）",
+   "start": "2025-07-07"
+  }
+ ],
+ "diesel_co2": {
+  "factor_kg_co2_per_l": 2.62,
+  "exact_product_kg_co2_per_l": 2.619466666666667,
+  "heat_value_gj_per_kl": 38.0,
+  "carbon_factor_tc_per_gj": 0.0188,
+  "co2_per_carbon": "44/12",
+  "boundary": "tank_to_wheel_combustion_co2_scope1",
+  "excluded": [
+   "well_to_tank_upstream",
+   "CH4",
+   "N2O"
+  ],
+  "publisher": "環境省 温室効果ガス排出量 算定・報告・公表制度",
+  "table": "算定方法・排出係数一覧（R5年度実績以降の排出量算定用）",
+  "url": "https://policies.env.go.jp/earth/ghg-santeikohyo/files/calc/itiran_2023_rev4.pdf",
+  "previous_factor_kg_co2_per_l": 2.58,
+  "previous_factor_derivation": "37.7 GJ/kL * 0.0187 tC/GJ * 44/12 (R4年度実績まで)"
+ },
+ "pv_plane": {
+  "pv_surface_tilt_deg": 30.0,
+  "pv_surface_azimuth_deg": 180.0
+ },
+ "grid_limit_mode": "soft",
+ "ice_initial_fuel": {
+  "rule": "seeded_uniform_percent_of_tank",
+  "range_percent": [
+   40.0,
+   90.0
+  ],
+  "seed": 42
+ },
+ "grid_limit_semantics": "depot_power_limit_kw = limit; import above it priced by the contract overage penalty",
+ "unchanged_from_parent": {
+  "co2_price_per_kg": 1.0,
+  "grid_co2_kg_per_kwh": 0.5
+ },
+ "scenarios": [
+  {
+   "key": "fsoft2_all_ice",
+   "scenario_id": "e9e14bbb-d41b-40b9-8a40-6d7c074060b8",
+   "name": "中間発表 比較 全車エンジンバス（軽油初期40〜90%）（仮・正式用コピー）",
+   "grid_limit_kw": null,
+   "active_vehicles": {
+    "BEV": 0,
+    "ICE": 60
+   },
+   "ice_co2_kg_per_l": [
+    2.62
+   ],
+   "charging_constraints": {
+    "depot_power_limit_kw": 200.0,
+    "physical_grid_import_limit_kw": null
+   },
+   "contract_overage": {
+    "enable_contract_overage_penalty": null,
+    "contract_overage_penalty_yen_per_kwh": null
+   },
+   "pv_plane": {
+    "pv_surface_tilt_deg": 30.0,
+    "pv_surface_azimuth_deg": 180.0
+   },
+   "ice_initial_fuel_l": [
+    64.0,
+    69.7,
+    71.8,
+    72.7,
+    73.1,
+    74.5,
+    75.5,
+    75.8,
+    77.5,
+    79.0,
+    80.3,
+    80.9,
+    81.8,
+    82.2,
+    82.3,
+    82.5,
+    83.9,
+    84.8,
+    85.0,
+    87.6,
+    87.8,
+    89.4,
+    92.1,
+    93.7,
+    95.3,
+    95.8,
+    98.9,
+    99.6,
+    102.0,
+    107.2,
+    107.3,
+    107.4,
+    109.0,
+    109.1,
+    110.0,
+    110.8,
+    111.2,
+    111.8,
+    117.9,
+    124.7,
+    125.1,
+    125.2,
+    125.5,
+    125.5,
+    126.5,
+    128.0,
+    129.8,
+    134.1,
+    134.2,
+    134.4,
+    134.4,
+    134.9,
+    135.0,
+    136.2,
+    136.4,
+    138.3,
+    141.9,
+    142.5,
+    143.1,
+    143.2
+   ],
+   "initial_ice_fuel_percent": null,
+   "weeks": [
+    "2025-01-06",
+    "2025-04-07",
+    "2025-07-07"
+   ],
+   "scenario_hash": "3ea17b3dd27949f91370b9f77ddbe807d60370bb8947a0a925d2239ba0b01e45"
+  }
+ ]
+}
