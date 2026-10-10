@@ -107,7 +107,9 @@ class Worker(BaseModel):
 
 class ClusterConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    global_gurobi_slots: int = Field(default=2, ge=0, le=2)
+    # Per-PC Named-User academic licenses (2026-10-10) replace the two-session
+    # WLS pool; each worker still admits at most its own `slots`.
+    global_gurobi_slots: int = Field(default=2, ge=0, le=64)
     external_gurobi_slots: int = Field(default=0, ge=0, le=64)
     workers: list[Worker] = Field(default_factory=list)
 

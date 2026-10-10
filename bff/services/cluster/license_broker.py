@@ -16,8 +16,8 @@ from .store import JobStore, now, worker_has_slot
 
 class LicenseBroker:
     def __init__(self, store: JobStore, *, total: int, external: int):
-        if not 0 <= external <= total <= 2:
-            raise ValueError("Managed WLS capacity must be between zero and two")
+        if not 0 <= external <= total <= 64:
+            raise ValueError("Managed Gurobi capacity must be between zero and 64")
         self.store, self.total, self.external = store, total, external
         with store.connect() as db:
             db.execute("""CREATE TABLE IF NOT EXISTS license_reservations (
