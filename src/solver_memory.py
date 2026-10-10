@@ -16,7 +16,10 @@ def memory_limits() -> dict[str, float] | None:
     # Keep 2 GiB within the task budget for Python/input/reporting. Gurobi uses
     # decimal GB; the scheduler and Windows probes use binary GiB.
     hard = (budget - 2) * (1024 ** 3) / 1e9
-    return {"task_budget_gib": budget, "native_hard_gb": hard, "native_soft_gb": hard * .9}
+    # Branch-and-bound nodes beyond half the soft limit go to disk (NodefileStart),
+    # so long MIP searches do not stop at the memory limit (2026-10-11).
+    return {"task_budget_gib": budget, "native_hard_gb": hard, "native_soft_gb": hard * .9,
+            "node_file_start_gb": hard * .45}
 
 
 def apply_memory_limits(model) -> None:
@@ -27,3 +30,6 @@ def apply_memory_limits(model) -> None:
     # larger defaults. Never increase an already stricter model limit.
     model.Params.MemLimit = min(float(model.Params.MemLimit), limits["native_hard_gb"])
     model.Params.SoftMemLimit = min(float(model.Params.SoftMemLimit), limits["native_soft_gb"])
+    # Node files change only where B&B nodes are stored, not the search itself.
+    model.Params.NodefileStart = min(float(getattr(model.Params, "NodefileStart", math.inf)),
+                                     limits["node_file_start_gb"])

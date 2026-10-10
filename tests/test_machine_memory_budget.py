@@ -51,3 +51,16 @@ def test_optimize_boundary_enforces_budget_on_clones(monkeypatch):
             assert self.Params.SoftMemLimit < self.Params.MemLimit
             return "solved"
     assert optimize_model(Model()) == "solved"
+
+
+def test_node_files_start_well_below_the_soft_limit(monkeypatch):
+    monkeypatch.setenv(ENV_KEY,"14")
+    model=SimpleNamespace(Params=SimpleNamespace(MemLimit=float("inf"),SoftMemLimit=float("inf"),NodefileStart=float("inf")))
+    apply_memory_limits(model)
+    limits=memory_limits()
+    assert model.Params.NodefileStart == pytest.approx(12*1024**3/1e9*.45)
+    assert model.Params.NodefileStart < model.Params.SoftMemLimit < model.Params.MemLimit
+    model.Params.NodefileStart=0.5
+    apply_memory_limits(model)
+    assert model.Params.NodefileStart == 0.5
+    assert limits["node_file_start_gb"] < limits["native_soft_gb"]
