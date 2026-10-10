@@ -392,8 +392,8 @@ export default function WorkerNodes({
               <div>
                 <dt>利用可能メモリ</dt>
                 <dd>{metric(node.capability.ram_free_gb, "GB")}</dd>
-                <dt>計算予算の上限（搭載RAMの半分）</dt>
-                <dd>{metric(node.machine_memory_budget_gib ?? ((node.capability.installed_ram_gb ?? node.capability.ram_gb ?? 0) / 2 || null), "GiB")}</dd>
+                <dt>計算予算の上限（搭載RAM−8GiB、最低でも半分）</dt>
+                <dd>{metric(node.machine_memory_budget_gib ?? (((ram) => ram > 0 ? Math.max(ram / 2, ram - 8) : null)(node.capability.installed_ram_gb ?? node.capability.ram_gb ?? 0)), "GiB")}</dd>
                 <dt>OS・他アプリ用の追加余裕</dt>
                 <dd>{metric(node.reserved_system_ram_gb, "GiB")}</dd>
                 <dt>Windows割当余地</dt>

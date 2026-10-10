@@ -22,7 +22,7 @@ const states: Record<string, string> = { PREPARING: "入力を準備中", NOT_PR
   VERIFIED: "検算・集計済み", FAILED: "失敗", BLOCKED: "開始条件で停止", CANCELLED: "取消済み",
   LOST: "通信不明・同じ試行を照合中", STATE_UNKNOWN: "状態不明", FAILED_OR_UNVERIFIED: "失敗または未検算",
   PREPARE_OR_SUBMIT_FAILED: "入力準備・投入に失敗" };
-const reasons: Record<string, string> = { EXCEEDS_MACHINE_MEMORY_BUDGET: "機器の計算予算（搭載RAMの半分）を超過", INSUFFICIENT_OR_UNKNOWN_COMMIT_CAPACITY: "Windowsのメモリ割当余地が不足・未確認", INSUFFICIENT_OR_UNKNOWN_RAM: "空きRAM不足・未確認", WORKER_SLOTS_RESERVED: "別の計算を実行中",
+const reasons: Record<string, string> = { EXCEEDS_MACHINE_MEMORY_BUDGET: "機器の計算予算（搭載RAM−8GiB、最低でも半分）を超過", INSUFFICIENT_OR_UNKNOWN_COMMIT_CAPACITY: "Windowsのメモリ割当余地が不足・未確認", INSUFFICIENT_OR_UNKNOWN_RAM: "空きRAM不足・未確認", WORKER_SLOTS_RESERVED: "別の計算を実行中",
   GUROBI_REQUIRES_32GB_INSTALLED_RAM: "Gurobiは搭載RAM 32GB以上が必要（不足・未確認）",
   CPU_BUSY: "CPU使用率が高い", AC_POWER_REQUIRED: "AC電源未確認", INSUFFICIENT_OR_UNKNOWN_CPU_THREADS: "CPU枠不足",
   GUROBI_LICENSE_UNAVAILABLE: "Gurobiライセンスを利用できません" };

@@ -24,10 +24,14 @@ def finite_number(value: object) -> float | None:
 
 
 def machine_memory_budget(capability: dict) -> float | None:
-    """Use half installed RAM: 16/32/64 GiB machines admit 8/16/32 GiB."""
+    """Installed RAM minus 8 GiB, never below half: 16/32/64 GiB admit 8/24/56 GiB.
+
+    Free RAM, Windows commit headroom, and the per-worker system reserve are
+    still checked separately at admission (2026-10-11 user decision).
+    """
     installed = finite_number(capability.get("installed_ram_gb"))
     capacity = installed if installed is not None else finite_number(capability.get("ram_gb"))
-    return capacity / 2 if capacity is not None and capacity > 0 else None
+    return max(capacity / 2, capacity - 8) if capacity is not None and capacity > 0 else None
 
 
 def commit_capacity_error(capability: dict, required_gb: float) -> str | None:

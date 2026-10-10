@@ -4,17 +4,17 @@ from bff.services.cluster.resource_policy import machine_memory_budget, resource
 from bff.services.cluster.contracts import Worker
 from src.solver_memory import ENV_KEY, memory_limits, apply_memory_limits
 
-@pytest.mark.parametrize("installed,budget", [(16,8),(32,16),(64,32)])
-def test_half_capacity(installed,budget):
+@pytest.mark.parametrize("installed,budget", [(8,4),(16,8),(32,24),(64,56)])
+def test_installed_minus_eight_never_below_half(installed,budget):
     assert machine_memory_budget({"installed_ram_gb":installed,"ram_gb":installed-.3}) == budget
 
-@pytest.mark.parametrize("required,free,commit,allowed", [(16,21.18,22.69,True),(18,30,40,False),(16,19,40,False),(16,30,19,False)])
+@pytest.mark.parametrize("required,free,commit,allowed", [(16,21.18,22.69,True),(18,30,40,True),(24,30,40,True),(25,40,40,False),(16,19,40,False),(16,30,19,False)])
 def test_fresh_admission(required,free,commit,allowed):
     worker=Worker(id="worker",name="worker")
     cap={"installed_ram_gb":32,"ram_gb":31.7,"ram_free_gb":free,"platform":"Windows","commit_available_gb":commit,"disk_free_gb":40,"cpu_count":8}
     fit=resource_fit(worker,cap,{"minimum_ram_gb":required,"requires_gurobi":True,"resource_requirements":{"cpu_threads":4}},[])
     assert fit["eligible"] is allowed
-    assert fit["machine_memory_budget_gib"] == 16
+    assert fit["machine_memory_budget_gib"] == 24
     assert fit["physical_free_ram_gb"] == free
     assert fit["system_reserve_gb"] == 4
 
