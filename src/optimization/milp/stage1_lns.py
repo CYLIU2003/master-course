@@ -125,7 +125,7 @@ def run_stage1_lns(
     """Improve the model's incumbent in place; return auditable telemetry."""
     began = time.monotonic()
     rng = random.Random(settings.seed)
-    saved_params = {name: model.getParamInfo(name)[2] for name in ("TimeLimit", "SolutionLimit", "MIPFocus")}
+    saved_params = {name: model.getParamInfo(name)[2] for name in ("TimeLimit", "SolutionLimit", "MIPFocus", "MIPGap")}
     result: Dict[str, Any] = {
         "schema_version": "stage1_lns_v1", "applied": False, "operators": list(OPERATORS),
         "settings": settings.__dict__.copy(), "iterations": [],
@@ -166,6 +166,10 @@ def run_stage1_lns(
         weights = {name: 1.0 for name in OPERATORS}
         model.Params.SolutionLimit = 2_000_000_000
         model.Params.MIPFocus = 1
+        # The run's relative MIPGap (e.g. 1 %) would declare a neighbourhood
+        # "optimal" at the incumbent whenever its local bound is within 1 % of
+        # the whole-week objective, so every sub-solve must close its own gap.
+        model.Params.MIPGap = 0.0
 
         while True:
             remaining = settings.time_budget_sec - (time.monotonic() - began)

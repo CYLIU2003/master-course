@@ -79,3 +79,15 @@ def test_lns_sees_variables_added_without_update():
                             settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=3, max_iterations=20))
     assert result["applied"] and result["trip_indexed_binary_count"] == 16
     assert result["best_objective"] == pytest.approx(13)
+
+
+def test_lns_improves_below_the_runs_relative_gap():
+    # With a large constant cost, every improvement is under the run's 5 % gap;
+    # sub-solves must still close their own gap and find it.
+    model, _ = _assignment_model()
+    model.ObjCon = 100_000
+    model.Params.MIPGap = 0.05
+    result = run_stage1_lns(model, GRB, trips=_trips(), optimize=lambda m: m.optimize(),
+                            settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=5, max_iterations=30))
+    assert result["best_objective"] == pytest.approx(100_013)
+    assert model.Params.MIPGap == 0.05
