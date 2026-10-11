@@ -15966,14 +15966,21 @@ class GurobiMILPAdapter:
             # main optimize below then starts from the best incumbent, and its
             # status, bound and gap describe the unchanged full model.
             stage1_lns_began = time.monotonic()
-            stage1_lns_result = run_stage1_lns(
-                stage1,
-                GRB,
-                trips=lns_trips(problem.trips),
-                settings=stage1_lns_settings,
-                optimize=lambda model: optimize_model(model, _stage1_search_callback),
-                log=print,
-            )
+            try:
+                stage1_lns_result = run_stage1_lns(
+                    stage1,
+                    GRB,
+                    trips=lns_trips(problem.trips),
+                    settings=stage1_lns_settings,
+                    optimize=lambda model: optimize_model(model, _stage1_search_callback),
+                    log=print,
+                )
+            except Exception as exc:  # LNS is optional: fall back to the plain solve, recorded.
+                stage1_lns_result = {
+                    "schema_version": "stage1_lns_v1",
+                    "applied": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
             stage_time_limit = max(
                 stage_time_limit - (time.monotonic() - stage1_lns_began),
                 min(float(stage1_search_controls["lns_final_reserve_sec"]), stage_time_limit),

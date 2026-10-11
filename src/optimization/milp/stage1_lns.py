@@ -132,6 +132,8 @@ def run_stage1_lns(
         "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; "
                      "never an optimality certificate",
     }
+    # Pending additions are invisible to getVars() until update (lazy update mode).
+    model.update()
     variables = model.getVars()
     try:
         model.Params.SolutionLimit = 1
@@ -146,7 +148,7 @@ def run_stage1_lns(
         log(f"stage1 LNS: initial incumbent {best_objective:.2f}")
 
         vtypes = model.getAttr("VType", variables)
-        binary = np.array([kind == GRB.BINARY for kind in vtypes])
+        binary = np.fromiter((kind == GRB.BINARY for kind in vtypes), dtype=bool, count=len(vtypes))
         # Names are read in chunks: 6.8M Python strings at once would cost ~1.5 GB.
         trip_ids = [trip.trip_id for trip in trips]
         parts = [trip_index_arrays(model.getAttr("VarName", variables[i:i + 250_000]), trip_ids)

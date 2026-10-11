@@ -28,8 +28,7 @@ def _assignment_model():
     for (v, t), var in y.items():  # deliberately bad seed: every trip on V2
         var.Start = 1.0 if v == "V2" else 0.0
     used["V1"].Start, used["V2"].Start = 0.0, 1.0
-    model.update()
-    return model, y
+    return model, y  # deliberately not updated: production calls LNS with pending additions
 
 
 def _trips():
@@ -44,6 +43,7 @@ def test_trip_index_arrays_parse_family_vehicle_and_trip_tokens():
 
 def test_lns_improves_bad_seed_and_restores_the_model():
     model, y = _assignment_model()
+    model.update()
     lb_before = model.getAttr("LB", model.getVars())
     ub_before = model.getAttr("UB", model.getVars())
     time_limit_before = model.Params.TimeLimit
@@ -71,3 +71,11 @@ def test_lns_profile_and_budget_guard():
     assert lns_settings_from_controls(controls, stage_time_limit_sec=2000, seed=42) is None
     dual = _configured_stage1_gurobi_search_controls(SimpleNamespace(stage1_gurobi_search_profile="bounded_presolve_dual"))
     assert lns_settings_from_controls(dual, stage_time_limit_sec=21600, seed=42) is None
+
+
+def test_lns_sees_variables_added_without_update():
+    model, _ = _assignment_model()
+    result = run_stage1_lns(model, GRB, trips=_trips(), optimize=lambda m: m.optimize(),
+                            settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=3, max_iterations=20))
+    assert result["applied"] and result["trip_indexed_binary_count"] == 16
+    assert result["best_objective"] == pytest.approx(13)
