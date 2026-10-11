@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.solver_policy import optimize_model
+from src.optimization.milp.stage1_lns import lns_settings_from_controls, lns_trips, run_stage1_lns
 
 import csv
 import contextvars
@@ -2041,11 +2042,19 @@ def _configured_stage1_gurobi_search_controls(
                 **({"node_method": 2, "crossover": 0} if no_crossover else {}),
                 "no_rel_heur_work": 120.0 if profile == "bounded_presolve_norel" else 0.0,
                 "soft_mem_limit_gb": 18.0}
+    if profile == "lns_dual":
+        # bounded_presolve_dual controls for the final full-model solve, preceded
+        # by an MIP-based LNS on the same model (src/optimization/milp/stage1_lns.py).
+        return {**default_controls, "profile": profile, "mip_focus": 1,
+                "heuristics": 0.2, "presolve": 1, "pre_passes": 3, "root_method": 1,
+                "no_rel_heur_work": 0.0, "soft_mem_limit_gb": 18.0,
+                "lns_enabled": True, "lns_iteration_time_limit_sec": 300.0,
+                "lns_initial_time_limit_sec": 1800.0, "lns_final_reserve_sec": 1800.0}
     raise ValueError(
         "stage1_gurobi_search_profile must be 'default', 'bound_focus', "
         "'root_cut_focus', 'incumbent_focus', 'bounded_presolve', "
         "'bounded_presolve_barrier', 'bounded_presolve_dual', 'bounded_presolve_norel', "
-        "or 'bounded_presolve_barrier_no_crossover'"
+        "'bounded_presolve_barrier_no_crossover', or 'lns_dual'"
     )
 
 
@@ -15946,6 +15955,37 @@ class GurobiMILPAdapter:
             ),
         )
         stage1.Params.TimeLimit = max(stage_time_limit, 0.001)
+        stage1_lns_result: Optional[Dict[str, Any]] = None
+        stage1_lns_settings = lns_settings_from_controls(
+            stage1_search_controls,
+            stage_time_limit_sec=stage_time_limit,
+            seed=int(config.random_seed),
+        )
+        if stage1_lns_settings is not None:
+            # Improve the supplied seed by MIP-based LNS on this same model; the
+            # main optimize below then starts from the best incumbent, and its
+            # status, bound and gap describe the unchanged full model.
+            stage1_lns_began = time.monotonic()
+            stage1_lns_result = run_stage1_lns(
+                stage1,
+                GRB,
+                trips=lns_trips(problem.trips),
+                settings=stage1_lns_settings,
+                optimize=lambda model: optimize_model(model, _stage1_search_callback),
+                log=print,
+            )
+            stage_time_limit = max(
+                stage_time_limit - (time.monotonic() - stage1_lns_began),
+                min(float(stage1_search_controls["lns_final_reserve_sec"]), stage_time_limit),
+            )
+            stage1.Params.TimeLimit = max(stage_time_limit, 0.001)
+            directory = problem.metadata.get("phase3_diagnostics_dir")
+            if directory:
+                Path(directory).mkdir(parents=True, exist_ok=True)
+                (Path(directory) / "stage1_lns.json").write_text(
+                    json.dumps(stage1_lns_result, ensure_ascii=False, indent=2, default=str),
+                    encoding="utf-8",
+                )
         stage1_memory_before_optimize = _gurobi_memory_snapshot(stage1)
         optimize_model(stage1, _stage1_search_callback)
         stage1_memory_after_optimize = _gurobi_memory_snapshot(stage1)
@@ -16016,6 +16056,7 @@ class GurobiMILPAdapter:
             final_simplex_iteration_count=getattr(stage1, "IterCount", None),
             final_barrier_iteration_count=getattr(stage1, "BarIterCount", None),
         )
+        stage1_search_telemetry_result["lns"] = stage1_lns_result
         stage1_search_telemetry_result["native_memory"] = {
             "before_optimize": stage1_memory_before_optimize,
             "after_optimize": stage1_memory_after_optimize,

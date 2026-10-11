@@ -3388,7 +3388,8 @@ export interface components {
         | "bounded_presolve_barrier"
         | "bounded_presolve_dual"
         | "bounded_presolve_norel"
-        | "bounded_presolve_barrier_no_crossover";
+        | "bounded_presolve_barrier_no_crossover"
+        | "lns_dual";
       /**
        * Stage1 Gurobi Scale Flag
        * @default -1
