@@ -135,6 +135,8 @@ def run_stage1_lns(
     # Pending additions are invisible to getVars() until update (lazy update mode).
     model.update()
     variables = model.getVars()
+    best: Optional[np.ndarray] = None
+    best_objective = math.inf
     try:
         model.Params.SolutionLimit = 1
         model.Params.TimeLimit = max(min(settings.initial_time_limit_sec, settings.time_budget_sec), 1.0)
@@ -190,10 +192,18 @@ def run_stage1_lns(
             model.setAttr("UB", fix_vars, values)
             model.setAttr("Start", variables, best.tolist())
             model.Params.TimeLimit = max(min(settings.iteration_time_limit_sec, remaining), 1.0)
+            out_of_memory = False
             try:
-                optimize(model)
-                status = int(model.Status)
-                objective = float(model.ObjVal) if model.SolCount > 0 else math.inf
+                try:
+                    optimize(model)
+                    status = int(model.Status)
+                    objective = float(model.ObjVal) if model.SolCount > 0 else math.inf
+                except Exception as exc:
+                    # A neighbourhood too large for the native memory cap fails only
+                    # this sub-solve (Gurobi error 10001); shrink it and continue.
+                    if getattr(exc, "errno", None) != 10001:
+                        raise
+                    out_of_memory, status, objective = True, -10001, math.inf
                 improved = objective < best_objective - settings.improvement_tolerance_yen
                 if improved:
                     best = np.array(model.getAttr("X", variables), dtype=float)
@@ -203,7 +213,9 @@ def run_stage1_lns(
                 model.setAttr("UB", candidate_vars, original_ub.tolist())
             timed_out = status == GRB.TIME_LIMIT
             weights[operator] = max(0.1, 0.8 * weights[operator] + 0.2 * (3.0 if improved else 0.0))
-            neighbourhoods.adapt(operator, timed_out=timed_out, improved=improved)
+            neighbourhoods.adapt(operator, timed_out=timed_out or out_of_memory, improved=improved)
+            if out_of_memory:
+                neighbourhoods.scale[operator] = max(0.25, neighbourhoods.scale[operator] * 0.5)
             result["iterations"].append({
                 "operator": operator, "free_trips": int(free_trips.sum()), "fixed_binaries": len(fix_vars),
                 "status": status, "objective": None if math.isinf(objective) else objective,
@@ -215,9 +227,12 @@ def run_stage1_lns(
                       improvement_yen=result["initial_objective"] - best_objective,
                       accepted=sum(1 for item in result["iterations"] if item["improved"]),
                       operator_weights=weights, operator_scales=dict(neighbourhoods.scale))
-        model.setAttr("Start", variables, best.tolist())
         return result
     finally:
+        if best is not None:
+            # Whatever happens, the best incumbent found so far stays the MIP start.
+            model.setAttr("Start", variables, best.tolist())
+            result["best_objective_at_exit"] = best_objective
         for name, value in saved_params.items():
             model.setParam(name, value)
         result["elapsed_sec"] = round(time.monotonic() - began, 3)

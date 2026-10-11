@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.solver_policy import optimize_model
+from src.execution_control import ExecutionCancelled
 from src.optimization.milp.stage1_lns import lns_settings_from_controls, lns_trips, run_stage1_lns
 
 import csv
@@ -15975,6 +15976,8 @@ class GurobiMILPAdapter:
                     optimize=lambda model: optimize_model(model, _stage1_search_callback),
                     log=print,
                 )
+            except ExecutionCancelled:
+                raise
             except Exception as exc:  # LNS is optional: fall back to the plain solve, recorded.
                 stage1_lns_result = {
                     "schema_version": "stage1_lns_v1",

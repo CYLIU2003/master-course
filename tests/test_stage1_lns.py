@@ -91,3 +91,45 @@ def test_lns_improves_below_the_runs_relative_gap():
                             settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=5, max_iterations=30))
     assert result["best_objective"] == pytest.approx(100_013)
     assert model.Params.MIPGap == 0.05
+
+
+class _NativeError(Exception):
+    def __init__(self, errno):
+        super().__init__(f"error {errno}")
+        self.errno = errno
+
+
+def test_out_of_memory_fails_only_that_sub_solve():
+    model, _ = _assignment_model()
+    calls = {"n": 0}
+
+    def optimize(m):
+        calls["n"] += 1
+        if calls["n"] in (2, 3):  # first two LNS sub-solves run out of memory
+            raise _NativeError(10001)
+        m.optimize()
+    result = run_stage1_lns(model, GRB, trips=_trips(), optimize=optimize,
+                            settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=1, max_iterations=40))
+    statuses = [item["status"] for item in result["iterations"]]
+    assert statuses[:2] == [-10001, -10001] and result["applied"]
+    assert result["best_objective"] == pytest.approx(13)
+
+
+def test_other_errors_propagate_but_keep_the_best_start():
+    from src.execution_control import ExecutionCancelled
+    model, _ = _assignment_model()
+    calls = {"n": 0}
+
+    def optimize(m):
+        calls["n"] += 1
+        if calls["n"] == 25:
+            raise ExecutionCancelled("EXECUTION_CANCELLED")
+        m.optimize()
+    with pytest.raises(ExecutionCancelled):
+        run_stage1_lns(model, GRB, trips=_trips(), optimize=optimize,
+                       settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=1, max_iterations=40))
+    model.update()
+    assert model.getAttr("UB", model.getVars()) == [1.0] * 18  # bounds restored
+    model.Params.SolutionLimit = 1
+    model.optimize()
+    assert model.ObjVal == pytest.approx(13)  # improvements before the error are kept as the start
