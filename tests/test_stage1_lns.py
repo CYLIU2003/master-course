@@ -133,3 +133,17 @@ def test_other_errors_propagate_but_keep_the_best_start():
     model.Params.SolutionLimit = 1
     model.optimize()
     assert model.ObjVal == pytest.approx(13)  # improvements before the error are kept as the start
+
+
+def test_soft_memory_cap_is_tightened_during_lns_and_restored():
+    model, _ = _assignment_model()
+    model.Params.MemLimit = 10.0
+    seen = []
+
+    def optimize(m):
+        seen.append(m.Params.SoftMemLimit)
+        m.optimize()
+    run_stage1_lns(model, GRB, trips=_trips(), optimize=optimize,
+                   settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=1, max_iterations=5))
+    assert seen[0] > 8.0 and all(value == pytest.approx(8.0) for value in seen[1:])
+    assert model.Params.SoftMemLimit > 8.0 and model.Params.MemLimit == 10.0

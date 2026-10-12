@@ -31,7 +31,9 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 import numpy as np
 
 
-OPERATORS = ("time_window", "random_trips", "route_day", "full_day")
+# "full_day" (all trips of one day) was never accepted in rc7 (0/44) and is the
+# neighbourhood most likely to hit the memory cap; it stays available but unused.
+OPERATORS = ("time_window", "random_trips", "route_day")
 
 
 @dataclass(frozen=True)
@@ -125,7 +127,7 @@ def run_stage1_lns(
     """Improve the model's incumbent in place; return auditable telemetry."""
     began = time.monotonic()
     rng = random.Random(settings.seed)
-    saved_params = {name: model.getParamInfo(name)[2] for name in ("TimeLimit", "SolutionLimit", "MIPFocus", "MIPGap")}
+    saved_params = {name: model.getParamInfo(name)[2] for name in ("TimeLimit", "SolutionLimit", "MIPFocus", "MIPGap", "SoftMemLimit")}
     result: Dict[str, Any] = {
         "schema_version": "stage1_lns_v1", "applied": False, "operators": list(OPERATORS),
         "settings": settings.__dict__.copy(), "iterations": [],
@@ -172,6 +174,11 @@ def run_stage1_lns(
         # "optimal" at the incumbent whenever its local bound is within 1 % of
         # the whole-week objective, so every sub-solve must close its own gap.
         model.Params.MIPGap = 0.0
+        # Stop a too-large neighbourhood gracefully (status MEM_LIMIT) well before
+        # the hard native cap, which would raise instead.
+        hard_limit = float(model.Params.MemLimit)
+        if math.isfinite(hard_limit) and hard_limit < 1e90:
+            model.Params.SoftMemLimit = min(float(model.Params.SoftMemLimit), 0.8 * hard_limit)
 
         while True:
             remaining = settings.time_budget_sec - (time.monotonic() - began)
@@ -198,6 +205,7 @@ def run_stage1_lns(
                     optimize(model)
                     status = int(model.Status)
                     objective = float(model.ObjVal) if model.SolCount > 0 else math.inf
+                    out_of_memory = status == getattr(GRB, "MEM_LIMIT", -1)
                 except Exception as exc:
                     # A neighbourhood too large for the native memory cap fails only
                     # this sub-solve (Gurobi error 10001); shrink it and continue.
