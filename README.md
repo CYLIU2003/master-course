@@ -42,6 +42,8 @@
 
 ## GurobiのPC・同時実行条件（2026-09-25）
 
+2026-10-12: フロント8868の子機17/17台に個人用Academic Named-Userを導入・検証しました。端末別ID・参照先・検証内容は[ライセンス導入の作業メモ](docs/notes/GUROBI_LICENSE_DEPLOYMENT_20261010.md)に記録しています。常駐分散計算のWLS設定と以下の実行条件は継続しています。
+
 Gurobiを使う最適化・ライセンス試験は、**搭載RAM 32GB以上**のPCへ限定します。OS認識容量31.xGBの32GB機を誤って除外しないよう、Windowsの搭載容量を別に取得します。空きRAM・OS用の余裕・ジョブの必要RAMは従来どおり別途検査します。Gurobi非依存の計算・検算はこの32GB制限の対象外です。
 
 親機の永続キューが共有枠を管理し、実行中・通信不明・終了後の330秒の解放待ち・外部予約を数えます。枠が空くまで新規求解を開始しません。同じWindowsユーザーの `%USERPROFILE%/.master-course/gurobi-authority.json` に指定したキューだけがGurobi枠の管理主体になります。別ポート・別実験のcontrollerで独立した2枠を作らないよう、起動・取得時に拒否します。新しい実験もこの親機キューを使い、実験ごとの入力・attempt・成果物は分離してください。状態不明の枠を消すためにauthorityファイルや予約DBを削除してはいけません。
@@ -4410,7 +4412,7 @@ queueの終了照合とcooldownを引き継ぎます。メモリの一括解放�
 
 ## 機器別メモリ予算と最新試行の監視（2026-09-26）
 
-計算予算の上限を搭載RAMの半分にします（16GB機は8GiB、32GB機は16GiB、64GB機は32GiB）。実際の投入は現在の空きRAMとWindows commit余地からOS用の追加余裕・他ジョブ予約を引いて判定します。Gurobiは引き続き32GB以上に限定。週次campaignの要求は18から16GiBへ変更し、標準の子機では16＋4＝20GiBの空きが必要です。64GB機で必ず32GiBを消費する設定ではなく、仕事の予算が小さければその値を使います。
+計算予算の上限を搭載RAMの半分にします（16GB機は8GiB、32GB機は16GiB、64GB機は32GiB）。2026-10-11からは「搭載RAM−8GiB（最低でも半分）」に変更しました（16GB機8GiB、32GB機24GiB、64GB機56GiB）。空きRAM・commit余地・OS余裕の検査は従来どおりです。実際の投入は現在の空きRAMとWindows commit余地からOS用の追加余裕・他ジョブ予約を引いて判定します。Gurobiは引き続き32GB以上に限定。週次campaignの要求は18から16GiBへ変更し、標準の子機では16＋4＝20GiBの空きが必要です。64GB機で必ず32GiBを消費する設定ではなく、仕事の予算が小さければその値を使います。
 
 新しい分散attemptは予算をmanifestに固定し、workerはGurobiのモデル生成と毎回の求解前に上限を適用します。予算内の2GiBをPython等用に見込み、残りをnative hard limit、さらにその90%をsoft limitにします。GiBからGurobiの10^9バイト単位へ変換します。これはGurobi全モデルの上限で、Pythonを含むOSプロセス全体の厳密なハード上限ではありません。hard limit到達時は解を取得できないことがあるため、成功扱いせず失敗原本を保存します。[公式パラメータ仕様](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parameter:MemLimit)。旧試行の数値を新予算の結果へ流用しません。
 
