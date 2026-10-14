@@ -508,3 +508,24 @@ def test_problem_builder_propagates_ice_emission_factor_from_catalog() -> None:
 
     assert expected is not None
     assert vehicle_type.co2_emission_kg_per_l == expected["co2EmissionKgPerL"]
+
+
+def test_positive_demand_charge_with_flat_tariff_charges_one_horizon_peak() -> None:
+    # Midterm demand-charge runs (2026-10-14): a flat tariff plus a positive
+    # monthly rate must mark every slot as a demand slot, so the single horizon
+    # peak is charged (TEPCO's one contract kW), never an on/off-peak pair.
+    from src.optimization.common.problem import classify_peak_slots
+    scenario = _scenario()
+    scenario.pop("energy_price_profiles")
+    scenario["scenario_overlay"]["cost_coefficients"] = {
+        "grid_flat_price_per_kwh": 30.0,
+        "tou_pricing": [{"start_hour": 0, "end_hour": 24, "price_per_kwh": 30.0}],
+        "demand_charge_cost_per_kw": 1606.5,
+    }
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    assert problem.scenario.demand_charge_on_peak_yen_per_kw == 1606.5
+    assert all(slot.demand_charge_weight == 1606.5 for slot in problem.price_slots)
+    on_peak, off_peak = classify_peak_slots(problem.price_slots)
+    assert off_peak == set() and len(on_peak) == len(problem.price_slots)
+    expected = 1606.5 * problem.scenario.planning_horizon_hours / 24.0 / 30.0
+    assert problem.scenario.demand_charge_on_peak_horizon_yen_per_kw == pytest.approx(expected)
