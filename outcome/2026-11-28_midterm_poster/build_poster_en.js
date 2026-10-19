@@ -67,7 +67,7 @@ y += 8.0;
 y = section("2. Case study", LX, y, COL);
 const rows = [["Routes", "Tokyu Bus Shibu 21–23 (Tsurumaki depot)"], ["Trips", "1,704 trips per week"], ["Fleet", "35 electric + 25 diesel buses available (fixed)"],
   ["Assets", "PV 1,000 kW, battery 6,000 kWh, chargers 10 × 90 kW"], ["Grid limit", "90/200/400/800 kW (500 JPY/kWh on excess)"], ["Weeks", "Winter, spring, summer (+autumn, basic charge)"],
-  ["Prices", "Grid 30 JPY/kWh; diesel 150 JPY/L; basic 1,890 JPY/kW-mo"], ["CO₂", "Diesel 2.62 kg/L; grid 0.5 kg/kWh (provisional)"]];
+  ["Prices", "Grid 30 JPY/kWh; diesel 150 JPY/L; basic 1,890 JPY/kW-mo"], ["CO₂", "Diesel 2.62 kg/L; grid 0.5 kg/kWh (TEPCO actual 0.452)"]];
 s.addTable(rows.map(([k, v]) => [{ text: k, options: { bold: true } }, { text: v }]),
   { x: LX, y, w: COL, colW: [3.0, COL - 3.0], fontSize: 30, fontFace: FONT, color: INK, rowH: 0.78, valign: "middle",
     border: { type: "solid", pt: 1, color: GRID } });
@@ -79,7 +79,7 @@ text([
   { text: "Hourly rolling: re-plan every hour while executing the week; costs are taken from the executed result.", options: { breakLine: true } },
   { text: "Comparison: objective without and with the basic charge." }],
   { x: LX, y, w: COL, h: 42.8 - y, paraSpaceAfter: 18 });
-caption("Note: All trip assignments and all 16 charging plans with the basic charge are time-limited feasible solutions (MIP gap 13–67%); without it, 11 of 12 charging plans are optimal. Peak = 15-min average. Basic charge rates of TEPCO Energy Partner (business, <500 kW; 1,989 JPY/kW at ≥500 kW); power factor 100% assumed.",
+caption("Note: All trip assignments and all 16 charging plans with the basic charge are time-limited feasible solutions (MIP gap 13–67%); without it, 11 of 12 charging plans are optimal. Peak = 15-min average. Contract demand = annual peak (metered-demand rule below 500 kW). Basic charge: former TEPCO EP business rate (1,989 JPY/kW at ≥500 kW); power factor 100%.",
   LX, 43.2, COL, 2.2, 26);
 
 // ---- Right column
@@ -125,7 +125,7 @@ const b8 = basicYear(peakYear(rc8, 90)) / 1e6, b9 = basicYear(peakYear(rc9, 90))
 text([
   { text: `Spreading charging with the basic charge in the objective lowers the peak demand and the basic charge without a large change in the energy purchased (90 kW limit: ${b8.toFixed(1)} → ${b9.toFixed(1)} million JPY per year).`, options: { breakLine: true } },
   { text: "The mixed fleet emits about 75–85% less CO₂ than an all-diesel fleet.", options: { breakLine: true } },
-  { text: "Next: sensitivity of the conditions that favor diesel buses, and the solution quality of trip assignment." }],
+  { text: "Next: explain the gap between the assignment stage (charging expected from PV and battery) and the grid purchase in execution; sensitivity of the conditions that favor diesel buses." }],
   { x: RX, y, w: COL, h: 45.4 - y, paraSpaceAfter: 10, fontSize: 34 });
 
 (async () => {
