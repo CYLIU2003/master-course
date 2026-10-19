@@ -59,6 +59,45 @@ bullets(s, [
   "営業所には太陽光（1,000 kW）と蓄電池（6,000 kWh）も置いた設定"], { x: 0.6, y: 1.7, w: 12.1, h: 4.8, fontSize: 20 });
 s.addNotes("電気バスはCO₂を減らせますが、全部を電気にはまだできません。燃料バスと一緒に使うときに問題になるのが、充電の電気です。");
 
+// 2b. Terms (for listeners from other fields)
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("この発表で使う言葉", { placeholder: "title" });
+s.addTable([
+  ["便", "バスが始発から終点まで1回走ること。対象の路線では1週間に1,704便"],
+  ["燃料バス", "軽油で走る、これまでの普通のバス（ディーゼルバス）"],
+  ["営業所", "バスの車庫。走り終えたバスが戻ってきて、電気バスはここで充電する"],
+  ["受電（買電）", "営業所が電力会社から電気を買うこと"],
+  ["kW（キロワット）", "その時に使っている電気の勢い（大きさ）"],
+  ["kWh（キロワット時）", "使った電気の量。kW × 時間"],
+  ["太陽光・蓄電池", "営業所で発電する太陽光パネルと、電気をためておく大きな電池"]].map(([k, v]) => [{ text: k, options: { bold: true } }, v]),
+  { x: 0.6, y: 1.6, w: 12.1, colW: [2.9, 9.2], fontSize: 18, color: INK, rowH: 0.66, valign: "middle", border: { type: "solid", pt: 0.75, color: GRID } });
+s.addNotes("分野が違う人もいるので、先に言葉をそろえます。特に、kWとkWhの違いが今日の話の中心なので、次のページで説明します。");
+
+// 2c. kW vs kWh
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("kWとkWhのちがい", { placeholder: "title" });
+const AX = (x0, label) => {
+  s.addShape(pres.shapes.LINE, { x: x0, y: 5.3, w: 4.6, h: 0, line: { color: SUB, width: 1.25 } });
+  s.addShape(pres.shapes.LINE, { x: x0, y: 2.0, w: 0, h: 3.3, line: { color: SUB, width: 1.25 } });
+  text(s, "時間 →", { x: x0 + 3.6, y: 5.35, w: 1.0, h: 0.35, fontSize: 13, color: SUB, align: "right" });
+  text(s, "kW", { x: x0 - 0.55, y: 1.95, w: 0.5, h: 0.35, fontSize: 13, color: SUB, align: "right" });
+  text(s, label, { x: x0, y: 1.55, w: 4.6, h: 0.4, fontSize: 18, bold: true });
+};
+AX(0.9, "一度にまとめて充電");
+s.addShape(pres.shapes.RECTANGLE, { x: 2.0, y: 2.3, w: 1.2, h: 3.0, fill: { color: GREY }, line: { color: GREY } });
+AX(6.3, "時間を分けて充電");
+s.addShape(pres.shapes.RECTANGLE, { x: 7.4, y: 3.8, w: 2.4, h: 1.5, fill: { color: BLUE }, line: { color: BLUE } });
+s.addShape(pres.shapes.LINE, { x: 0.9, y: 2.3, w: 10.0, h: 0, line: { color: GREY, width: 1, dashType: "dash" } });
+s.addShape(pres.shapes.LINE, { x: 6.3, y: 3.8, w: 4.6, h: 0, line: { color: BLUE, width: 1, dashType: "dash" } });
+text(s, "高い", { x: 3.3, y: 2.35, w: 1.2, h: 0.35, fontSize: 14, color: SUB });
+text(s, "低い", { x: 10.6, y: 3.45, w: 1.0, h: 0.35, fontSize: 14, color: BLUE_DARK });
+bullets(s, [
+  "高さ＝kW（勢い）→ 基本料金が決まる",
+  "面積＝kWh（量）→ 電力量料金が決まる",
+  "同じ量の電気でも、時間を分けると高さ（kW）を下げられる"], { x: 0.6, y: 5.9, w: 12.1, h: 1.3, fontSize: 18, paraSpaceAfter: 4 });
+caption(s, "模式図（左右の面積は同じ）", 6.3, 5.35, 3.2);
+s.addNotes("水道に例えると、kWは蛇口から出る水の勢い、kWhはたまった水の量です。同じ量の水でも、勢いよく短時間で出すか、ゆっくり長く出すかで、勢いの最大値が変わります。電気の基本料金は、この勢いの最大値で決まります。左と右は面積が同じなので、電力量料金は同じですが、右の方が基本料金は安くなります。");
+
 // 3. Electricity bill
 s = pres.addSlide({ masterName: "PLAIN" });
 s.addText("電気料金の仕組み", { placeholder: "title" });
@@ -73,15 +112,20 @@ s.addNotes("会社の電気料金は、使った量だけでなく、一番た�
 
 // 4. What is optimized
 s = pres.addSlide({ masterName: "PLAIN" });
-s.addText("この研究で決めていること", { placeholder: "title" });
-bullets(s, [
-  "便の割当：1,704便を、どのバス（電気・燃料）が走るか",
-  "充電計画：15分ごとに、充電・太陽光・蓄電池・買う電気をどうするか",
-  "目的：車両の使用費・電気代・燃料代などを合わせた費用を最も小さくする",
-  "受電上限：営業所が買う電力の目安。超えた分には1 kWhあたり500円の追加費用（仮の値）をかける。超えること自体は認めている",
-  "方法：数式で問題を書いて計算機で解く（数理最適化）。そのままでは解が改善しなかったので、一部の便だけを解き直す方法（LNS）を加えた",
-  "比較：基本料金を考えずに計画した場合と、考えて計画した場合"], { x: 0.6, y: 1.7, w: 12.1, h: 5.2, fontSize: 19 });
-s.addNotes("決めることは、どのバスがどの便を走るかと、いつ充電するかの2つです。組み合わせが非常に多いので、計算機で解いています。費用の中心は車両の使用費（1台1日2万円）で、CO₂も1 kgあたり1円として含めていますが、影響は小さく、主に結果として評価しています。受電上限は絶対に超えられない線ではなく、超えた分に追加費用がかかる目安として扱っています。基本料金を考える場合と考えない場合を比べました。");
+s.addText("数理最適化で計画を立てる", { placeholder: "title" });
+const COLS = [
+  ["決めること", ["どのバス（電気・燃料）がどの便を走るか", "いつ、どのバスを、どれだけ充電するか（15分ごと）", "太陽光・蓄電池・買う電気の使い分け"]],
+  ["守るルール", ["前の便を終えて、次の便の出発に間に合う", "電池の残りが足りなくならない", "充電器は10基まで", "受電上限を超えた分は追加費用（500円/kWh、仮の値）"]],
+  ["できるだけ小さくするもの", ["1週間の費用の合計", "内訳：車両の使用費・電気代・燃料代・追加費用", "基本料金を考える場合は、それも加える"]]];
+COLS.forEach(([head, items], i) => {
+  const x = 0.6 + i * 4.1;
+  text(s, head, { x, y: 1.6, w: 3.8, h: 0.5, fontSize: 19, bold: true, color: BLUE_DARK });
+  s.addShape(pres.shapes.LINE, { x, y: 2.15, w: 3.8, h: 0, line: { color: GRID, width: 1 } });
+  bullets(s, items, { x, y: 2.3, w: 3.8, h: 3.2, fontSize: 16, paraSpaceAfter: 8 });
+});
+text(s, "このルールを数式で書き、計算機（Gurobi）でいちばん費用が小さい計画を探す。問題が大きく一度には解き切れないので、一部の便だけを選んで解き直すことを何度も繰り返した（LNS）。比較は、基本料金を考えない場合と考える場合。",
+  { x: 0.6, y: 5.6, w: 12.1, h: 1.2, fontSize: 17 });
+s.addNotes("数理最適化は、決めること・守るルール・小さくしたいもの、の3つを数式で書いて、計算機に一番よい答えを探させる方法です。時間割やシフト表を作るのに近いです。決めることは、どのバスがどの便を走るかと、いつ充電するかです。受電上限は絶対に超えられない線ではなく、超えた分に追加費用がかかる目安として扱っています。組み合わせが非常に多いので、計算機で解いています。費用の中心は車両の使用費（1台1日2万円）で、CO₂も1 kgあたり1円として含めていますが、影響は小さく、主に結果として評価しています。受電上限は絶対に超えられない線ではなく、超えた分に追加費用がかかる目安として扱っています。基本料金を考える場合と考えない場合を比べました。");
 
 // 5. Result: peak
 s = pres.addSlide({ masterName: "PLAIN" });
