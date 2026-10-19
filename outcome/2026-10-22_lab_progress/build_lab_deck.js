@@ -1,6 +1,6 @@
-// Lab progress talk (2026-10-22) for a mixed audience: the supervisor plus juniors
-// from other topics.  Plain words, one idea per slide, numbers from verified runs.
-// Run: NODE_PATH=<pptxgenjs node_modules> DECK_NODE_MODULES=... PPTX_SKILL=... node build_lab_deck.js
+// Lab progress talk (2026-10-22): supervisor plus juniors from other topics.
+// Plain academic slides: white background, black text, Tokyo City University blue (#0485D7) only for
+// the title rule and the proposed-case series; the comparison case is grey. Plain words, one point per slide.
 const path = require("path");
 const fs = require("fs");
 const pptxgen = require(path.join(process.env.DECK_NODE_MODULES, "pptxgenjs"));
@@ -8,167 +8,146 @@ const { applyTheme } = require(process.env.PPTX_SKILL + "/scripts/apply_theme.js
 
 const rc8 = JSON.parse(fs.readFileSync(path.join(__dirname, "cases_rc8.json"), "utf8"));
 const rc9 = JSON.parse(fs.readFileSync(path.join(__dirname, "cases_rc9.json"), "utf8")).filter((r) => r.status === "VERIFIED");
-const diesel = fs.readFileSync(path.join(__dirname, "all_diesel_estimate.csv"), "utf8").replace(/^﻿/, "").trim().split(/\r?\n/);
-const dKeys = diesel[0].split(",");
-const dRows = diesel.slice(1).map((l) => Object.fromEntries(l.split(",").map((v, i) => [dKeys[i], v])));
+const night = JSON.parse(fs.readFileSync(path.join(__dirname, "night_profile_90kW_winter.json"), "utf8"));
+const dl = fs.readFileSync(path.join(__dirname, "all_diesel_estimate.csv"), "utf8").replace(/^﻿/, "").trim().split(/\r?\n/);
+const dk = dl[0].split(","), diesel = dl.slice(1).map((l) => Object.fromEntries(l.split(",").map((v, i) => [dk[i], v])));
 const LIMITS = [90, 200, 400, 800];
 const WIN = "2025-01-06";
 const get = (rows, g, w) => rows.find((r) => r.grid_limit_kw === g && r.week === w);
+const peakYear = (rows, g) => Math.max(...rows.filter((r) => r.grid_limit_kw === g && r.week !== "2025-10-06").map((r) => r.peak_grid_kw));
+const basicYear = (kw) => kw * (kw >= 500 ? 1989 : 1890) * 0.85 * 12;
 
-const THEME = {
-  name: "Lab progress EV bus", headFontFace: "Yu Gothic", bodyFontFace: "Yu Gothic",
-  colors: { dk1: "1B2A2F", lt1: "FFFFFF", dk2: "0F4C5C", lt2: "EEF4F3", accent1: "1F7A8C", accent2: "E07A2E",
-            accent3: "5FA84A", accent4: "C9A227", accent5: "6C5B9E", accent6: "B23A48", hlink: "1F7A8C", folHlink: "6C5B9E" },
-};
-const HEX = { teal: "1F7A8C", orange: "E07A2E", green: "5FA84A", ink: "1B2A2F", muted: "5B6B70", grid: "D9E2E1", soft: "EEF4F3" };
+const BLUE = "0485D7", BLUE_DARK = "0268B0", GREY = "9A9A9A", INK = "222222", SUB = "555555", GRID = "DDDDDD";
+const THEME = { name: "TCU white", headFontFace: "Yu Gothic", bodyFontFace: "Yu Gothic",
+  colors: { dk1: INK, lt1: "FFFFFF", dk2: BLUE_DARK, lt2: "F4F7FA", accent1: BLUE, accent2: GREY,
+            accent3: "5B9BD5", accent4: "A5A5A5", accent5: "264478", accent6: "636363", hlink: BLUE, folHlink: BLUE_DARK } };
 
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE";
 pres.theme = { headFontFace: THEME.headFontFace, bodyFontFace: THEME.bodyFontFace };
 pres.title = "研究室進捗発表 2026-10-22";
 const C = pres.SchemeColor;
-pres.defineSlideMaster({ title: "DARK", background: { color: THEME.colors.dk2 },
-  objects: [{ placeholder: { options: { name: "title", type: "title", x: 0.8, y: 2.0, w: 11.7, h: 1.8, fontSize: 36, bold: true, color: C.background1, valign: "middle" }, text: "" } },
-            { placeholder: { options: { name: "body", type: "body", x: 0.8, y: 4.0, w: 11.7, h: 2.0, fontSize: 20, color: C.background2 }, text: "" } }] });
-pres.defineSlideMaster({ title: "LIGHT", background: { color: THEME.colors.lt1 },
-  objects: [{ placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.35, w: 12.1, h: 0.95, fontSize: 30, bold: true, color: C.text2, valign: "middle" }, text: "" } }],
-  slideNumber: { x: 12.4, y: 7.0, w: 0.6, h: 0.3, fontSize: 10, color: HEX.muted } });
+pres.defineSlideMaster({ title: "PLAIN", background: { color: "FFFFFF" },
+  objects: [{ placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.35, w: 12.1, h: 0.85, fontSize: 28, bold: true, color: C.text1, valign: "bottom", align: "left" }, text: "" } },
+            { line: { x: 0.6, y: 1.3, w: 12.1, h: 0, line: { color: BLUE, width: 2.5 } } }],
+  slideNumber: { x: 12.3, y: 7.0, w: 0.6, h: 0.3, fontSize: 11, color: SUB } });
 
-const card = (s, x, y, w, h) => s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w, h, fill: { color: HEX.soft }, line: { color: HEX.soft }, rectRadius: 0.12 });
-const text = (s, t, o) => s.addText(t, { isTextBox: true, margin: 0, valign: "top", color: HEX.ink, fontSize: 16, ...o });
-const chartBase = (title) => ({ showTitle: true, title, titleFontFace: "+mn-lt", titleFontSize: 14, titleColor: HEX.ink,
-  catAxisLabelColor: HEX.muted, valAxisLabelColor: HEX.muted, catAxisLabelFontFace: "+mn-lt", valAxisLabelFontFace: "+mn-lt",
-  catAxisLabelFontSize: 13, valAxisLabelFontSize: 11, valGridLine: { color: HEX.grid, size: 0.75 }, catGridLine: { style: "none" },
-  legendFontFace: "+mn-lt", legendFontSize: 13, legendColor: HEX.ink, dataLabelFontFace: "+mn-lt", dataLabelFontSize: 12, dataLabelColor: HEX.ink });
+const text = (s, t, o) => s.addText(t, { isTextBox: true, margin: 0, valign: "top", color: INK, fontSize: 18, lineSpacingMultiple: 1.2, ...o });
+const bullets = (s, items, o) => text(s, items.map((t, i) => ({ text: t, options: { bullet: { indent: 18 }, breakLine: i < items.length - 1 } })), { paraSpaceAfter: 10, ...o });
+const chart = (o) => ({ showTitle: false, catAxisLabelColor: SUB, valAxisLabelColor: SUB, catAxisLabelFontFace: "+mn-lt", valAxisLabelFontFace: "+mn-lt",
+  catAxisLabelFontSize: 14, valAxisLabelFontSize: 12, valGridLine: { color: GRID, size: 0.75 }, catGridLine: { style: "none" },
+  legendFontFace: "+mn-lt", legendFontSize: 14, legendColor: INK, dataLabelFontFace: "+mn-lt", dataLabelFontSize: 13, dataLabelColor: INK,
+  showLegend: true, legendPos: "t", chartColors: [GREY, BLUE], valAxisTitleColor: SUB, catAxisTitleColor: SUB, valAxisTitleFontSize: 13, catAxisTitleFontSize: 13, ...o });
+const caption = (s, t, x, y, w) => text(s, t, { x, y, w, h: 0.4, fontSize: 13, color: SUB });
 
-// 1. Title
-let s = pres.addSlide({ masterName: "DARK" });
-s.addText("どのバスが・いつ充電すれば\n安くて環境にやさしい？", { placeholder: "title" });
-s.addText("研究室 進捗発表（2026年10月22日）\nGXに向けた燃料バスと併用する電気バスの便割当・充電計画の最適化", { placeholder: "body" });
-s.addNotes("今日は、研究の中身を、専門外の人にも分かるように話します。キーワードは、電気バス、充電、電気の基本料金です。");
+// 1. Title (white, blue rule)
+let s = pres.addSlide();
+s.background = { color: "FFFFFF" };
+text(s, "GXに向けた燃料バスと併用する\n電気バスの便割当・充電計画の最適化", { x: 0.9, y: 2.0, w: 11.5, h: 1.9, fontSize: 36, bold: true, valign: "bottom" });
+s.addShape(pres.shapes.LINE, { x: 0.9, y: 4.1, w: 11.5, h: 0, line: { color: BLUE, width: 3 } });
+text(s, "研究室進捗発表　2026年10月22日\n劉 承洋", { x: 0.9, y: 4.35, w: 11.5, h: 1.2, fontSize: 20, color: SUB });
+s.addNotes("今日は、研究の中身を、ほかのテーマの人にも分かるように話します。キーワードは電気バス、充電、電気の基本料金です。");
 
 // 2. Background
-s = pres.addSlide({ masterName: "LIGHT" });
-s.addText("背景：バス会社が電気バスを入れ始めている", { placeholder: "title" });
-[["CO₂を減らしたい", "バスの排気ガスを減らすため、各社が電気バスを導入している（GX：脱炭素への転換）"],
- ["全部は電気にできない", "値段が高く、充電にも時間がかかる。しばらくは燃料（軽油）バスと一緒に使う"],
- ["充電の電気が大問題", "夜や昼にまとめて充電すると、営業所が一度にたくさんの電気を使う"]].forEach(([h, b], i) => {
-  const x = 0.6 + i * 4.15; card(s, x, 1.6, 3.85, 3.6);
-  s.addShape(pres.shapes.OVAL, { x: x + 0.3, y: 1.85, w: 0.75, h: 0.75, fill: { color: C.accent1 }, line: { color: C.accent1 } });
-  s.addText(String(i + 1), { x: x + 0.3, y: 1.85, w: 0.75, h: 0.75, align: "center", valign: "middle", fontSize: 24, bold: true, color: C.background1, isTextBox: true, margin: 0 });
-  text(s, h, { x: x + 0.3, y: 2.85, w: 3.3, h: 0.6, fontSize: 20, bold: true, color: C.text2 });
-  text(s, b, { x: x + 0.3, y: 3.55, w: 3.3, h: 1.5, fontSize: 17 });
-});
-text(s, "対象：東急バス 渋21〜23系統（弦巻営業所）、1週間で1,704本の運行、電気バス35台＋燃料バス25台", { x: 0.6, y: 5.5, w: 12.1, h: 0.5, fontSize: 16, color: HEX.muted });
-s.addNotes("電気バスはCO₂を減らせますが、全部を電気にはまだできません。そこで燃料バスと一緒に使います。そのとき問題になるのが、充電に使う電気です。");
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("背景", { placeholder: "title" });
+bullets(s, [
+  "脱炭素（GX）のため、路線バスに電気バスの導入が進んでいる",
+  "ただし車両が高く充電にも時間がかかるので、当面は燃料（軽油）バスと一緒に使う",
+  "電気バスは営業所で充電する。夜にまとめて充電すると、営業所が一度に多くの電気を使う",
+  "対象：東急バス 渋21〜23系統（弦巻営業所）。1週間に1,704便、電気バス35台・燃料バス25台"], { x: 0.6, y: 1.7, w: 12.1, h: 4.8, fontSize: 20 });
+s.addNotes("電気バスはCO₂を減らせますが、全部を電気にはまだできません。燃料バスと一緒に使うときに問題になるのが、充電の電気です。");
 
-// 3. Key idea: the breaker and the basic charge
-s = pres.addSlide({ masterName: "LIGHT" });
-s.addText("電気代は「使った量」と「一番多く使った瞬間」で決まる", { placeholder: "title" });
-card(s, 0.6, 1.6, 5.9, 3.8); card(s, 6.8, 1.6, 5.9, 3.8);
-text(s, "① 使った量で払う（電力量料金）", { x: 0.9, y: 1.85, w: 5.4, h: 0.5, fontSize: 20, bold: true, color: C.accent1 });
-text(s, "家の電気代と同じ。たくさん使えば高くなる。\n\n例：1 kWhあたり30円", { x: 0.9, y: 2.55, w: 5.4, h: 2.6, fontSize: 19 });
-text(s, "② 一番多い瞬間で決まる（基本料金）", { x: 7.1, y: 1.85, w: 5.4, h: 0.5, fontSize: 20, bold: true, color: C.accent2 });
-text(s, "1年のうち、一番たくさん電気を使った瞬間の大きさ（kW）で、1年分の基本料金が決まる。\n\n家でいえば「ブレーカーの大きさ」。一度だけ大きく使っても、1年間高いまま。",
-  { x: 7.1, y: 2.55, w: 5.4, h: 2.6, fontSize: 19 });
-text(s, "→ 電気バスの充電を一度に重ねると、②が大きくなってしまう", { x: 0.6, y: 5.75, w: 12.1, h: 0.6, fontSize: 20, bold: true, color: C.text2 });
-s.addNotes("ここが今日一番大事なポイントです。会社の電気代は、使った量だけでなく、一番たくさん使った瞬間の大きさでも決まります。これを基本料金と呼びます。一度でもたくさん使うと、1年間その分の料金がかかります。");
+// 3. Electricity bill
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("電気料金の仕組み", { placeholder: "title" });
+s.addTable([
+  [{ text: "", options: { fill: { color: "F2F2F2" } } }, { text: "電力量料金", options: { bold: true, fill: { color: "F2F2F2" } } }, { text: "基本料金", options: { bold: true, fill: { color: "F2F2F2" } } }],
+  [{ text: "何で決まるか", options: { bold: true } }, "使った電気の量（kWh）", "1年で最も多く使った瞬間の大きさ（kW）"],
+  [{ text: "家庭でいうと", options: { bold: true } }, "毎月の使用量に応じた料金", "ブレーカー（契約アンペア）の大きさ"],
+  [{ text: "この研究の値", options: { bold: true } }, "30円/kWh", "1,890円/kW・月（500 kW以上は1,989円）"]],
+  { x: 0.6, y: 1.7, w: 12.1, colW: [2.4, 4.2, 5.5], fontSize: 18, color: INK, rowH: 0.75, valign: "middle", border: { type: "solid", pt: 0.75, color: GRID } });
+text(s, "基本料金は、一度でも大きく使うとその後1年間高くなる。電気バスの充電が一度に重なると、基本料金が大きくなる。", { x: 0.6, y: 5.1, w: 12.1, h: 1.0, fontSize: 20 });
+s.addNotes("会社の電気料金は、使った量だけでなく、一番たくさん使った瞬間の大きさでも決まります。これが基本料金です。一度でもたくさん使うと、1年間その分の料金がかかります。");
 
-// 4. What is decided
-s = pres.addSlide({ masterName: "LIGHT" });
-s.addText("研究でやっていること：巨大なパズルをコンピュータで解く", { placeholder: "title" });
-[["どのバスが", "どの運行を走るか", "1,704本の運行を、60台のバスに割り振る"],
- ["いつ", "どれだけ充電するか", "15分ごとに、充電・太陽光・蓄電池・買う電気を決める"],
- ["何を一番小さく", "するか", "電気代・燃料代・基本料金・CO₂などの合計費用"]].forEach(([a, b, c], i) => {
-  const x = 0.6 + i * 4.15; card(s, x, 1.6, 3.85, 3.2);
-  text(s, a, { x: x + 0.3, y: 1.85, w: 3.3, h: 0.5, fontSize: 18, color: HEX.muted });
-  text(s, b, { x: x + 0.3, y: 2.35, w: 3.3, h: 0.6, fontSize: 22, bold: true, color: C.text2 });
-  text(s, c, { x: x + 0.3, y: 3.15, w: 3.3, h: 1.5, fontSize: 17 });
-});
-text(s, "組み合わせが多すぎて人の手では無理。数理最適化（数式で書いて、計算機で一番よい答えを探す方法）で解く。普通の解き方では答えが良くならなかったので、「一部だけを少しずつ解き直す」工夫（LNS）を入れて改善した。",
-  { x: 0.6, y: 5.1, w: 12.1, h: 1.3, fontSize: 17 });
-s.addNotes("決めることは、どのバスがどの運行を走るか、いつ充電するかの2つです。目的は、費用の合計を一番小さくすること。組み合わせが膨大なので、計算機で解きます。");
+// 4. What is optimized
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("この研究で決めていること", { placeholder: "title" });
+bullets(s, [
+  "便の割当：1,704便を、どのバス（電気・燃料）が走るか",
+  "充電計画：15分ごとに、充電・太陽光・蓄電池・買う電気をどうするか",
+  "目的：電気代・燃料代・基本料金・CO₂などを合わせた費用を最も小さくする",
+  "方法：数式で問題を書いて計算機で解く（数理最適化）。そのままでは解が改善しなかったので、一部の便だけを解き直す方法（LNS）を加えた",
+  "比較：基本料金を考えずに計画した場合と、考えて計画した場合"], { x: 0.6, y: 1.7, w: 12.1, h: 5.0, fontSize: 20 });
+s.addNotes("決めることは、どのバスがどの便を走るかと、いつ充電するかの2つです。組み合わせが非常に多いので、計算機で解いています。基本料金を考える場合と考えない場合を比べました。");
 
-// 5. Result 1: without basic charge, peaks stay high
-s = pres.addSlide({ masterName: "LIGHT" });
-s.addText("結果①：基本料金を考えないと、一度にたくさん電気を使う", { placeholder: "title" });
-const winterLabels = LIMITS.map((g) => `上限 ${g} kW`);
+// 5. Result: peak
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("結果1：基本料金を考えると、受電のピークが下がる", { placeholder: "title" });
 s.addChart(pres.charts.BAR, [
-  { name: "基本料金を考えない計画", labels: winterLabels, values: LIMITS.map((g) => Math.round(get(rc8, g, WIN).peak_grid_kw)) },
-  { name: "基本料金も考えた計画", labels: winterLabels, values: LIMITS.map((g) => Math.round(get(rc9, g, WIN).peak_grid_kw)) }],
-  { ...chartBase("冬の1週間で、一番多く電気を使った瞬間（kW）"), x: 0.6, y: 1.45, w: 8.4, h: 5.2, barDir: "col", barGrouping: "clustered",
-    chartColors: [HEX.orange, HEX.teal], showValue: true, dataLabelPosition: "outEnd", showLegend: true, legendPos: "t", valAxisMinVal: 0 });
-card(s, 9.3, 1.6, 3.5, 4.8);
-const w8 = LIMITS.map((g) => get(rc8, g, WIN).peak_grid_kw), w9 = LIMITS.map((g) => get(rc9, g, WIN).peak_grid_kw);
-text(s, [{ text: "約半分に", options: { fontSize: 30, bold: true, color: C.accent1, breakLine: true } },
-  { text: `考えない：${Math.round(Math.min(...w8))}〜${Math.round(Math.max(...w8))} kW`, options: { fontSize: 15, breakLine: true } },
-  { text: `考える：${Math.round(Math.min(...w9))}〜${Math.round(Math.max(...w9))} kW`, options: { fontSize: 15, breakLine: true } },
-  { text: " ", options: { fontSize: 10, breakLine: true } },
-  { text: "1週間に買う電気の量も、電気バスが担当する運行の割合もほとんど同じ。違うのは「いつ充電するか」（次のページ）。", options: { fontSize: 14, color: HEX.muted } }],
-  { x: 9.5, y: 1.8, w: 3.1, h: 4.4 });
-s.addNotes("受電上限を変えて冬の1週間を計算しました。オレンジは基本料金を考えない計画、青は考えた計画です。考えないと600〜750 kWまで上がりますが、考えると約370 kWで済みます。");
+  { name: "基本料金を考えない", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc8, g, WIN).peak_grid_kw)) },
+  { name: "基本料金を考える", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc9, g, WIN).peak_grid_kw)) }],
+  chart({ x: 0.6, y: 1.55, w: 7.6, h: 4.9, barDir: "col", barGrouping: "clustered", showValue: true, dataLabelPosition: "outEnd", valAxisMinVal: 0,
+    showValAxisTitle: true, valAxisTitle: "最大受電電力 [kW]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
+caption(s, "冬の代表週（2025年1月6日〜）の最大受電電力", 0.6, 6.5, 7.6);
+bullets(s, [
+  `考えない場合：${Math.round(Math.min(...LIMITS.map((g) => get(rc8, g, WIN).peak_grid_kw)))}〜${Math.round(Math.max(...LIMITS.map((g) => get(rc8, g, WIN).peak_grid_kw)))} kW`,
+  `考える場合：${Math.round(Math.min(...LIMITS.map((g) => get(rc9, g, WIN).peak_grid_kw)))}〜${Math.round(Math.max(...LIMITS.map((g) => get(rc9, g, WIN).peak_grid_kw)))} kW`,
+  "電気バスが担当する便の割合は92〜96%で、ほとんど変わらない"], { x: 8.6, y: 1.9, w: 4.2, h: 4.2, fontSize: 18 });
+s.addNotes("冬の1週間で一番多く電気を使った瞬間を比べました。灰色が基本料金を考えない場合、青が考えた場合です。考えると、受電上限によらず約370 kW前後に下がりました。");
 
-// 5b. Why: same night energy, flattened in time
-const night = JSON.parse(fs.readFileSync(path.join(__dirname, "night_profile_90kW_winter.json"), "utf8"));
-s = pres.addSlide({ masterName: "LIGHT" });
-s.addText("なぜ下がった？：夜の充電を、同じ量のまま「ならした」", { placeholder: "title" });
+// 6. Why
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("ピークが下がった理由：夜の充電を分散させた", { placeholder: "title" });
 s.addChart(pres.charts.LINE, [
-  { name: "基本料金を考えない計画", labels: night.labels, values: night.rc8_grid_kw },
-  { name: "基本料金も考えた計画", labels: night.labels, values: night.rc9_grid_kw }],
-  { ...chartBase("冬の一晩（22時〜翌8時）に買った電気（kW、15分ごと）"), x: 0.6, y: 1.45, w: 8.4, h: 5.2, lineSize: 3, lineDataSymbol: "none",
-    chartColors: [HEX.orange, HEX.teal], showLegend: true, legendPos: "t", valAxisMinVal: 0, catAxisLabelFrequency: 4, catAxisLabelFontSize: 11 });
-card(s, 9.3, 1.6, 3.5, 4.8);
-text(s, [{ text: "山を低く、すそを広く", options: { fontSize: 22, bold: true, color: C.accent1, breakLine: true } },
-  { text: " ", options: { fontSize: 10, breakLine: true } },
-  { text: `この夜に買った電気：${night.night_grid_kwh_rc8.toLocaleString()} kWh → ${night.night_grid_kwh_rc9.toLocaleString()} kWh（ほぼ同じ）`, options: { fontSize: 14, breakLine: true } },
-  { text: `一番高い瞬間：${Math.round(Math.max(...night.rc8_grid_kw))} kW → ${Math.round(Math.max(...night.rc9_grid_kw))} kW`, options: { fontSize: 14, bold: true, breakLine: true } },
-  { text: " ", options: { fontSize: 10, breakLine: true } },
-  { text: "バスが車庫にいる夜の時間を広く使って、充電を少しずつ分けた。", options: { fontSize: 14, color: HEX.muted } }],
-  { x: 9.5, y: 1.8, w: 3.1, h: 4.4 });
-text(s, "受電上限90 kW・冬の週（2025年1月6日の夜）。この週は、昼は太陽光と蓄電池でまかなえたので、電気を買ったのは夜だけ。", { x: 0.6, y: 6.7, w: 11.6, h: 0.4, fontSize: 12, color: HEX.muted });
-s.addNotes("なぜピークが下がったのかを、一晩の電気の買い方で見ます。オレンジは一度にたくさん買っていますが、青は同じくらいの量を、夜の長い時間に分けて少しずつ買っています。買う量はほぼ同じなので、電気代はあまり変わらず、基本料金だけが下がります。");
+  { name: "基本料金を考えない", labels: night.labels, values: night.rc8_grid_kw },
+  { name: "基本料金を考える", labels: night.labels, values: night.rc9_grid_kw }],
+  chart({ x: 0.6, y: 1.55, w: 7.6, h: 4.9, lineSize: 2.5, lineDataSymbol: "none", valAxisMinVal: 0, catAxisLabelFrequency: 4, catAxisLabelFontSize: 12,
+    showValAxisTitle: true, valAxisTitle: "買電電力 [kW]" }));
+caption(s, "受電上限90 kW・冬の一晩（22時〜8時）の買電電力（15分ごと）", 0.6, 6.5, 7.6);
+bullets(s, [
+  `1週間に買った電気はほぼ同じ（${night.week_grid_kwh[0].toLocaleString()} → ${night.week_grid_kwh[1].toLocaleString()} kWh）`,
+  `一番高い瞬間は ${Math.round(Math.max(...night.rc8_grid_kw))} kW → ${Math.round(Math.max(...night.rc9_grid_kw))} kW`,
+  "バスが車庫にいる夜の時間を広く使い、充電を少しずつ分けている",
+  "この週は昼の充電を太陽光と蓄電池でまかなえたため、電気を買ったのは夜だけ"], { x: 8.6, y: 1.9, w: 4.2, h: 4.6, fontSize: 17 });
+s.addNotes("なぜ下がったのかを一晩の電気の買い方で見ます。灰色は一度にたくさん買っていますが、青は同じくらいの量を夜の長い時間に分けて買っています。買う量はほぼ同じなので、電気代はあまり変わらず、基本料金だけが下がります。");
 
-// 6. Result 2: what it means in money
-s = pres.addSlide({ masterName: "LIGHT" });
-s.addText("結果②：基本料金は1年で数百万円変わる", { placeholder: "title" });
-const unit = (kw) => (kw >= 500 ? 1989 : 1890) * 0.85 * 12; // JPY per kW-year (TEPCO business <500 kW, high voltage >=500 kW)
-const peakYear = (rows, g) => Math.max(...rows.filter((r) => r.grid_limit_kw === g && ["2025-01-06", "2025-04-07", "2025-07-07"].includes(r.week)).map((r) => r.peak_grid_kw));
-const p8 = peakYear(rc8, 90), p9 = peakYear(rc9, 90);
-const basic8 = Math.round(p8 * unit(p8) / 1e4), basic9 = Math.round(p9 * unit(p9) / 1e4);
-card(s, 0.6, 1.6, 5.9, 3.6); card(s, 6.8, 1.6, 5.9, 3.6);
-text(s, [{ text: "基本料金を考えない計画", options: { fontSize: 18, color: HEX.muted, breakLine: true } },
-  { text: `年 ${basic8.toLocaleString()} 万円`, options: { fontSize: 40, bold: true, color: C.accent2 } }], { x: 0.9, y: 2.0, w: 5.4, h: 2.8, align: "center", valign: "middle" });
-text(s, [{ text: "基本料金も考えた計画", options: { fontSize: 18, color: HEX.muted, breakLine: true } },
-  { text: `年 ${basic9.toLocaleString()} 万円`, options: { fontSize: 40, bold: true, color: C.accent1 } }], { x: 7.1, y: 2.0, w: 5.4, h: 2.8, align: "center", valign: "middle" });
-text(s, `受電上限90 kWの例。1年で一番大きかった瞬間（kW）×基本料金単価（500 kW未満1,890円・以上1,989円/kW・月、力率100%で0.85倍）×12か月で計算（冬・春・夏の最大）。差は年 約${(basic8 - basic9).toLocaleString()}万円。`,
-  { x: 0.6, y: 5.5, w: 12.1, h: 0.9, fontSize: 15, color: HEX.muted });
-s.addNotes("一番大きく使った瞬間が下がると、1年分の基本料金が下がります。90 kWの例では、年に約540万円の差になります。単価は東京電力の業務用の値で、正式な料金表でもう一度確認する予定です。");
-
-// 7. Result 3: CO2
-s = pres.addSlide({ masterName: "LIGHT" });
-s.addText("結果③：電気バスと一緒に使うと、CO₂は約8割減る", { placeholder: "title" });
-const W = [["2025-01-06", "冬"], ["2025-04-07", "春"], ["2025-07-07", "夏"]];
+// 7. Basic charge per year
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("結果2：1年の基本料金", { placeholder: "title" });
 s.addChart(pres.charts.BAR, [
-  { name: "全部を燃料バスで走る（計算上の目安）", labels: W.map((x) => x[1]), values: W.map(([w]) => Math.round(Number(dRows.find((d) => d.week === w).co2_kg) / 100) / 10) },
-  { name: "電気バスと一緒に使う（最適化）", labels: W.map((x) => x[1]), values: W.map(([w]) => Math.round(get(rc8, 800, w).total_co2_kg / 100) / 10) }],
-  { ...chartBase("1週間のCO₂（トン）"), x: 0.6, y: 1.45, w: 8.4, h: 5.2, barDir: "col", barGrouping: "clustered",
-    chartColors: [HEX.orange, HEX.teal], showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0", showLegend: true, legendPos: "t" });
-card(s, 9.3, 1.6, 3.5, 4.8);
-text(s, [{ text: "CO₂ 約75〜85%減", options: { fontSize: 24, bold: true, color: C.accent1, breakLine: true } },
-  { text: " ", options: { fontSize: 10, breakLine: true } },
-  { text: "電気バスは走行中にCO₂を出さず、太陽光の電気も使える。\n\n「全部燃料バス」は走る距離から軽油の量を計算した目安で、最適化した結果ではない。", options: { fontSize: 14, color: HEX.ink } }],
-  { x: 9.5, y: 1.8, w: 3.1, h: 4.4 });
-s.addNotes("CO₂の比較です。電気バスと一緒に使うと、全部を燃料バスで走る場合より、CO₂が約8割減ります。全部燃料バスの方は、距離から計算した目安です。");
+  { name: "基本料金を考えない", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(basicYear(peakYear(rc8, g)) / 1e4)) },
+  { name: "基本料金を考える", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(basicYear(peakYear(rc9, g)) / 1e4)) }],
+  chart({ x: 0.6, y: 1.55, w: 7.6, h: 4.9, barDir: "col", barGrouping: "clustered", showValue: true, dataLabelPosition: "outEnd", valAxisMinVal: 0,
+    showValAxisTitle: true, valAxisTitle: "基本料金 [万円/年]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
+caption(s, "契約電力＝1年の最大受電電力（冬・春・夏）として計算", 0.6, 6.5, 7.6);
+const b8 = Math.round(basicYear(peakYear(rc8, 90)) / 1e4), b9 = Math.round(basicYear(peakYear(rc9, 90)) / 1e4);
+bullets(s, [`受電上限90 kWの例：年 ${b8.toLocaleString()}万円 → ${b9.toLocaleString()}万円`, "どの受電上限でも、基本料金は約2.5〜5割下がる",
+  "計算：最大受電電力 × 単価 × 0.85（力率100%）× 12か月"], { x: 8.6, y: 1.9, w: 4.2, h: 4.2, fontSize: 18 });
+s.addNotes("ピークが下がると、1年分の基本料金が下がります。90 kWの例では年に約540万円の差です。単価は東京電力の業務用の値で、正式な料金表で確認する予定です。");
 
-// 8. Lessons and next
-s = pres.addSlide({ masterName: "DARK" });
-s.addText("わかったことと、これから", { placeholder: "title" });
-s.addText([
-  { text: "電気バスの充電は、「使う量」より「一度に使う大きさ」に気をつけると、基本料金を大きく減らせる", options: { bullet: true, breakLine: true } },
-  { text: "電気バスと燃料バスを一緒に使うと、CO₂を約8割減らせる", options: { bullet: true, breakLine: true } },
-  { text: "これから：秋の週を加えて1年で評価する／燃料バスに切り替えた方が得になる条件を調べる", options: { bullet: true } }],
-  { placeholder: "body", fontSize: 20, paraSpaceAfter: 10 });
-s.addNotes("まとめです。充電の重なりを減らすことで、基本料金を大きく減らせることが分かりました。これからは、秋を加えた1年間の評価と、燃料バスに切り替えた方が得になる条件を調べます。");
+// 8. CO2
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("結果3：CO₂排出量", { placeholder: "title" });
+const SE = [["2025-01-06", "冬"], ["2025-04-07", "春"], ["2025-07-07", "夏"]];
+s.addChart(pres.charts.BAR, [
+  { name: "全車燃料バス（概算）", labels: SE.map((x) => x[1]), values: SE.map(([w]) => Math.round(Number(diesel.find((d) => d.week === w).co2_kg) / 100) / 10) },
+  { name: "電気バスと併用", labels: SE.map((x) => x[1]), values: SE.map(([w]) => Math.round(get(rc8, 800, w).total_co2_kg / 100) / 10) }],
+  chart({ x: 0.6, y: 1.55, w: 7.6, h: 4.9, barDir: "col", barGrouping: "clustered", showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0", valAxisMinVal: 0,
+    showValAxisTitle: true, valAxisTitle: "CO₂ [t/週]" }));
+caption(s, "全車燃料バスは、走行距離から軽油の量を計算した概算（最適化の結果ではない）", 0.6, 6.5, 7.6);
+bullets(s, ["電気バスと併用すると、CO₂は全車燃料バスより約75〜85%少ない", "電気バスは走行中にCO₂を出さず、太陽光の電気も使える"], { x: 8.6, y: 1.9, w: 4.2, h: 4.2, fontSize: 18 });
+s.addNotes("CO₂の比較です。電気バスと一緒に使うと、全部を燃料バスで走る場合より約8割少なくなります。全部燃料バスの方は距離からの概算です。");
+
+// 9. Summary
+s = pres.addSlide({ masterName: "PLAIN" });
+s.addText("まとめと今後", { placeholder: "title" });
+bullets(s, [
+  "基本料金を考えて計画すると、買う電気の量はほぼ同じまま、受電のピークと1年の基本料金を下げられる",
+  "電気バスと燃料バスを併用すると、CO₂を約8割減らせる",
+  "今後：燃料バスに切り替えた方が得になる条件を調べる／計算結果の質（最適性）をさらに確かめる",
+  "中間発表（11月28日）はA0ポスターで発表予定"], { x: 0.6, y: 1.7, w: 12.1, h: 4.8, fontSize: 20 });
+s.addNotes("まとめです。充電の重なりを減らすことで、基本料金を大きく減らせることが分かりました。今後は、燃料バスに切り替えた方が得になる条件を調べます。");
 
 (async () => {
   const out = path.join(__dirname, "lab_progress_20261022.pptx");
