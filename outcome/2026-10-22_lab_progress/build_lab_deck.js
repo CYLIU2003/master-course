@@ -15,7 +15,9 @@ const LIMITS = [90, 200, 400, 800];
 const WIN = "2025-01-06";
 const get = (rows, g, w) => rows.find((r) => r.grid_limit_kw === g && r.week === w);
 const peakYear = (rows, g) => Math.max(...rows.filter((r) => r.grid_limit_kw === g && r.week !== "2025-10-06").map((r) => r.peak_grid_kw));
-const basicYear = (kw) => kw * (kw >= 500 ? 1989 : 1890) * 0.85 * 12;
+// Annual basic charge at the current TEPCO EP tariff (Kanto, high voltage, Basic plan, 2026-04-01, tax incl.).
+const BASIC_YEN_PER_KW = 2530;
+const basicYear = (kw) => kw * BASIC_YEN_PER_KW * 0.85 * 12;
 
 const BLUE = "0485D7", BLUE_DARK = "0268B0", GREY = "9A9A9A", INK = "222222", SUB = "555555", GRID = "DDDDDD";
 const THEME = { name: "TCU white", headFontFace: "Yu Gothic", bodyFontFace: "Yu Gothic",
@@ -105,7 +107,7 @@ s.addTable([
   [{ text: "", options: { fill: { color: "F2F2F2" } } }, { text: "電力量料金", options: { bold: true, fill: { color: "F2F2F2" } } }, { text: "基本料金", options: { bold: true, fill: { color: "F2F2F2" } } }],
   [{ text: "何で決まるか", options: { bold: true } }, "使った電気の量（kWh）", "1年で最も多く使った30分間の電力（kW）"],
   [{ text: "家庭でいうと", options: { bold: true } }, "毎月の使用量に応じた料金", "ブレーカー（契約アンペア）の大きさ"],
-  [{ text: "この研究の値", options: { bold: true } }, "30円/kWh", "1,890円/kW・月（500 kW以上は1,989円）"]],
+  [{ text: "この研究の値", options: { bold: true } }, "30円/kWh（設定値）", "2,530円/kW・月（東京電力EP 2026年4月〜）"]],
   { x: 0.6, y: 1.7, w: 12.1, colW: [2.4, 4.2, 5.5], fontSize: 18, color: INK, rowH: 0.75, valign: "middle", border: { type: "solid", pt: 0.75, color: GRID } });
 text(s, "基本料金は、一度でも大きく使うとその後1年間高くなる。電気バスの充電が一度に重なると、基本料金が大きくなる。", { x: 0.6, y: 5.1, w: 12.1, h: 1.0, fontSize: 20 });
 s.addNotes("会社の電気料金は、使った量だけでなく、一番たくさん使った30分間の電力の大きさでも決まります。計算は15分ごとなので、15分間の最大で評価しています（30分平均より厳しめ）。これが基本料金です。一度でもたくさん使うと、1年間その分の料金がかかります。");
@@ -171,8 +173,8 @@ caption(s, "契約電力＝代表週（冬・春・夏）の最大受電電力�
 const b8 = Math.round(basicYear(peakYear(rc8, 90)) / 1e4), b9 = Math.round(basicYear(peakYear(rc9, 90)) / 1e4);
 bullets(s, [`受電上限90 kWの例：年 ${b8.toLocaleString()}万円 → ${b9.toLocaleString()}万円`, "どの受電上限でも、基本料金は約2.5〜5割下がる",
   "一方、電気代（電力量料金）の増減は1週間で最大約2万円で、基本料金の差に比べて小さい",
-  "計算：最大受電電力 × 単価 × 0.85（力率100%）× 12か月"], { x: 8.6, y: 1.9, w: 4.2, h: 4.6, fontSize: 17 });
-s.addNotes("ピークが下がると、1年分の基本料金が下がります。90 kWの例では年に約540万円の差です。電気を買う量は条件によって−11%〜+19%変わりましたが、電気代の差は1週間で最大約2万円です。契約電力は、500 kW未満なら過去1年の最大需要電力で決まります（実量制、東京電力EPの公式ページで確認）。単価1,890円は東京電力EPの旧メニューの値で、現行の単価は確認中です。単価が変わっても、削減の割合は変わりません。");
+  "計算：最大受電電力 × 2,530円 × 0.85（力率100%）× 12か月"], { x: 8.6, y: 1.9, w: 4.2, h: 4.6, fontSize: 17 });
+s.addNotes("ピークが下がると、1年分の基本料金が下がります。90 kWの例では年に約645万円の差です。電気を買う量は条件によって−11%〜+19%変わりましたが、電気代の差は1週間で最大約2万円です。契約電力は、500 kW未満なら過去1年の最大需要電力で決まります（実量制、東京電力EPの公式ページで確認）。単価2,530円は、東京電力EPの2026年4月からの料金表（関東・高圧・ベーシックプラン、税込）の値です。なお、最適化の計算そのものは旧単価1,890円で行っています。単価が変わっても、削減の割合は変わりません。");
 
 // 8. CO2
 s = pres.addSlide({ masterName: "PLAIN" });

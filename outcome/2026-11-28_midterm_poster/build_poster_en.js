@@ -14,7 +14,9 @@ const dk = dl[0].split(","), diesel = dl.slice(1).map((l) => Object.fromEntries(
 const LIMITS = [90, 200, 400, 800];
 const get = (rows, g, w) => rows.find((r) => r.grid_limit_kw === g && r.week === w);
 const peakYear = (rows, g) => Math.max(...rows.filter((r) => r.grid_limit_kw === g).map((r) => r.peak_grid_kw));
-const basicYear = (kw) => kw * (kw >= 500 ? 1989 : 1890) * 0.85 * 12;
+// Annual basic charge at the current TEPCO EP tariff (Kanto, high voltage, Basic plan, 2026-04-01, tax incl.).
+const BASIC_YEN_PER_KW = 2530;
+const basicYear = (kw) => kw * BASIC_YEN_PER_KW * 0.85 * 12;
 const fmt = (n) => n.toLocaleString("en-US");
 
 const BLUE = "0485D7", BLUE_DARK = "0268B0", GREY = "9A9A9A", INK = "222222", SUB = "555555", GRID = "DDDDDD";
@@ -67,7 +69,7 @@ y += 8.0;
 y = section("2. Case study", LX, y, COL);
 const rows = [["Routes", "Tokyu Bus Shibu 21–23 (Tsurumaki depot)"], ["Trips", "1,704 trips per week"], ["Fleet", "35 electric + 25 diesel buses available (fixed)"],
   ["Assets", "PV 1,000 kW, battery 6,000 kWh, chargers 10 × 90 kW"], ["Grid limit", "90/200/400/800 kW (500 JPY/kWh on excess)"], ["Weeks", "Winter, spring, summer (+autumn, basic charge)"],
-  ["Prices", "Grid 30 JPY/kWh; diesel 150 JPY/L; basic 1,890 JPY/kW-mo"], ["CO₂", "Diesel 2.62 kg/L; grid 0.5 kg/kWh (TEPCO actual 0.452)"]];
+  ["Prices", "Grid 30 JPY/kWh; diesel 150 JPY/L; basic 2,530 JPY/kW-mo"], ["CO₂", "Diesel 2.62 kg/L; grid 0.5 kg/kWh (TEPCO actual 0.452)"]];
 s.addTable(rows.map(([k, v]) => [{ text: k, options: { bold: true } }, { text: v }]),
   { x: LX, y, w: COL, colW: [3.0, COL - 3.0], fontSize: 30, fontFace: FONT, color: INK, rowH: 0.78, valign: "middle",
     border: { type: "solid", pt: 1, color: GRID } });
@@ -79,7 +81,7 @@ text([
   { text: "Hourly rolling: re-plan every hour while executing the week; costs are taken from the executed result.", options: { breakLine: true } },
   { text: "Comparison: objective without and with the basic charge." }],
   { x: LX, y, w: COL, h: 42.8 - y, paraSpaceAfter: 18 });
-caption("Note: All trip assignments and all 16 charging plans with the basic charge are time-limited feasible solutions (MIP gap 13–67%); without it, 11 of 12 charging plans are optimal. Peak = 15-min average. Contract demand = annual peak (metered-demand rule below 500 kW). Basic charge: former TEPCO EP business rate (1,989 JPY/kW at ≥500 kW); power factor 100%.",
+caption("Note: All trip assignments and all 16 charging plans with the basic charge are time-limited feasible solutions (MIP gap 13–67%); without it, 11 of 12 charging plans are optimal. Peak = 15-min average. Contract demand = annual peak (metered-demand rule below 500 kW). Basic charge: TEPCO EP Kanto high-voltage Basic plan (Apr 2026), 2,530 JPY/kW, power factor 100%; the optimization used the former 1,890 JPY/kW.",
   LX, 43.2, COL, 2.2, 26);
 
 // ---- Right column

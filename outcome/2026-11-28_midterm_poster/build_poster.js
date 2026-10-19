@@ -16,7 +16,9 @@ const dk = dl[0].split(","), diesel = dl.slice(1).map((l) => Object.fromEntries(
 const LIMITS = [90, 200, 400, 800];
 const get = (rows, g, w) => rows.find((r) => r.grid_limit_kw === g && r.week === w);
 const peakYear = (rows, g) => Math.max(...rows.filter((r) => r.grid_limit_kw === g).map((r) => r.peak_grid_kw));
-const basicYear = (kw) => kw * (kw >= 500 ? 1989 : 1890) * 0.85 * 12;
+// Annual basic charge at the current TEPCO EP tariff (Kanto, high voltage, Basic plan, 2026-04-01, tax incl.).
+const BASIC_YEN_PER_KW = 2530;
+const basicYear = (kw) => kw * BASIC_YEN_PER_KW * 0.85 * 12;
 
 // Tokyo City University blue as used on tcu.ac.jp (#0485D7).
 const BLUE = "0485D7", BLUE_DARK = "0268B0", GREY = "9A9A9A", INK = "222222", SUB = "555555", GRID = "DDDDDD";
@@ -66,7 +68,7 @@ y += 8.0;
 y = section("2．対象と条件", LX, y, COL);
 const rows = [["対象", "東急バス 渋21〜23系統（弦巻営業所）"], ["運行", "1週間 1,704便"], ["車両", "保有 電気バス35台・燃料バス25台（固定）"],
   ["設備", "太陽光1,000 kW・蓄電池6,000 kWh・充電器90 kW×10"], ["受電上限", "90/200/400/800 kW（超過分に500円/kWh・仮）"], ["期間", "冬・春・夏の代表週（基本料金ありは秋も）"],
-  ["単価", "電気30円/kWh・軽油150円/L・基本料金1,890円/kW月"], ["CO₂", "軽油2.62 kg/L、電力0.5 kg/kWh（仮・実値0.452）"]];
+  ["単価", "電気30円/kWh・軽油150円/L・基本料金2,530円/kW月"], ["CO₂", "軽油2.62 kg/L、電力0.5 kg/kWh（仮・実値0.452）"]];
 s.addTable(rows.map(([k, v]) => [{ text: k, options: { bold: true } }, { text: v }]),
   { x: LX, y, w: COL, colW: [3.2, COL - 3.2], fontSize: 34, fontFace: "Yu Gothic", color: INK, rowH: 0.78, valign: "middle",
     border: { type: "solid", pt: 1, color: GRID } });
@@ -119,13 +121,13 @@ caption("図4　1週間のCO₂（全車燃料バスは走行距離からの概�
 y += 6.6;
 y = section("5．まとめと今後", RX, y, COL);
 text([
-  { text: "基本料金を考慮して充電を分散させると、買電量を大きく変えずに受電ピークと基本料金を下げられる（上限90 kWで年約1,265万円→720万円）。", options: { breakLine: true } },
+  { text: `基本料金を考慮して充電を分散させると、買電量を大きく変えずに受電ピークと基本料金を下げられる（上限90 kWで年約${Math.round(basicYear(peakYear(rc8, 90)) / 1e4).toLocaleString()}万円→${Math.round(basicYear(peakYear(rc9, 90)) / 1e4).toLocaleString()}万円）。`, options: { breakLine: true } },
   { text: "電気バスとの併用で、CO₂は全車燃料バスより約75〜85%少なかった。", options: { breakLine: true } },
   { text: "今後：便割当段階の充電の見込みと実際の買電の差の検証、燃料バスへの振り替え条件の感度分析。" }],
   { x: RX, y, w: COL, h: 45.4 - y, paraSpaceAfter: 10, fontSize: 36 });
 
 // ---- Footnote across the bottom
-caption("注：便割当は全件、基本料金を含めた充電計画は16件すべて制限時間内の実行可能解（ギャップ13〜67%）。含めない充電計画は12件中11件が最適。最大受電は15分平均。契約電力は実量制（500 kW未満）の考え方で年間最大受電とした。基本料金単価は東京電力EP旧業務用電力（500 kW以上は1,989円/kW）、力率100%を仮定。",
+caption("注：便割当は全件、基本料金を含めた充電計画は16件すべて制限時間内の実行可能解（ギャップ13〜67%）。含めない充電計画は12件中11件が最適。最大受電は15分平均。契約電力は実量制（500 kW未満）の考え方で年間最大受電とした。基本料金は東京電力EP（2026年4月、関東・高圧ベーシックプラン）2,530円/kW、力率100%。最適化には旧単価1,890円を使用。",
   LX, 43.2, COL, 2.2, 28);
 
 (async () => {
