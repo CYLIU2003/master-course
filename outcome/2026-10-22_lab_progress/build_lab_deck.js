@@ -104,9 +104,29 @@ text(s, [{ text: "約半分に", options: { fontSize: 30, bold: true, color: C.a
   { text: `考えない：${Math.round(Math.min(...w8))}〜${Math.round(Math.max(...w8))} kW`, options: { fontSize: 15, breakLine: true } },
   { text: `考える：${Math.round(Math.min(...w9))}〜${Math.round(Math.max(...w9))} kW`, options: { fontSize: 15, breakLine: true } },
   { text: " ", options: { fontSize: 10, breakLine: true } },
-  { text: "使う電気の量や、電気バスが担当する運行の割合はほとんど同じ。充電の時間や蓄電池の使い方をずらして、重なりを減らしたと考えられる。", options: { fontSize: 14, color: HEX.muted } }],
+  { text: "1週間に買う電気の量も、電気バスが担当する運行の割合もほとんど同じ。違うのは「いつ充電するか」（次のページ）。", options: { fontSize: 14, color: HEX.muted } }],
   { x: 9.5, y: 1.8, w: 3.1, h: 4.4 });
 s.addNotes("受電上限を変えて冬の1週間を計算しました。オレンジは基本料金を考えない計画、青は考えた計画です。考えないと600〜750 kWまで上がりますが、考えると約370 kWで済みます。");
+
+// 5b. Why: same night energy, flattened in time
+const night = JSON.parse(fs.readFileSync(path.join(__dirname, "night_profile_90kW_winter.json"), "utf8"));
+s = pres.addSlide({ masterName: "LIGHT" });
+s.addText("なぜ下がった？：夜の充電を、同じ量のまま「ならした」", { placeholder: "title" });
+s.addChart(pres.charts.LINE, [
+  { name: "基本料金を考えない計画", labels: night.labels, values: night.rc8_grid_kw },
+  { name: "基本料金も考えた計画", labels: night.labels, values: night.rc9_grid_kw }],
+  { ...chartBase("冬の一晩（22時〜翌8時）に買った電気（kW、15分ごと）"), x: 0.6, y: 1.45, w: 8.4, h: 5.2, lineSize: 3, lineDataSymbol: "none",
+    chartColors: [HEX.orange, HEX.teal], showLegend: true, legendPos: "t", valAxisMinVal: 0, catAxisLabelFrequency: 4, catAxisLabelFontSize: 11 });
+card(s, 9.3, 1.6, 3.5, 4.8);
+text(s, [{ text: "山を低く、すそを広く", options: { fontSize: 22, bold: true, color: C.accent1, breakLine: true } },
+  { text: " ", options: { fontSize: 10, breakLine: true } },
+  { text: `この夜に買った電気：${night.night_grid_kwh_rc8.toLocaleString()} kWh → ${night.night_grid_kwh_rc9.toLocaleString()} kWh（ほぼ同じ）`, options: { fontSize: 14, breakLine: true } },
+  { text: `一番高い瞬間：${Math.round(Math.max(...night.rc8_grid_kw))} kW → ${Math.round(Math.max(...night.rc9_grid_kw))} kW`, options: { fontSize: 14, bold: true, breakLine: true } },
+  { text: " ", options: { fontSize: 10, breakLine: true } },
+  { text: "バスが車庫にいる夜の時間を広く使って、充電を少しずつ分けた。", options: { fontSize: 14, color: HEX.muted } }],
+  { x: 9.5, y: 1.8, w: 3.1, h: 4.4 });
+text(s, "受電上限90 kW・冬の週（2025年1月6日の夜）。この週は、昼は太陽光と蓄電池でまかなえたので、電気を買ったのは夜だけ。", { x: 0.6, y: 6.7, w: 11.6, h: 0.4, fontSize: 12, color: HEX.muted });
+s.addNotes("なぜピークが下がったのかを、一晩の電気の買い方で見ます。オレンジは一度にたくさん買っていますが、青は同じくらいの量を、夜の長い時間に分けて少しずつ買っています。買う量はほぼ同じなので、電気代はあまり変わらず、基本料金だけが下がります。");
 
 // 6. Result 2: what it means in money
 s = pres.addSlide({ masterName: "LIGHT" });

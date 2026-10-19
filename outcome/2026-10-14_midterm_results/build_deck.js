@@ -150,7 +150,7 @@ if (fs.existsSync(rc9Path)) {
   const done = LIMITS.flatMap((g) => WEEKS.map(([w]) => [g, w])).filter(([g, w]) => c9(g, w));
   s = pres.addSlide({ masterName: "CONTENT" });
   s.addText("基本料金を最適化に入れると、受電ピークが大きく下がる", { placeholder: "title" });
-  s.addNotes('次に、基本料金を最適化の目的関数に入れて計算し直しました。同じケースで比べると、受電ピークが25〜63%下がりました。電気バスの担当便の割合はほぼ同じなので、主に充電と蓄電池の使い方でピークを抑えたと考えています。');
+  s.addNotes('次に、基本料金を最適化の目的関数に入れて計算し直しました。同じケースで比べると、受電ピークが25〜63%下がりました。1週間に買う電気の量と電気バスの担当便の割合はほぼ同じで、夜の充電を時間的にならしてピークを下げていました。');
   const labels = done.map(([g, w]) => `${g} kW・${WEEKS.find((x) => x[0] === w)[1].slice(0, 1)}`);
   s.addChart(pres.charts.BAR, [
     { name: "基本料金なしで最適化", labels, values: done.map(([g, w]) => Math.round(cell(g, w).peak_grid_kw)) },
@@ -162,7 +162,7 @@ if (fs.existsSync(rc9Path)) {
   s.addText([{ text: `ピーク −${Math.round(Math.min(...drops) * 100)}〜${Math.round(Math.max(...drops) * 100)}%`, options: { fontSize: 22, bold: true, color: C.accent1, breakLine: true } },
     { text: "同じケースで、基本料金の有無を比べた", options: { fontSize: 13, color: HEX.ink } }],
     { x: 9.6, y: 1.7, w: 3.1, h: 2.0, align: "center", valign: "middle", isTextBox: true });
-  s.addText("基本料金は1,606.5円/kW月（1,890円×0.85）を計画期間に按分して目的関数に入れた。ほかの条件は同じ。電気バスの担当便の割合はほぼ変わらないので、主に充電と蓄電池の使い方でピークを抑えたと考えられる。",
+  s.addText("基本料金は1,606.5円/kW月（1,890円×0.85）を計画期間に按分して目的関数に入れた。ほかの条件は同じ。1週間の買電量と電気バスの担当便の割合はほぼ同じで、夜の充電を時間的にならしてピークを下げた（90 kW・冬の買電量 3,896→3,931 kWh で確認）。",
     { x: 9.5, y: 4.0, w: 3.3, h: 2.4, fontSize: 12, color: HEX.muted, valign: "top", isTextBox: true, margin: 0 });
   if (done.length < 12) note(s, `計算中のケースを除く（${done.length}/12ケース）。`);
 }
