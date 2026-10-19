@@ -51,7 +51,7 @@ text("東京都市大学　劉 承洋（研究室名・指導教員をここに�
 s.addShape(pres.shapes.LINE, { x: M, y: M + 5.6, w: W, h: 0, line: { color: BLUE, width: 8 } });
 
 // ---- Abstract (full width)
-text("概要　路線バスの電動化では、営業所での充電が重なると受電電力のピークが大きくなり、契約電力に応じた基本料金や受電設備の負担が増える。本研究では、燃料バスと電気バスを併用する営業所を対象に、便の割当と充電計画を同時に最適化し、受電上限と基本料金が費用とCO₂に与える影響を評価した。基本料金を目的関数に含めると、1週間の買電量をほぼ変えずに、冬の受電ピークが約2〜5割低くなった。",
+text("概要　路線バスの電動化では、営業所での充電が重なると受電電力のピークが大きくなり、契約電力に応じた基本料金や受電設備の負担が増える。本研究では、燃料バスと電気バスを併用する営業所を対象に、便の割当と充電計画を同時に最適化し、受電上限と基本料金が費用とCO₂に与える影響を評価した。基本料金を目的関数に含めた場合、買電量を大きく変えずに、冬の受電ピークが約2.5〜5割低くなった。",
   { x: M, y: 8.0, w: W, h: 3.9, fontSize: 42 });
 
 // ---- Left column
@@ -61,16 +61,16 @@ text([
   { text: "路線バスで電気バスの導入が進んでいるが、車両価格や充電時間の制約から、当面は燃料（軽油）バスとの併用が続く。", options: { breakLine: true } },
   { text: "電気料金は、使用電力量に応じた料金と、契約電力（過去1年の最大需要電力）に応じた基本料金からなる。夜間に充電が集中すると後者が大きくなる。", options: { breakLine: true } },
   { text: "本研究の目的は、受電上限と基本料金の有無が、便割当・充電計画・費用・CO₂に与える影響を明らかにすることである。" }],
-  { x: LX, y, w: COL, h: 8.8, paraSpaceAfter: 18 });
-y += 9.2;
+  { x: LX, y, w: COL, h: 7.6, paraSpaceAfter: 18 });
+y += 8.0;
 y = section("2．対象と条件", LX, y, COL);
-const rows = [["対象", "東急バス 渋21〜23系統（弦巻営業所）"], ["運行", "1週間 1,704便"], ["車両", "電気バス35台・燃料バス25台（固定）"],
-  ["設備", "太陽光 1,000 kW（傾斜30°）、蓄電池 6,000 kWh"], ["受電上限", "90 / 200 / 400 / 800 kW"], ["期間", "冬・春・夏・秋の代表週"],
-  ["単価", "電気 30円/kWh、軽油 150円/L、基本料金 1,890円/kW・月"], ["CO₂", "軽油 2.62 kg/L、電力 0.5 kg/kWh"]];
+const rows = [["対象", "東急バス 渋21〜23系統（弦巻営業所）"], ["運行", "1週間 1,704便"], ["車両", "保有 電気バス35台・燃料バス25台（固定）"],
+  ["設備", "太陽光1,000 kW・蓄電池6,000 kWh・充電器90 kW×10"], ["受電上限", "90/200/400/800 kW（超過分に500円/kWh・仮）"], ["期間", "冬・春・夏の代表週（基本料金ありは秋も）"],
+  ["単価", "電気30円/kWh・軽油150円/L・基本料金1,890円/kW月"], ["CO₂", "軽油 2.62 kg/L、電力 0.5 kg/kWh（仮）"]];
 s.addTable(rows.map(([k, v]) => [{ text: k, options: { bold: true } }, { text: v }]),
   { x: LX, y, w: COL, colW: [3.2, COL - 3.2], fontSize: 34, fontFace: "Yu Gothic", color: INK, rowH: 0.78, valign: "middle",
     border: { type: "solid", pt: 1, color: GRID } });
-y += rows.length * 0.78 + 0.9;
+y += rows.length * 0.78 + 1.5;
 y = section("3．手法", LX, y, COL);
 text([
   { text: "便割当（Stage 1）：1,704便を60台に割り当てる混合整数計画問題。汎用ソルバーだけでは改善しなかったため、一部の便だけを解き直す大近傍探索（LNS）で初期解を改善した。", options: { breakLine: true } },
@@ -98,8 +98,8 @@ s.addChart(pres.charts.LINE, [
     showValAxisTitle: true, valAxisTitle: "買電電力 [kW]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
 caption("図2　受電上限90 kW・冬の一晩（22時〜8時）の買電電力", RX, y + 5.45, COL);
 y += 6.4;
-text(`基本料金を含めると、冬の最大受電電力は受電上限によらず359〜380 kWとなった（含めない場合は478〜750 kW）。1週間の買電量はほぼ同じで（${night.week_grid_kwh[0].toLocaleString()} → ${night.week_grid_kwh[1].toLocaleString()} kWh）、夜間の充電を分散させてピークを下げていた（図2）。電気バスが担当する便の割合は92〜96%で、ほぼ変わらなかった。`,
-  { x: RX, y, w: COL, h: 3.9, fontSize: 38 });
+text(`基本料金を含めると、冬の最大受電電力は受電上限によらず359〜380 kWとなった（含めない場合は478〜750 kW）。上限90 kWの例では1週間の買電量はほぼ同じで（${night.week_grid_kwh[0].toLocaleString()} → ${night.week_grid_kwh[1].toLocaleString()} kWh）、夜間の充電を分散させてピークを下げていた（図2）。受電上限は超過分に追加費用を課す目安のため、ピークが上限を超える場合がある。電気バスが担当する便の割合は92〜96%で、ほぼ変わらなかった。`,
+  { x: RX, y, w: COL, h: 3.9, fontSize: 34 });
 y += 4.2;
 const half = (COL - 0.6) / 2;
 s.addChart(pres.charts.BAR, [
@@ -119,17 +119,17 @@ caption("図4　1週間のCO₂（全車燃料バスは走行距離からの概�
 y += 6.6;
 y = section("5．まとめと今後", RX, y, COL);
 text([
-  { text: "基本料金を考慮して充電を分散させると、買電量をほぼ変えずに受電ピークと基本料金を下げられる（上限90 kWで年約1,265万円→720万円）。", options: { breakLine: true } },
-  { text: "電気バスとの併用で、CO₂は全車燃料バスより約75〜85%少ない。", options: { breakLine: true } },
+  { text: "基本料金を考慮して充電を分散させると、買電量を大きく変えずに受電ピークと基本料金を下げられる（上限90 kWで年約1,265万円→720万円）。", options: { breakLine: true } },
+  { text: "電気バスとの併用で、CO₂は全車燃料バスより約75〜85%少なかった。", options: { breakLine: true } },
   { text: "今後：燃料バスへの振り替えが有利になる条件の感度分析、便割当の解の質の改善。" }],
   { x: RX, y, w: COL, h: 45.4 - y, paraSpaceAfter: 10, fontSize: 36 });
 
 // ---- Footnote across the bottom
-caption("注：最適化の停止条件はギャップ1%。基本料金を含めた計算の充電計画は制限時間内の実行可能解を含む。基本料金単価は東京電力EP業務用電力（500 kW以上は高圧電力 1,989円/kW）、力率100%を仮定。",
+caption("注：便割当は全件、基本料金を含めた充電計画は16件すべて制限時間内の実行可能解（ギャップ13〜67%）。含めない充電計画は12件中11件が最適。最大受電は15分平均。基本料金単価は東京電力EP業務用電力（500 kW以上は高圧電力 1,989円/kW）、力率100%を仮定。",
   LX, 43.2, COL, 2.2, 28);
 
 (async () => {
-  const out = path.join(__dirname, "midterm_poster_A0.pptx");
+  const out = path.join(__dirname, process.env.POSTER_OUT || "midterm_poster_A0.pptx");
   await pres.writeFile({ fileName: out });
   await applyTheme(out, THEME);
   console.log("wrote", out);

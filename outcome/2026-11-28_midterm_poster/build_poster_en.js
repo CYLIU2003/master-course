@@ -52,7 +52,7 @@ text("(Author name, laboratory and supervisor), Tokyo City University", { x: M +
 s.addShape(pres.shapes.LINE, { x: M, y: M + 5.6, w: W, h: 0, line: { color: BLUE, width: 8 } });
 
 // ---- Abstract
-text("Abstract  When battery-electric buses charge at the depot at the same time, the peak grid demand rises, and so do the demand-based basic electricity charge and the required receiving equipment. For a depot that operates electric and diesel buses together, we jointly optimize trip assignment and charging and evaluate how the grid import limit and the basic charge affect cost and CO₂ emissions. Including the basic charge in the objective lowered the winter peak demand by about 25–50% while the weekly energy purchased stayed almost the same.",
+text("Abstract  When battery-electric buses charge at the depot at the same time, the peak grid demand rises, and so do the demand-based basic electricity charge and the required receiving equipment. For a depot that operates electric and diesel buses together, we jointly optimize trip assignment and charging and evaluate how the grid import limit and the basic charge affect cost and CO₂ emissions. Including the basic charge in the objective lowered the winter peak demand by about 25–50% without a large change in the energy purchased.",
   { x: M, y: 8.0, w: W, h: 4.0, fontSize: 38 });
 
 // ---- Left column
@@ -62,16 +62,16 @@ text([
   { text: "Electric buses are being introduced on city bus routes, but because of vehicle cost and charging time they will be operated together with diesel buses for some time.", options: { breakLine: true } },
   { text: "A business electricity bill consists of an energy charge (per kWh) and a basic charge set by the contract demand, i.e. the highest demand of the past 12 months. Charging concentrated at night raises the latter.", options: { breakLine: true } },
   { text: "Objective: clarify how the grid import limit and the basic charge affect trip assignment, charging, cost and CO₂." }],
-  { x: LX, y, w: COL, h: 8.8, paraSpaceAfter: 18 });
-y += 9.2;
+  { x: LX, y, w: COL, h: 7.6, paraSpaceAfter: 18 });
+y += 8.0;
 y = section("2. Case study", LX, y, COL);
-const rows = [["Routes", "Tokyu Bus Shibu 21–23 (Tsurumaki depot)"], ["Trips", "1,704 trips per week"], ["Fleet", "35 electric + 25 diesel buses (fixed)"],
-  ["Assets", "PV 1,000 kW (30° tilt), battery storage 6,000 kWh"], ["Grid limit", "90 / 200 / 400 / 800 kW"], ["Weeks", "Winter, spring, summer, autumn"],
-  ["Prices", "Energy 30 JPY/kWh, diesel 150 JPY/L, basic 1,890 JPY/kW-month"], ["CO₂", "Diesel 2.62 kg/L, grid 0.5 kg/kWh"]];
+const rows = [["Routes", "Tokyu Bus Shibu 21–23 (Tsurumaki depot)"], ["Trips", "1,704 trips per week"], ["Fleet", "35 electric + 25 diesel buses available (fixed)"],
+  ["Assets", "PV 1,000 kW, battery 6,000 kWh, chargers 10 × 90 kW"], ["Grid limit", "90/200/400/800 kW (500 JPY/kWh on excess)"], ["Weeks", "Winter, spring, summer (+autumn, basic charge)"],
+  ["Prices", "Grid 30 JPY/kWh; diesel 150 JPY/L; basic 1,890 JPY/kW-mo"], ["CO₂", "Diesel 2.62 kg/L; grid 0.5 kg/kWh (provisional)"]];
 s.addTable(rows.map(([k, v]) => [{ text: k, options: { bold: true } }, { text: v }]),
-  { x: LX, y, w: COL, colW: [3.4, COL - 3.4], fontSize: 32, fontFace: FONT, color: INK, rowH: 0.78, valign: "middle",
+  { x: LX, y, w: COL, colW: [3.0, COL - 3.0], fontSize: 30, fontFace: FONT, color: INK, rowH: 0.78, valign: "middle",
     border: { type: "solid", pt: 1, color: GRID } });
-y += rows.length * 0.78 + 0.9;
+y += rows.length * 0.78 + 1.5;
 y = section("3. Method", LX, y, COL);
 text([
   { text: "Trip assignment (Stage 1): a mixed-integer program assigning 1,704 trips to 60 buses. A general-purpose solver did not improve the initial plan, so we improved it with large neighborhood search (LNS), re-solving only part of the trips at a time.", options: { breakLine: true } },
@@ -79,7 +79,7 @@ text([
   { text: "Hourly rolling: re-plan every hour while executing the week; costs are taken from the executed result.", options: { breakLine: true } },
   { text: "Comparison: objective without and with the basic charge." }],
   { x: LX, y, w: COL, h: 42.8 - y, paraSpaceAfter: 18 });
-caption("Note: MIP gap tolerance 1%. With the basic charge, the charging plans are time-limited feasible solutions. Basic charge rates of TEPCO Energy Partner (business, <500 kW; 1,989 JPY/kW at ≥500 kW); power factor 100% assumed.",
+caption("Note: All trip assignments and all 16 charging plans with the basic charge are time-limited feasible solutions (MIP gap 13–67%); without it, 11 of 12 charging plans are optimal. Peak = 15-min average. Basic charge rates of TEPCO Energy Partner (business, <500 kW; 1,989 JPY/kW at ≥500 kW); power factor 100% assumed.",
   LX, 43.2, COL, 2.2, 26);
 
 // ---- Right column
@@ -101,8 +101,8 @@ s.addChart(pres.charts.LINE, [
     showValAxisTitle: true, valAxisTitle: "Grid purchase [kW]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
 caption("Fig. 2  Grid purchase over one winter night (22:00–08:00), 90 kW limit", RX, y + 5.45, COL);
 y += 6.4;
-text(`With the basic charge, the winter peak demand was 359–380 kW regardless of the grid limit (478–750 kW without it). The weekly energy purchased was almost unchanged (${fmt(night.week_grid_kwh[0])} → ${fmt(night.week_grid_kwh[1])} kWh); night charging was spread over time (Fig. 2). Electric buses served 92–96% of trips in both cases.`,
-  { x: RX, y, w: COL, h: 3.9, fontSize: 36 });
+text(`With the basic charge, the winter peak demand was 359–380 kW regardless of the grid limit (478–750 kW without it). At the 90 kW limit the weekly energy purchased was almost unchanged (${fmt(night.week_grid_kwh[0])} → ${fmt(night.week_grid_kwh[1])} kWh); night charging was spread over time (Fig. 2). The limit is a soft limit with a cost on the excess, so the peak can exceed it. Electric buses served 92–96% of trips in both cases.`,
+  { x: RX, y, w: COL, h: 3.9, fontSize: 32 });
 y += 4.2;
 const half = (COL - 0.6) / 2;
 s.addChart(pres.charts.BAR, [
@@ -123,7 +123,7 @@ y += 6.6;
 y = section("5. Conclusions", RX, y, COL);
 const b8 = basicYear(peakYear(rc8, 90)) / 1e6, b9 = basicYear(peakYear(rc9, 90)) / 1e6;
 text([
-  { text: `Spreading charging with the basic charge in the objective lowers the peak demand and the basic charge with almost the same energy purchased (90 kW limit: ${b8.toFixed(1)} → ${b9.toFixed(1)} million JPY per year).`, options: { breakLine: true } },
+  { text: `Spreading charging with the basic charge in the objective lowers the peak demand and the basic charge without a large change in the energy purchased (90 kW limit: ${b8.toFixed(1)} → ${b9.toFixed(1)} million JPY per year).`, options: { breakLine: true } },
   { text: "The mixed fleet emits about 75–85% less CO₂ than an all-diesel fleet.", options: { breakLine: true } },
   { text: "Next: sensitivity of the conditions that favor diesel buses, and the solution quality of trip assignment." }],
   { x: RX, y, w: COL, h: 45.4 - y, paraSpaceAfter: 10, fontSize: 34 });
