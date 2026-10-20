@@ -131,9 +131,9 @@ s.addTable([
   [H(""), H("電力量料金"), H("基本料金")],
   [B("決まり方"), "使用した電力量（kWh）", "契約電力（kW）。500 kW未満は過去1年間の最大需要電力（30分平均）［1］"],
   [B("家庭での例え"), "毎月の使用量に応じた料金", "契約アンペア（ブレーカー）の大きさ"],
-  [B("本研究での値"), "30円/kWh（設定値）", "2,530円/kW・月 × 0.85（力率100%）［2］"]],
+  [B("本研究での値"), "30円/kWh（設定値）", "2,530円/kW・月［3］× 0.85（力率100%）［2］"]],
   tableOpts({ x: 0.6, y: 1.6, w: 12.1, colW: [2.2, 3.9, 6.0], fontSize: 16, rowH: 0.7 }));
-caption(s, "表1　事業者向け電気料金（高圧）の構成。出典［1］［2］", 0.6, 4.55, 12.1);
+caption(s, "表1　事業者向け電気料金（高圧）の構成。出典［1］〜［3］", 0.6, 4.55, 12.1);
 bullets(s, [
   "基本料金は過去1年間の最大値で決まるため、一度のピークがその後1年間の料金に影響する",
   "電気バスの充電が同じ時間帯に集中すると、このピークが大きくなる"], { x: 0.6, y: 5.1, w: 12.1, h: 1.4, fontSize: 17 });
@@ -153,8 +153,8 @@ COLS.forEach(([head, items], i) => {
 });
 text(s, "解法", { x: 0.6, y: 4.45, w: 12.1, h: 0.4, fontSize: 17, bold: true, color: BLUE_DARK });
 bullets(s, [
-  "便割当（Stage 1）と充電計画（Stage 2、15分刻み）の2段階に分け、混合整数計画問題として求解した［6］",
-  "便割当は一括では解が改善しなかったため、一部の便のみを解き直す大近傍探索（LNS）［7］を併用した",
+  "便割当（Stage 1）と充電計画（Stage 2、15分刻み）の2段階に分け、混合整数計画問題として求解した［7］",
+  "便割当は一括では解が改善しなかったため、一部の便のみを解き直す大近傍探索（LNS）［8］を併用した",
   "1時間ごとに計画を更新しながら1週間を運用し（ローリング）、その実行結果から費用を集計した"],
   { x: 0.6, y: 4.9, w: 12.1, h: 1.9, fontSize: 16, paraSpaceAfter: 6 });
 s.addNotes("数理最適化は、決めること・守るルール・最小化したいものの3つを数式で書き、計算機で最もよい計画を探す方法です。時間割やシフト表を作るのに近いと考えてください。問題が大きいため、便割当と充電計画の2段階に分けて解いています。");
@@ -188,13 +188,13 @@ s.addNotes("定式化の概略です。目的関数は、車両の使用費、�
 // ---- 2. Conditions
 s = page(S2, "計算条件");
 s.addTable([
-  ["対象", "東急バス 渋21〜23系統（弦巻営業所）、時刻表は公共交通オープンデータ［5］"],
+  ["対象", "東急バス 渋21〜23系統（弦巻営業所）、時刻表は公共交通オープンデータ［6］"],
   ["運行", "1週間 1,704便"],
   ["車両", "電気バス35台・燃料バス25台（保有台数、固定）"],
-  ["設備", "太陽光 1,000 kW（傾斜30°、pvlib［4］で斜面日射を算定）、蓄電池 6,000 kWh、充電器 90 kW × 10基"],
+  ["設備", "太陽光 1,000 kW（傾斜30°、pvlib［5］で斜面日射を算定）、蓄電池 6,000 kWh、充電器 90 kW × 10基"],
   ["受電上限", "90 / 200 / 400 / 800 kW（超過分に500円/kWhの追加費用、仮の値）"],
   ["対象期間", "冬・春・夏の代表週（基本料金を考慮する場合は秋も計算）"],
-  ["単価・係数", "電力量 30円/kWh（設定値）、軽油 150円/L、CO₂ 軽油2.62 kg/L［3］・電力0.5 kg/kWh（仮の値）"],
+  ["単価・係数", "電力量 30円/kWh（設定値）、軽油 150円/L、CO₂ 軽油2.62 kg/L［4］・電力0.5 kg/kWh（仮の値）"],
   ["計算ケース", "基本料金を考慮しない 12ケース、考慮する 16ケース（計28ケース）"]].map(([k, v]) => [B(k), v]),
   tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.2, 9.9], fontSize: 15, rowH: 0.6 }));
 caption(s, "表2　計算条件", 0.6, 6.45, 12.1);
@@ -237,7 +237,7 @@ s.addChart(pres.charts.BAR, [
   { name: "基本料金を考慮する", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(basicYear(peakYear(rc9, g)) / 1e4)) }],
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, barDir: "col", barGrouping: "clustered", showValue: true, dataLabelPosition: "outEnd", valAxisMinVal: 0,
     showValAxisTitle: true, valAxisTitle: "基本料金 [万円/年]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, "図4　年間の基本料金（契約電力＝代表週（冬・春・夏）の最大受電電力、単価［2］）", 0.6, 6.45, 7.6);
+caption(s, "図4　年間の基本料金（契約電力＝代表週（冬・春・夏）の最大受電電力、単価［3］）", 0.6, 6.45, 7.6);
 const b8 = Math.round(basicYear(peakYear(rc8, 90)) / 1e4), b9 = Math.round(basicYear(peakYear(rc9, 90)) / 1e4);
 bullets(s, [`受電上限90 kW：年 ${b8.toLocaleString()}万円 → ${b9.toLocaleString()}万円`, "いずれの受電上限でも約2.5〜5割減少した",
   "電力量料金の増減は1週間で最大約2万円であり、基本料金の差と比べて小さい",
@@ -255,7 +255,7 @@ s.addChart(pres.charts.BAR, [
 caption(s, "図5　1週間のCO₂排出量（併用は受電上限800 kW・基本料金を考慮しない場合）", 0.6, 6.45, 7.6);
 bullets(s, ["電気バスとの併用により、CO₂は全車燃料バスと比べて約75〜85%少なかった",
   "全車燃料バスは走行距離から軽油量を求めた概算であり、最適化の結果ではない",
-  "電力の係数0.5 kg/kWhは仮の値。実値0.452［3］で再計算しても削減率は約77〜86%"], { x: 8.6, y: 1.8, w: 4.2, h: 4.6, fontSize: 16 });
+  "電力の係数0.5 kg/kWhは仮の値。実値0.452［4］で再計算しても削減率は約77〜86%"], { x: 8.6, y: 1.8, w: 4.2, h: 4.6, fontSize: 16 });
 s.addNotes("CO₂の比較です。電気バスと併用すると、全部を燃料バスで走る場合より約8割少なくなります。電力の係数0.5は、東京電力EPの実値（令和6年度実績0.452）より大きめで、電気バスに不利な側の仮定です。");
 
 // ---- 3. Results table
@@ -311,14 +311,15 @@ s.addNotes("まとめです。基本料金を考慮して計画すると、買�
 s = page("参考文献", "参考文献");
 text(s, [
   "［1］東京電力エナジーパートナー：契約電力の決定方法（実量制），https://www.tepco.co.jp/ep/corporate/charge_c2/decision03.html（2026年10月19日閲覧）",
-  "［2］東京電力エナジーパートナー：電気料金単価表（特別高圧・高圧），2026年4月1日実施，高圧・ベーシックプラン（関東）",
-  "［3］環境省・経済産業省：算定方法・排出係数一覧（軽油）；電気事業者別排出係数（令和6年度実績），2026年1月公表・2月更新",
-  "［4］W. F. Holmgren, C. W. Hansen, M. A. Mikofski: pvlib python: a python package for modeling solar energy systems, Journal of Open Source Software, 3(29), 884, 2018",
-  "［5］公共交通オープンデータセンター：東急バス 時刻表データ（ODPT）",
-  "［6］Gurobi Optimization, LLC: Gurobi Optimizer Reference Manual",
-  "［7］P. Shaw: Using constraint programming and local search methods to solve vehicle routing problems, Proc. CP-98, LNCS 1520, pp. 417–431, 1998"]
+  "［2］東京電力エナジーパートナー：特別高圧・高圧のお客さま向けの電気料金プランについて（計算式），https://www.tepco.co.jp/ep/corporate/plan_h/minaoshi_2025plan.html（2026年10月20日閲覧）",
+  "［3］東京電力エナジーパートナー：電気料金単価表（特別高圧・高圧），2026年4月1日実施，高圧・ベーシックプラン（関東）",
+  "［4］環境省・経済産業省：算定方法・排出係数一覧（軽油）；電気事業者別排出係数（令和6年度実績），2026年1月公表・2月更新",
+  "［5］W. F. Holmgren, C. W. Hansen, M. A. Mikofski: pvlib python: a python package for modeling solar energy systems, Journal of Open Source Software, 3(29), 884, 2018",
+  "［6］公共交通オープンデータセンター：東急バス 時刻表データ（ODPT）",
+  "［7］Gurobi Optimization, LLC: Gurobi Optimizer Reference Manual",
+  "［8］P. Shaw: Using constraint programming and local search methods to solve vehicle routing problems, Proc. CP-98, LNCS 1520, pp. 417–431, 1998"]
   .map((t, i, a) => ({ text: t, options: { breakLine: i < a.length - 1 } })),
-  { x: 0.6, y: 1.6, w: 12.1, h: 5.2, fontSize: 14, paraSpaceAfter: 10, lineSpacingMultiple: 1.15 });
+  { x: 0.6, y: 1.55, w: 12.1, h: 5.35, fontSize: 13, paraSpaceAfter: 8, lineSpacingMultiple: 1.12 });
 
 (async () => {
   const out = path.join(__dirname, "lab_progress_20261022.pptx");
