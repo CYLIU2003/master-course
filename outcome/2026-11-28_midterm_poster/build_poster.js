@@ -11,6 +11,7 @@ const { applyTheme } = require(process.env.PPTX_SKILL + "/scripts/apply_theme.js
 const rc8 = JSON.parse(fs.readFileSync(path.join(__dirname, "cases_rc8.json"), "utf8"));
 const rc9 = JSON.parse(fs.readFileSync(path.join(__dirname, "cases_rc9.json"), "utf8")).filter((r) => r.status === "VERIFIED");
 const night = JSON.parse(fs.readFileSync(path.join(__dirname, "night_profile_90kW_winter.json"), "utf8"));
+const iceHour = JSON.parse(fs.readFileSync(path.join(__dirname, "ice_by_hour_rc8.json"), "utf8"));
 const dl = fs.readFileSync(path.join(__dirname, "all_diesel_estimate.csv"), "utf8").replace(/^﻿/, "").trim().split(/\r?\n/);
 const dk = dl[0].split(","), diesel = dl.slice(1).map((l) => Object.fromEntries(l.split(",").map((v, i) => [dk[i], v])));
 const LIMITS = [90, 200, 400, 800];
@@ -53,7 +54,7 @@ text("東京都市大学　劉 承洋（研究室名・指導教員をここに�
 s.addShape(pres.shapes.LINE, { x: M, y: M + 5.6, w: W, h: 0, line: { color: BLUE, width: 8 } });
 
 // ---- Abstract (full width)
-text("概要　路線バスの電動化では、営業所での充電が重なると受電電力のピークが大きくなり、契約電力に応じた基本料金や受電設備の負担が増える。本研究では、燃料バスと電気バスを併用する営業所を対象に、便の割当と充電計画を同時に最適化し、受電上限と基本料金が費用とCO₂に与える影響を評価した。基本料金を目的関数に含めた場合、買電量を大きく変えずに、冬の受電ピークが約2.5〜5割低くなった。",
+text("概要　路線バスの電動化では、営業所での充電が重なると受電電力のピークが大きくなり、契約電力に応じた基本料金や受電設備の負担が増える。本研究では、燃料バスと電気バスを併用する営業所を対象に、便の割当と充電計画を同時に最適化し、受電上限を変えたときの電気バスの担当便と、基本料金を考慮したときの受電ピーク・費用を評価した。受電上限を下げても電気バスの担当便は92.0〜96.5%でほぼ一定であり、基本料金を目的関数に含めると冬の受電ピークが約2.5〜5割低くなった。",
   { x: M, y: 8.0, w: W, h: 3.9, fontSize: 42 });
 
 // ---- Left column
@@ -62,9 +63,9 @@ y = section("1．背景と目的", LX, y, COL);
 text([
   { text: "路線バスで電気バスの導入が進んでいるが、車両価格や充電時間の制約から、当面は燃料（軽油）バスとの併用が続く。", options: { breakLine: true } },
   { text: "電気料金は、使用電力量に応じた料金と、契約電力（過去1年の最大需要電力）に応じた基本料金からなる。夜間に充電が集中すると後者が大きくなる。", options: { breakLine: true } },
-  { text: "本研究の目的は、受電上限と基本料金の有無が、便割当・充電計画・費用・CO₂に与える影響を明らかにすることである。" }],
-  { x: LX, y, w: COL, h: 7.6, paraSpaceAfter: 18 });
-y += 8.0;
+  { text: "本研究の目的は、(1) 受電上限を変えたとき、電気バスに任せられる便の割合と費用・CO₂がどう変わるか、(2) 基本料金を考慮すると、充電計画と費用がどう変わるかを明らかにすることである。" }],
+  { x: LX, y, w: COL, h: 8.9, paraSpaceAfter: 14 });
+y += 9.2;
 y = section("2．対象と条件", LX, y, COL);
 const rows = [["対象", "東急バス 渋21〜23系統（弦巻営業所）"], ["運行", "1週間 1,704便"], ["車両", "保有 電気バス35台・燃料バス25台（固定）"],
   ["設備", "太陽光1,000 kW・蓄電池6,000 kWh・充電器90 kW×10"], ["受電上限", "90/200/400/800 kW（超過分に500円/kWh・仮）"], ["期間", "冬・春・夏の代表週（基本料金ありは秋も）"],
@@ -72,59 +73,62 @@ const rows = [["対象", "東急バス 渋21〜23系統（弦巻営業所）"], 
 s.addTable(rows.map(([k, v]) => [{ text: k, options: { bold: true } }, { text: v }]),
   { x: LX, y, w: COL, colW: [3.2, COL - 3.2], fontSize: 34, fontFace: "Yu Gothic", color: INK, rowH: 0.78, valign: "middle",
     border: { type: "solid", pt: 1, color: GRID } });
-y += rows.length * 0.78 + 1.5;
+y += rows.length * 0.78 + 1.2;
 y = section("3．手法", LX, y, COL);
 text([
   { text: "便割当（Stage 1）：1,704便を60台に割り当てる混合整数計画問題。汎用ソルバーだけでは改善しなかったため、一部の便だけを解き直す大近傍探索（LNS）で初期解を改善した。", options: { breakLine: true } },
   { text: "充電計画（Stage 2）：割当を固定し、15分ごとの充電・太陽光・蓄電池・買電を最適化する。", options: { breakLine: true } },
   { text: "毎時の見直し：1時間ごとに計画を立て直しながら1週間を実行し、その結果で費用を集計した。", options: { breakLine: true } },
-  { text: "比較：目的関数に基本料金を含めない場合と含める場合の2通りで計算した。" }],
+  { text: "比較：(1) 受電上限4段階 × 冬・春・夏（基本料金を含めない12ケース）、(2) 基本料金を含めた16ケース。" }],
   { x: LX, y, w: COL, h: 42.8 - y, paraSpaceAfter: 18 });
 
 // ---- Right column
 y = 12.5;
 y = section("4．結果", RX, y, COL);
 const WIN = "2025-01-06";
-s.addChart(pres.charts.BAR, [
-  { name: "基本料金を含めない", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc8, g, WIN).peak_grid_kw)) },
-  { name: "基本料金を含める", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc9, g, WIN).peak_grid_kw)) }],
-  { ...chart(), x: RX, y, w: COL, h: 6.4, barDir: "col", barGrouping: "clustered", chartColors: [GREY, BLUE],
-    showValue: true, dataLabelPosition: "outEnd", valAxisMinVal: 0, showCatAxisTitle: true, catAxisTitle: "受電上限", catAxisTitleFontSize: 30, catAxisTitleColor: SUB,
-    showValAxisTitle: true, valAxisTitle: "最大受電電力 [kW]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
-caption("図1　冬の代表週における最大受電電力", RX, y + 6.45, COL);
-y += 7.4;
-s.addChart(pres.charts.LINE, [
-  { name: "基本料金を含めない", labels: night.labels, values: night.rc8_grid_kw },
-  { name: "基本料金を含める", labels: night.labels, values: night.rc9_grid_kw }],
-  { ...chart(), x: RX, y, w: COL, h: 5.4, lineSize: 5, lineDataSymbol: "none", chartColors: [GREY, BLUE], valAxisMinVal: 0, catAxisLabelFrequency: 8,
-    showValAxisTitle: true, valAxisTitle: "買電電力 [kW]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
-caption("図2　受電上限90 kW・冬の一晩（22時〜8時）の買電電力", RX, y + 5.45, COL);
-y += 6.4;
-text(`基本料金を含めると、冬の最大受電電力は受電上限によらず359〜380 kWとなった（含めない場合は478〜750 kW）。上限90 kWの例では1週間の買電量はほぼ同じで（${night.week_grid_kwh[0].toLocaleString()} → ${night.week_grid_kwh[1].toLocaleString()} kWh）、夜間の充電を分散させてピークを下げていた（図2）。受電上限は超過分に追加費用を課す目安のため、ピークが上限を超える場合がある。電気バスが担当する便の割合は92〜96%で、ほぼ変わらなかった。`,
-  { x: RX, y, w: COL, h: 3.9, fontSize: 34 });
-y += 4.2;
-const half = (COL - 0.6) / 2;
-s.addChart(pres.charts.BAR, [
-  { name: "含めない", labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => Math.round(basicYear(peakYear(rc8, g)) / 1e4)) },
-  { name: "含める", labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => Math.round(basicYear(peakYear(rc9, g)) / 1e4)) }],
-  { ...chart(), x: RX, y, w: half, h: 5.2, barDir: "col", barGrouping: "clustered", chartColors: [GREY, BLUE], valAxisMinVal: 0,
-    legendFontSize: 28, catAxisLabelFontSize: 28, showValAxisTitle: true, valAxisTitle: "基本料金 [万円/年]", valAxisTitleFontSize: 28, valAxisTitleColor: SUB,
-    showCatAxisTitle: true, catAxisTitle: "受電上限 [kW]", catAxisTitleFontSize: 28, catAxisTitleColor: SUB });
 const SE = [["2025-01-06", "冬"], ["2025-04-07", "春"], ["2025-07-07", "夏"]];
+s.addChart(pres.charts.LINE, SE.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc8, g, w).bev_trip_share_pct * 10) / 10) })),
+  { ...chart(), x: RX, y, w: COL, h: 5.4, lineSize: 5, lineDataSymbol: "circle", lineDataSymbolSize: 14, chartColors: [BLUE_DARK, "7AB8E8", GREY],
+    valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showCatAxisTitle: true, catAxisTitle: "受電上限", catAxisTitleFontSize: 30, catAxisTitleColor: SUB,
+    showValAxisTitle: true, valAxisTitle: "電気バス担当便 [%]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
+caption("図1　受電上限と電気バスの担当便（基本料金を含めない場合）", RX, y + 5.45, COL);
+y += 6.4;
+const shares = rc8.map((r) => r.bev_trip_share_pct);
+const rng = (b) => { const v = iceHour.map((r) => r.bands[b].diesel / r.bands[b].total * 100); return `${Math.min(...v).toFixed(0)}〜${Math.max(...v).toFixed(0)}%`; };
+text(`(1) 受電上限を90〜800 kWで変えても、電気バスの担当便は${Math.min(...shares).toFixed(1)}〜${Math.max(...shares).toFixed(1)}%でほぼ一定だった。燃料バスが担当したのは主に早朝（${rng("05-06")}）と深夜（${rng("22-")}）の便で（図2）、上限を下げても燃料バスに戻る便は増えず、超過分の費用を払う計画となった。`,
+  { x: RX, y, w: COL, h: 3.0, fontSize: 33 });
+y += 3.3;
+const half = (COL - 0.6) / 2;
+const BANDS = [["05-06", "早朝"], ["07-21", "日中"], ["22-", "深夜"]];
+const iceShare = (g, b) => { const rs = iceHour.filter((r) => r.grid_limit_kw === g);
+  return Math.round(rs.reduce((a, r) => a + r.bands[b].diesel / r.bands[b].total, 0) / rs.length * 1000) / 10; };
+s.addChart(pres.charts.BAR, LIMITS.map((g) => ({ name: `${g}`, labels: BANDS.map((x) => x[1]), values: BANDS.map(([b]) => iceShare(g, b)) })),
+  { ...chart(), x: RX, y, w: half, h: 5.0, barDir: "col", barGrouping: "clustered", chartColors: ["CFCFCF", GREY, "7AB8E8", BLUE_DARK], valAxisMinVal: 0,
+    legendFontSize: 26, catAxisLabelFontSize: 28, showValAxisTitle: true, valAxisTitle: "燃料バス担当便 [%]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
 s.addChart(pres.charts.BAR, [
   { name: "全車燃料バス", labels: SE.map((x) => x[1]), values: SE.map(([w]) => Math.round(Number(diesel.find((d) => d.week === w).co2_kg) / 100) / 10) },
   { name: "電気バス併用", labels: SE.map((x) => x[1]), values: SE.map(([w]) => Math.round(get(rc8, 800, w).total_co2_kg / 100) / 10) }],
-  { ...chart(), x: RX + half + 0.6, y, w: half, h: 5.2, barDir: "col", barGrouping: "clustered", chartColors: [GREY, BLUE], valAxisMinVal: 0,
-    legendFontSize: 28, catAxisLabelFontSize: 28, showValAxisTitle: true, valAxisTitle: "CO₂ [t/週]", valAxisTitleFontSize: 28, valAxisTitleColor: SUB });
-caption("図3　年間の基本料金（契約電力＝年間最大受電）", RX, y + 5.25, half, 1.2);
-caption("図4　1週間のCO₂（全車燃料バスは走行距離からの概算）", RX + half + 0.6, y + 5.25, half, 1.2);
-y += 6.6;
+  { ...chart(), x: RX + half + 0.6, y, w: half, h: 5.0, barDir: "col", barGrouping: "clustered", chartColors: [GREY, BLUE], valAxisMinVal: 0,
+    legendFontSize: 26, catAxisLabelFontSize: 28, showValAxisTitle: true, valAxisTitle: "CO₂ [t/週]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
+caption("図2　時間帯別の燃料バス担当便（凡例：受電上限 kW）", RX, y + 5.05, half, 1.2, 28);
+caption("図3　1週間のCO₂（全車燃料バスは走行距離からの概算）", RX + half + 0.6, y + 5.05, half, 1.2, 28);
+y += 6.45;
+s.addChart(pres.charts.BAR, [
+  { name: "基本料金を含めない", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc8, g, WIN).peak_grid_kw)) },
+  { name: "基本料金を含める", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc9, g, WIN).peak_grid_kw)) }],
+  { ...chart(), x: RX, y, w: COL, h: 5.2, barDir: "col", barGrouping: "clustered", chartColors: [GREY, BLUE],
+    showValue: true, dataLabelPosition: "outEnd", valAxisMinVal: 0, showCatAxisTitle: true, catAxisTitle: "受電上限", catAxisTitleFontSize: 30, catAxisTitleColor: SUB,
+    showValAxisTitle: true, valAxisTitle: "最大受電電力 [kW]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
+caption("図4　冬の代表週における最大受電電力", RX, y + 5.25, COL);
+y += 6.15;
+text(`(2) 基本料金を含めると、冬の最大受電電力は受電上限によらず359〜380 kWとなり（含めない場合は478〜750 kW）、年間の基本料金は約2.5〜5割減少した（上限90 kWで年約${Math.round(basicYear(peakYear(rc8, 90)) / 1e4).toLocaleString()}万円→${Math.round(basicYear(peakYear(rc9, 90)) / 1e4).toLocaleString()}万円）。買電量の変化は小さく、夜間の充電を分散させていた。`,
+  { x: RX, y, w: COL, h: 3.0, fontSize: 33 });
+y += 3.3;
 y = section("5．まとめと今後", RX, y, COL);
 text([
-  { text: `基本料金を考慮して充電を分散させると、買電量を大きく変えずに受電ピークと基本料金を下げられる（上限90 kWで年約${Math.round(basicYear(peakYear(rc8, 90)) / 1e4).toLocaleString()}万円→${Math.round(basicYear(peakYear(rc9, 90)) / 1e4).toLocaleString()}万円）。`, options: { breakLine: true } },
-  { text: "電気バスとの併用で、CO₂は全車燃料バスより約75〜85%少なかった。", options: { breakLine: true } },
-  { text: "今後：便割当段階の充電の見込みと実際の買電の差の検証、燃料バスへの振り替え条件の感度分析。" }],
-  { x: RX, y, w: COL, h: 45.4 - y, paraSpaceAfter: 10, fontSize: 36 });
+  { text: "受電上限は、今回の条件では電気バスの担当便を減らさず、超過費用として効いた。基本料金を考慮すると、受電ピークと基本料金を大きく下げられる。", options: { breakLine: true } },
+  { text: "今後：担当便が変わらない原因の検証（便割当段階の買電の見込みと実際の差）、日本の料金体系に沿った再計算、日をまたぐ計画の評価。" }],
+  { x: RX, y, w: COL, h: 45.4 - y, paraSpaceAfter: 8, fontSize: 32 });
 
 // ---- Footnote across the bottom
 caption("注：便割当は全件、基本料金を含めた充電計画は16件すべて制限時間内の実行可能解（ギャップ13〜67%）。含めない充電計画は12件中11件が最適。最大受電は15分平均。契約電力は実量制（500 kW未満）の考え方で年間最大受電とした。基本料金は東京電力EP（2026年4月、関東・高圧ベーシックプラン）2,530円/kW、力率100%。最適化には旧単価1,890円を使用。",

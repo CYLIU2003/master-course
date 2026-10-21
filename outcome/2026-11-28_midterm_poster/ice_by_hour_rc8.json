@@ -1,0 +1,230 @@
+[
+  {
+    "grid_limit_kw": 90,
+    "week": "2025-01-06",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft090\\2025-01-06\\original\\output\\2026-10-12\\run_20261012_0908\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 33,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 32,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 19,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 90,
+    "week": "2025-04-07",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft090\\2025-04-07\\original\\output\\2026-10-12\\run_20261012_0908\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 41,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 72,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 23,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 90,
+    "week": "2025-07-07",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft090\\2025-07-07\\original\\output\\2026-10-12\\run_20261012_0908\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 24,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 16,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 19,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 200,
+    "week": "2025-01-06",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft200\\2025-01-06\\original\\output\\2026-10-12\\run_20261012_0909\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 32,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 31,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 18,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 200,
+    "week": "2025-04-07",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft200\\2025-04-07\\original\\output\\2026-10-12\\run_20261012_0908\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 44,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 60,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 21,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 200,
+    "week": "2025-07-07",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft200\\2025-07-07\\original\\output\\2026-10-13\\run_20261013_1235\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 33,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 27,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 24,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 400,
+    "week": "2025-01-06",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft400\\2025-01-06\\original\\output\\2026-10-13\\run_20261013_1309\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 32,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 20,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 24,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 400,
+    "week": "2025-04-07",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft400\\2025-04-07\\original\\output\\2026-10-13\\run_20261013_1433\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 40,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 66,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 24,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 400,
+    "week": "2025-07-07",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft400\\2025-07-07\\original\\output\\2026-10-13\\run_20261013_1439\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 30,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 25,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 20,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 800,
+    "week": "2025-01-06",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft800\\2025-01-06\\original\\output\\2026-10-13\\run_20261013_1712\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 33,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 34,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 18,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 800,
+    "week": "2025-04-07",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft800\\2025-04-07\\original\\output\\2026-10-13\\run_20261013_2011\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 39,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 57,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 22,
+        "total": 108
+      }
+    }
+  },
+  {
+    "grid_limit_kw": 800,
+    "week": "2025-07-07",
+    "plan": "output\\midterm_20261128\\rc8\\fsoft800\\2025-07-07\\original\\output\\2026-10-13\\run_20261013_2216\\rolling_hourly_chain\\executed_plan.json",
+    "bands": {
+      "05-06": {
+        "diesel": 30,
+        "total": 186
+      },
+      "07-21": {
+        "diesel": 29,
+        "total": 1410
+      },
+      "22-": {
+        "diesel": 20,
+        "total": 108
+      }
+    }
+  }
+]
