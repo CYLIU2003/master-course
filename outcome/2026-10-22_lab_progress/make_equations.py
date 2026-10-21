@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 EQUATIONS = {
     "objective": r"$\min\ \sum_{k,d}\, c^{\mathrm{veh}} u_{kd} + \sum_{t}\,(p^{\mathrm{e}} g_t + \pi\, s_t)"
-                 r" + c^{\mathrm{f}} \sum_{j} f_j + c^{\mathrm{CO_2}} Q^{\mathrm{CO_2}} + \alpha\, p^{\mathrm{dem}} W$",
+                 r" + c^{\mathrm{f}} \sum_{j} f_j + c^{\mathrm{CO_2}} Q^{\mathrm{CO_2}}$",
     "cover": r"$\sum_{k}\ \sum_{i:(i,j)\in\mathcal{A}} x^{k}_{ij} = 1 \quad \forall j$",
     "connect": r"$(i,j)\in\mathcal{A}\ \Leftrightarrow\ t^{\mathrm{arr}}_i + t^{\mathrm{turn}}_i + t^{\mathrm{dh}}_{ij} \leq t^{\mathrm{dep}}_j$",
     "soc": r"$E_{k,t+1} = E_{k,t} + \eta\, z_{k,t}\, \Delta t - e_{k,t},\quad E^{\min}_k \leq E_{k,t} \leq E^{\max}_k$",
