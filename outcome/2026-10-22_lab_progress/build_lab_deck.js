@@ -75,6 +75,7 @@ s.addText("目次", { placeholder: "title" });
 text(s, [S1, S2, S3, S4, S5, S6].map((t, i) => ({ text: t, options: { breakLine: i < 5 } })), { x: 1.0, y: 1.7, w: 11, h: 3.8, fontSize: 21, paraSpaceAfter: 12 });
 text(s, "今回の報告内容：中間発表（11月28日）の主軸とした柱Aの計算と集計が完了したため、その結果を報告する。あわせて、年末までに進める柱Bの計画を示す。",
   { x: 1.0, y: 5.6, w: 11.3, h: 0.8, fontSize: 16, color: SUB });
+s.addNotes("今日の流れです。まず研究の背景と、研究を2つの柱に分けて進めていることを説明します。次に計算の方法と条件、柱Aの結果、考察、今後の予定の順に話します。");
 
 // ---- Progress against the 2026-10-08 three-party meeting plan
 s = page(S0, "前回の三者ミーティング（10月8日）で決めた計画と進捗");
@@ -83,7 +84,7 @@ s.addTable([
   [B("題目"), "GXに向けた燃料バスと併用する電気バスの便割当・充電計画の最適化", "決定済み"],
   [B("下準備1"), "燃料バスのCO₂係数を根拠付きで算出する", "完了：軽油2.62 kg/L（環境省の算定制度）"],
   [B("下準備2"), "pvlibで傾斜30°の斜面日射を適用する", "完了：計画と実行の両方に適用"],
-  [B("柱A（中間発表の主軸）"), "冬・春・夏 × 受電上限 90/200/400/800 kW、全車燃料バスとの比較", "計算完了（12ケース）。担当便・費用・燃料・時間帯・CO₂を集計。全車燃料バスは距離からの概算"],
+  [B("柱A（中間発表の主軸）"), "冬・春・夏 × 受電上限 90/200/400/800 kW、全車燃料バスとの比較", "計算完了（12ケース）。担当便・費用・燃料・時間帯・CO₂を集計。全車燃料バスは距離からの概算。10月21日に追加の試行計算（3ケース）"],
   [B("柱B（日をまたぐ意味）"), "中間発表後に予定", "実験の設計を決定（10月21日）。実装は11月から"]],
   tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.9, 4.6, 4.6], fontSize: 14, rowH: 0.72 }));
 caption(s, "研究方針（2026年10月8日）による。柱A：受電電力と担当便、柱B：日をまたぐ計画の意味", 0.6, 6.35, 12.1);
@@ -114,8 +115,11 @@ s.addTable([
   ["受電（買電）", "営業所が電力会社から電気を購入すること"],
   ["kW（キロワット）", "ある時点で使用している電力の大きさ"],
   ["kWh（キロワット時）", "使用した電力量。kW × 時間"],
-  ["受電上限", "営業所が受け取る電力（kW）の目安。本研究では、超えた分に追加費用をかける"]].map(([k, v]) => [B(k), v]),
-  tableOpts({ x: 0.6, y: 1.6, w: 12.1, colW: [2.9, 9.2], fontSize: 17, rowH: 0.64 }));
+  ["受電上限", "営業所が受け取る電力（kW）の目安。本研究では、超えた分に追加費用をかける"],
+  ["便割当・充電計画", "どのバスがどの便を走るか、いつどれだけ充電するかを決めた計画"],
+  ["代表週", "季節（冬・春・夏）を代表させるために選んだ1週間"],
+  ["解なし", "すべての条件（時刻表・電池残量・受電上限など）を同時に満たす計画が見つからないこと"]].map(([k, v]) => [B(k), v]),
+  tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.9, 9.2], fontSize: 15, rowH: 0.53 }));
 s.addNotes("研究テーマが違う方も多いので、先に用語をそろえておきます。特にkWとkWhの違いが大事なので、次のページで説明します。");
 
 // ---- 1. kW vs kWh (supplement)
@@ -163,6 +167,29 @@ PILLAR(6.8, "柱B　日をまたぐ意味", "F5F5F5", [
   ["成果", "翌朝の電池不足、燃料バスへの振替、夜の買電の差"]]);
 s.addNotes("研究の柱は2つです。柱Aは、受電電力の上限を変えたときに、電気バスに任せられる便と費用がどう変わるかを調べるもので、中間発表の主軸です。柱Bは、日ごとに計画した場合と比べて、日をまたいで連続して計画すると何を防げるかを示すもので、年末までに結果を出します。柱Bでは、最初の週は初期状態の影響を受けるので、2〜3週続けて回し、最後の1週だけを評価します。");
 
+// ---- 2. Pillar B: daily vs continuous planning (schematic)
+s = page(S2, "柱Bの考え方：日ごとの計画と、日をまたいだ計画");
+const DAYS = ["月", "火", "水", "木", "金", "土", "日"];
+text(s, "(a) 日ごとの計画", { x: 0.6, y: 1.5, w: 4, h: 0.4, fontSize: 17, bold: true });
+DAYS.forEach((d, i) => {
+  const x = 0.6 + i * 1.72;
+  s.addShape(pres.shapes.RECTANGLE, { x, y: 1.95, w: 1.45, h: 0.75, fill: { color: "F2F2F2" }, line: { color: GREY, width: 1 } });
+  text(s, d, { x, y: 1.95, w: 1.45, h: 0.75, fontSize: 16, align: "center", valign: "middle" });
+  if (i < DAYS.length - 1) s.addShape(pres.shapes.LINE, { x: x + 1.47, y: 2.32, w: 0.23, h: 0, line: { color: SUB, width: 1.25, endArrowType: "triangle" } });
+});
+text(s, "毎日、その日の費用だけを最小にする計画を立てる（翌日のことは考えない）。前日に実行した結果の電池残量を、翌日に引き継ぐ", { x: 0.6, y: 2.8, w: 12.1, h: 0.6, fontSize: 14, color: SUB });
+text(s, "(b) 日をまたいだ計画（今の方法）", { x: 0.6, y: 3.5, w: 6, h: 0.4, fontSize: 17, bold: true, color: BLUE_DARK });
+s.addShape(pres.shapes.RECTANGLE, { x: 0.6, y: 3.95, w: 11.77, h: 0.75, fill: { color: "EEF5FB" }, line: { color: BLUE, width: 1 } });
+text(s, "月 〜 日（1週間をまとめて計画）", { x: 0.6, y: 3.95, w: 11.77, h: 0.75, fontSize: 16, align: "center", valign: "middle", color: BLUE_DARK });
+text(s, "1週間の費用をまとめて最小にする。翌日の運行に必要な充電も、前の夜のうちに見込んで計画できる", { x: 0.6, y: 4.8, w: 12.1, h: 0.6, fontSize: 14, color: SUB });
+bullets(s, [
+  "比べるもの：翌朝の電池不足、燃料バスへの振替、夜の買電（量とピーク）",
+  "最初の週は初期状態の影響を受けるため、2〜3週続けて回し、最後の1週だけを評価する",
+  "予想（仮説）：(a) では夜の充電を控えすぎて、翌朝の電池不足や燃料バスへの振替が増える可能性がある"],
+  { x: 0.6, y: 5.45, w: 12.1, h: 1.5, fontSize: 15, paraSpaceAfter: 4 });
+caption(s, "図2　柱Bで比べる2つの計画方法（模式図）", 8.6, 1.5, 4.1);
+s.addNotes("柱Bの考え方です。上の(a)は、毎日その日のことだけを考えて計画を立てる方法です。前の日に実行した結果の電池残量を次の日に引き継ぎます。下の(b)は今の方法で、1週間をまとめて計画するので、翌日に必要な充電も前の夜のうちに見込めます。(a)では、その日の費用を下げるために夜の充電を控えすぎて、翌朝に電池が足りなくなったり、燃料バスに振り替えたりする場面が増えると予想しています。これを数字で確かめるのが柱Bです。");
+
 // ---- 3. Problem and solution approach
 s = page(S3, "問題設定と解法");
 const COLS = [
@@ -204,7 +231,7 @@ text(s, [
   { text: "g：買電量、s：上限超過量", options: { breakLine: true } },
   { text: "f：燃料使用量、Q：CO₂排出量", options: {} }],
   { x: 9.4, y: 1.6, w: 3.3, h: 3.4, fontSize: 13, color: SUB, lineSpacingMultiple: 1.25 });
-text(s, [{ text: "記号は簡略化して示した。π＝500円/kWh（仮の値）、c" }, { text: "CO₂", options: { superscript: true } }, { text: "＝1円/kg、N" }, { text: "ch", options: { superscript: true } }, { text: "＝10。" }],
+text(s, [{ text: "前ページの3列（決めること・守るルール・最小化する費用）を式で表したもの。記号は簡略化した。π＝500円/kWh（仮の値）、c" }, { text: "CO₂", options: { superscript: true } }, { text: "＝1円/kg、N" }, { text: "ch", options: { superscript: true } }, { text: "＝10。" }],
   { x: 0.6, y: 6.55, w: 12.1, h: 0.4, fontSize: 12, color: SUB });
 s.addNotes("定式化の概略です。目的関数は、車両の使用費、電気代、上限を超えた分の追加費用、燃料代、CO₂費用の合計です。受電上限は、超過量sを許したうえでsに費用をかける形にしています。");
 
@@ -214,10 +241,10 @@ s.addTable([
   ["対象", "東急バス 渋21〜23系統（弦巻営業所）、時刻表は公共交通オープンデータ［3］"],
   ["運行", "1週間 1,704便"],
   ["車両", "電気バス35台・燃料バス25台（保有台数、固定）"],
-  ["設備", "太陽光 1,000 kW（傾斜30°、pvlib［2］で斜面日射を算定）、蓄電池 6,000 kWh、充電器 90 kW × 10基"],
+  ["設備", "太陽光 1,000 kW（傾斜30°、pvlib［2］で斜面日射を算定）、蓄電池 6,000 kWh、充電器 90 kW×10基"],
   ["受電上限", "90 / 200 / 400 / 800 kW（超過分に500円/kWhの追加費用、仮の値）"],
-  ["対象期間", "冬・春・夏の代表週（2025年1月6日・4月7日・7月7日から1週間）"],
-  ["単価・係数", "電力量 30円/kWh（設定値）、軽油 150円/L、CO₂ 軽油2.62 kg/L［1］・電力0.5 kg/kWh（仮の値）"],
+  ["対象期間", "冬・春・夏の代表週（2025年1月6日・4月7日・7月7日から各1週間）"],
+  ["単価・係数", "電力量 30円/kWh（設定値）、軽油 150円/L、車両使用費 2万円/台・日、CO₂ 軽油2.62 kg/L［1］・電力0.5 kg/kWh（仮の値）"],
   ["計算ケース", "受電上限4段階 × 3週 ＝ 12ケース"]].map(([k, v]) => [B(k), v]),
   tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.2, 9.9], fontSize: 15, rowH: 0.6 }));
 caption(s, "表1　計算条件", 0.6, 6.45, 12.1);
@@ -228,7 +255,7 @@ s = page(S4, "結果(A-1)　受電上限と電気バスの担当便");
 s.addChart(pres.charts.LINE, SEASONS.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(g, w).bev_trip_share_pct * 10) / 10) })),
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, lineSize: 2.5, lineDataSymbol: "circle", lineDataSymbolSize: 7, chartColors: [BLUE_DARK, BLUE_LIGHT, GREY],
     valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showValAxisTitle: true, valAxisTitle: "電気バスが担当した便 [%]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, "図2　受電上限と電気バスの担当便の割合（1,704便/週）", 0.6, 6.45, 7.6);
+caption(s, "図3　受電上限と電気バスの担当便の割合（1,704便/週）", 0.6, 6.45, 7.6);
 const shares = rc8.map((r) => r.bev_trip_share_pct), w90 = get(90, WIN);
 bullets(s, [
   `電気バスの担当便は${Math.min(...shares).toFixed(1)}〜${Math.max(...shares).toFixed(1)}%で、受電上限によらずほぼ一定だった`,
@@ -244,7 +271,7 @@ s.addChart(pres.charts.BAR, [
   { name: "上限の超過費用", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "contract_overage_cost") / 1e3) / 10) }],
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, barDir: "col", barGrouping: "stacked", chartColors: [BLUE, GREY, "CFCFCF"], valAxisMinVal: 0,
     showValAxisTitle: true, valAxisTitle: "運用費 [万円/週]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, "図3　受電上限と1週間の運用費の内訳（冬・春・夏の平均、車両使用費は除く）", 0.6, 6.45, 7.6);
+caption(s, "図4　受電上限と1週間の運用費の内訳（冬・春・夏の平均、車両使用費は除く）", 0.6, 6.45, 7.6);
 const opex = (g) => (avg(g, "electricity_cost") + avg(g, "fuel_cost") + avg(g, "contract_overage_cost")) / 1e4;
 const fuelL = LIMITS.map((g) => avg(g, "ice_fuel_consumed_l"));
 const veh = rc8.map((r) => r.vehicle_usage_cost / 1e4);
@@ -263,7 +290,7 @@ const iceShare = (g, b) => { const rs = iceHour.filter((r) => r.grid_limit_kw ==
 s.addChart(pres.charts.BAR, LIMITS.map((g) => ({ name: `${g} kW`, labels: BANDS.map((x) => x[1]), values: BANDS.map(([b]) => iceShare(g, b)) })),
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, barDir: "col", barGrouping: "clustered", chartColors: ["CFCFCF", GREY, BLUE_LIGHT, BLUE_DARK], showValue: true,
     dataLabelPosition: "outEnd", dataLabelFormatCode: "0", dataLabelFontSize: 10, valAxisMinVal: 0, showValAxisTitle: true, valAxisTitle: "燃料バスが担当した便 [%]" }));
-caption(s, "図4　出発時間帯別の燃料バス担当率（冬・春・夏の平均、凡例は受電上限）", 0.6, 6.45, 7.6);
+caption(s, "図5　出発時間帯別の燃料バス担当率（冬・春・夏の平均、凡例は受電上限）", 0.6, 6.45, 7.6);
 const rng = (b) => { const v = iceHour.map((r) => r.bands[b].diesel / r.bands[b].total * 100); return `${Math.min(...v).toFixed(0)}〜${Math.max(...v).toFixed(0)}%`; };
 bullets(s, [
   `燃料バスが担当したのは主に早朝（${rng("05-06")}）と深夜（${rng("22-")}）の便で、日中は${rng("07-21")}だった`,
@@ -278,7 +305,7 @@ s.addChart(pres.charts.BAR, [
   { name: "電気バスと併用", labels: SEASONS.map((x) => x[1]), values: SEASONS.map(([w]) => Math.round(get(800, w).total_co2_kg / 100) / 10) }],
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, barDir: "col", barGrouping: "clustered", showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0", valAxisMinVal: 0,
     showValAxisTitle: true, valAxisTitle: "CO₂ [t/週]" }));
-caption(s, "図5　1週間のCO₂排出量（併用は受電上限800 kWの場合）", 0.6, 6.45, 7.6);
+caption(s, "図6　1週間のCO₂排出量（併用は受電上限800 kWの場合）", 0.6, 6.45, 7.6);
 bullets(s, ["電気バスとの併用により、CO₂は全車燃料バスと比べて約75〜85%少なかった",
   "全車燃料バスは走行距離から軽油量を求めた概算であり、最適化の結果ではない",
   "電力の係数0.5 kg/kWhは仮の値。実値0.452［1］で再計算しても削減率は約77〜86%"], { x: 8.6, y: 1.8, w: 4.2, h: 4.6, fontSize: 16 });
@@ -340,8 +367,9 @@ s.addTable([
   [B("〜11月27日"), "柱A", "中間発表（11月28日、A0ポスター）の準備"],
   [B("11月"), "柱B", "日ごとの計画を毎日つないで実行する仕組みの実装とテスト"],
   [B("12月前半"), "柱B", "冬・春・夏 × 2方式（日ごと／連続）× 2〜3週の計算。最後の1週を評価"],
-  [B("12月後半"), "柱B", "翌朝の電池不足・燃料バスへの振替・夜の買電の差を集計し、年内に報告"]].map((r, i) => i === 0 ? r : [r[0], { text: r[1], options: { align: "center" } }, r[2]]),
-  tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [1.9, 1.1, 9.1], fontSize: 15, rowH: 0.68 }));
+  [B("12月後半"), "柱B", "翌朝の電池不足・燃料バスへの振替・夜の買電の差を集計し、年内に報告"],
+  [B("1月以降"), "3本目", "運行や利用者の観点を取り入れた3本目の柱（内容は検討中）"]].map((r, i) => i === 0 ? r : [r[0], { text: r[1], options: { align: "center" } }, r[2]]),
+  tableOpts({ x: 0.6, y: 1.5, w: 12.1, colW: [1.9, 1.1, 9.1], fontSize: 14, rowH: 0.6 }));
 caption(s, "柱Bの季節は柱Aと同じ冬・春・夏の代表週とする", 0.6, 6.4, 12.1);
 s.addNotes("今後の予定です。中間発表までは柱Aに集中し、担当便が変わらない理由を確かめ、受電上限を超えられない条件での試行計算を行います。柱Bは11月に仕組みを作り、12月に冬・春・夏の3季節で、日ごとの計画と連続した計画を比べます。最初の週は初期状態の影響を受けるので、2〜3週回して最後の1週だけを評価します。");
 
