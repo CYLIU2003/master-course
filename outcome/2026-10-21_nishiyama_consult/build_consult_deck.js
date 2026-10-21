@@ -20,7 +20,7 @@ const shares = rc8.map((r) => r.bev_trip_share_pct);
 const rng = (b) => { const v = iceHour.map((r) => r.bands[b].diesel / r.bands[b].total * 100); return `${Math.min(...v).toFixed(0)}〜${Math.max(...v).toFixed(0)}%`; };
 
 const BLUE = "0485D7", BLUE_DARK = "0268B0", BLUE_LIGHT = "7AB8E8", BLUE_PALE = "EEF5FB", GREY = "9A9A9A", INK = "222222", SUB = "555555", GRID = "DDDDDD", HEAD = "F2F2F2";
-const THEME = { name: "TCU white", headFontFace: "Yu Gothic", bodyFontFace: "Yu Gothic",
+const THEME = { name: "TCU white", headFontFace: "Noto Sans JP", bodyFontFace: "Noto Sans JP",
   colors: { dk1: INK, lt1: "FFFFFF", dk2: BLUE_DARK, lt2: "F4F7FA", accent1: BLUE, accent2: GREY,
             accent3: "5B9BD5", accent4: "A5A5A5", accent5: "264478", accent6: "636363", hlink: BLUE, folHlink: BLUE_DARK } };
 
@@ -236,5 +236,12 @@ s.addTable([
   const out = path.join(__dirname, process.env.DECK_OUT || "西山先生へのご相談_研究の現状と軸C.pptx");
   await pres.writeFile({ fileName: out });
   await applyTheme(out, THEME);
+  // The theme helper sets only the Latin typeface; set the East Asian one too so Japanese text uses Noto Sans JP.
+  const JSZip = require(path.join(process.env.DECK_NODE_MODULES, "jszip"));
+  const zip = await JSZip.loadAsync(fs.readFileSync(out));
+  const themePath = Object.keys(zip.files).find((f) => /^ppt\/theme\/theme\d+\.xml$/.test(f));
+  const xml = (await zip.file(themePath).async("string")).replace(/<a:ea typeface="[^"]*"\/>/g, `<a:ea typeface="${THEME.bodyFontFace}"/>`);
+  zip.file(themePath, xml);
+  fs.writeFileSync(out, await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
   console.log("wrote", out);
 })();
