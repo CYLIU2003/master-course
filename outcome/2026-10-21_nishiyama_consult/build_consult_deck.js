@@ -90,16 +90,23 @@ caption(s, "柱A・Bは10月8日の三者ミーティング（占部先生・中
 // ---- Pillar A results
 s = page("柱Aで分かっていること（12ケース）");
 s.addChart(pres.charts.LINE, SEASONS.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(g, w).bev_trip_share_pct * 10) / 10) })),
-  chart({ x: 0.6, y: 1.5, w: 5.9, h: 4.6, lineSize: 2.5, lineDataSymbol: "circle", lineDataSymbolSize: 7, chartColors: [BLUE_DARK, BLUE_LIGHT, GREY],
-    valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showValAxisTitle: true, valAxisTitle: "電気バスが担当した便 [%]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
+  chart({ x: 0.6, y: 1.4, w: 5.9, h: 3.3, lineSize: 2.5, lineDataSymbol: "circle", lineDataSymbolSize: 7, chartColors: [BLUE_DARK, BLUE_LIGHT, GREY],
+    valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showValAxisTitle: true, valAxisTitle: "電気バス担当便 [%]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
 s.addChart(pres.charts.BAR, [
   { name: "電気代", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "electricity_cost") / 1e3) / 10) },
   { name: "燃料代", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "fuel_cost") / 1e3) / 10) },
   { name: "上限の超過費用", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "contract_overage_cost") / 1e3) / 10) }],
-  chart({ x: 6.8, y: 1.5, w: 5.9, h: 4.6, barDir: "col", barGrouping: "stacked", chartColors: [BLUE, GREY, "CFCFCF"], valAxisMinVal: 0,
+  chart({ x: 6.8, y: 1.4, w: 5.9, h: 3.3, barDir: "col", barGrouping: "stacked", chartColors: [BLUE, GREY, "CFCFCF"], valAxisMinVal: 0,
     showValAxisTitle: true, valAxisTitle: "運用費 [万円/週]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, "図1　受電上限と電気バスの担当便", 0.6, 6.15, 5.9);
-caption(s, "図2　受電上限と1週間の運用費（3週平均、車両使用費は除く）", 6.8, 6.15, 5.9);
+caption(s, "図1　1週間の全1,704便のうち電気バスが担当した割合（各点が1ケース）", 0.6, 4.72, 5.9, 0.35);
+caption(s, "図2　1週間の運用費の内訳（冬・春・夏の3週の平均、車両使用費は除く）", 6.8, 4.72, 5.9, 0.35);
+const P = (k, v) => [{ text: k, options: { bold: true, fill: { color: HEAD } } }, v];
+s.addTable([
+  [...P("対象", "東急バス 渋21〜23系統（弦巻営業所）、1週間 1,704便"), ...P("計算した週", "2025年の冬（1/6〜）・春（4/7〜）・夏（7/7〜）の各1週間")],
+  [...P("車両", "保有：電気バス35台・燃料バス25台（台数は固定）"), ...P("受電上限", "90／200／400／800 kW（超過分は500円/kWh、仮）")],
+  [...P("設備", "太陽光1,000 kW・蓄電池6,000 kWh・充電器90 kW×10基"), ...P("単価", "電気30円/kWh、軽油150円/L、車両使用費 1台1日2万円")],
+  [...P("計算", "2段階の最適化、15分刻み、毎時見直しで1週間を実行"), ...P("ケース", "受電上限4段階 × 3週 ＝ 12ケース（基本料金は含めない）")]],
+  tableOpts({ x: 0.6, y: 5.12, w: 12.1, colW: [1.0, 5.05, 1.1, 4.95], fontSize: 11, rowH: 0.43 }));
 s.addNotes("受電上限を800 kWから90 kWに下げても、電気バスの担当便は92.0〜96.5%でほぼ一定でした。運用費は1週間あたり約11万円から約87万円に増えましたが、増分はほぼすべて上限の超過費用（仮に500円/kWh）で、燃料使用量は約155 L/週で変わりませんでした。");
 
 // ---- Pillar A interpretation
