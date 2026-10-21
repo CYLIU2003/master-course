@@ -228,19 +228,38 @@ caption(s, "図2　受電上限と電気バスの担当便の割合（基本料�
 const shares = rc8.map((r) => r.bev_trip_share_pct), w90 = get(rc8, 90, WIN);
 bullets(s, [
   `電気バスの担当便は${Math.min(...shares).toFixed(1)}〜${Math.max(...shares).toFixed(1)}%で、受電上限によらずほぼ一定だった`,
-  `上限90 kWでも燃料バスへの振り替えは増えず、上限の超過分に追加費用を払う計画となった（冬：超過${fmt(w90.contract_over_limit_kwh)} kWh/週、約${Math.round(w90.contract_overage_cost / 1e4)}万円/週）`,
+  `上限90 kWでも燃料バスへの振り替えは増えず、上限の超過分に追加費用を払う計画となった（冬：超過${fmt(w90.contract_over_limit_kwh)} kWh/週、約${Math.round(w90.contract_overage_cost / 1e4)}万円/週、図3）`,
   "季節差（春がやや低い）は、受電上限による差より大きい"], { x: 8.6, y: 1.8, w: 4.2, h: 4.6, fontSize: 16 });
 s.addNotes("柱Aの問いは、受電上限を下げると電気バスに任せられる便がどれだけ減るか、でした。結果は、上限を90 kWまで下げても、電気バスの担当便は92〜96%でほとんど変わりませんでした。燃料バスに振り替える代わりに、上限を超えた分の追加費用を払う計画になっています。なぜ振り替えが起きないかは、考察で述べます。");
 
+// ---- 3. Pillar A: weekly cost and fuel
+s = page(S3, "結果(A-2)　受電上限と運用費・燃料使用量");
+const avg = (g, k) => { const rs = rc8.filter((r) => r.grid_limit_kw === g); return rs.reduce((a, r) => a + r[k], 0) / rs.length; };
+s.addChart(pres.charts.BAR, [
+  { name: "電気代", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "electricity_cost") / 1e3) / 10) },
+  { name: "燃料代", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "fuel_cost") / 1e3) / 10) },
+  { name: "上限の超過費用", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "contract_overage_cost") / 1e3) / 10) }],
+  chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, barDir: "col", barGrouping: "stacked", chartColors: [BLUE, GREY, "CFCFCF"], valAxisMinVal: 0,
+    showValAxisTitle: true, valAxisTitle: "運用費 [万円/週]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
+caption(s, "図3　受電上限と1週間の運用費の内訳（冬・春・夏の平均、車両使用費は除く）", 0.6, 6.45, 7.6);
+const opex = (g) => (avg(g, "electricity_cost") + avg(g, "fuel_cost") + avg(g, "contract_overage_cost")) / 1e4;
+const fuelL = LIMITS.map((g) => avg(g, "ice_fuel_consumed_l"));
+bullets(s, [
+  `運用費は上限800 kWの約${Math.round(opex(800))}万円/週から、90 kWでは約${Math.round(opex(90))}万円/週に増えた`,
+  "増えた分はほぼすべて上限の超過費用で、電気代・燃料代はほぼ変わらない",
+  `燃料使用量は約${Math.round(Math.min(...fuelL))}〜${Math.round(Math.max(...fuelL))} L/週で、受電上限によらずほぼ一定`,
+  "車両使用費（約404〜410万円/週）は上限によらずほぼ同じため図から除いた"], { x: 8.6, y: 1.8, w: 4.2, h: 4.6, fontSize: 16 });
+s.addNotes("柱Aの費用と燃料の曲線です。受電上限を下げると運用費は増えますが、増えた分はほぼすべて上限を超えた分の追加費用です。燃料の使用量は、上限によらず1週間に約155 Lでほとんど変わりません。つまり、上限を下げても燃料バスへの振り替えは起きていません。");
+
 // ---- 3. Pillar A: which trips go to diesel
-s = page(S3, "結果(A-2)　燃料バスが担当した便の時間帯");
+s = page(S3, "結果(A-3)　燃料バスが担当した便の時間帯");
 const BANDS = [["05-06", "早朝（5〜6時台）"], ["07-21", "日中（7〜21時台）"], ["22-", "深夜（22時以降）"]];
 const iceShare = (g, b) => { const rs = iceHour.filter((r) => r.grid_limit_kw === g);
   return Math.round(rs.reduce((a, r) => a + r.bands[b].diesel / r.bands[b].total, 0) / rs.length * 1000) / 10; };
 s.addChart(pres.charts.BAR, LIMITS.map((g) => ({ name: `${g} kW`, labels: BANDS.map((x) => x[1]), values: BANDS.map(([b]) => iceShare(g, b)) })),
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, barDir: "col", barGrouping: "clustered", chartColors: ["CFCFCF", GREY, "7AB8E8", BLUE_DARK], showValue: true,
     dataLabelPosition: "outEnd", dataLabelFormatCode: "0", dataLabelFontSize: 10, valAxisMinVal: 0, showValAxisTitle: true, valAxisTitle: "燃料バスが担当した便 [%]" }));
-caption(s, "図3　出発時間帯別の燃料バス担当率（冬・春・夏の平均、凡例は受電上限）", 0.6, 6.45, 7.6);
+caption(s, "図4　出発時間帯別の燃料バス担当率（冬・春・夏の平均、凡例は受電上限）", 0.6, 6.45, 7.6);
 const rng = (b) => { const v = iceHour.map((r) => r.bands[b].diesel / r.bands[b].total * 100); return `${Math.min(...v).toFixed(0)}〜${Math.max(...v).toFixed(0)}%`; };
 bullets(s, [
   `燃料バスが担当したのは主に早朝（${rng("05-06")}）と深夜（${rng("22-")}）の便で、日中は${rng("07-21")}だった`,
@@ -249,14 +268,14 @@ bullets(s, [
 s.addNotes("柱Aのもう一つの問いは、どの時間帯の便が先に燃料バスへ戻るか、でした。燃料バスが担当したのは主に早朝と深夜の便で、日中はほとんど電気バスでした。この傾向は受電上限を変えても同じでした。");
 
 // ---- 3. Pillar A: CO2 against an all-diesel fleet
-s = page(S3, "結果(A-3)　全車燃料バスとのCO₂比較");
+s = page(S3, "結果(A-4)　全車燃料バスとのCO₂比較");
 const SE = [["2025-01-06", "冬"], ["2025-04-07", "春"], ["2025-07-07", "夏"]];
 s.addChart(pres.charts.BAR, [
   { name: "全車燃料バス（概算）", labels: SE.map((x) => x[1]), values: SE.map(([w]) => Math.round(Number(diesel.find((d) => d.week === w).co2_kg) / 100) / 10) },
   { name: "電気バスと併用", labels: SE.map((x) => x[1]), values: SE.map(([w]) => Math.round(get(rc8, 800, w).total_co2_kg / 100) / 10) }],
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, barDir: "col", barGrouping: "clustered", showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0", valAxisMinVal: 0,
     showValAxisTitle: true, valAxisTitle: "CO₂ [t/週]" }));
-caption(s, "図4　1週間のCO₂排出量（併用は受電上限800 kW・基本料金を考慮しない場合）", 0.6, 6.45, 7.6);
+caption(s, "図5　1週間のCO₂排出量（併用は受電上限800 kW・基本料金を考慮しない場合）", 0.6, 6.45, 7.6);
 bullets(s, ["電気バスとの併用により、CO₂は全車燃料バスと比べて約75〜85%少なかった",
   "全車燃料バスは走行距離から軽油量を求めた概算であり、最適化の結果ではない",
   "電力の係数0.5 kg/kWhは仮の値。実値0.452［4］で再計算しても削減率は約77〜86%"], { x: 8.6, y: 1.8, w: 4.2, h: 4.6, fontSize: 16 });
@@ -269,7 +288,7 @@ s.addChart(pres.charts.BAR, [
   { name: "基本料金を考慮する", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc9, g, WIN).peak_grid_kw)) }],
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, barDir: "col", barGrouping: "clustered", showValue: true, dataLabelPosition: "outEnd", valAxisMinVal: 0,
     showValAxisTitle: true, valAxisTitle: "最大受電電力 [kW]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, "図5　冬季代表週（2025年1月6日〜）の最大受電電力", 0.6, 6.45, 7.6);
+caption(s, "図6　冬季代表週（2025年1月6日〜）の最大受電電力", 0.6, 6.45, 7.6);
 bullets(s, [
   `考慮しない場合：${fmt(Math.min(...LIMITS.map((g) => get(rc8, g, WIN).peak_grid_kw)))}〜${fmt(Math.max(...LIMITS.map((g) => get(rc8, g, WIN).peak_grid_kw)))} kW`,
   `考慮する場合：${fmt(Math.min(...LIMITS.map((g) => get(rc9, g, WIN).peak_grid_kw)))}〜${fmt(Math.max(...LIMITS.map((g) => get(rc9, g, WIN).peak_grid_kw)))} kW（低減率25〜50%）`,
@@ -284,7 +303,7 @@ s.addChart(pres.charts.LINE, [
   { name: "基本料金を考慮する", labels: night.labels, values: night.rc9_grid_kw }],
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, lineSize: 2.5, lineDataSymbol: "none", valAxisMinVal: 0, catAxisLabelFrequency: 4, catAxisLabelFontSize: 12,
     showValAxisTitle: true, valAxisTitle: "買電電力 [kW]" }));
-caption(s, "図6　受電上限90 kW・冬季の一晩（22時〜8時）における買電電力（15分値）", 0.6, 6.45, 7.6);
+caption(s, "図7　受電上限90 kW・冬季の一晩（22時〜8時）における買電電力（15分値）", 0.6, 6.45, 7.6);
 bullets(s, [
   `最大値：${fmt(Math.max(...night.rc8_grid_kw))} kW → ${fmt(Math.max(...night.rc9_grid_kw))} kW`,
   `1週間の買電量はほぼ同じ（${night.week_grid_kwh[0].toLocaleString()} → ${night.week_grid_kwh[1].toLocaleString()} kWh）`,
@@ -299,7 +318,7 @@ s.addChart(pres.charts.BAR, [
   { name: "基本料金を考慮する", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(basicYear(peakYear(rc9, g)) / 1e4)) }],
   chart({ x: 0.6, y: 1.5, w: 7.6, h: 4.85, barDir: "col", barGrouping: "clustered", showValue: true, dataLabelPosition: "outEnd", valAxisMinVal: 0,
     showValAxisTitle: true, valAxisTitle: "基本料金 [万円/年]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, "図7　年間の基本料金（契約電力＝代表週（冬・春・夏）の最大受電電力、単価［3］）", 0.6, 6.45, 7.6);
+caption(s, "図8　年間の基本料金（契約電力＝代表週（冬・春・夏）の最大受電電力、単価［3］）", 0.6, 6.45, 7.6);
 const b8 = Math.round(basicYear(peakYear(rc8, 90)) / 1e4), b9 = Math.round(basicYear(peakYear(rc9, 90)) / 1e4);
 bullets(s, [`受電上限90 kW：年 ${b8.toLocaleString()}万円 → ${b9.toLocaleString()}万円`, "いずれの受電上限でも約2.5〜5割減少した",
   "電力量料金の増減は1週間で最大約2万円であり、基本料金の差と比べて小さい",

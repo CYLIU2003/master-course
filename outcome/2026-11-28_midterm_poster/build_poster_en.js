@@ -116,21 +116,23 @@ s.addChart(pres.charts.BAR, [
 caption("Fig. 2  Diesel share by departure time (05–06 h, 07–21 h, 22 h–; legend: limit kW)", RX, y + 5.05, half, 1.2, 26);
 caption("Fig. 3  Weekly CO₂ (all-diesel: estimate from distance)", RX + half + 0.6, y + 5.05, half, 1.2, 26);
 y += 6.45;
+const avg = (g, k) => { const rs = rc8.filter((r) => r.grid_limit_kw === g); return rs.reduce((a, r) => a + r[k], 0) / rs.length; };
 s.addChart(pres.charts.BAR, [
-  { name: "Without basic charge", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc8, g, WIN).peak_grid_kw)) },
-  { name: "With basic charge", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc9, g, WIN).peak_grid_kw)) }],
-  { ...chart(), x: RX, y, w: COL, h: 5.2, barDir: "col", barGrouping: "clustered", chartColors: [GREY, BLUE],
-    showValue: true, dataLabelPosition: "outEnd", valAxisMinVal: 0, showCatAxisTitle: true, catAxisTitle: "Grid import limit", catAxisTitleFontSize: 30, catAxisTitleColor: SUB,
-    showValAxisTitle: true, valAxisTitle: "Peak demand [kW]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
-caption("Fig. 4  Peak grid demand in the winter week", RX, y + 5.25, COL);
+  { name: "Electricity", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "electricity_cost") / 1e4) / 100) },
+  { name: "Diesel", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "fuel_cost") / 1e4) / 100) },
+  { name: "Excess over limit", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "contract_overage_cost") / 1e4) / 100) }],
+  { ...chart(), x: RX, y, w: COL, h: 5.2, barDir: "col", barGrouping: "stacked", chartColors: [BLUE, GREY, "CFCFCF"], valAxisMinVal: 0,
+    showCatAxisTitle: true, catAxisTitle: "Grid import limit", catAxisTitleFontSize: 30, catAxisTitleColor: SUB,
+    showValAxisTitle: true, valAxisTitle: "Operating cost [M JPY/week]", valAxisTitleFontSize: 28, valAxisTitleColor: SUB });
+caption("Fig. 4  Weekly operating cost by grid limit (excl. vehicle cost)", RX, y + 5.25, COL);
 y += 6.15;
-const b8 = basicYear(peakYear(rc8, 90)) / 1e6, b9 = basicYear(peakYear(rc9, 90)) / 1e6;
-text(`(2) With the basic charge, the winter peak was 359–380 kW regardless of the limit (478–750 kW without it), and the annual basic charge fell by about 25–50% (90 kW limit: ${b8.toFixed(1)} → ${b9.toFixed(1)} million JPY per year). The energy purchased changed little; night charging was spread over time.`,
+const opex = (g) => (avg(g, "electricity_cost") + avg(g, "fuel_cost") + avg(g, "contract_overage_cost")) / 1e6;
+text(`Operating cost rose from about ${opex(800).toFixed(2)} to ${opex(90).toFixed(2)} million JPY per week as the limit fell from 800 to 90 kW, almost all as excess cost; diesel use stayed at about 155 L per week (Fig. 4). (Reference) With the basic charge in the objective, the winter peak fell to 359–380 kW.`,
   { x: RX, y, w: COL, h: 3.0, fontSize: 31 });
 y += 3.3;
 y = section("5. Conclusions", RX, y, COL);
 text([
-  { text: "Under these conditions the grid limit did not reduce the electric-bus share; it acted as an excess cost. Including the basic charge greatly lowers the peak demand and the basic charge.", options: { breakLine: true } },
+  { text: "Under these conditions the grid limit changed neither the electric-bus share nor diesel use; it acted as an excess cost. Diesel buses served only early-morning and late-night trips.", options: { breakLine: true } },
   { text: "Next: why the share does not change (gap between expected and executed grid purchase), recalculation under the Japanese tariff, and the value of multi-day planning." }],
   { x: RX, y, w: COL, h: 45.4 - y, paraSpaceAfter: 8, fontSize: 30 });
 

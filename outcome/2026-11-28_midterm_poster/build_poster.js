@@ -113,20 +113,23 @@ s.addChart(pres.charts.BAR, [
 caption("図2　時間帯別の燃料バス担当便（凡例：受電上限 kW）", RX, y + 5.05, half, 1.2, 28);
 caption("図3　1週間のCO₂（全車燃料バスは走行距離からの概算）", RX + half + 0.6, y + 5.05, half, 1.2, 28);
 y += 6.45;
+const avg = (g, k) => { const rs = rc8.filter((r) => r.grid_limit_kw === g); return rs.reduce((a, r) => a + r[k], 0) / rs.length; };
 s.addChart(pres.charts.BAR, [
-  { name: "基本料金を含めない", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc8, g, WIN).peak_grid_kw)) },
-  { name: "基本料金を含める", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(get(rc9, g, WIN).peak_grid_kw)) }],
-  { ...chart(), x: RX, y, w: COL, h: 5.2, barDir: "col", barGrouping: "clustered", chartColors: [GREY, BLUE],
-    showValue: true, dataLabelPosition: "outEnd", valAxisMinVal: 0, showCatAxisTitle: true, catAxisTitle: "受電上限", catAxisTitleFontSize: 30, catAxisTitleColor: SUB,
-    showValAxisTitle: true, valAxisTitle: "最大受電電力 [kW]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
-caption("図4　冬の代表週における最大受電電力", RX, y + 5.25, COL);
+  { name: "電気代", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "electricity_cost") / 1e3) / 10) },
+  { name: "燃料代", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "fuel_cost") / 1e3) / 10) },
+  { name: "上限の超過費用", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "contract_overage_cost") / 1e3) / 10) }],
+  { ...chart(), x: RX, y, w: COL, h: 5.2, barDir: "col", barGrouping: "stacked", chartColors: [BLUE, GREY, "CFCFCF"], valAxisMinVal: 0,
+    showCatAxisTitle: true, catAxisTitle: "受電上限", catAxisTitleFontSize: 30, catAxisTitleColor: SUB,
+    showValAxisTitle: true, valAxisTitle: "運用費 [万円/週]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
+caption("図4　受電上限と1週間の運用費の内訳（3週平均、車両使用費は除く）", RX, y + 5.25, COL);
 y += 6.15;
-text(`(2) 基本料金を含めると、冬の最大受電電力は受電上限によらず359〜380 kWとなり（含めない場合は478〜750 kW）、年間の基本料金は約2.5〜5割減少した（上限90 kWで年約${Math.round(basicYear(peakYear(rc8, 90)) / 1e4).toLocaleString()}万円→${Math.round(basicYear(peakYear(rc9, 90)) / 1e4).toLocaleString()}万円）。買電量の変化は小さく、夜間の充電を分散させていた。`,
+const opex = (g) => (avg(g, "electricity_cost") + avg(g, "fuel_cost") + avg(g, "contract_overage_cost")) / 1e4;
+text(`運用費は上限800 kWの約${Math.round(opex(800))}万円/週から90 kWの約${Math.round(opex(90))}万円/週に増えたが、増分はほぼ超過費用で、燃料使用量は約155 L/週で一定だった（図4）。（参考）基本料金を目的関数に含めると、冬の受電ピークは359〜380 kWに下がった。`,
   { x: RX, y, w: COL, h: 3.0, fontSize: 33 });
 y += 3.3;
 y = section("5．まとめと今後", RX, y, COL);
 text([
-  { text: "受電上限は、今回の条件では電気バスの担当便を減らさず、超過費用として効いた。基本料金を考慮すると、受電ピークと基本料金を大きく下げられる。", options: { breakLine: true } },
+  { text: "受電上限は、今回の条件では電気バスの担当便と燃料使用量を変えず、超過費用として効いた。燃料バスが担当するのは早朝・深夜の便に限られた。", options: { breakLine: true } },
   { text: "今後：担当便が変わらない原因の検証（便割当段階の買電の見込みと実際の差）、日本の料金体系に沿った再計算、日をまたぐ計画の評価。" }],
   { x: RX, y, w: COL, h: 45.4 - y, paraSpaceAfter: 8, fontSize: 32 });
 
