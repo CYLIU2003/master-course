@@ -44,7 +44,7 @@ from src.optimization.common.bev_terminal_policy import (
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.milp.pv_execution_reserve import add_pv_execution_reserve_constraints
 from src.optimization.milp.auxiliary_bess import add_auxiliary_bess_constraints
-from src.optimization.milp.charging_window_support import ChargingWindowSupportEvents
+from src.optimization.milp.charging_window_support import ChargingWindowSupportEvents, VehicleAwayEvents
 from src.optimization.milp.charging_session_relaxation import add_session_time_relaxation
 from src.optimization.milp.charging_mip_start import apply_charging_mip_start
 from src.optimization.milp.depot_connection_factors import (
@@ -29358,6 +29358,50 @@ class GurobiMILPAdapter:
         session_constraint_count = 0
         daily_timeline = bool(getattr(problem.dispatch_context, "daily_return_depot_id", ""))
         sparse_windows = problem.metadata.get("stage1_sparse_charge_window_support") is True
+        # Start/end windows run to the horizon boundaries, so with several
+        # fragments per vehicle they overlap the vehicle's other trips. Cap
+        # charging by the certain away fraction (VehicleAwayEvents); Stage 2
+        # charges only in wholly-home slots, so no Stage 2 schedule is removed.
+        away_exclusion = problem.metadata.get("stage1_away_charge_exclusion", True) is not False
+        horizon_start_min = self._horizon_start_min(problem)
+        away_audit = {
+            "enabled": away_exclusion, "vehicle_count": 0, "endpoint_term_count": 0,
+            "additional_continuous_variables": 0, "additional_constraints": 0,
+            "semantics": (
+                "charge_on <= 1 - away and charge_power <= P_max (1 - away); away is the "
+                "slot fraction between a trip entered from home and a trip left for home; "
+                "valid because Stage 2 charges only in slots spent wholly at home"
+            ),
+        }
+        # Stage 2 requires every bus that served day d to reach its operating
+        # maximum SOC before next morning's departure (soc_next_morning). Mirror
+        # it for overnight daily-return connections; other first trips of the
+        # day are left unconstrained, which only relaxes.
+        next_morning_enabled = bool(
+            daily_timeline
+            and (problem.metadata or {}).get("bev_soc_deadline_mode") == "next_morning_operational_max"
+        )
+        next_morning_audit = {
+            "enabled": next_morning_enabled, "constraint_count": 0, "incidence_term_count": 0,
+            "factor_groups_skipped_mixed_days": 0,
+            "semantics": (
+                "slot_end_soc[t*] >= operating_max * overnight incidence, with t* = min(next-morning "
+                "target slot, slot before the depot departure of the next day's first trip), as in Stage 2"
+            ),
+        }
+        step_min = max(int(problem.scenario.timestep_min), 1)
+
+        def next_morning_slot(day_idx: int, next_trip: Any, home: str) -> int:
+            slot = post_return_target_slot_index(problem, day_idx)
+            if next_trip is not None:
+                leave = int(next_trip.departure_min) - checked_deadhead_minutes(
+                    problem.dispatch_context, home, str(next_trip.origin))
+                slot = min(slot, (leave - horizon_start_min) // step_min - 1)
+            return slot
+
+        def raw_day(trip: Any) -> int:
+            return (int(trip.departure_min) - horizon_start_min) // 1440
+
         window_support_audit = {
             "representation": "endpoint_events" if sparse_windows else "dense_slots",
             "dense_term_occurrences": 0, "endpoint_term_count": 0,
@@ -29403,6 +29447,14 @@ class GurobiMILPAdapter:
             }
             terminal_load_terms: List[Any] = []
             support_events = ChargingWindowSupportEvents(slot_indices) if sparse_windows else None
+            away_events = (
+                VehicleAwayEvents(slot_indices, horizon_start_min=horizon_start_min,
+                                  step_min=int(problem.scenario.timestep_min))
+                if away_exclusion else None
+            )
+            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+            next_morning_terms: Dict[int, List[Any]] = {}
+            slot_end_soc_by_slot: Dict[int, Any] = {}
 
             def add_charge_windows(slots, variable):
                 if support_events is not None:
@@ -29433,6 +29485,8 @@ class GurobiMILPAdapter:
                             trip_energy_kwh * energy_fraction * assignment_var
                         )
                 start_var = start_arc.get(assignment_key)
+                if away_events is not None and start_var is not None:
+                    away_events.add_step(self._service_minute(problem, int(trip.departure_min)), start_var, 1.0)
                 startup_precheck = startup_energy_precheck_by_assignment.get(
                     assignment_key
                 )
@@ -29460,6 +29514,8 @@ class GurobiMILPAdapter:
                 end_var = end_arc.get(assignment_key)
                 if end_var is None:
                     continue
+                if away_events is not None:
+                    away_events.add_step(self._trip_service_arrival_min(problem, trip), end_var, -1.0)
                 return_exists, return_deadhead_min = return_deadhead_min_to_home(
                     problem,
                     vehicle,
@@ -29524,6 +29580,19 @@ class GurobiMILPAdapter:
                 next_trip = trip_by_id.get(to_trip_id)
                 if arc_var is None or previous_trip is None or next_trip is None:
                     continue
+                daily_return_arc = requires_daily_return(problem.dispatch_context, previous_trip, next_trip)
+                if next_morning_enabled and daily_return_arc:
+                    previous_day, next_day = raw_day(previous_trip), raw_day(next_trip)
+                    target = next_morning_slot(
+                        previous_day, next_trip if next_day == previous_day + 1 else None, home_depot_id)
+                    next_morning_terms.setdefault(target, []).append(arc_var)
+                if away_events is not None and (
+                    daily_return_arc
+                    or self._locations_equivalent(problem, previous_trip.destination, home_depot_id)
+                    or self._locations_equivalent(problem, next_trip.origin, home_depot_id)
+                ):
+                    away_events.add_step(self._trip_service_arrival_min(problem, previous_trip), arc_var, -1.0)
+                    away_events.add_step(self._service_minute(problem, int(next_trip.departure_min)), arc_var, 1.0)
                 if daily_timeline:
                     for event_end, energy in connection_energy_events(problem, vehicle, previous_trip, next_trip):
                         posting = slot_index_ceil(problem, event_end) - 1
@@ -29554,6 +29623,32 @@ class GurobiMILPAdapter:
                 window_support_audit["endpoint_term_count"] += support_events.endpoint_term_count
                 window_support_audit["additional_continuous_variables"] += len(support_vars)
                 window_support_audit["additional_constraints"] += len(support_vars)
+
+            if away_events is not None and isinstance(x, FactoredConnectionVariables):
+                # Every factored connection is a daily return through home.
+                for entry in x.by_vehicle.get(vehicle_id, ()):
+                    for trip_id, var in zip(entry.factor.origins, entry.origins):
+                        away_events.add_step(self._trip_service_arrival_min(problem, trip_by_id[trip_id]), var, -1.0)
+                    for trip_id, var in zip(entry.factor.targets, entry.targets):
+                        away_events.add_step(self._service_minute(problem, int(trip_by_id[trip_id].departure_min)), var, 1.0)
+            if next_morning_enabled and isinstance(x, FactoredConnectionVariables):
+                for entry in x.by_vehicle.get(vehicle_id, ()):
+                    origin_days = {raw_day(trip_by_id[trip_id]) for trip_id in entry.factor.origins}
+                    target_days = {raw_day(trip_by_id[trip_id]) for trip_id in entry.factor.targets}
+                    if len(origin_days) != 1 or target_days != {next(iter(origin_days)) + 1}:
+                        next_morning_audit["factor_groups_skipped_mixed_days"] += 1
+                        continue
+                    day_idx = next(iter(origin_days))
+                    for trip_id, var in zip(entry.factor.targets, entry.targets):
+                        target = next_morning_slot(day_idx, trip_by_id[trip_id], home_depot_id)
+                        next_morning_terms.setdefault(target, []).append(var)
+            away_vars = away_events.build(model, gp, grb, vehicle_id=vehicle_id) if away_events is not None else {}
+            if away_vars:
+                away_audit["vehicle_count"] += 1
+                away_audit["endpoint_term_count"] += away_events.endpoint_term_count
+                away_audit["additional_continuous_variables"] += len(away_vars)
+                away_audit["additional_constraints"] += len(away_vars)
+                constraint_count += len(away_vars)
 
             if isinstance(x, FactoredConnectionVariables):
                 factor_support, factor_loads, factor_terminal, factor_count = add_factor_soc_terms(
@@ -29599,6 +29694,14 @@ class GurobiMILPAdapter:
                     ),
                 )
                 constraint_count += 1
+                away = away_vars.get(slot_idx)
+                if away is not None:
+                    model.addConstr(charge_availability <= 1.0 - away,
+                                    name=f"stage1_away_charge_on__{vehicle_id}__slot_{slot_idx}")
+                    model.addConstr(charge_power <= charge_max_kw * (1.0 - away),
+                                    name=f"stage1_away_charge_power__{vehicle_id}__slot_{slot_idx}")
+                    constraint_count += 2
+                    away_audit["additional_constraints"] += 2
                 stage1_charge_on_var[(vehicle_id, slot_idx)] = (
                     charge_availability
                 )
@@ -29654,6 +29757,18 @@ class GurobiMILPAdapter:
                     ),
                 )
                 constraint_count += 2
+                slot_end_soc_by_slot[slot_idx] = slot_end_soc
+            operating_max_kwh = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
+            for target_slot, terms in sorted(next_morning_terms.items()):
+                if target_slot not in slot_end_soc_by_slot:
+                    continue
+                model.addConstr(
+                    slot_end_soc_by_slot[target_slot] >= operating_max_kwh * gp.quicksum(terms),
+                    name=f"stage1_soc_next_morning__{vehicle_id}__slot_{target_slot}",
+                )
+                constraint_count += 1
+                next_morning_audit["constraint_count"] += 1
+                next_morning_audit["incidence_term_count"] += len(terms)
             cumulative_load += sum(terminal_load_terms)
             terminal_requirement_kwh = max(
                 minimum_soc_kwh,
@@ -29723,6 +29838,8 @@ class GurobiMILPAdapter:
             "session_time_relaxation": "continuous_start_end_with_stage2_setup_teardown;inactive_horizon_boundaries;taper_and_minimum_duration_deferred",
             "soc_state_representation": state_representation,
             "charge_window_support": window_support_audit,
+            "away_charge_exclusion": away_audit,
+            "next_morning_operational_max": next_morning_audit,
             "relaxation_semantics": (
                 "continuous physical-charger assignment with exact vehicle, "
                 "charger, port, power, depot, and charging-window upper bounds; "

@@ -675,16 +675,23 @@ def test_candidate_audit_enumerates_distinct_powertrain_patterns() -> None:
         ]
         >= 1
     )
-    assert metadata["stage1_candidate_enumeration_events"][0][
-        "partial_mip_start_applied"
-    ] is True
-    assert (
-        metadata["stage1_candidate_enumeration_events"][0][
-            "partial_mip_start_semantics"
-        ]
-        == "opposite_powertrain_whole_duty_swap_search_hint_"
-        "validated_by_unchanged_stage1_model"
-    )
+    # The second pattern may already sit in the primary solution pool; only a
+    # pattern found by no-good enumeration needs the opposite-duty search hint.
+    if any(
+        candidate["stage1_candidate_source"]
+        == "powertrain_pattern_no_good_enumeration"
+        for candidate in candidates
+    ):
+        assert metadata["stage1_candidate_enumeration_events"][0][
+            "partial_mip_start_applied"
+        ] is True
+        assert (
+            metadata["stage1_candidate_enumeration_events"][0][
+                "partial_mip_start_semantics"
+            ]
+            == "opposite_powertrain_whole_duty_swap_search_hint_"
+            "validated_by_unchanged_stage1_model"
+        )
     assert metadata["stage1_candidate_enumeration_events"][-1][
         "solver_status"
     ] == "infeasible"

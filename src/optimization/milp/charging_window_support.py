@@ -1,4 +1,5 @@
 """Exact endpoint representation of slot-wise charging opportunity sums."""
+from bisect import bisect_left
 from collections import Counter, defaultdict
 from typing import Any, Iterable, Sequence
 
@@ -46,6 +47,58 @@ class ChargingWindowSupportEvents:
             support[slot] = current
             previous = current
         return support
+
+    @property
+    def endpoint_term_count(self) -> int:
+        return sum(len(terms) for terms in self.events.values())
+
+
+class VehicleAwayEvents:
+    """Fraction of each slot that a vehicle certainly spends away from home.
+
+    An away segment starts at the departure of a trip entered from home (a
+    start arc, a daily-return connection, or a connection touching the home
+    depot) and ends at the arrival of a trip left for home by the same arc
+    kinds. In between, the vehicle drives or waits at a terminal. On one
+    time-ordered binary path these segments are disjoint, so the sum below is
+    the exact away fraction of each slot; the home-side deadhead legs count as
+    home, which only relaxes. Each term adds ``sign * variable * H_m(slot)``,
+    where ``H_m`` is the fraction of the slot at or after minute ``m``.
+    """
+
+    def __init__(self, slots: Sequence[int], *, horizon_start_min: int, step_min: int):
+        self.slots = tuple(slots)
+        if self.slots != tuple(sorted(set(self.slots))):
+            raise ValueError("Away support requires sorted unique slots")
+        self.horizon_start_min = int(horizon_start_min)
+        self.step_min = max(int(step_min), 1)
+        self.events: dict[int, list[Any]] = defaultdict(list)
+
+    def _position(self, slot: int) -> int:
+        return bisect_left(self.slots, slot)
+
+    def add_step(self, minute: float, variable: Any, sign: float) -> None:
+        offset = float(minute) - self.horizon_start_min
+        slot = int(offset // self.step_min)
+        head = ((slot + 1) * self.step_min - offset) / self.step_min
+        for target, coefficient in ((slot, head), (slot + 1, 1.0 - head)):
+            position = self._position(target)
+            if coefficient > 1e-12 and position < len(self.slots):
+                self.events[position].append(sign * coefficient * variable)
+
+    def build(self, model: Any, gp: Any, grb: Any, *, vehicle_id: str) -> dict[int, Any]:
+        if not self.events:
+            return {}
+        away = {}
+        previous = 0.0
+        for position, slot in enumerate(self.slots):
+            current = model.addVar(lb=-grb.INFINITY, vtype=grb.CONTINUOUS,
+                                   name=f"stage1_away_fraction__{vehicle_id}__{slot}")
+            model.addConstr(current == previous + gp.quicksum(self.events.get(position, ())),
+                            name=f"stage1_away_balance__{vehicle_id}__{slot}")
+            away[slot] = current
+            previous = current
+        return away
 
     @property
     def endpoint_term_count(self) -> int:

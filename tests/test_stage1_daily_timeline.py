@@ -66,3 +66,114 @@ def test_fixed_path_has_identical_movement_postings_and_complete_home_slots(spar
             assert model.Status == gp.GRB.OPTIMAL
             actual = {slot for slot, var in enumerate(available) if var.X > .99}
             assert actual == expected.home_slots["bev-1"]
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+@pytest.mark.parametrize("away_exclusion", [False, True])
+def test_two_fragments_do_not_open_charging_windows_over_each_other(sparse, away_exclusion):
+    """A later fragment's start window and an earlier fragment's end window run
+    to the horizon boundaries. Without the away cap they let Stage 1 charge a
+    bus while it drives its other fragment; Stage 2 never can."""
+    gp = pytest.importorskip("gurobipy")
+    problem = daily_problem()
+    first, second = problem.trips
+    first = replace(first, arrival_min=551)
+    second = replace(second, departure_min=1913, arrival_min=1973)
+    rules = {**problem.dispatch_context.deadhead_rules,
+             ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 17),
+             ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 19)}
+    dispatch = [replace(problem.dispatch_context.trips[0], arrival_time="09:11"),
+                replace(problem.dispatch_context.trips[1], departure_time="31:53", arrival_time="32:53")]
+    problem = replace(problem, trips=(first, second), depot_energy_assets={},
+        scenario=replace(problem.scenario, timestep_min=15),
+        dispatch_context=replace(problem.dispatch_context, trips=dispatch, deadhead_rules=rules),
+        price_slots=tuple(EnergyPriceSlot(i) for i in range(192)),
+        metadata={**problem.metadata, "stage1_sparse_charge_window_support": sparse,
+                  "stage1_away_charge_exclusion": away_exclusion})
+    plan = AssignmentPlan(
+        duties=(VehicleDuty("d1", "BEV", (DutyLeg(dispatch[0]),)),
+                VehicleDuty("d2", "BEV", (DutyLeg(dispatch[1]),))),
+        served_trip_ids=(first.trip_id, second.trip_id),
+        metadata={"duty_vehicle_map": {"d1": "bev-1", "d2": "bev-1"}})
+    expected = fixed_path_slot_loads(problem, plan, list(range(192)))
+    vehicle = problem.vehicles[0]
+    adapter = GurobiMILPAdapter()
+    with gp.Env(empty=True) as env:
+        env.setParam("OutputFlag", 0)
+        env.start()
+        with gp.Model(env=env) as model:
+            one = lambda: model.addVar(lb=1, ub=1, vtype=gp.GRB.BINARY)
+            _, metadata = adapter._add_stage1_time_indexed_soc_relaxation(model, gp=gp, grb=gp.GRB,
+                problem=problem, trip_by_id=problem.trip_by_id(), vehicles=(vehicle,),
+                assignment_trip_ids_by_vehicle={"bev-1": plan.served_trip_ids},
+                startup_energy_precheck_by_assignment={("bev-1", t.trip_id):
+                    adapter._startup_energy_precheck(problem, vehicle, t) for t in (first, second)},
+                y={("bev-1", t.trip_id): one() for t in problem.trips}, x={},
+                start_arc={("bev-1", t.trip_id): one() for t in problem.trips},
+                end_arc={("bev-1", t.trip_id): one() for t in problem.trips},
+                used_vehicle={"bev-1": one()})
+            model.update()
+            available = [model.getVarByName(f"stage1_charge_available__bev-1__slot_{slot}")
+                         for slot in range(192)]
+            model.setObjective(gp.quicksum(available), gp.GRB.MAXIMIZE)
+            model.optimize()
+            assert model.Status == gp.GRB.OPTIMAL
+            actual = {slot for slot, var in enumerate(available) if var.X > .99}
+    service = expected.service_active["bev-1"]
+    assert metadata["away_charge_exclusion"]["enabled"] is away_exclusion
+    if away_exclusion:
+        assert not actual & service
+        assert expected.home_slots["bev-1"] <= actual
+    else:
+        assert actual & service
+
+
+@pytest.mark.parametrize("targets", [(140, 191), (110, 191)])
+def test_stage1_mirrors_stage2_next_morning_operating_max_deadline(targets):
+    """Stage 2 fills every bus that served day d to its operating maximum
+    before next morning's departure. Stage 1 must see the same deadline."""
+    gp = pytest.importorskip("gurobipy")
+    from src.optimization.common.soc_helpers import vehicle_maximum_soc_kwh
+    from src.optimization.common.vehicle_timeline import build_vehicle_timeline, fixed_path_soc_target_slots
+    problem = daily_problem()
+    first, second = problem.trips
+    first = replace(first, arrival_min=551)
+    second = replace(second, departure_min=1913, arrival_min=1973)
+    rules = {**problem.dispatch_context.deadhead_rules,
+             ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 17),
+             ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 19)}
+    dispatch = [replace(problem.dispatch_context.trips[0], arrival_time="09:11"),
+                replace(problem.dispatch_context.trips[1], departure_time="31:53", arrival_time="32:53")]
+    problem = replace(problem, trips=(first, second), depot_energy_assets={},
+        scenario=replace(problem.scenario, timestep_min=15),
+        dispatch_context=replace(problem.dispatch_context, trips=dispatch, deadhead_rules=rules),
+        price_slots=tuple(EnergyPriceSlot(i) for i in range(192)),
+        metadata={**problem.metadata, "bev_soc_deadline_mode": "next_morning_operational_max",
+                  "post_return_target_slots": list(targets)})
+    plan = AssignmentPlan(duties=(VehicleDuty("duty", "BEV", tuple(DutyLeg(t) for t in dispatch)),),
+        served_trip_ids=(first.trip_id, second.trip_id), metadata={"duty_vehicle_map": {"duty": "bev-1"}})
+    deadline = fixed_path_soc_target_slots(problem, build_vehicle_timeline(problem, plan)["bev-1"])[0]
+    vehicle = problem.vehicles[0]
+    adapter = GurobiMILPAdapter()
+    with gp.Env(empty=True) as env:
+        env.setParam("OutputFlag", 0)
+        env.start()
+        with gp.Model(env=env) as model:
+            one = lambda: model.addVar(lb=1, ub=1, vtype=gp.GRB.BINARY)
+            _, metadata = adapter._add_stage1_time_indexed_soc_relaxation(model, gp=gp, grb=gp.GRB,
+                problem=problem, trip_by_id=problem.trip_by_id(), vehicles=(vehicle,),
+                assignment_trip_ids_by_vehicle={"bev-1": plan.served_trip_ids},
+                startup_energy_precheck_by_assignment={("bev-1", first.trip_id):
+                    adapter._startup_energy_precheck(problem, vehicle, first)},
+                y={("bev-1", t.trip_id): one() for t in problem.trips},
+                x={("bev-1", first.trip_id, second.trip_id): one()},
+                start_arc={("bev-1", first.trip_id): one()},
+                end_arc={("bev-1", second.trip_id): one()}, used_vehicle={"bev-1": one()})
+            model.update()
+            assert metadata["next_morning_operational_max"]["constraint_count"] == 1
+            assert model.getConstrByName(f"stage1_soc_next_morning__bev-1__slot_{deadline}") is not None
+            soc = model.getVarByName(f"stage1_soc_state__bev-1__slot_{deadline}")
+            model.setObjective(soc, gp.GRB.MINIMIZE)
+            model.optimize()
+            assert model.Status == gp.GRB.OPTIMAL
+            assert soc.X == pytest.approx(vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=vehicle.battery_capacity_kwh))
