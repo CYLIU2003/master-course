@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.solver_policy import optimize_model
 from src.execution_control import ExecutionCancelled
-from src.optimization.milp.stage1_lns import lns_settings_from_controls, lns_trips, run_stage1_lns
+from src.optimization.milp.stage1_lns import lns_settings_from_controls, lns_trips, optimize_after_lns, run_stage1_lns
 
 import csv
 import contextvars
@@ -15997,7 +15997,13 @@ class GurobiMILPAdapter:
                     encoding="utf-8",
                 )
         stage1_memory_before_optimize = _gurobi_memory_snapshot(stage1)
-        optimize_model(stage1, _stage1_search_callback)
+        if (stage1_lns_result or {}).get("applied"):
+            optimize_after_lns(
+                stage1, stage1_lns_result,
+                optimize=lambda model: optimize_model(model, _stage1_search_callback),
+            )
+        else:
+            optimize_model(stage1, _stage1_search_callback)
         stage1_memory_after_optimize = _gurobi_memory_snapshot(stage1)
         if (
             stage1_fragment_lazy_separator is not None

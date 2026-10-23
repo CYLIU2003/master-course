@@ -147,3 +147,33 @@ def test_soft_memory_cap_is_tightened_during_lns_and_restored():
                    settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=1, max_iterations=5))
     assert seen[0] > 8.0 and all(value == pytest.approx(8.0) for value in seen[1:])
     assert model.Params.SoftMemLimit > 8.0 and model.Params.MemLimit == 10.0
+
+
+def test_final_solve_out_of_memory_keeps_the_lns_incumbent():
+    from src.optimization.milp.stage1_lns import optimize_after_lns
+    model, _ = _assignment_model()
+    model.Params.MemLimit = 10.0
+    result = run_stage1_lns(model, GRB, trips=_trips(), optimize=lambda m: m.optimize(),
+                            settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=1, max_iterations=40))
+    calls = {"n": 0}
+
+    def optimize(m):
+        calls["n"] += 1
+        assert m.Params.SoftMemLimit == pytest.approx(8.0)
+        if calls["n"] == 1:  # the full post-LNS solve hits the native cap
+            raise _NativeError(10001)
+        m.optimize()
+    optimize_after_lns(model, result, optimize=optimize)
+    assert result["final_solve_out_of_memory"] is True
+    assert model.Status == GRB.SOLUTION_LIMIT and model.SolCount == 1
+    assert model.ObjVal == pytest.approx(result["best_objective"])
+
+
+def test_final_solve_other_errors_propagate():
+    from src.optimization.milp.stage1_lns import optimize_after_lns
+    model, _ = _assignment_model()
+
+    def optimize(m):
+        raise _NativeError(10003)
+    with pytest.raises(_NativeError):
+        optimize_after_lns(model, {"applied": True}, optimize=optimize)

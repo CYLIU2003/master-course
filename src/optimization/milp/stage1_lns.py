@@ -246,6 +246,28 @@ def run_stage1_lns(
         result["elapsed_sec"] = round(time.monotonic() - began, 3)
 
 
+def optimize_after_lns(model: Any, lns_result: Dict[str, Any], *, optimize: Callable[[Any], None]) -> None:
+    """Run the final full-model solve after LNS without losing its incumbent.
+
+    The soft memory cap gets the LNS sub-solve margin, so Gurobi normally stops
+    with MEM_LIMIT and keeps the incumbent. If the native cap still raises
+    (error 10001; rc11 hit it in every post-LNS root LP), the LNS best remains
+    the model's MIP start and is reloaded without search; the status then reads
+    solution_limit and ``final_solve_out_of_memory`` records the event.
+    """
+    hard_limit = float(model.Params.MemLimit)
+    if math.isfinite(hard_limit) and hard_limit < 1e90:
+        model.Params.SoftMemLimit = min(float(model.Params.SoftMemLimit), 0.8 * hard_limit)
+    try:
+        optimize(model)
+    except Exception as exc:
+        if getattr(exc, "errno", None) != 10001:
+            raise
+        lns_result["final_solve_out_of_memory"] = True
+        model.Params.SolutionLimit = 1
+        optimize(model)
+
+
 def lns_trips(problem_trips: Sequence[Any]) -> List[LnsTrip]:
     """Absolute start minute per trip; per-day minutes are offset by the day index."""
     absolute = max((int(t.departure_min) for t in problem_trips), default=0) > 1.5 * 1440
