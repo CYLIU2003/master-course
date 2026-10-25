@@ -177,3 +177,66 @@ def test_stage1_mirrors_stage2_next_morning_operating_max_deadline(targets):
             model.optimize()
             assert model.Status == gp.GRB.OPTIMAL
             assert soc.X == pytest.approx(vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=vehicle.battery_capacity_kwh))
+
+
+@pytest.mark.parametrize("with_days", [False, True])
+def test_next_morning_deadline_also_binds_a_new_fragment_start(with_days):
+    """rc12: splitting the overnight link into end + start arcs escaped the
+    overnight-arc rows. The served-day rows must impose Stage 2's deadline."""
+    gp = pytest.importorskip("gurobipy")
+    from src.optimization.common.soc_helpers import vehicle_maximum_soc_kwh
+    from src.optimization.common.vehicle_timeline import build_vehicle_timeline, fixed_path_soc_target_slots
+    problem = daily_problem()
+    first, second = problem.trips
+    first = replace(first, arrival_min=551)
+    second = replace(second, departure_min=1913, arrival_min=1973)
+    rules = {**problem.dispatch_context.deadhead_rules,
+             ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 17),
+             ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 19)}
+    dispatch = [replace(problem.dispatch_context.trips[0], arrival_time="09:11"),
+                replace(problem.dispatch_context.trips[1], departure_time="31:53", arrival_time="32:53")]
+    problem = replace(problem, trips=(first, second), depot_energy_assets={},
+        scenario=replace(problem.scenario, timestep_min=15),
+        dispatch_context=replace(problem.dispatch_context, trips=dispatch, deadhead_rules=rules),
+        price_slots=tuple(EnergyPriceSlot(i) for i in range(192)),
+        metadata={**problem.metadata, "bev_soc_deadline_mode": "next_morning_operational_max",
+                  # The fixture returns to the initial SOC at slot 191, so a
+                  # final-day deadline inside the horizon would make Stage 2
+                  # infeasible too; outside the slots both stages skip it.
+                  "post_return_target_slots": [140, 500]})
+    plan = AssignmentPlan(
+        duties=(VehicleDuty("d1", "BEV", (DutyLeg(dispatch[0]),)),
+                VehicleDuty("d2", "BEV", (DutyLeg(dispatch[1]),))),
+        served_trip_ids=(first.trip_id, second.trip_id),
+        metadata={"duty_vehicle_map": {"d1": "bev-1", "d2": "bev-1"}})
+    deadline = fixed_path_soc_target_slots(problem, build_vehicle_timeline(problem, plan)["bev-1"])[0]
+    vehicle = problem.vehicles[0]
+    adapter = GurobiMILPAdapter()
+    with gp.Env(empty=True) as env:
+        env.setParam("OutputFlag", 0)
+        env.start()
+        with gp.Model(env=env) as model:
+            one = lambda: model.addVar(lb=1, ub=1, vtype=gp.GRB.BINARY)
+            _, metadata = adapter._add_stage1_time_indexed_soc_relaxation(model, gp=gp, grb=gp.GRB,
+                problem=problem, trip_by_id=problem.trip_by_id(), vehicles=(vehicle,),
+                assignment_trip_ids_by_vehicle={"bev-1": plan.served_trip_ids},
+                startup_energy_precheck_by_assignment={("bev-1", t.trip_id):
+                    adapter._startup_energy_precheck(problem, vehicle, t) for t in (first, second)},
+                y={("bev-1", t.trip_id): one() for t in problem.trips}, x={},
+                start_arc={("bev-1", t.trip_id): one() for t in problem.trips},
+                end_arc={("bev-1", t.trip_id): one() for t in problem.trips},
+                used_vehicle={"bev-1": one()},
+                used_vehicle_day={("bev-1", 0): one(), ("bev-1", 1): one()} if with_days else None)
+            model.update()
+            soc = model.getVarByName(f"stage1_soc_state__bev-1__slot_{deadline}")
+            model.setObjective(soc, gp.GRB.MINIMIZE)
+            model.optimize()
+            assert model.Status == gp.GRB.OPTIMAL
+            maximum = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=vehicle.battery_capacity_kwh)
+            audit = metadata["next_morning_operational_max"]
+            if with_days:
+                assert audit["first_trip_constraint_count"] >= 1 and audit["no_next_day_constraint_count"] == 1
+                assert soc.X == pytest.approx(maximum)
+            else:
+                assert audit["first_trip_constraint_count"] == 0
+                assert soc.X < maximum - 1.0

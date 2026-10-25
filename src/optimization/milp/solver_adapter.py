@@ -15163,6 +15163,7 @@ class GurobiMILPAdapter:
                 end_arc=end_arc,
                 used_vehicle=used_vehicle,
                 state_out=stage1_energy_recourse_state,
+                used_vehicle_day=used_vehicle_day,
             )
             if stage1_time_indexed_soc_relaxation_enabled
             else (
@@ -29310,6 +29311,7 @@ class GurobiMILPAdapter:
         end_arc: Mapping[Tuple[str, str], Any],
         used_vehicle: Mapping[str, Any],
         state_out: Optional[Dict[str, Any]] = None,
+        used_vehicle_day: Optional[Mapping[Tuple[str, int], Any]] = None,
     ) -> Tuple[int, Dict[str, Any]]:
         """Add cumulative, location-aware SOC necessary conditions.
 
@@ -29389,6 +29391,7 @@ class GurobiMILPAdapter:
         )
         next_morning_audit = {
             "enabled": next_morning_enabled, "constraint_count": 0, "incidence_term_count": 0,
+            "first_trip_constraint_count": 0, "no_next_day_constraint_count": 0,
             "factor_groups_skipped_mixed_days": 0,
             "semantics": (
                 "slot_end_soc[t*] >= operating_max * overnight incidence, with t* = min(next-morning "
@@ -29775,6 +29778,50 @@ class GurobiMILPAdapter:
                 constraint_count += 1
                 next_morning_audit["constraint_count"] += 1
                 next_morning_audit["incidence_term_count"] += len(terms)
+            if next_morning_enabled and used_vehicle_day is not None:
+                # Every served day, whatever links it to the next one (a new
+                # fragment escaped the overnight-arc rows above in rc12): j is
+                # the day's first trip iff y_j = 1 and no earlier trip of that
+                # day is assigned; the prefix p_j counts the earlier ones.
+                trips_by_day: Dict[int, List[Any]] = {}
+                for trip_id in trip_ids:
+                    trip = trip_by_id.get(trip_id)
+                    if trip is not None and (vehicle_id, trip_id) in y:
+                        trips_by_day.setdefault(raw_day(trip), []).append(trip)
+                for day_idx, day_trips in sorted(trips_by_day.items()):
+                    served_before = used_vehicle_day.get((vehicle_id, day_idx - 1))
+                    if served_before is None:
+                        continue
+                    prefix = 0.0
+                    for trip in sorted(day_trips, key=lambda item: (int(item.departure_min), str(item.trip_id))):
+                        assigned = y[(vehicle_id, trip.trip_id)]
+                        target = next_morning_slot(day_idx - 1, trip, home_depot_id)
+                        if target in slot_end_soc_by_slot:
+                            model.addConstr(
+                                slot_end_soc_by_slot[target]
+                                >= operating_max_kwh * (assigned - prefix + served_before - 1),
+                                name=f"stage1_soc_next_morning_first__{vehicle_id}__{trip.trip_id}",
+                            )
+                            constraint_count += 1
+                            next_morning_audit["first_trip_constraint_count"] += 1
+                        following = model.addVar(lb=0.0, vtype=grb.CONTINUOUS,
+                                                 name=f"stage1_day_prefix__{vehicle_id}__{trip.trip_id}")
+                        model.addConstr(following == prefix + assigned,
+                                        name=f"stage1_day_prefix_balance__{vehicle_id}__{trip.trip_id}")
+                        constraint_count += 1
+                        prefix = following
+                for day_idx in sorted({day for (vid, day) in used_vehicle_day if vid == vehicle_id}):
+                    target = post_return_target_slot_index(problem, day_idx)
+                    if target not in slot_end_soc_by_slot:
+                        continue
+                    following_day = used_vehicle_day.get((vehicle_id, day_idx + 1), 0.0)
+                    model.addConstr(
+                        slot_end_soc_by_slot[target]
+                        >= operating_max_kwh * (used_vehicle_day[(vehicle_id, day_idx)] - following_day),
+                        name=f"stage1_soc_next_morning_idle__{vehicle_id}__day_{day_idx}",
+                    )
+                    constraint_count += 1
+                    next_morning_audit["no_next_day_constraint_count"] += 1
             cumulative_load += sum(terminal_load_terms)
             terminal_requirement_kwh = max(
                 minimum_soc_kwh,
