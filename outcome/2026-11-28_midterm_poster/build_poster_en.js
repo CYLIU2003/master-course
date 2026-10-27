@@ -1,3 +1,7 @@
+// TODO before 11/28 (user decision 2026-10-27): rebuild from rc13 results. The 30 JPY/kWh grid price is an
+// all-inclusive unit (basic + energy charge). Keep the annual basic charge (2,530 JPY/kW) only as a reference
+// ("目安") for what a lower peak would save; never add it to the 30 JPY/kWh electricity cost, and label the
+// unit row as "電気30円/kWh（基本料金・従量料金を含む）". rc9 (basic charge in the objective) double counts.
 // English version of the midterm A0 portrait poster (841 x 1189 mm), same layout and data as
 // build_poster.js: white background, black text, Tokyo City University blue (#0485D7) only for the
 // title rule, section headings and the proposed-case series (comparison case in grey).
