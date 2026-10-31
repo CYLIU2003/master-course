@@ -133,8 +133,10 @@ def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
                 or profile['model_sha256'] != content_hash(model)
                 or profile['training_end_exclusive'] != model['training_end_exclusive']
                 or manifest['design']['training_end_exclusive'] != model['training_end_exclusive']
-                or profile['valid_starts'] != [stamp.isoformat() for stamp in starts]
-                or profile['ghi_w_m2'] != [row['ghi_w_m2'] for row in predictions]):
+                # A shorter plan from the week start uses the leading part of the
+                # same frozen forecast; every requested slot must still match.
+                or profile['valid_starts'][:len(starts)] != [stamp.isoformat() for stamp in starts]
+                or profile['ghi_w_m2'][:len(starts)] != [row['ghi_w_m2'] for row in predictions]):
             raise ValueError('Declared weekly forecast differs from planning predictions')
         holdout_audit = {'holdout_directory': str(directory.relative_to(repo_root)),
                          'manifest_sha256': _digest(directory / 'manifest.json'),

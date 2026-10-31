@@ -54,6 +54,19 @@ def test_explicit_campaign_profile_is_bound_to_planning_predictions(tmp_path):
     assert len(audit["weekly_profile_sha256"]) == 64
 
 
+def test_one_day_plan_uses_the_leading_part_of_the_weekly_forecast(tmp_path):
+    directory, dates = _holdout(tmp_path)
+    profiles, audit = _date_forecast_rows(tmp_path, dates[:1], 15, .85, forecast_directory=directory)
+    assert len(profiles) == 1 and audit["weekly_profile_verified"] is True
+
+
+@pytest.mark.parametrize("change", ["values", "timestamp"])
+def test_one_day_plan_rejects_a_changed_leading_forecast(tmp_path, change):
+    directory, dates = _holdout(tmp_path, change)
+    with pytest.raises(ValueError, match="weekly forecast"):
+        _date_forecast_rows(tmp_path, dates[:1], 15, .85, forecast_directory=directory)
+
+
 @pytest.mark.parametrize("change", ["values", "timestamp", "model", "hash", "undeclared"])
 def test_inconsistent_weekly_forecast_is_rejected(tmp_path, change):
     directory, dates = _holdout(tmp_path, change)
