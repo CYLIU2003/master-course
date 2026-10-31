@@ -1,28 +1,41 @@
-"""Read the executed state at a 00:00 boundary to start the next plan of a chain.
+"""Read the executed state at a next-morning boundary to start the next plan of a chain.
 
-Only the rolling execution state is read, never a forecast or day-ahead state.
-No trip of the 渋21〜23 timetable crosses midnight (latest arrival 23:24, earliest
-departure 05:51), so no vehicle is in service at the boundary. A BEV absent from
-the state was never used: it keeps the previous state, which the caller supplies.
+The boundary is the next-morning target slot, not 00:00: a bus that has just
+returned at midnight cannot be at the morning target yet, and the plan that owns
+the target must also own the overnight charging that reaches it. Only the rolling
+execution is read, never a forecast or day-ahead state. A BEV without a trace was
+never used: it keeps its previous state, which the caller supplies.
 """
 from __future__ import annotations
 
+import math
 from typing import Mapping
 
 
-def boundary_state(state: Mapping, *, days: int, depot_id: str, previous_soc_kwh: Mapping[str, float],
-                   previous_fuel_l: Mapping[str, float]) -> dict:
-    """Merge ``state_for_next_hour.json`` at ``days`` × 24 h with the previous state."""
-    if days < 1 or state["current_min"] != days * 1440:
-        raise ValueError(f"State at minute {state['current_min']} is not the end of day {days}")
-    if state["in_progress_events"]:
-        raise ValueError("A vehicle is in service at the chain boundary")
-    soc, fuel = state["actual_vehicle_soc_kwh"], state["actual_vehicle_fuel_l"]
-    unknown = (set(soc) - set(previous_soc_kwh)) | (set(fuel) - set(previous_fuel_l))
+def _at(trace: Mapping[str, float], slot: int, label: str) -> float:
+    value = trace.get(str(slot))
+    if value is None or not math.isfinite(float(value)):
+        raise ValueError(f"{label} has no finite value at slot {slot}")
+    return float(value)
+
+
+def boundary_state(plan: Mapping, *, boundary_slot: int, depot_id: str, previous_soc_kwh: Mapping[str, float],
+                   fuel_l: Mapping[str, float]) -> dict:
+    """Return BEV SOC, BESS SOC and ICE fuel at the start of ``boundary_slot``.
+
+    A vehicle's slot value is the state at the start of the slot (rc13: slot 96
+    equals the hourly state at 24:00 for every bus); the BESS trace is the state
+    at the end of the slot. ``fuel_l`` comes from the last hourly state before the
+    boundary, which only the caller can read.
+    """
+    if boundary_slot < 1:
+        raise ValueError("A chain boundary needs at least one executed slot")
+    traces = plan["vehicle_soc_kwh_by_vehicle_slot"]
+    unknown = set(traces) - set(previous_soc_kwh)
     if unknown:
-        raise ValueError(f"Executed state has unknown vehicles: {sorted(unknown)}")
-    return {"current_min": state["current_min"],
-            "vehicle_soc_kwh": {**previous_soc_kwh, **soc},
-            "vehicle_fuel_l": {**previous_fuel_l, **fuel},
-            "bess_soc_kwh": float(state["actual_bess_soc_kwh"][depot_id]),
-            "unused_bev_ids": sorted(set(previous_soc_kwh) - set(soc))}
+        raise ValueError(f"Executed plan has unknown BEVs: {sorted(unknown)}")
+    soc = {vehicle: _at(traces[vehicle], boundary_slot, f"SOC of {vehicle}") if vehicle in traces else float(previous)
+           for vehicle, previous in previous_soc_kwh.items()}
+    return {"boundary_slot": boundary_slot, "vehicle_soc_kwh": soc,
+            "bess_soc_kwh": _at(plan["bess_soc_kwh_by_depot_slot"][depot_id], boundary_slot - 1, "BESS SOC"),
+            "vehicle_fuel_l": dict(fuel_l), "unused_bev_ids": sorted(set(previous_soc_kwh) - set(traces))}
