@@ -2043,19 +2043,22 @@ def _configured_stage1_gurobi_search_controls(
                 **({"node_method": 2, "crossover": 0} if no_crossover else {}),
                 "no_rel_heur_work": 120.0 if profile == "bounded_presolve_norel" else 0.0,
                 "soft_mem_limit_gb": 18.0}
-    if profile == "lns_dual":
+    if profile in ("lns_dual", "lns_dual_no_time_window"):
         # bounded_presolve_dual controls for the final full-model solve, preceded
         # by an MIP-based LNS on the same model (src/optimization/milp/stage1_lns.py).
         return {**default_controls, "profile": profile, "mip_focus": 1,
                 "heuristics": 0.2, "presolve": 1, "pre_passes": 3, "root_method": 1,
                 "no_rel_heur_work": 0.0, "soft_mem_limit_gb": 18.0,
                 "lns_enabled": True, "lns_iteration_time_limit_sec": 300.0,
-                "lns_initial_time_limit_sec": 1800.0, "lns_final_reserve_sec": 1800.0}
+                "lns_initial_time_limit_sec": 1800.0, "lns_final_reserve_sec": 1800.0,
+                # time_window used 18 % of the rc13 LNS time for 3 % of its improvement.
+                **({"lns_operators": ("random_trips", "route_day")}
+                   if profile == "lns_dual_no_time_window" else {})}
     raise ValueError(
         "stage1_gurobi_search_profile must be 'default', 'bound_focus', "
         "'root_cut_focus', 'incumbent_focus', 'bounded_presolve', "
         "'bounded_presolve_barrier', 'bounded_presolve_dual', 'bounded_presolve_norel', "
-        "'bounded_presolve_barrier_no_crossover', or 'lns_dual'"
+        "'bounded_presolve_barrier_no_crossover', 'lns_dual', or 'lns_dual_no_time_window'"
     )
 
 
@@ -15645,7 +15648,10 @@ class GurobiMILPAdapter:
         ) = self._apply_stage1_assignment_warm_start(
             problem,
             enabled=bool(getattr(config, "warm_start", True)),
-            preferred_plan=getattr(config, "fixed_assignment", None),
+            preferred_plan=(
+                getattr(config, "stage1_seed_plan", None)
+                or getattr(config, "fixed_assignment", None)
+            ),
             y=y,
             x=x,
             start_arc=start_arc,
@@ -15657,6 +15663,16 @@ class GurobiMILPAdapter:
                 stage1_exact_clone_vehicle_ids
             ),
         )
+        if (
+            getattr(config, "stage1_seed_plan", None) is not None
+            and not stage1_warm_start_applied
+        ):
+            # An unused seed would silently turn a short seeded run into a
+            # short unseeded one, which is not comparable to its anchor.
+            raise ValueError(
+                "stage1_seed_plan was rejected: "
+                + str(stage1_warm_start_rejection_reason)
+            )
         from .seed_snapshot import write_stage1_seed_snapshot
         write_stage1_seed_snapshot(
             problem, config, applied=stage1_warm_start_applied,
@@ -15677,7 +15693,8 @@ class GurobiMILPAdapter:
         }
         if stage1_selected_clone_group is not None and stage1_warm_start_applied:
             stage1_warm_start_plan = (
-                getattr(config, "fixed_assignment", None)
+                getattr(config, "stage1_seed_plan", None)
+                or getattr(config, "fixed_assignment", None)
                 or problem.baseline_plan
             )
             if stage1_warm_start_plan is None:

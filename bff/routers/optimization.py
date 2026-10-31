@@ -982,8 +982,14 @@ class RunOptimizationBody(BaseModel):
     stage1_gurobi_search_profile: Literal[
         "default", "bound_focus", "root_cut_focus", "incumbent_focus", "bounded_presolve",
         "bounded_presolve_barrier", "bounded_presolve_dual", "bounded_presolve_norel",
-        "bounded_presolve_barrier_no_crossover", "lns_dual"
+        "bounded_presolve_barrier_no_crossover", "lns_dual", "lns_dual_no_time_window"
     ] = "default"
+    # Hourly rolling step limit; None keeps the shared stage2 limit. The
+    # day-ahead Stage 2 needs a long limit, the rolling steps do not.
+    rolling_time_limit_seconds: Optional[int] = Field(default=None, ge=1)
+    # Serialized assignment of another run with the same trips and vehicles,
+    # used only as the Stage 1 MIP start. Embedded so workers need no file.
+    stage1_seed_plan: Optional[Dict[str, Any]] = None
     # Non-default scaling is a controlled numerical diagnostic.  The BFF
     # records it and prevents a one-off solver setting from becoming research
     # evidence without a separately accepted frozen comparison.
@@ -12093,6 +12099,13 @@ def _run_optimization(
                 ),
             )
             solve_started_at = time.perf_counter()
+            stage1_seed_payload = raw_frontend_request_payload.get("stage1_seed_plan")
+            if stage1_seed_payload:
+                from src.optimization.milp.seed_snapshot import restore_stage1_seed_plan
+                opt_config = replace(
+                    opt_config,
+                    stage1_seed_plan=restore_stage1_seed_plan(problem, stage1_seed_payload),
+                )
             engine_result = OptimizationEngine().solve(problem, opt_config)
             solve_elapsed = time.perf_counter() - solve_started_at
             run_git_state_after_solve = collect_git_state()
@@ -13443,7 +13456,11 @@ def _run_optimization(
                         # Rolling is a charging-only conditional solve. Preserve
                         # an explicit user override, otherwise use the audited
                         # service default rather than the long Stage 1 limit.
-                        time_limit_sec=int(stage2_time_limit_seconds or 30),
+                        time_limit_sec=int(
+                            raw_frontend_request_payload.get("rolling_time_limit_seconds")
+                            or stage2_time_limit_seconds
+                            or 30
+                        ),
                         mip_gap=mip_gap,
                         random_seed=random_seed,
                         gurobi_threads=gurobi_threads,

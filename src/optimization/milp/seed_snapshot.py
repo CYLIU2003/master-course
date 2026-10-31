@@ -17,7 +17,7 @@ def write_stage1_seed_snapshot(problem, config, *, applied: bool, source: str, r
     directory = problem.metadata.get("phase3_diagnostics_dir")
     if not directory:
         raise ValueError("Seed evidence requires a diagnosis directory")
-    plan = config.fixed_assignment or problem.baseline_plan
+    plan = getattr(config, "stage1_seed_plan", None) or config.fixed_assignment or problem.baseline_plan
     serialized = ResultSerializer.serialize_plan(plan) if applied and plan is not None else None
     if applied and serialized is None:
         raise ValueError("Applied seed is missing its assignment plan")
@@ -40,3 +40,11 @@ def write_stage1_seed_snapshot(problem, config, *, applied: bool, source: str, r
     with path.open("x", encoding="utf-8") as stream:
         json.dump(payload, stream, ensure_ascii=False, indent=2, allow_nan=False)
         stream.write("\n")
+
+
+def restore_stage1_seed_plan(problem, payload):
+    """Rebuild a seed assignment for this problem; unknown trips or vehicles raise."""
+    from dataclasses import replace
+    from src.optimization.rolling.reoptimizer import assignment_plan_from_serialized_result
+    plan = assignment_plan_from_serialized_result(problem, payload)
+    return replace(plan, metadata={**dict(plan.metadata or {}), "source": "stage1_seed_from_prior_run"})

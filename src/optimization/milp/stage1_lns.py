@@ -54,6 +54,7 @@ class LnsSettings:
     seed: int = 42
     improvement_tolerance_yen: float = 1.0
     max_iterations: Optional[int] = None
+    operators: Sequence[str] = OPERATORS
 
 
 def trip_index_arrays(names: Sequence[str], trip_ids: Sequence[str]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -129,7 +130,7 @@ def run_stage1_lns(
     rng = random.Random(settings.seed)
     saved_params = {name: model.getParamInfo(name)[2] for name in ("TimeLimit", "SolutionLimit", "MIPFocus", "MIPGap", "SoftMemLimit")}
     result: Dict[str, Any] = {
-        "schema_version": "stage1_lns_v1", "applied": False, "operators": list(OPERATORS),
+        "schema_version": "stage1_lns_v1", "applied": False, "operators": list(settings.operators),
         "settings": settings.__dict__.copy(), "iterations": [],
         "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; "
                      "never an optimality certificate",
@@ -167,7 +168,7 @@ def run_stage1_lns(
         original_ub = np.array(model.getAttr("UB", candidate_vars), dtype=float)
         result["trip_indexed_binary_count"] = int(len(candidates))
         neighbourhoods = _Neighbourhoods(trips, settings, rng)
-        weights = {name: 1.0 for name in OPERATORS}
+        weights = {name: 1.0 for name in settings.operators}
         model.Params.SolutionLimit = 2_000_000_000
         model.Params.MIPFocus = 1
         # The run's relative MIPGap (e.g. 1 %) would declare a neighbourhood
@@ -186,7 +187,7 @@ def run_stage1_lns(
                 break
             if settings.max_iterations is not None and len(result["iterations"]) >= settings.max_iterations:
                 break
-            operator = rng.choices(OPERATORS, weights=[weights[name] for name in OPERATORS])[0]
+            operator = rng.choices(list(settings.operators), weights=[weights[name] for name in settings.operators])[0]
             free_trips = neighbourhoods.free_mask(operator)
             cand_first, cand_second = first[candidates], second[candidates]
             free_var = free_trips[cand_first] | ((cand_second >= 0) & free_trips[np.maximum(cand_second, 0)])
@@ -290,4 +291,4 @@ def lns_settings_from_controls(controls: Mapping[str, Any], *, stage_time_limit_
         return None
     return LnsSettings(time_budget_sec=budget, iteration_time_limit_sec=iteration,
                        initial_time_limit_sec=float(controls.get("lns_initial_time_limit_sec", 1800.0)),
-                       seed=int(seed))
+                       seed=int(seed), operators=tuple(controls.get("lns_operators", OPERATORS)))

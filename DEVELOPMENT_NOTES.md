@@ -11998,3 +11998,9 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 - ddfe6a5cをGitHub mainへpushしSHA一致後、GitHub5枝を期待SHA付きlease/atomic pushで削除。ローカル69枝はmainからの到達を再確認してgit branch -dで削除。強制ブランチ削除・worktree削除・ファイル移動なし。origin追跡参照をpruneし、ローカル/GitHubともmainのみを確認。
 - 改行問題はステージの再取り込みと.gitattributesで修正し、新規327ファイルのステージbyte一致に加え、Windows git checkout-index書出し327ファイルの原本byte一致を実測。原資料のhashを変える正規化はしていない。
 - main集約・旧枝の扱い・復元位置はdocs/notes/MAIN_CONSOLIDATION_20261007.mdへ記録。最終SHA・全worktree照合・clean/remote一致はoutput/git_sync_20261007/final-verification.jsonへ保存する。今回の同期は研究採用・教員承認・新版での正式実験を意味しない。
+
+## 2026-10-31 柱B向けの計算短縮（立て直し制限・便割当の開始解・探索の除外）
+
+要求の `rolling_time_limit_seconds` で毎時の立て直しの制限を前日計画（`stage2_time_limit_seconds`）と分けた。未指定なら従来どおり共用する。`lns_dual_no_time_window` は `lns_dual` から `time_window` だけを除く。`stage1_seed_plan` は過去の解の割当を Stage 1 の開始解として要求に埋め込む。`problem.baseline_plan` は切替費用として目的関数に入るので使わず、`OptimizationConfig.stage1_seed_plan` で渡し、拒否されたら停止する。`prepare_week` に `planning_days` を追加した（既定7日）。
+
+数式・制約・単位・合格判定は変えていない。ただし時間制限、探索、開始解は解に影響するので、同じ比較に入れる全ケースを同じ設定で解く。開始解は別の上限の割当へ解を寄せる可能性があるため、rc13 との比較で確認するまで効果を前提にしない。

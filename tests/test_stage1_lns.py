@@ -177,3 +177,20 @@ def test_final_solve_other_errors_propagate():
         raise _NativeError(10003)
     with pytest.raises(_NativeError):
         optimize_after_lns(model, {"applied": True}, optimize=optimize)
+
+
+def test_no_time_window_profile_only_removes_that_operator():
+    from types import SimpleNamespace
+    base = _configured_stage1_gurobi_search_controls(SimpleNamespace(stage1_gurobi_search_profile="lns_dual"))
+    fast = _configured_stage1_gurobi_search_controls(SimpleNamespace(stage1_gurobi_search_profile="lns_dual_no_time_window"))
+    ignored = ("profile", "lns_operators")
+    assert {k: v for k, v in fast.items() if k not in ignored} == {k: v for k, v in base.items() if k not in ignored}
+    settings = lns_settings_from_controls(fast, stage_time_limit_sec=21600, seed=42)
+    assert settings.operators == ("random_trips", "route_day")
+    assert lns_settings_from_controls(base, stage_time_limit_sec=21600, seed=42).operators == ("time_window", "random_trips", "route_day")
+    model, _ = _assignment_model()
+    result = run_stage1_lns(model, GRB, trips=_trips(), optimize=lambda m: m.optimize(),
+                            settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=1, max_iterations=20,
+                                                 operators=settings.operators))
+    assert {item["operator"] for item in result["iterations"]} <= set(settings.operators)
+    assert result["best_objective"] == pytest.approx(13)

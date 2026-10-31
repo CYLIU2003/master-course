@@ -574,6 +574,9 @@ class OptimizationConfig:
     executed_phase: str = ""
     diagnostic_mode: bool = False
     fixed_assignment: Optional["AssignmentPlan"] = None
+    # MIP start for Stage 1 only. Unlike baseline_plan it never enters the
+    # objective (switch cost), so the model of a seeded run stays unchanged.
+    stage1_seed_plan: Optional["AssignmentPlan"] = None
     rolling_lookahead_hours: Optional[int] = None
 
 
