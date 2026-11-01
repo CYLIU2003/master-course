@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.benchmarks.monthly_week_contract import select_monthly_weeks, validate_balanced_week
+from scripts.benchmarks.monthly_week_contract import select_monthly_weeks, validate_balanced_week, validate_balanced_week_part
 from src.optimization.common.date_series import materialize_dated_timetable
 
 
@@ -46,6 +46,37 @@ def test_weekday_template_tampering_is_rejected():
     rows[0]["service_id"] = "SUN_HOL"
     with pytest.raises(ValueError, match="changed after materialization"):
         validate_balanced_week(rows, contract, week="2025-11-10")
+
+
+def _part(start, count, holidays=()):
+    templates = [{"trip_id": service, "route_id": "route", "service_id": service,
+                  "operator_id": "tokyu", "departure": "09:00", "arrival": "09:30",
+                  "distance_km": 4.0, "distance_source": "verified_source"}
+                 for service in ("WEEKDAY", "SAT", "SUN_HOL")]
+    dates = [(date.fromisoformat(start) + timedelta(days=i)).isoformat() for i in range(count)]
+    return materialize_dated_timetable(templates, service_dates=dates, holiday_dates=holidays, source_provenance={})
+
+
+@pytest.mark.parametrize("start,count", [("2025-11-10", 1), ("2025-11-14", 2), ("2025-11-16", 1)])
+def test_consecutive_days_of_a_week_pass_the_same_service_checks(start, count):
+    rows, contract = _part(start, count)
+    assert validate_balanced_week_part(rows, contract)["week_start"] == "2025-11-10"
+
+
+def test_week_part_rejects_a_holiday_a_week_crossing_and_a_full_week():
+    with pytest.raises(ValueError, match="public holidays"):
+        validate_balanced_week_part(*_part("2025-11-03", 1, ["2025-11-03"]))
+    with pytest.raises(ValueError, match="consecutive days"):
+        validate_balanced_week_part(*_part("2025-11-16", 2))
+    with pytest.raises(ValueError, match="one to six"):
+        validate_balanced_week_part(*_week())
+
+
+def test_week_part_rejects_a_changed_service():
+    rows, contract = _part("2025-11-10", 1)
+    rows[0]["service_id"] = "SUN_HOL"
+    with pytest.raises(ValueError):
+        validate_balanced_week_part(rows, contract)
 
 
 def test_2025_selection_preserves_all_months_and_skips_golden_week_and_culture_day():

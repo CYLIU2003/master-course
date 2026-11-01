@@ -29,6 +29,30 @@ def select_monthly_weeks(year: int, holiday_dates: list[str]) -> list[str]:
     return selected
 
 
+def validate_balanced_week_part(rows: list[dict], contract: dict) -> dict:
+    """Apply the balanced-week calendar and service checks to consecutive days of one week."""
+    dates = list(contract.get("service_dates") or [])
+    if not dates or len(dates) >= 7:
+        raise ValueError("A balanced week part has one to six service dates")
+    start = date.fromisoformat(dates[0])
+    monday = start - timedelta(days=start.weekday())
+    week_dates = [(monday + timedelta(days=i)).isoformat() for i in range(7)]
+    offset = start.weekday()
+    if date.fromisoformat(week_dates[-1]).month != monday.month or dates != week_dates[offset:offset + len(dates)]:
+        raise ValueError("Balanced week part must be consecutive days of a Monday-Sunday week within one month")
+    holidays = sorted(set(contract.get("holiday_dates", [])).intersection(dates))
+    if holidays:
+        raise ValueError(f"Balanced week part includes public holidays: {holidays}")
+    validate_dated_timetable(rows, contract)
+    services = ["WEEKDAY"] * 5 + ["SAT", "SUN_HOL"]
+    for day, service in zip(dates, services[offset:]):
+        if {row.get("service_id") for row in rows if row.get("service_date") == day} != {service}:
+            raise ValueError(f"Materialized service IDs differ from balanced week on {day}")
+    return {"status": "BALANCED_WEEK_PART_VERIFIED", "service_dates": dates, "week_start": monday.isoformat(),
+            "holiday_dates_in_window": holidays, "trip_count": len(rows),
+            "timetable_rows_sha256": contract["timetable_rows_sha256"]}
+
+
 def validate_balanced_week(rows: list[dict], contract: dict, *, week: str) -> dict:
     """Reject calendar or actual service-template drift before any weekly solve."""
     start = date.fromisoformat(week)

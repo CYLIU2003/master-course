@@ -51,7 +51,7 @@ from bff.services.run_preparation import (
 )
 from bff.store import output_paths, scenario_store
 from scripts.audits.audit_shibu24_source import sha256
-from scripts.benchmarks.monthly_week_contract import validate_balanced_week
+from scripts.benchmarks.monthly_week_contract import validate_balanced_week, validate_balanced_week_part
 from scripts.benchmarks.seasonal_design_contract import seasonal_bess_controls, seasonal_bess_range
 from src.runtime_scope import resolve_scope
 from src.value_normalization import normalize_for_python
@@ -521,7 +521,8 @@ def configure_doc(
     if design and design.get("require_balanced_monthly_weeks"):
         if holiday_manifest["sha256"] != design["calendar_source_sha256"]:
             raise ValueError("Monthly selection and materialized calendar source hashes differ")
-        contract["balanced_week_audit"] = validate_balanced_week(rows, contract, week=start_date)
+        contract["balanced_week_audit"] = (validate_balanced_week(rows, contract, week=start_date) if len(dates) == 7
+                                           else validate_balanced_week_part(rows, contract))
     return doc
 
 
