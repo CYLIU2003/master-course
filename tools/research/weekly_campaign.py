@@ -122,7 +122,8 @@ def validate_rolling_fleet(scenario: dict, payload: dict) -> dict:
             "status": "INPUT_HANDOFF_VALIDATED_NOT_RESEARCH_APPROVAL"}
 
 
-def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_hash: str, planning_days: int = 7) -> dict:
+def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_hash: str, planning_days: int = 7,
+                 morning_tolerance_percent: float = 0.0, morning_shortfall_penalty_yen_per_kwh: float = 0.0) -> dict:
     parent = scenario_store._load(parent_id, skip_graph_arcs=True)
     before = parent_hash(parent)
     if before != expected_parent_hash:
@@ -163,7 +164,9 @@ def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_has
         if key not in ("prepared_input_id", "rebuild_dispatch", "use_existing_duties", "research_run")})
     doc["simulation_config"].update(stage1_native_log_enabled=True, stage2_native_log_enabled=True,
                                      allow_postsolve_repair=False, stage1_sparse_charge_window_support=True,
-                                     stage1_exact_depot_connection_factors=True)
+                                     stage1_exact_depot_connection_factors=True,
+                                     final_soc_target_tolerance_percent=morning_tolerance_percent,
+                                     next_morning_shortfall_penalty_yen_per_kwh=morning_shortfall_penalty_yen_per_kwh)
     doc.setdefault("meta", {}).update(base_scenario_id=parent_id, run_instance=True,
                                       evaluation_scope="conditional_weekly_operation_cost")
     scenario_store._invalidate_dispatch_artifacts(doc)

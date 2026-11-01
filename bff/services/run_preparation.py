@@ -2816,6 +2816,7 @@ def materialize_scenario_from_prepared_input(
         "final_soc_floor_percent",
         "final_soc_target_percent",
         "final_soc_target_tolerance_percent",
+        "next_morning_shortfall_penalty_yen_per_kwh",
         "initial_soc_percent",
         "initial_ice_fuel_percent",
         "min_ice_fuel_percent",

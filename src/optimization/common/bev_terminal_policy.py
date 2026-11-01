@@ -42,6 +42,13 @@ def validate_bev_soc_timing_config(config: Mapping[str, Any]) -> tuple[str, str]
     return deadline, overnight
 
 
+def validate_next_morning_tolerance(tolerance_percent: Any, shortfall_penalty_yen_per_kwh: Any) -> None:
+    """A tolerance with no price on the shortfall would leave every morning at the lowered floor."""
+
+    if float(tolerance_percent or 0.0) > 0.0 and not float(shortfall_penalty_yen_per_kwh or 0.0) > 0.0:
+        raise ValueError("NEXT_MORNING_TOLERANCE_REQUIRES_SHORTFALL_PENALTY")
+
+
 def _safe_nonnegative_float_metadata(
     metadata: Mapping[str, Any],
     key: str,

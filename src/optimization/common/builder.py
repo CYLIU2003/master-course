@@ -27,6 +27,7 @@ from src.optimization.common.cost_components import (
 from src.optimization.common.bess_terminal_policy import normalize_bess_terminal_policy
 from src.optimization.common.bess_dispatch_policy import validate_auxiliary_bess
 from src.optimization.common.bev_terminal_policy import (
+    validate_next_morning_tolerance,
     BevTerminalSocPolicy,
     normalize_bev_terminal_soc_policy,
     validate_bev_soc_timing_config,
@@ -502,6 +503,10 @@ class ProblemBuilder:
                 raise ValueError(
                     "NEXT_MORNING_TARGET_MISMATCH: fixed_target must equal the declared operational SOC ceiling"
                 )
+            validate_next_morning_tolerance(
+                final_soc_target_tolerance_percent,
+                simulation_cfg.get("next_morning_shortfall_penalty_yen_per_kwh"),
+            )
         if battery_degradation_price_jpy_per_kwh is None:
             battery_degradation_price_jpy_per_kwh = 0.0
         vehicle_usage_cost_jpy_per_used_bus = self._safe_float(
@@ -1551,6 +1556,9 @@ class ProblemBuilder:
                 "milp_max_successors_per_trip": milp_max_successors_per_trip,
                 "planning_days": planning_days,
                 "bev_soc_deadline_mode": input_config.get("bev_soc_deadline_mode", "legacy_day_end"),
+                "next_morning_shortfall_penalty_yen_per_kwh": float(
+                    input_config.get("next_morning_shortfall_penalty_yen_per_kwh") or 0.0
+                ),
                 "final_overnight_mode": input_config.get("final_overnight_mode", "exclude"),
                 "terminal_overnight_contract": (
                     input_config.get("terminal_overnight_contract")

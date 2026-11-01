@@ -73,6 +73,7 @@ from src.optimization.common.soc_helpers import (
     effective_final_soc_target_kwh,
     final_soc_floor_kwh,
     final_soc_target_enabled,
+    next_morning_required_soc_kwh,
     post_return_target_slot_index,
     remaining_posted_transition_fraction,
     return_deadhead_energy_kwh,
@@ -22781,6 +22782,11 @@ class GurobiMILPAdapter:
             )
 
         fixed_soc_deadlines = {}
+        next_morning_shortfall_var = {}
+        next_morning_shortfall_penalty = self._safe_nonnegative_float(
+            problem.metadata.get("next_morning_shortfall_penalty_yen_per_kwh"),
+            default=0.0,
+        )
         if getattr(problem.dispatch_context, "daily_return_depot_id", ""):
             if (problem.metadata or {}).get("bev_soc_deadline_mode") == "next_morning_operational_max":
                 fixed_soc_deadlines = {vid: fixed_path_soc_target_slots(problem, events)
@@ -22990,9 +22996,14 @@ class GurobiMILPAdapter:
                         # A rolling window's terminal reference may be lower
                         # than the operating maximum. It must never lower a
                         # serviced day's next-morning departure requirement.
-                        target_soc_expr >= soc_max,
+                        target_soc_expr >= next_morning_required_soc_kwh(problem, vehicle, cap_kwh=cap),
                         name=f"soc_next_morning__{vehicle_id}__day_{day_idx}",
                     )
+                    if next_morning_shortfall_penalty > 0.0:
+                        shortfall = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS,
+                                                  name=f"next_morning_shortfall__{vehicle_id}__day_{day_idx}")
+                        stage2.addConstr(shortfall >= soc_max - target_soc_expr)
+                        next_morning_shortfall_var[(vehicle_id, day_idx)] = shortfall
             for pos in range(len(slot_indices) - 1):
                 slot_idx = slot_indices[pos]
                 next_slot = slot_indices[pos + 1]
@@ -23327,6 +23338,10 @@ class GurobiMILPAdapter:
         ):
             objective2 += problem.scenario.demand_charge_on_peak_horizon_yen_per_kw * w_on_var
             objective2 += problem.scenario.demand_charge_off_peak_horizon_yen_per_kw * w_off_var
+        # A model-only preference: reported apart from the Stage 2 energy objective
+        # and never entered in the ledger, which only counts purchased energy.
+        for var in next_morning_shortfall_var.values():
+            objective2 += next_morning_shortfall_penalty * var
         stage2.setObjective(objective2, GRB.MINIMIZE)
         charging_start_audit = apply_charging_mip_start(
             stage2, policy=config.stage2_charging_start_policy,
@@ -23907,23 +23922,28 @@ class GurobiMILPAdapter:
             problem.metadata,
             gurobi_feasibility_tol=stage2_feasibility_tol,
         )
+        next_morning_shortfall_kwh = sum(float(var.X) for var in next_morning_shortfall_var.values())
+        next_morning_shortfall_penalty_jpy = next_morning_shortfall_penalty * next_morning_shortfall_kwh
+        stage2_energy_objective = float(getattr(stage2, "ObjVal", 0.0) or 0.0) - next_morning_shortfall_penalty_jpy
         metadata = {
             **dict(stage1_plan.metadata or {}),
             "status": solver_status,
             "stage2_solver_status": stage2_status,
+            "stage2_next_morning_shortfall_kwh": next_morning_shortfall_kwh,
+            "stage2_next_morning_shortfall_penalty_jpy": next_morning_shortfall_penalty_jpy,
             "stage2_charging_start": charging_start_audit,
             "stage2_exact_optimality_certified": stage2_exact_optimality_certified,
             "stage1_mip_gap": stage1_gap,
             "stage2_mip_gap": stage2_gap,
             "stage1_objective_value": stage1_objective_value,
-            "stage2_objective_value": float(getattr(stage2, "ObjVal", 0.0) or 0.0),
+            "stage2_objective_value": stage2_energy_objective,
             "stage1_has_feasible_incumbent": True,
             "stage1_objective": stage1_objective_value,
             "stage1_best_bound": stage1_bound,
             "stage1_mip_gap_ratio": stage1_gap,
             "stage1_runtime_seconds": stage1_runtime_sec,
             "stage2_has_feasible_incumbent": True,
-            "stage2_objective": float(getattr(stage2, "ObjVal", 0.0) or 0.0),
+            "stage2_objective": stage2_energy_objective,
             "stage2_best_bound": stage2_bound,
             "stage2_mip_gap_ratio": stage2_gap,
             "stage2_runtime_seconds": float(time.perf_counter() - started),
@@ -29411,7 +29431,7 @@ class GurobiMILPAdapter:
             "first_trip_constraint_count": 0, "no_next_day_constraint_count": 0,
             "factor_groups_skipped_mixed_days": 0,
             "semantics": (
-                "slot_end_soc[t*] >= operating_max * overnight incidence, with t* = min(next-morning "
+                "slot_end_soc[t*] >= next_morning_required * overnight incidence, with t* = min(next-morning "
                 "target slot, slot before the depot departure of the next day's first trip), as in Stage 2"
             ),
         }
@@ -29784,12 +29804,12 @@ class GurobiMILPAdapter:
                 )
                 constraint_count += 2
                 slot_end_soc_by_slot[slot_idx] = slot_end_soc
-            operating_max_kwh = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
+            next_morning_required_kwh = next_morning_required_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
             for target_slot, terms in sorted(next_morning_terms.items()):
                 if target_slot not in slot_end_soc_by_slot:
                     continue
                 model.addConstr(
-                    slot_end_soc_by_slot[target_slot] >= operating_max_kwh * gp.quicksum(terms),
+                    slot_end_soc_by_slot[target_slot] >= next_morning_required_kwh * gp.quicksum(terms),
                     name=f"stage1_soc_next_morning__{vehicle_id}__slot_{target_slot}",
                 )
                 constraint_count += 1
@@ -29816,7 +29836,7 @@ class GurobiMILPAdapter:
                         if target in slot_end_soc_by_slot:
                             model.addConstr(
                                 slot_end_soc_by_slot[target]
-                                >= operating_max_kwh * (assigned - prefix + served_before - 1),
+                                >= next_morning_required_kwh * (assigned - prefix + served_before - 1),
                                 name=f"stage1_soc_next_morning_first__{vehicle_id}__{trip.trip_id}",
                             )
                             constraint_count += 1
@@ -29834,7 +29854,7 @@ class GurobiMILPAdapter:
                     following_day = used_vehicle_day.get((vehicle_id, day_idx + 1), 0.0)
                     model.addConstr(
                         slot_end_soc_by_slot[target]
-                        >= operating_max_kwh * (used_vehicle_day[(vehicle_id, day_idx)] - following_day),
+                        >= next_morning_required_kwh * (used_vehicle_day[(vehicle_id, day_idx)] - following_day),
                         name=f"stage1_soc_next_morning_idle__{vehicle_id}__day_{day_idx}",
                     )
                     constraint_count += 1

@@ -314,6 +314,25 @@ def effective_final_soc_target_kwh(
     )
 
 
+def next_morning_required_soc_kwh(
+    problem: CanonicalOptimizationProblem,
+    vehicle: Any,
+    *,
+    cap_kwh: float | None = None,
+) -> float:
+    """Hard SOC of a serviced day's next-morning deadline: operating maximum less the tolerance.
+
+    Taken from the declared tolerance, never from a rolling window's frozen
+    terminal reference, which must not lower a next-morning requirement.
+    """
+    cap = max(float(cap_kwh if cap_kwh is not None else vehicle_capacity_kwh(problem, vehicle)), 0.0)
+    maximum = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=cap)
+    tolerance_ratio = percent_like_to_ratio((problem.metadata or {}).get("final_soc_target_tolerance_percent"))
+    if not tolerance_ratio:
+        return maximum
+    return max(final_soc_floor_kwh(problem, vehicle, cap_kwh=cap), maximum - max(tolerance_ratio, 0.0) * cap)
+
+
 def final_soc_target_enabled(problem: CanonicalOptimizationProblem) -> bool:
     policy = normalize_bev_terminal_soc_policy(
         (problem.metadata or {}).get("bev_terminal_soc_policy"),

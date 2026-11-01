@@ -1,3 +1,10 @@
+## 2026-11-01 翌朝の期限に許容幅と不足分の罰則を追加（柱B、未計算・新release要）
+
+- **背景**：柱Bは W も D も毎朝「目標90%、下限80%、不足分に罰則」とする（本人確定）。ところが許容幅は最終日の目標にしか効かず、毎朝の期限は `soc_max` 固定だった。rc14 の平日の朝がほぼ全車90.0%だったのはこのため。
+- **変更**：`next_morning_required_soc_kwh`（運用上限−許容幅。ただし最終SOC下限より下げない）を Stage 1 の3種類の行、Stage 2、`feasibility.py`、`executed_soc.py` で共通に使う。凍結した立て直しの終端参照は使わない。Stage 2（実行段階の立て直しも同じ関数）に `next_morning_shortfall__*` を追加し、`shortfall >= soc_max - 期限の残量`、目的関数に単価×shortfall を足す。許容幅があるのに単価がない設定は拒否する。
+- **数式・比較可能性への影響**：許容幅0かつ単価0なら制約も目的関数も従来と同じ。許容幅を入れると実行可能領域が広がるので、rc13・rc14 と本番は比較しない。罰則はモデル内部の好みで、費用の集計に入れない。`stage2_objective` からも引いて、`_stage2_result_accounting_reconciliation` が従来どおり合うようにした。罰則は `stage2_next_morning_shortfall_kwh` と `stage2_next_morning_shortfall_penalty_jpy` に別記する。`stage2_best_bound` は罰則込みのモデルの値のまま。Stage 1 には下限だけを課し罰則を入れない。
+- **テスト**：`tests/test_next_morning_tolerance.py`。この PC は Gurobi のライセンス切れなので、Stage 1 と Stage 2 のモデルの動作は未確認。ワーカーでの試験計算で確かめる。
+
 ## 2026-10-25 rc12で残った穴：新しい断片で翌朝の期限を逃れていた（rc13で修正）
 
 - **rc12の結果（完了4件、DIAGNOSTIC）**：冬・春・夏90 kWと冬200 kWとも、Stage 1は依然として買電0を見込んだ（Stage 2計画は407〜1,846 kWh/週、実行は2,385〜3,904 kWh/週）。電気バスの担当便は91.8〜96.0%で、rc8とほぼ同じ。走行中スロットへのStage 1の充電は18.4%→4.2%（冬90 kW）に減り、1つ目の修正は効いた。

@@ -13,6 +13,7 @@ from .soc_helpers import (
     effective_final_soc_target_kwh,
     final_soc_floor_kwh,
     is_electric_vehicle,
+    next_morning_required_soc_kwh,
     vehicle_initial_soc_kwh,
     vehicle_maximum_soc_kwh,
 )
@@ -70,15 +71,18 @@ def audit_executed_bev_targets(
                 failures.append("return_to_initial_surplus")
         deadlines = {}
         if daily_mode:
+            required = next_morning_required_soc_kwh(problem, vehicle)
             for day, slot in fixed_path_soc_target_slots(problem, timelines.get(vid, ())).items():
                 raw = trace.get(slot + 1)
                 actual = float(raw) if raw is not None else None
                 if actual is not None and not math.isfinite(actual):
                     actual = None
                 passed = (0 <= slot < end_slot and actual is not None and math.isfinite(actual)
-                          and maximum - tolerance <= actual <= maximum + tolerance)
+                          and required - tolerance <= actual <= maximum + tolerance)
                 deadlines[str(day)] = {"boundary_slot": slot + 1, "soc_kwh": actual,
-                                       "target_kwh": maximum, "satisfied": passed}
+                                       "target_kwh": maximum, "required_kwh": required, "satisfied": passed,
+                                       "shortfall_to_target_kwh": (None if actual is None
+                                                                   else max(maximum - actual, 0.0))}
                 if not passed:
                     failures.append(f"next_morning_target:{day}")
         initial = vehicle_initial_soc_kwh(problem, vehicle)

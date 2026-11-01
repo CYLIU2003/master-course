@@ -715,7 +715,7 @@ class FeasibilityChecker:
     ) -> List[str]:
         """Replay each vehicle once, across native duties and operating dates."""
         from .vehicle_timeline import build_vehicle_timeline, complete_home_slots, slot_loads_from_vehicle_timeline, fixed_path_soc_target_slots
-        from .soc_helpers import is_electric_vehicle, vehicle_capacity_kwh
+        from .soc_helpers import is_electric_vehicle, next_morning_required_soc_kwh, vehicle_capacity_kwh
 
         errors: List[str] = []
         step = int(problem.scenario.timestep_min)
@@ -757,7 +757,8 @@ class FeasibilityChecker:
                         departures.setdefault((event.start_min-start_min)//step, []).append(trips[event.trip_id])
                         served_days.add((event.start_min - start_min) // 1440)
                 target = effective_final_soc_target_kwh(problem, vehicle, cap_kwh=capacity)
-                daily_target = (maximum if (problem.metadata or {}).get("bev_soc_deadline_mode")
+                daily_target = (next_morning_required_soc_kwh(problem, vehicle, cap_kwh=capacity)
+                                if (problem.metadata or {}).get("bev_soc_deadline_mode")
                                 == "next_morning_operational_max" else target)
                 daily_target_slots = {slot: day for day, slot in fixed_path_soc_target_slots(problem, events).items()}
                 for slot in slots:

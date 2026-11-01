@@ -309,6 +309,7 @@ def prepare_date_series_scenario(scenario: dict[str,Any], *, repo_root: Path = R
     if cfg.get('daily_return_depot_id'):
         contract['bev_terminal_soc_policy'] = cfg.get('bev_terminal_soc_policy')
         contract['final_soc_target_tolerance_percent'] = cfg.get('final_soc_target_tolerance_percent')
+        contract['next_morning_shortfall_penalty_yen_per_kwh'] = cfg.get('next_morning_shortfall_penalty_yen_per_kwh')
     if forecast_audit is not None:
         contract['solar_semantics'] = 'training_only_forecast_for_planning_separate_actuals_for_execution'
     cfg.update(service_dates=dates,service_date=dates[0],date_series_contract=contract,
