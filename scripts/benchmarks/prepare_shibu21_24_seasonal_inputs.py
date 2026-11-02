@@ -349,9 +349,18 @@ def load_source_candidate(
     return {**manifest, "source_directory": relative_directory}
 
 
+def planning_pv_profiles(forecast: dict, actual: dict, planning_pv_source: str) -> dict:
+    """Select the PV the plan sees; execution always uses the separate actuals."""
+    if planning_pv_source == "forecast":
+        return forecast
+    if planning_pv_source == "actual_hindsight":
+        return actual
+    raise ValueError("Unknown planning PV source")
+
+
 def configure_doc(
     doc: dict, start_date: str, source: dict, *, design: dict | None = None,
-    planning_days: int = 7,
+    planning_days: int = 7, planning_pv_source: str = "forecast",
 ) -> dict:
     """Materialize a declared dated case from the immutable candidate source."""
     if isinstance(planning_days, bool) or not isinstance(planning_days, int) or not 1 <= planning_days <= 7:
@@ -460,10 +469,11 @@ def configure_doc(
     forecast_directory = None
     if design and design.get("require_balanced_monthly_weeks"):
         forecast_directory = ROOT / design["forecast_holdouts_directory"]
-    profiles, forecast_audit = _date_forecast_rows(
+    forecast_profiles, forecast_audit = _date_forecast_rows(
         ROOT, dates, step, float(asset.get("performance_ratio") or .85),
         forecast_directory=forecast_directory, plane=plane,
     )
+    profiles = planning_pv_profiles(forecast_profiles, profiles, planning_pv_source)
     for key in ("capacity_factor_by_slot", "pv_generation_kwh_by_slot", "pv_generation_kwh_by_date",
                 "pv_case_id", "pv_source_date"):
         asset.pop(key, None)
@@ -488,6 +498,7 @@ def configure_doc(
                     rolling_lookahead_hours=cfg.get("rolling_lookahead_hours"),
                     pv_capacity_factor_rows_sha256=content_hash(profiles),
                     pv_information_mode="training_only_forecast_proxy", forecast_audit=forecast_audit,
+                    planning_pv_source=planning_pv_source,
                     pv_execution_input=execution_input,
                     pv_irradiance_plane=None if plane is None else plane.describe(),
                     bev_terminal_soc_policy="return_to_initial", final_soc_target_tolerance_percent=0.0,

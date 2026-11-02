@@ -123,7 +123,8 @@ def validate_rolling_fleet(scenario: dict, payload: dict) -> dict:
 
 
 def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_hash: str, planning_days: int = 7,
-                 morning_tolerance_percent: float = 0.0, morning_shortfall_penalty_yen_per_kwh: float = 0.0) -> dict:
+                 morning_tolerance_percent: float = 0.0, morning_shortfall_penalty_yen_per_kwh: float = 0.0,
+                 planning_pv_source: str = "forecast") -> dict:
     parent = scenario_store._load(parent_id, skip_graph_arcs=True)
     before = parent_hash(parent)
     if before != expected_parent_hash:
@@ -157,7 +158,8 @@ def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_has
     else:
         identity = scenario_store.duplicate_scenario(parent_id, name=f"渋21〜23 週次実行 {week}")["id"]
         write_json(state_file, {"scenario_id": identity, "parent_id": parent_id, "parent_hash": before})
-    doc = configure_doc(scenario_store._load(identity, skip_graph_arcs=True), week, source, design=design, planning_days=planning_days)
+    doc = configure_doc(scenario_store._load(identity, skip_graph_arcs=True), week, source, design=design, planning_days=planning_days,
+                        planning_pv_source=planning_pv_source)
     extension = _overnight_contract(doc, tables["timetable_rows"])
     controls = request("placeholder")
     doc["simulation_config"].update({key: value for key, value in controls.items()

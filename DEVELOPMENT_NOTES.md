@@ -12011,3 +12011,9 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 要求の `rolling_time_limit_seconds` で毎時の立て直しの制限を前日計画（`stage2_time_limit_seconds`）と分けた。未指定なら従来どおり共用する。`lns_dual_no_time_window` は `lns_dual` から `time_window` だけを除く。`stage1_seed_plan` は過去の解の割当を Stage 1 の開始解として要求に埋め込む。`problem.baseline_plan` は切替費用として目的関数に入るので使わず、`OptimizationConfig.stage1_seed_plan` で渡し、拒否されたら停止する。`prepare_week` に `planning_days` を追加した（既定7日）。
 
 数式・制約・単位・合格判定は変えていない。ただし時間制限、探索、開始解は解に影響するので、同じ比較に入れる全ケースを同じ設定で解く。開始解は別の上限の割当へ解を寄せる可能性があるため、rc13 との比較で確認するまで効果を前提にしない。
+
+## 2026-11-02 Hindsight planning PV for diagnosis
+
+`configure_doc(planning_pv_source="actual_hindsight")` lets the day-ahead plan and rolling look-ahead see the actual PV of the evaluation week. Default `forecast` is unchanged. Execution still uses the same actual file, and `date_series_contract.planning_pv_source` records the choice.
+
+Mathematical effect: only the plan-side PV input changes; formulas, costs and constraints do not. A hindsight result assumes information no operator has, so it is a diagnostic bound on forecast error, not a realistic operation or an optimality claim. The next-morning extension slots keep their existing input.
