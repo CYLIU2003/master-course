@@ -994,6 +994,9 @@ class RunOptimizationBody(BaseModel):
     # records it and prevents a one-off solver setting from becoming research
     # evidence without a separately accepted frozen comparison.
     stage1_gurobi_scale_flag: Literal[-1, 0, 1, 2, 3] = -1
+    # Day-ahead Stage 2 binary MIP start (a proposal, never fixed charging).
+    # Rolling windows keep their own policy; see charging_mip_start.py.
+    stage2_charging_start_policy: Literal["none", "stage1_recourse_binary"] = "none"
     stage1_root_lp_diagnostic_enabled: bool = False
     stage1_root_lp_diagnostic_time_limit_seconds: int = Field(
         default=30,
@@ -11509,6 +11512,7 @@ def _run_optimization(
     stage1_activation_start_strengthening_vehicle_ids: Optional[List[str]] = None,
     enforce_interactive_runtime_controls: bool = True,
     execution_profile: str = "existing_solver_v1",
+    stage2_charging_start_policy: str = "none",
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -11754,6 +11758,7 @@ def _run_optimization(
                     stage1_gurobi_search_profile or "default"
                 ),
                 stage1_gurobi_scale_flag=int(stage1_gurobi_scale_flag),
+                stage2_charging_start_policy=str(stage2_charging_start_policy),
                 stage1_root_lp_diagnostic_enabled=bool(
                     stage1_root_lp_diagnostic_enabled
                 ),
@@ -12008,6 +12013,9 @@ def _run_optimization(
                     ),
                     "stage1_gurobi_scale_flag": int(
                         stage1_gurobi_scale_flag
+                    ),
+                    "stage2_charging_start_policy": (
+                        opt_config.stage2_charging_start_policy
                     ),
                     "stage1_stage2_candidate_limit": (
                         opt_config.stage1_stage2_candidate_limit
@@ -14541,6 +14549,7 @@ def enqueue_optimization(
             request.stage1_activation_start_strengthening_vehicle_ids,
             _public_run_enforces_interactive_runtime_controls(request),
             request.execution_profile,
+            request.stage2_charging_start_policy,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

@@ -1517,3 +1517,29 @@ def test_stage2_contract_overage_matches_stage1_soft_limit() -> None:
         .contract_overage_cost
         > 0.0
     )
+
+
+def test_stage2_recourse_start_is_submitted_and_keeps_the_optimum() -> None:
+    """The day-ahead binary start from the Stage 1 recourse is only a proposal."""
+
+    def solve(policy: str) -> dict[str, object]:
+        result = MILPOptimizer().solve(
+            _full_phase3_counterexample(sunny_midday_pv_kwh=25.0),
+            OptimizationConfig(
+                mode=OptimizationMode.MILP, thesis_mode=True, phase="phase3_two_stage",
+                research_run=True, time_limit_sec=30, stage1_time_limit_sec=20,
+                stage2_time_limit_sec=10, mip_gap=0.0, random_seed=42, warm_start=True,
+                stage1_best_obj_stop_enabled=False, stage1_stage2_candidate_limit=1,
+                gurobi_threads=1, stage2_charging_start_policy=policy,
+            ),
+        )
+        assert result.feasible, result.infeasibility_reasons
+        return dict(result.plan.metadata)
+
+    baseline, started = solve("none"), solve("stage1_recourse_binary")
+    audit = started["stage2_charging_start"]
+    assert baseline["stage2_charging_start"]["reason"] == "disabled"
+    assert audit["source"].startswith("stage1_time_indexed_energy_recourse")
+    assert audit["status"] == "SUBMITTED", audit
+    assert audit["source_conversion"]["kept_slots"] > 0
+    assert abs(float(started["stage2_objective"]) - float(baseline["stage2_objective"])) <= 1e-6

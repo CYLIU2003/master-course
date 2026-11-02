@@ -258,6 +258,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
             stage1_activation_start_strengthening=True,
             stage1_activation_start_strengthening_vehicle_ids=["vehicle-1"],
             gurobi_threads=4,
+            stage2_charging_start_policy="stage1_recourse_binary",
             frontend_request_payload={
                 "stage1_best_obj_stop_enabled": True,
                 "gurobi_threads": 4,
@@ -277,6 +278,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert config.stage1_root_lp_diagnostic_exact_clique_time_limit_sec == 60
     assert config.stage1_numeric_coefficient_diagnostic_enabled is False
     assert config.stage1_gurobi_scale_flag == -1
+    assert config.stage2_charging_start_policy == "stage1_recourse_binary"
     assert config.diagnostic_mode is True
     assert config.gurobi_threads == 4
     assert canonical_problem.metadata[
@@ -674,12 +676,13 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     assert submitted_args[26] == 60
     assert submitted_args[28] is False
     assert submitted_args[29] is True
-    assert submitted_args[-6] is False
-    assert submitted_args[-5] == -1
-    assert submitted_args[-4] == 1
-    assert submitted_args[-3] == ["vehicle-1"]
-    assert submitted_args[-2] is False
-    assert submitted_args[-1] == "existing_solver_v1"
+    assert submitted_args[-7] is False
+    assert submitted_args[-6] == -1
+    assert submitted_args[-5] == 1
+    assert submitted_args[-4] == ["vehicle-1"]
+    assert submitted_args[-3] is False
+    assert submitted_args[-2] == "existing_solver_v1"
+    assert submitted_args[-1] == "none"
     assert submitted_args[31] == "day_ahead_and_hourly_rolling"
     assert submitted_args[32] is True
     assert submitted_args[33] == 60

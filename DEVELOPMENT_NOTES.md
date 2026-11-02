@@ -1,3 +1,11 @@
+## 2026-11-02 前日計画の Stage 2 に Stage 1 の充電見込みを初期解として渡す（試験機能・既定無効、新release要）
+
+- **背景**：rc18（`ccacbe6a`）の厳しい受電上限で、前日計画の Stage 2（充電の2値変数と電力の配分）が実行可能解をほとんど見つけられない。冬・90 kW（実際の天気）は3,600秒で773,589円（下限314,517円）、制限10,800秒の診断でもメモリ上限で779,428円（下限378,652円）と改善しなかった。夏・200 kW（予報）はメモリ上限で解0件。一方、Stage 1 の連続の充電見込み（`stage1_time_indexed_energy_recourse_result.charge_power_kw_by_vehicle_slot`）は車両×時刻の充電を持っているのに、Stage 2 には使われていなかった（既存の `fixed_assignment_binary` は `stage1_plan.charging_slots` を使い、前日計画ではこれが空）。
+- **変更**：`stage2_charging_start_policy="stage1_recourse_binary"`（前日計画のみ、既定 `none`）。`recourse_charging_slots` が見込みの正の充電を、(1) 走行中・回送中・車庫外の時刻を除き、(2) 充電器のポート数を超えないよう、前の時刻から続く充電を優先し、次に見込みの電力が大きい順に残し、(3) 前の時刻と同じ充電器を優先して割り当てる。結果を既存の `apply_charging_mip_start` に渡し、`charge_on` と充電器の割当の2値変数の `Start` だけを設定する。除いた件数は `stage2_charging_start.source_conversion` に記録する。毎時の立て直しでは使わない（`rolling_window_not_supported`）。BFF の `RunOptimizationBody.stage2_charging_start_policy` から `OptimizationConfig` に渡し、`solver_settings` に記録する。
+- **数式・比較可能性への影響**：`Start` は変数の上下限・制約・目的関数を変えない。実行可能かどうかは Gurobi が判定し、最終解は通常の探索の結果（後処理での修正ではない）。最適性の証明があれば最適値は同じ。時間・メモリ打ち切りの解は探索の出発点に依存するので、初期解あり・なしの結果は同じ条件の比較として扱わず、設定を明記する。rc18 の結果を置き換えるには新しい release と全12件の再計算が必要。
+- **テスト**：`tests/test_charging_mip_start.py`（ポート数の上限、続く充電の優先、除外の記録、2値変数だけ、毎時CLIに出ないこと）、`tests/test_weather_coupled_assignment.py::test_stage2_recourse_start_is_submitted_and_keeps_the_optimum`（小問題で提出され、ギャップ0の最適値が変わらない）、`tests/test_optimization_canonical_metaheuristics.py`（BFF の引数順）。同ファイルの `test_run_optimization_uses_canonical_engine_for_ga_mode` は変更前の HEAD でも失敗する（既存）。
+- **未確認**：実規模で Gurobi が初期解を受け入れるか、解が良くなるか。ワーカーでの比較計算で確かめる。
+
 ## 2026-11-01 翌朝の期限に許容幅と不足分の罰則を追加（柱B、未計算・新release要）
 
 - **背景**：柱Bは W も D も毎朝「目標90%、下限80%、不足分に罰則」とする（本人確定）。ところが許容幅は最終日の目標にしか効かず、毎朝の期限は `soc_max` 固定だった。rc14 の平日の朝がほぼ全車90.0%だったのはこのため。

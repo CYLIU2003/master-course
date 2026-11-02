@@ -46,7 +46,10 @@ from src.optimization.milp.pv_execution_reserve import add_pv_execution_reserve_
 from src.optimization.milp.auxiliary_bess import add_auxiliary_bess_constraints
 from src.optimization.milp.charging_window_support import ChargingWindowSupportEvents, VehicleAwayEvents
 from src.optimization.milp.charging_session_relaxation import add_session_time_relaxation
-from src.optimization.milp.charging_mip_start import apply_charging_mip_start
+from src.optimization.milp.charging_mip_start import (
+    FIXED_ASSIGNMENT_SOURCE, RECOURSE_SOURCE, RECOURSE_START_POLICY,
+    apply_charging_mip_start, recourse_charging_slots,
+)
 from src.optimization.milp.depot_connection_factors import (
     ArcDomain, SuccessorRow, FactoredConnectionVariables,
     add_factor_soc_terms, connection_windows, create_factor_variables, factor_depot_connections,
@@ -23343,10 +23346,42 @@ class GurobiMILPAdapter:
         for var in next_morning_shortfall_var.values():
             objective2 += next_morning_shortfall_penalty * var
         stage2.setObjective(objective2, GRB.MINIMIZE)
+        start_source, start_slots, start_source_audit = (
+            FIXED_ASSIGNMENT_SOURCE, stage1_plan.charging_slots, None
+        )
+        if config.stage2_charging_start_policy == RECOURSE_START_POLICY:
+            # Day-ahead only: a rolling window starts from measured state, and
+            # the day-ahead recourse is not evidence about that window.
+            start_source, start_slots = RECOURSE_SOURCE, ()
+            recourse_power = (
+                (stage1_plan.metadata or {}).get("stage1_time_indexed_energy_recourse_result") or {}
+            ).get("charge_power_kw_by_vehicle_slot")
+            if is_remaining_day_reoptimization:
+                start_source_audit = {"reason": "rolling_window_not_supported"}
+            elif not isinstance(recourse_power, Mapping):
+                start_source_audit = {"reason": "no_recourse_source"}
+            elif config.warm_start:
+                start_slots, start_source_audit = recourse_charging_slots(
+                    {v: recourse_power[v] for v in assigned_bev_ids if v in recourse_power},
+                    slot_indices=slot_indices,
+                    charger_vars=physical_charger_assignment_var,
+                    ports_by_charger={
+                        str(charger.charger_id): int(charger.simultaneous_ports or 1)
+                        for charger in problem.chargers
+                    },
+                    blocked_slots_by_vehicle={
+                        vehicle_id: (
+                            set(slot_indices) - set(allowed_charge_slots_by_vehicle.get(vehicle_id, ()))
+                        ) | set(active_slot_by_vehicle.get(vehicle_id, ()))
+                        | set(deadhead_active_slot_by_vehicle.get(vehicle_id, ()))
+                        for vehicle_id in assigned_bev_ids
+                    },
+                )
         charging_start_audit = apply_charging_mip_start(
             stage2, policy=config.stage2_charging_start_policy,
             warm_start=config.warm_start,
-            charging_slots=stage1_plan.charging_slots,
+            source=start_source, source_audit=start_source_audit,
+            charging_slots=start_slots,
             charge_on_vars=charge_on_var,
             charger_vars=physical_charger_assignment_var,
             window_start_slot=slot_indices[0] if slot_indices else None,

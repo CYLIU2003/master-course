@@ -10,13 +10,80 @@ from typing import Any
 from src.optimization.common.problem import ChargingSlot
 
 
-CHARGING_START_POLICIES = ("none", "fixed_assignment_binary")
+CHARGING_START_POLICIES = ("none", "fixed_assignment_binary", "stage1_recourse_binary")
+RECOURSE_START_POLICY = "stage1_recourse_binary"
+FIXED_ASSIGNMENT_SOURCE = "fixed_assignment.charging_slots"
+RECOURSE_SOURCE = "stage1_time_indexed_energy_recourse.charge_power_kw_by_vehicle_slot"
 
 
 def validate_charging_start_policy(policy: str) -> str:
     if policy not in CHARGING_START_POLICIES:
         raise ValueError(f"Unsupported Stage2 charging start policy: {policy!r}")
     return policy
+
+
+def recourse_charging_slots(
+    charge_power_kw_by_vehicle_slot: Mapping[str, Mapping[Any, Any]], *,
+    slot_indices: Iterable[int],
+    charger_vars: Mapping[tuple[str, str, int], Any],
+    ports_by_charger: Mapping[str, int],
+    blocked_slots_by_vehicle: Mapping[str, Iterable[int]],
+) -> tuple[tuple[ChargingSlot, ...], dict[str, Any]]:
+    """Turn the Stage 1 continuous recourse into a port-feasible binary support.
+
+    The recourse relaxes physical charger assignment, so it can charge more
+    vehicles in a slot than there are ports. Here every slot keeps at most
+    ``ports`` vehicles per charger: vehicles already charging in the previous
+    slot keep their charger first, then larger recourse power wins. Dropped
+    and blocked (trip, deadhead, away) support is counted, never hidden.
+    The result is only a MIP start proposal for native validation.
+    """
+    candidates: dict[str, list[str]] = {}
+    for vehicle, charger, _slot in charger_vars:
+        if charger not in candidates.setdefault(vehicle, []):
+            candidates[vehicle].append(charger)
+    blocked = {vehicle: set(slots) for vehicle, slots in blocked_slots_by_vehicle.items()}
+    power: dict[int, dict[str, float]] = {}
+    invalid = 0
+    for vehicle, by_slot in charge_power_kw_by_vehicle_slot.items():
+        for raw_slot, raw_kw in by_slot.items():
+            kw = float(raw_kw)
+            if not math.isfinite(kw) or kw < 0:
+                invalid += 1
+                continue
+            if kw > 1e-6:
+                power.setdefault(int(raw_slot), {})[str(vehicle)] = kw
+    audit = {"source_positive_slots": sum(len(v) for v in power.values()),
+             "blocked_slots": 0, "unrepresentable_slots": 0, "port_dropped_slots": 0,
+             "invalid_source_values": invalid}
+    slots: list[ChargingSlot] = []
+    previous: dict[str, str] = {}
+    for slot in sorted(slot_indices):
+        wanted = power.get(slot, {})
+        used: dict[str, int] = {}
+        current: dict[str, str] = {}
+        order = sorted(wanted, key=lambda v: (v not in previous, -wanted[v], v))
+        for vehicle in order:
+            if slot in blocked.get(vehicle, ()):
+                audit["blocked_slots"] += 1
+                continue
+            options = [c for c in candidates.get(vehicle, ()) if (vehicle, c, slot) in charger_vars]
+            if not options:
+                audit["unrepresentable_slots"] += 1
+                continue
+            if previous.get(vehicle) in options:
+                options.remove(previous[vehicle])
+                options.insert(0, previous[vehicle])
+            charger = next((c for c in options if used.get(c, 0) < max(int(ports_by_charger.get(c, 1)), 1)), None)
+            if charger is None:
+                audit["port_dropped_slots"] += 1
+                continue
+            used[charger] = used.get(charger, 0) + 1
+            current[vehicle] = charger
+            slots.append(ChargingSlot(vehicle, slot, charger, charge_kw=wanted[vehicle]))
+        previous = current
+    audit["kept_slots"] = len(slots)
+    return tuple(slots), audit
 
 
 def apply_charging_mip_start(
@@ -27,6 +94,8 @@ def apply_charging_mip_start(
     window_start_slot: int | None,
     connected_chargers: Mapping[str, str],
     active_session_vehicle_ids: Iterable[str],
+    source: str = FIXED_ASSIGNMENT_SOURCE,
+    source_audit: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Submit a partial MIP start to native validation, not an incumbent.
 
@@ -39,8 +108,10 @@ def apply_charging_mip_start(
     """
     validate_charging_start_policy(policy)
     audit: dict[str, Any] = {"policy": policy, "status": "NOT_APPLIED",
-        "source": "fixed_assignment.charging_slots", "scope": "binary_only",
+        "source": source, "scope": "binary_only",
         "submitted_variables": 0, "solver_acceptance": "NOT_OBSERVED"}
+    if source_audit is not None:
+        audit["source_conversion"] = dict(source_audit)
     if policy == "none" or not warm_start:
         return {**audit, "reason": "disabled"}
     if not charge_on_vars or not charger_vars:

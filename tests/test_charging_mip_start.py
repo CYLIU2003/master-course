@@ -153,3 +153,54 @@ def test_real_rolling_entry_preserves_start_policy_and_measured_connection():
     assert effective.rolling_active_charge_session_vehicle_ids == ("bev-1",)
     assert effective.fixed_assignment is plan
     assert original.rolling_connected_charger_by_vehicle == {}
+
+
+def recourse_inputs():
+    variable = lambda: SimpleNamespace(LB=0, UB=1, Start=None)
+    vehicles, slots = ("v1", "v2", "v3"), (10, 11, 12)
+    return {"slot_indices": slots,
+            "charger_vars": {(v, "a", s): variable() for v in vehicles for s in slots},
+            "ports_by_charger": {"a": 2},
+            "blocked_slots_by_vehicle": {}}
+
+
+def test_recourse_support_respects_ports_and_keeps_ongoing_sessions():
+    from src.optimization.milp.charging_mip_start import recourse_charging_slots
+    power = {"v1": {"10": 5.0, "11": 1.0}, "v2": {"10": 9.0, "11": 9.0}, "v3": {"10": 1.0, "11": 50.0}}
+    slots, audit = recourse_charging_slots(power, **recourse_inputs())
+    kept = {(c.vehicle_id, c.slot_index) for c in slots}
+    # slot 10: the two largest; slot 11: both ongoing sessions beat a larger newcomer.
+    assert kept == {("v1", 10), ("v2", 10), ("v1", 11), ("v2", 11)}
+    assert audit["port_dropped_slots"] == 2
+    assert audit["source_positive_slots"] == 6 and audit["kept_slots"] == 4
+
+
+def test_recourse_support_skips_blocked_and_unrepresentable_slots():
+    from src.optimization.milp.charging_mip_start import recourse_charging_slots
+    args = recourse_inputs()
+    args["blocked_slots_by_vehicle"] = {"v1": {10}}
+    slots, audit = recourse_charging_slots({"v1": {10: 3.0, 12: 2.0}, "w": {10: 4.0}}, **args)
+    assert [(c.vehicle_id, c.slot_index, c.charger_id) for c in slots] == [("v1", 12, "a")]
+    assert audit["blocked_slots"] == 1 and audit["unrepresentable_slots"] == 1
+
+
+def test_recourse_policy_is_binary_only_and_records_conversion():
+    from src.optimization.milp.charging_mip_start import RECOURSE_SOURCE, recourse_charging_slots
+    args = inputs()
+    slots, conversion = recourse_charging_slots(
+        {"v": {100: 7.5}}, slot_indices=(100, 101), charger_vars=args["charger_vars"],
+        ports_by_charger={"a": 1, "b": 1}, blocked_slots_by_vehicle={})
+    args.update(policy="stage1_recourse_binary", charging_slots=slots,
+                source=RECOURSE_SOURCE, source_audit=conversion)
+    audit = apply_charging_mip_start(**args)
+    assert audit["status"] == "SUBMITTED" and audit["source"] == RECOURSE_SOURCE
+    assert audit["source_conversion"]["kept_slots"] == 1
+    assert args["charge_on_vars"][("v", 100)].Start == 1
+    assert args["charge_on_vars"][("v", 101)].Start == 0
+    assert all((v.LB, v.UB) == (0, 1) for v in args["charger_vars"].values())
+
+
+def test_rolling_cli_does_not_offer_the_day_ahead_recourse_policy():
+    import scripts.run_hourly_charging_reoptimization as rolling
+    import inspect
+    assert '"stage1_recourse_binary"' not in inspect.getsource(rolling)
