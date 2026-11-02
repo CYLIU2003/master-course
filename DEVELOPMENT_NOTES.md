@@ -12016,4 +12016,4 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 
 `configure_doc(planning_pv_source="actual_hindsight")` lets the day-ahead plan and rolling look-ahead see the actual PV of the evaluation week. Default `forecast` is unchanged. Execution still uses the same actual file, and `date_series_contract.planning_pv_source` records the choice.
 
-Mathematical effect: only the plan-side PV input changes; formulas, costs and constraints do not. A hindsight result assumes information no operator has, so it is a diagnostic bound on forecast error, not a realistic operation or an optimality claim. The next-morning extension slots keep their existing input.
+Mathematical effect: only the plan-side PV input changes; formulas, costs and constraints do not. A hindsight result assumes information no operator has, so it is a diagnostic bound on forecast error, not a realistic operation or an optimality claim. The next-morning extension slots use the same actual PV in that mode.

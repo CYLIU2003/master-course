@@ -141,12 +141,15 @@ def _overnight_contract(doc: dict, templates: list[dict]) -> dict:
     predicted, forecast_audit = _date_forecast_rows(
         ROOT, extended_dates, step, performance_ratio, plane=plane
     )
-    if predicted[:day_count] != asset["pv_capacity_factor_by_date"]:
-        raise ValueError("Next-morning model differs from the frozen service-day forecast")
     actual, actual_sources = _date_pv_rows(
         ROOT / "data/external/solcast_raw/tsurumaki_2025_2026",
         extended_dates, step, performance_ratio, plane,
     )
+    # A hindsight diagnosis plans the following morning on the same actual PV as the service days.
+    if config["date_series_contract"].get("planning_pv_source") == "actual_hindsight":
+        predicted = actual
+    if predicted[:day_count] != asset["pv_capacity_factor_by_date"]:
+        raise ValueError("Next-morning model differs from the frozen service-day forecast")
     if not actual_sources or len(actual) != day_count + 1:
         raise ValueError("The final next morning has no verified Solcast source")
     contract = {
