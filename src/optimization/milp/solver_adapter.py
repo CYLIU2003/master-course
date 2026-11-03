@@ -4338,6 +4338,9 @@ class Stage1TimeIndexedEnergyRecourseRelaxation:
     off_peak_by_depot: Mapping[str, Any]
     configuration: Mapping[str, Any]
     weather_input: Mapping[str, Any]
+    # Mirrors Stage 2's model-only next-morning shortfall penalty (kWh below
+    # the operating maximum at each served day's deadline).
+    next_morning_shortfall_by_vehicle_day: Mapping[Tuple[str, int], Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -27210,6 +27213,14 @@ class GurobiMILPAdapter:
                     .demand_charge_off_peak_horizon_yen_per_kw
                     * global_off_peak
                 )
+        next_morning_shortfall_by_vehicle_day = dict(
+            recourse_state.get("next_morning_shortfall_by_vehicle_day", {}) or {}
+        )
+        next_morning_shortfall_penalty = max(
+            float(recourse_state.get("next_morning_shortfall_penalty_yen_per_kwh", 0.0) or 0.0), 0.0
+        )
+        for shortfall in next_morning_shortfall_by_vehicle_day.values():
+            objective += next_morning_shortfall_penalty * shortfall
 
         recourse_input_payload = {
             "bess_planning_reserve": planning_reserve,
@@ -27249,6 +27260,7 @@ class GurobiMILPAdapter:
             "contract_overage_penalty_yen_per_kwh": (
                 contract_overage_penalty
             ),
+            "next_morning_shortfall_penalty_yen_per_kwh": next_morning_shortfall_penalty,
             "assets": {
                 depot_id: {
                     "bess_enabled": bool(asset.bess_enabled),
@@ -27308,6 +27320,8 @@ class GurobiMILPAdapter:
             "contract_overage_penalty_yen_per_kwh": (
                 contract_overage_penalty
             ),
+            "next_morning_shortfall_penalty_yen_per_kwh": next_morning_shortfall_penalty,
+            "next_morning_shortfall_variable_count": len(next_morning_shortfall_by_vehicle_day),
             "recourse_input_hash": recourse_input_hash,
             "objective_coefficient_and_rhs_hash": recourse_input_hash,
             "arbitrary_weather_assignment_bias_used": False,
@@ -27339,6 +27353,7 @@ class GurobiMILPAdapter:
             off_peak_by_depot=off_peak_by_depot,
             configuration=configuration,
             weather_input=weather_input,
+            next_morning_shortfall_by_vehicle_day=next_morning_shortfall_by_vehicle_day,
         )
 
     @staticmethod
@@ -27437,6 +27452,16 @@ class GurobiMILPAdapter:
                 recourse.configuration.get("recourse_input_hash") or ""
             ),
         }
+        shortfall_kwh = sum(
+            max(_value(variable), 0.0)
+            for variable in recourse.next_morning_shortfall_by_vehicle_day.values()
+        )
+        shortfall_penalty = float(
+            recourse.configuration.get("next_morning_shortfall_penalty_yen_per_kwh", 0.0) or 0.0
+        )
+        # Model-only preference, as in Stage 2: reported apart from energy cost.
+        result["next_morning_shortfall_kwh"] = shortfall_kwh
+        result["next_morning_shortfall_penalty_jpy"] = shortfall_penalty * shortfall_kwh
         for name, values in flow_groups.items():
             by_slot = _slot_values(values)
             result[name] = by_slot
@@ -29471,6 +29496,37 @@ class GurobiMILPAdapter:
             ),
         }
         step_min = max(int(problem.scenario.timestep_min), 1)
+        # Stage 2 adds penalty x (operating max - deadline SOC) for every served
+        # day (`next_morning_shortfall__*`).  Mirror it on the same deadline rows
+        # so Stage 1 does not plan to stop at the floor that Stage 2 pays to
+        # exceed.  One variable per vehicle and deadline day: rows of the same
+        # morning share it, so the penalty is never counted twice.
+        next_morning_shortfall_penalty = self._safe_nonnegative_float(
+            problem.metadata.get("next_morning_shortfall_penalty_yen_per_kwh"),
+            default=0.0,
+        )
+        next_morning_shortfall_enabled = next_morning_enabled and next_morning_shortfall_penalty > 0.0
+        next_morning_shortfall_var: Dict[Tuple[str, int], Any] = {}
+        next_morning_audit.update({
+            "shortfall_penalty_yen_per_kwh": next_morning_shortfall_penalty if next_morning_shortfall_enabled else 0.0,
+            "shortfall_variable_count": 0, "shortfall_constraint_count": 0,
+        })
+
+        def add_next_morning_shortfall(vehicle_id: str, target_slot: int, soc_expr: Any,
+                                       indicator: Any, operating_max_kwh: float) -> None:
+            if not next_morning_shortfall_enabled:
+                return
+            key = (vehicle_id, (int(target_slot) * step_min) // 1440)
+            shortfall = next_morning_shortfall_var.get(key)
+            if shortfall is None:
+                shortfall = model.addVar(lb=0.0, vtype=grb.CONTINUOUS,
+                                         name=f"stage1_next_morning_shortfall__{vehicle_id}__day_{key[1]}")
+                next_morning_shortfall_var[key] = shortfall
+                next_morning_audit["shortfall_variable_count"] += 1
+            model.addConstr(shortfall >= operating_max_kwh * indicator - soc_expr,
+                            name=f"stage1_next_morning_shortfall_row__{vehicle_id}__slot_{target_slot}"
+                                 f"__{next_morning_audit['shortfall_constraint_count']}")
+            next_morning_audit["shortfall_constraint_count"] += 1
 
         def next_morning_slot(day_idx: int, next_trip: Any, home: str) -> int:
             slot = post_return_target_slot_index(problem, day_idx)
@@ -29840,6 +29896,7 @@ class GurobiMILPAdapter:
                 constraint_count += 2
                 slot_end_soc_by_slot[slot_idx] = slot_end_soc
             next_morning_required_kwh = next_morning_required_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
+            operating_max_kwh = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=capacity_kwh)
             for target_slot, terms in sorted(next_morning_terms.items()):
                 if target_slot not in slot_end_soc_by_slot:
                     continue
@@ -29847,6 +29904,8 @@ class GurobiMILPAdapter:
                     slot_end_soc_by_slot[target_slot] >= next_morning_required_kwh * gp.quicksum(terms),
                     name=f"stage1_soc_next_morning__{vehicle_id}__slot_{target_slot}",
                 )
+                add_next_morning_shortfall(vehicle_id, target_slot, slot_end_soc_by_slot[target_slot],
+                                           gp.quicksum(terms), operating_max_kwh)
                 constraint_count += 1
                 next_morning_audit["constraint_count"] += 1
                 next_morning_audit["incidence_term_count"] += len(terms)
@@ -29874,6 +29933,8 @@ class GurobiMILPAdapter:
                                 >= next_morning_required_kwh * (assigned - prefix + served_before - 1),
                                 name=f"stage1_soc_next_morning_first__{vehicle_id}__{trip.trip_id}",
                             )
+                            add_next_morning_shortfall(vehicle_id, target, slot_end_soc_by_slot[target],
+                                                       assigned - prefix + served_before - 1, operating_max_kwh)
                             constraint_count += 1
                             next_morning_audit["first_trip_constraint_count"] += 1
                         following = model.addVar(lb=0.0, vtype=grb.CONTINUOUS,
@@ -29892,6 +29953,9 @@ class GurobiMILPAdapter:
                         >= next_morning_required_kwh * (used_vehicle_day[(vehicle_id, day_idx)] - following_day),
                         name=f"stage1_soc_next_morning_idle__{vehicle_id}__day_{day_idx}",
                     )
+                    add_next_morning_shortfall(vehicle_id, target, slot_end_soc_by_slot[target],
+                                               used_vehicle_day[(vehicle_id, day_idx)] - following_day,
+                                               operating_max_kwh)
                     constraint_count += 1
                     next_morning_audit["no_next_day_constraint_count"] += 1
             cumulative_load += sum(terminal_load_terms)
@@ -30018,6 +30082,10 @@ class GurobiMILPAdapter:
                     "charge_power_by_vehicle_slot": stage1_charge_power_var,
                     "charge_on_by_vehicle_slot": stage1_charge_on_var,
                     "electric_vehicle_by_id": electric_vehicle_by_id,
+                    "next_morning_shortfall_by_vehicle_day": next_morning_shortfall_var,
+                    "next_morning_shortfall_penalty_yen_per_kwh": (
+                        next_morning_shortfall_penalty if next_morning_shortfall_enabled else 0.0
+                    ),
                 }
             )
         return constraint_count, shared_charger_metadata

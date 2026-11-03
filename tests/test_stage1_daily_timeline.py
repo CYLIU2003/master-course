@@ -240,3 +240,108 @@ def test_next_morning_deadline_also_binds_a_new_fragment_start(with_days):
             else:
                 assert audit["first_trip_constraint_count"] == 0
                 assert soc.X < maximum - 1.0
+
+
+def _morning_problem(targets, **metadata):
+    problem = daily_problem()
+    first, second = problem.trips
+    first = replace(first, arrival_min=551)
+    second = replace(second, departure_min=1913, arrival_min=1973)
+    rules = {**problem.dispatch_context.deadhead_rules,
+             ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 17),
+             ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 19)}
+    dispatch = [replace(problem.dispatch_context.trips[0], arrival_time="09:11"),
+                replace(problem.dispatch_context.trips[1], departure_time="31:53", arrival_time="32:53")]
+    problem = replace(problem, trips=(first, second), depot_energy_assets={},
+        scenario=replace(problem.scenario, timestep_min=15),
+        dispatch_context=replace(problem.dispatch_context, trips=dispatch, deadhead_rules=rules),
+        price_slots=tuple(EnergyPriceSlot(i) for i in range(192)),
+        metadata={**problem.metadata, "bev_soc_deadline_mode": "next_morning_operational_max",
+                  "post_return_target_slots": list(targets), **metadata})
+    return problem, dispatch
+
+
+@pytest.mark.parametrize("penalty", [0.0, 50.0])
+def test_stage1_prices_the_next_morning_shortfall_like_stage2(penalty):
+    """rc18 audit: with a 10-point tolerance Stage 2 pays 50 JPY/kWh below the
+    operating maximum, Stage 1 only saw the 80% floor and planned to stop there.
+    The same price on the same deadline must lift Stage 1 to the maximum."""
+    gp = pytest.importorskip("gurobipy")
+    from src.optimization.common.soc_helpers import next_morning_required_soc_kwh, vehicle_maximum_soc_kwh
+    from src.optimization.common.vehicle_timeline import build_vehicle_timeline, fixed_path_soc_target_slots
+    problem, dispatch = _morning_problem((140, 191), final_soc_target_tolerance_percent=10,
+                                         next_morning_shortfall_penalty_yen_per_kwh=penalty)
+    first, second = problem.trips
+    plan = AssignmentPlan(duties=(VehicleDuty("duty", "BEV", tuple(DutyLeg(t) for t in dispatch)),),
+        served_trip_ids=(first.trip_id, second.trip_id), metadata={"duty_vehicle_map": {"duty": "bev-1"}})
+    deadline = fixed_path_soc_target_slots(problem, build_vehicle_timeline(problem, plan)["bev-1"])[0]
+    vehicle = problem.vehicles[0]
+    maximum = vehicle_maximum_soc_kwh(problem, vehicle, cap_kwh=vehicle.battery_capacity_kwh)
+    required = next_morning_required_soc_kwh(problem, vehicle, cap_kwh=vehicle.battery_capacity_kwh)
+    assert required < maximum - 1.0
+    adapter = GurobiMILPAdapter()
+    state = {}
+    with gp.Env(empty=True) as env:
+        env.setParam("OutputFlag", 0)
+        env.start()
+        with gp.Model(env=env) as model:
+            one = lambda: model.addVar(lb=1, ub=1, vtype=gp.GRB.BINARY)
+            _, metadata = adapter._add_stage1_time_indexed_soc_relaxation(model, gp=gp, grb=gp.GRB,
+                problem=problem, trip_by_id=problem.trip_by_id(), vehicles=(vehicle,),
+                assignment_trip_ids_by_vehicle={"bev-1": plan.served_trip_ids},
+                startup_energy_precheck_by_assignment={("bev-1", first.trip_id):
+                    adapter._startup_energy_precheck(problem, vehicle, first)},
+                y={("bev-1", t.trip_id): one() for t in problem.trips},
+                x={("bev-1", first.trip_id, second.trip_id): one()},
+                start_arc={("bev-1", first.trip_id): one()},
+                end_arc={("bev-1", second.trip_id): one()}, used_vehicle={"bev-1": one()},
+                state_out=state)
+            model.update()
+            shortfall = state["next_morning_shortfall_by_vehicle_day"]
+            assert state["next_morning_shortfall_penalty_yen_per_kwh"] == penalty
+            soc = model.getVarByName(f"stage1_soc_state__bev-1__slot_{deadline}")
+            # One kWh of charge costs 1 here; the shortfall costs `penalty`.
+            model.setObjective(soc + penalty * gp.quicksum(shortfall.values()), gp.GRB.MINIMIZE)
+            model.optimize()
+            assert model.Status == gp.GRB.OPTIMAL
+            audit = metadata["next_morning_operational_max"]
+            if penalty:
+                assert len(shortfall) == audit["shortfall_variable_count"] == 1
+                assert soc.X == pytest.approx(maximum)
+                assert sum(v.X for v in shortfall.values()) == pytest.approx(0.0, abs=1e-6)
+            else:
+                assert shortfall == {} and audit["shortfall_constraint_count"] == 0
+                assert soc.X == pytest.approx(required)
+
+
+def test_rows_of_one_morning_share_one_shortfall_variable():
+    """Overnight-arc, first-trip and idle rows can describe the same morning;
+    a separate variable per row would charge Stage 2's penalty twice."""
+    gp = pytest.importorskip("gurobipy")
+    problem, dispatch = _morning_problem((140, 500), final_soc_target_tolerance_percent=10,
+                                         next_morning_shortfall_penalty_yen_per_kwh=50.0)
+    first, second = problem.trips
+    vehicle = problem.vehicles[0]
+    adapter = GurobiMILPAdapter()
+    state = {}
+    with gp.Env(empty=True) as env:
+        env.setParam("OutputFlag", 0)
+        env.start()
+        with gp.Model(env=env) as model:
+            one = lambda: model.addVar(lb=1, ub=1, vtype=gp.GRB.BINARY)
+            _, metadata = adapter._add_stage1_time_indexed_soc_relaxation(model, gp=gp, grb=gp.GRB,
+                problem=problem, trip_by_id=problem.trip_by_id(), vehicles=(vehicle,),
+                assignment_trip_ids_by_vehicle={"bev-1": (first.trip_id, second.trip_id)},
+                startup_energy_precheck_by_assignment={("bev-1", t.trip_id):
+                    adapter._startup_energy_precheck(problem, vehicle, t) for t in (first, second)},
+                y={("bev-1", t.trip_id): one() for t in problem.trips},
+                x={("bev-1", first.trip_id, second.trip_id): one()},
+                start_arc={("bev-1", t.trip_id): one() for t in problem.trips},
+                end_arc={("bev-1", t.trip_id): one() for t in problem.trips},
+                used_vehicle={"bev-1": one()},
+                used_vehicle_day={("bev-1", 0): one(), ("bev-1", 1): one()}, state_out=state)
+            model.update()
+    audit = metadata["next_morning_operational_max"]
+    assert audit["shortfall_constraint_count"] > audit["shortfall_variable_count"]
+    days = [day for (_, day) in state["next_morning_shortfall_by_vehicle_day"]]
+    assert len(days) == len(set(days)) == audit["shortfall_variable_count"]

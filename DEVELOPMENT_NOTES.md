@@ -1,3 +1,11 @@
+## 2026-11-03 Stage 1 にも翌朝の不足分の罰則を入れる（rc20 用、新release要）
+
+- **背景**：同日の監査（下の項）で、rc18 の Stage 1 は買電を Stage 2 より大幅に少なく見込んでいた。Stage 2 だけが「運用上限−期限の残量」に50円/kWh を払い、Stage 1 は下限（上限−許容幅）だけを課していたため。本人の判断で、Stage 1 にも同じ罰則を入れ、各上限の Stage 1 はその上限の rc13 の割当から始める（共通の出発点をやめる）。
+- **変更**：`_add_stage1_time_indexed_soc_relaxation` の3種類の翌朝の行（日をまたぐ接続、翌日の最初の便、翌日に運行なし）ごとに `s ≥ 運用上限 × 指示式 − 期限の残量` を加える。`s` は車両と期限の日ごとに1つで、同じ朝の行は共有する（罰則を二重に数えない）。単価は Stage 2 と同じ `next_morning_shortfall_penalty_yen_per_kwh`、許容幅がない（単価0）ときは何も加えない。`_add_stage1_time_indexed_energy_recourse_relaxation` の目的関数に単価×s を足す。結果の `stage1_time_indexed_energy_recourse_result` に `next_morning_shortfall_kwh`・`next_morning_shortfall_penalty_jpy`、監査の `next_morning_operational_max` に変数・行の数を記録する。
+- **数式・比較可能性への影響**：各行は Stage 2 と同じ期限スロット t* を使い、指示式が1になるのは Stage 2 で罰則が掛かる日だけなので、Stage 1 の罰則は Stage 2 の罰則を超えない（Stage 1 は引き続き Stage 2 の緩和で、下界は弱くならない）。単価0では制約も目的関数も rc18 と同じ。rc18 とは目的関数が違うので、rc20 の12件は rc18 と並べて比べない。共通の出発点もやめるので、出発点の違いも結果に入る。
+- **テスト**：`tests/test_stage1_daily_timeline.py` に2件（単価50で Stage 1 が運用上限まで充電し、単価0では下限で止まる／同じ朝の複数の行が1つの変数を共有する）。関連137件が通過。
+- **rc19 の初期解が受け入れられなかった原因（確定、診断 `output/midterm_20261128/diag_stage2_start/`）**：rc19 の冬・90 kW を同じ入力で前日 Stage 2 の直前まで流し、初期解の2値変数を固定して解くと2.7秒で実行不可能。IIS（最小、292行・36の上下限）は1台（a645e188）の最終日の翌朝の期限（`soc_next_morning__…__day_6`）、SOCの推移、電池残量による充電電力の低下（`stage2_charge_band_select`・`stage2_charge_taper_power_upper`）、充電時間の下限、営業所外のスロット、初期解で0に固定した34スロットの `charge_on` だけからなる。Stage 1 の緩和は充電電力の低下と最短の充電時間を入れていない（`taper_and_minimum_duration_deferred`）ので、満充電近くでも全力で充電できるとみなして充電スロットを少なく見込み、その2値変数を固定すると Stage 2 では翌朝に届かない。Stage 1 の見込みから2値変数だけを作る初期解は、この緩和の差を埋めない限り使えない。
+
 ## 2026-11-03 rc18（`ccacbe6a`）柱A 12件のモデル監査（読むだけ、DIAGNOSTIC）
 
 - **方法**：保存済みの前日計画（`canonical_solver_result.json`、`vehicle_timelines.csv`）と実行（`rolling_hourly_chain`）を読んだだけ。計算・書き換えはしていない。`outcome/2026-11-12_three_party/audit_stage1_recourse.py`（出力 `audit_stage1_recourse_rc18.json`）、同じ集計を rc13 にも適用。共通の出発点との一致は `audit_seed_overlap_rc18.json`。
