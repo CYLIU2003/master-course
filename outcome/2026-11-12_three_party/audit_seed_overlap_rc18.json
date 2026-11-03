@@ -1,0 +1,98 @@
+[
+ {
+  "week": "2025-01-06",
+  "grid_limit_kw": 90,
+  "same_duty_as_seed": 0.8438967136150235,
+  "seed_bev_share": 0.9254694835680751,
+  "final_bev_share": 0.9413145539906104,
+  "seed_duties_not_in_case": 31
+ },
+ {
+  "week": "2025-01-06",
+  "grid_limit_kw": 200,
+  "same_duty_as_seed": 0.8714788732394366,
+  "seed_bev_share": 0.9330985915492958,
+  "final_bev_share": 0.9413145539906104,
+  "seed_duties_not_in_case": 16
+ },
+ {
+  "week": "2025-01-06",
+  "grid_limit_kw": 400,
+  "same_duty_as_seed": 0.8779342723004695,
+  "seed_bev_share": 0.9330985915492958,
+  "final_bev_share": 0.9413145539906104,
+  "seed_duties_not_in_case": 18
+ },
+ {
+  "week": "2025-01-06",
+  "grid_limit_kw": 800,
+  "same_duty_as_seed": 0.9066901408450704,
+  "seed_bev_share": 0.9330985915492958,
+  "final_bev_share": 0.9413145539906104,
+  "seed_duties_not_in_case": 16
+ },
+ {
+  "week": "2025-04-07",
+  "grid_limit_kw": 90,
+  "same_duty_as_seed": 0.9225352112676056,
+  "seed_bev_share": 0.8990610328638498,
+  "final_bev_share": 0.9184272300469484,
+  "seed_duties_not_in_case": 33
+ },
+ {
+  "week": "2025-04-07",
+  "grid_limit_kw": 200,
+  "same_duty_as_seed": 0.9747652582159625,
+  "seed_bev_share": 0.9184272300469484,
+  "final_bev_share": 0.9184272300469484,
+  "seed_duties_not_in_case": 0
+ },
+ {
+  "week": "2025-04-07",
+  "grid_limit_kw": 400,
+  "same_duty_as_seed": 0.7834507042253521,
+  "seed_bev_share": 0.9072769953051644,
+  "final_bev_share": 0.920774647887324,
+  "seed_duties_not_in_case": 19
+ },
+ {
+  "week": "2025-04-07",
+  "grid_limit_kw": 800,
+  "same_duty_as_seed": 0.8603286384976526,
+  "seed_bev_share": 0.9008215962441315,
+  "final_bev_share": 0.9219483568075117,
+  "seed_duties_not_in_case": 30
+ },
+ {
+  "week": "2025-07-07",
+  "grid_limit_kw": 90,
+  "same_duty_as_seed": 0.8820422535211268,
+  "seed_bev_share": 0.9507042253521126,
+  "final_bev_share": 0.9571596244131455,
+  "seed_duties_not_in_case": 3
+ },
+ {
+  "week": "2025-07-07",
+  "grid_limit_kw": 200,
+  "same_duty_as_seed": 0.8726525821596244,
+  "seed_bev_share": 0.9512910798122066,
+  "final_bev_share": 0.95481220657277,
+  "seed_duties_not_in_case": 2
+ },
+ {
+  "week": "2025-07-07",
+  "grid_limit_kw": 400,
+  "same_duty_as_seed": 0.8585680751173709,
+  "seed_bev_share": 0.9477699530516432,
+  "final_bev_share": 0.9524647887323944,
+  "seed_duties_not_in_case": 8
+ },
+ {
+  "week": "2025-07-07",
+  "grid_limit_kw": 800,
+  "same_duty_as_seed": 0.9847417840375586,
+  "seed_bev_share": 0.9501173708920188,
+  "final_bev_share": 0.9571596244131455,
+  "seed_duties_not_in_case": 4
+ }
+]
