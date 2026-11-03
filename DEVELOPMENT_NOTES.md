@@ -1,3 +1,11 @@
+## 2026-11-03 rc20 の計算構成（受電上限 90/400/900 kW を優先、次に 200/600 kW）
+
+- **ケース（本人の指定）**：3季節 × 90・400・900 kW を優先。900 kW は急速充電器10基（90 kW×10）を同時に使い切れる想定。余裕があれば 200・600 kW。800 kW は rc20 では計算しない。
+- **900・600 kW のシナリオ**：`tools/research/create_midterm_scenarios.py` に `--grid-limits` を足し、10/10 の燃料ばらつき版と同じ引数（`--grid-limit-mode soft --ice-initial-fuel-range 40,90 --key-prefix fsoft`、乱数の種42）で作成（`outcome/2026-10-09_midterm_scenarios/scenarios_fuel_600_900.json`）。800 kW のシナリオとの違いは ID・名前・時刻・`depot_power_limit_kw` だけであることを全項目の比較で確認した。Stage 1 の出発点は、rc13 にこの上限がないので 800 kW の割当。
+- **台の固定と時間の補正（本人の指示：遅い台は時間を延ばして性能によるムラを抑える）**：各ケースを1台に固定し、要求の時間制限（Stage 1（LNS を含む）、前日の Stage 2、毎時の立て直し、全体）を台の係数倍にした（`output/midterm_20261128/pin_rc20_batches.py`、記録 `rc20_pins.json`）。係数は rc18・rc19 の Gurobi の作業量÷秒（同じ種類の問題）から：6ae0mir・matlab・local 1.0、5b6f6bp 1.6、3pru7qp 2.4（3件同時）。根拠は `rc20_speed_factors.json`。matlab は他の計算と重なった値しかなく、local と同じ CPU なので1.0と置いた（未検証）。作業量で揃えるのが本来だが（Gurobi の WorkLimit）、LNS が経過時間で動くので今回は時間の係数で近似した。
+- **メモリ**：全件14 GiB（rc18 と同じ）。local は計算と並行して Prepare を回すと空きが足りず、最初に固定した冬・90 kW は待ちのまま取り消して 5b6f6bp で出し直した（`-r2`）。16 GB の機械は週の計算に入れない（Stage 1 は約13 GB、Stage 2 は 200 kW 夏で24 GB を使った）。代わりに powersystem（16 GB）で 400 kW 春を同じ入力・同じ時間、メモリ9 GiB で流す試験を別に行う（`pilot16/`、DIAGNOSTIC）。
+- Gurobi の同時実行の上限を6→7（各台に個別の Named-User があるため）。
+
 ## 2026-11-03 Stage 1 にも翌朝の不足分の罰則を入れる（rc20 用、新release要）
 
 - **背景**：同日の監査（下の項）で、rc18 の Stage 1 は買電を Stage 2 より大幅に少なく見込んでいた。Stage 2 だけが「運用上限−期限の残量」に50円/kWh を払い、Stage 1 は下限（上限−許容幅）だけを課していたため。本人の判断で、Stage 1 にも同じ罰則を入れ、各上限の Stage 1 はその上限の rc13 の割当から始める（共通の出発点をやめる）。

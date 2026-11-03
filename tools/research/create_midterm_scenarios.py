@@ -58,6 +58,8 @@ def main() -> None:
     parser.add_argument("--ice-fuel-seed", type=int, default=42)
     parser.add_argument("--key-prefix", default=None, help="Override the scenario key prefix")
     parser.add_argument("--only-all-ice", action="store_true", help="Create only the all-engine-bus comparison")
+    parser.add_argument("--grid-limits", default=None,
+                        help="Comma-separated kW limits to create instead of the default 90,200,400,800")
     parser.add_argument("--skip-all-ice", action="store_true",
                         help="Create only the grid-limit variants (the all-ICE case does not depend on the mode)")
     args = parser.parse_args()
@@ -88,7 +90,8 @@ def main() -> None:
         fuel_range = (low, high)
         suffix += f"（軽油初期{low:g}〜{high:g}%）"
     variants = [{"key": f"{prefix}{limit:03d}", "grid_limit_kw": limit,
-                 "name": f"中間発表 柱A 受電上限{limit}kW{suffix}（仮・正式用コピー）"} for limit in GRID_LIMITS_KW]
+                 "name": f"中間発表 柱A 受電上限{limit}kW{suffix}（仮・正式用コピー）"}
+                for limit in (tuple(int(x) for x in args.grid_limits.split(",")) if args.grid_limits else GRID_LIMITS_KW)]
     if args.only_all_ice:
         variants = []
     if not args.skip_all_ice:
