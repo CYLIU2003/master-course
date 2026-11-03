@@ -71,6 +71,12 @@
 - **台の固定と時間の補正（本人の指示：遅い台は時間を延ばして性能によるムラを抑える）**：各ケースを1台に固定し、要求の時間制限（Stage 1（LNS を含む）、前日の Stage 2、毎時の立て直し、全体）を台の係数倍にした（`output/midterm_20261128/pin_rc20_batches.py`、記録 `rc20_pins.json`）。係数は rc18・rc19 の Gurobi の作業量÷秒（同じ種類の問題）から：6ae0mir・matlab・local 1.0、5b6f6bp 1.6、3pru7qp 2.4（3件同時）。根拠は `rc20_speed_factors.json`。matlab は他の計算と重なった値しかなく、local と同じ CPU なので1.0と置いた（未検証）。作業量で揃えるのが本来だが（Gurobi の WorkLimit）、LNS が経過時間で動くので今回は時間の係数で近似した。
 - **メモリ**：全件14 GiB（rc18 と同じ）。local は計算と並行して Prepare を回すと空きが足りず、最初に固定した冬・90 kW は待ちのまま取り消して 5b6f6bp で出し直した（`-r2`）。16 GB の機械は週の計算に入れない（Stage 1 は約13 GB、Stage 2 は 200 kW 夏で24 GB を使った）。代わりに powersystem（16 GB）で 400 kW 春を同じ入力・同じ時間、メモリ9 GiB で流す試験を別に行う（`pilot16/`、DIAGNOSTIC）。
 - Gurobi の同時実行の上限を6→7（各台に個別の Named-User があるため）。
+- **16 GB の台の試験（11/3 19:34 開始、DIAGNOSTIC）**：本番と同じ固定版（`770830d2`）を配置して検証済み（powersystem、powersystem-1、desktop-6s6ua9u、desktop-mr7177o）。本番で動いているジョブの bundle をそのまま写し、メモリ予算と時間の倍率だけを変えて `run_pilot16.py` で流す（変更は各台の `pilot_changes.json`）。
+  - powersystem：400 kW 冬（3pru7qp と同じ2.4倍の時間）、9 GiB。
+  - powersystem-1：90 kW 春（6ae0mir の2倍の時間）、9 GiB。
+  - desktop-6s6ua9u：90 kW 夏（matlab の2倍の時間）、8 GiB。
+  - 本番の同じケースと比べ、回りきるか・結果のずれを見てから、16 GB の台を残りのケースに使うか決める。
+  - desktop-mr7177o（Ryzen 9 3950X、11/3 追加）・desktop-1800n4s・laptopintel8 は、Windows の確保済みメモリ（commit）の上限が RAM とほぼ同じ（17〜18 GB）で、9 GiB の計算を受けられない。ページファイルを広げれば使える（システム設定なので本人が操作）。
 
 ## 2026-11-03 Stage 1 にも翌朝の不足分の罰則を入れる（rc20 用、新release要）
 
