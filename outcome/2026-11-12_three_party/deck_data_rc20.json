@@ -105,7 +105,50 @@
    "week": "2025-07-07",
    "season": "夏（7月）",
    "case": "C:\\master-course\\output\\midterm_20261128\\rc20\\wk090\\2025-07-07",
-   "status": "PENDING:QUEUED"
+   "status": "VERIFIED",
+   "total_cost": 4263461.591004559,
+   "demand_cost": 0.0,
+   "vehicle_usage_cost": 4040000.0,
+   "electricity_cost": 44369.58830085563,
+   "fuel_cost": 18782.169126106233,
+   "contract_overage_cost": 159242.27855184724,
+   "contract_over_limit_kwh": 318.4845571036945,
+   "grid_import_kwh": 1478.9862766952963,
+   "peak_grid_kw": 262.8728950397138,
+   "pv_generated_kwh": 30188.98525,
+   "pv_used_total_kwh": 24192.50263319392,
+   "pv_curtailed_kwh": 5996.482616806083,
+   "bess_to_bus_kwh": 21003.55642159429,
+   "ice_fuel_consumed_l": 125.21446084070797,
+   "total_co2_kg": 1067.5550257503023,
+   "ice_co2_kg": 328.0618874026542,
+   "grid_electricity_co2_kg": 739.4931383476481,
+   "used_vehicle_day_count": 202,
+   "trips": 1704,
+   "service_km": 13925.428829,
+   "bev_trip_share_pct": 95.36384976525821,
+   "bev_km_share_pct": 96.864230406387,
+   "bev_vehicles_used": 29,
+   "ice_vehicles_used": 5,
+   "stage1_solver_status": "memory_limit",
+   "stage1_solver_mip_gap_ratio": null,
+   "stage1_certified_mip_gap_ratio": 0.44969083363289525,
+   "stage1_objective_value": 4070439.1947302627,
+   "stage1_certified_best_bound": 2240000.0,
+   "stage2_solver_status": "optimal",
+   "stage2_mip_gap_ratio": 0.0,
+   "final_gap": 0.44969083363289525,
+   "lns_applied": true,
+   "lns_initial_objective": 4070902.6525414805,
+   "lns_best_objective": 4070439.1947302627,
+   "lns_improvement_yen": 463.4578112177551,
+   "lns_accepted": 1,
+   "lns_iterations": 12,
+   "lns_error": null,
+   "lns_final_solve_out_of_memory": false,
+   "job_id": "09362269-610c-57e7-a9ab-95cfa75b7424",
+   "worker_id": "matlab-desktop",
+   "archive_sha256": "bbe661608b5dc62c9f96a336ffe889d1e6324209556ad07206db444e9e1e91e5"
   },
   {
    "grid_limit_kw": 200,
@@ -262,7 +305,50 @@
    "week": "2025-01-06",
    "season": "冬（1月）",
    "case": "C:\\master-course\\output\\midterm_20261128\\rc20\\wk400\\2025-01-06",
-   "status": "PENDING:QUEUED"
+   "status": "VERIFIED",
+   "total_cost": 4167046.630705954,
+   "demand_cost": 0.0,
+   "vehicle_usage_cost": 4020000.0,
+   "electricity_cost": 120214.4558578041,
+   "fuel_cost": 24402.37247787615,
+   "contract_overage_cost": 3.015543370565865e-08,
+   "contract_over_limit_kwh": 6.03108674113173e-11,
+   "grid_import_kwh": 4007.148528593641,
+   "peak_grid_kw": 400.00000000024124,
+   "pv_generated_kwh": 24576.52475,
+   "pv_used_total_kwh": 19940.15054371715,
+   "pv_curtailed_kwh": 4636.37420628285,
+   "bess_to_bus_kwh": 18665.81000952639,
+   "ice_fuel_consumed_l": 162.6824831858407,
+   "total_co2_kg": 2429.8023702437226,
+   "ice_co2_kg": 426.2281059469018,
+   "grid_electricity_co2_kg": 2003.5742642968207,
+   "used_vehicle_day_count": 201,
+   "trips": 1704,
+   "service_km": 13925.428829,
+   "bev_trip_share_pct": 94.07276995305165,
+   "bev_km_share_pct": 95.95398582751967,
+   "bev_vehicles_used": 28,
+   "ice_vehicles_used": 9,
+   "stage1_solver_status": "memory_limit",
+   "stage1_solver_mip_gap_ratio": null,
+   "stage1_certified_mip_gap_ratio": 0.45079007857654324,
+   "stage1_objective_value": 4078586.188309033,
+   "stage1_certified_best_bound": 2240000.0,
+   "stage2_solver_status": "optimal",
+   "stage2_mip_gap_ratio": 0.0,
+   "final_gap": 0.45079007857654324,
+   "lns_applied": true,
+   "lns_initial_objective": 4079770.2684810734,
+   "lns_best_objective": 4078586.188309033,
+   "lns_improvement_yen": 1184.0801720404997,
+   "lns_accepted": 6,
+   "lns_iterations": 40,
+   "lns_error": null,
+   "lns_final_solve_out_of_memory": false,
+   "job_id": "6ea8ceae-c8e0-5ffb-863c-2228f2420ea8",
+   "worker_id": "desktop-3pru7qp",
+   "archive_sha256": "9ad5c9526da6b36f3a7b6a71215658449e9e01e094e05a0cb7ddcbd53767f415"
   },
   {
    "grid_limit_kw": 400,
@@ -703,6 +789,24 @@
    }
   },
   {
+   "grid_limit_kw": 90,
+   "week": "2025-07-07",
+   "bands": {
+    "05-06": {
+     "diesel": 29,
+     "total": 186
+    },
+    "07-21": {
+     "diesel": 31,
+     "total": 1410
+    },
+    "22-": {
+     "diesel": 19,
+     "total": 108
+    }
+   }
+  },
+  {
    "grid_limit_kw": 200,
    "week": "2025-01-06",
    "bands": {
@@ -752,6 +856,24 @@
     },
     "22-": {
      "diesel": 25,
+     "total": 108
+    }
+   }
+  },
+  {
+   "grid_limit_kw": 400,
+   "week": "2025-01-06",
+   "bands": {
+    "05-06": {
+     "diesel": 34,
+     "total": 186
+    },
+    "07-21": {
+     "diesel": 43,
+     "total": 1410
+    },
+    "22-": {
+     "diesel": 24,
      "total": 108
     }
    }
@@ -915,6 +1037,12 @@
    "time_limit": 26
   },
   {
+   "grid_limit_kw": 90,
+   "week": "2025-07-07",
+   "steps": 174,
+   "time_limit": 45
+  },
+  {
    "grid_limit_kw": 200,
    "week": "2025-01-06",
    "steps": 175,
@@ -931,6 +1059,12 @@
    "week": "2025-07-07",
    "steps": 174,
    "time_limit": 3
+  },
+  {
+   "grid_limit_kw": 400,
+   "week": "2025-01-06",
+   "steps": 175,
+   "time_limit": 0
   },
   {
    "grid_limit_kw": 400,
@@ -984,13 +1118,13 @@
  "qf2": [
   {
    "season": "冬",
-   "n": 4,
+   "n": 5,
    "pv_generated": 24577.0,
-   "pv_used": 20103.0,
-   "pv_curtailed": 4474.0,
-   "grid_import": 3723.0,
-   "bus_charging": 23691.0,
-   "grid_share_pct": 15.7
+   "pv_used": 20070.0,
+   "pv_curtailed": 4506.0,
+   "grid_import": 3780.0,
+   "bus_charging": 23718.0,
+   "grid_share_pct": 15.9
   },
   {
    "season": "春",
@@ -1004,13 +1138,13 @@
   },
   {
    "season": "夏",
-   "n": 4,
+   "n": 5,
    "pv_generated": 30189.0,
-   "pv_used": 24281.0,
-   "pv_curtailed": 5908.0,
-   "grid_import": 2387.0,
-   "bus_charging": 25079.0,
-   "grid_share_pct": 9.5
+   "pv_used": 24263.0,
+   "pv_curtailed": 5926.0,
+   "grid_import": 2205.0,
+   "bus_charging": 24928.0,
+   "grid_share_pct": 8.8
   }
  ],
  "diesel": [
@@ -1385,7 +1519,79 @@
    }
   ]
  },
- "hindsight": [],
+ "hindsight": [
+  {
+   "grid_limit_kw": 90,
+   "week": "2025-01-06",
+   "season": "冬（1月）",
+   "case": "C:\\master-course\\output\\midterm_20261128\\rc20\\hs090\\2025-01-06",
+   "status": "VERIFIED",
+   "total_cost": 4751877.069672871,
+   "demand_cost": 0.0,
+   "vehicle_usage_cost": 4020000.0,
+   "electricity_cost": 101600.55168166025,
+   "fuel_cost": 23452.26962389386,
+   "contract_overage_cost": 604721.2728631919,
+   "contract_over_limit_kwh": 1209.4425457263837,
+   "grid_import_kwh": 3386.6850560554776,
+   "peak_grid_kw": 750.0,
+   "pv_generated_kwh": 24576.52475,
+   "pv_used_total_kwh": 20884.01250258152,
+   "pv_curtailed_kwh": 3692.512247418479,
+   "bess_to_bus_kwh": 18826.724492426696,
+   "ice_fuel_consumed_l": 156.34846415929204,
+   "total_co2_kg": 2102.9755041250833,
+   "ice_co2_kg": 409.63297609734406,
+   "grid_electricity_co2_kg": 1693.3425280277393,
+   "used_vehicle_day_count": 201,
+   "trips": 1704,
+   "service_km": 13925.428829,
+   "bev_trip_share_pct": 94.42488262910798,
+   "bev_km_share_pct": 96.1725052452961,
+   "bev_vehicles_used": 28,
+   "ice_vehicles_used": 11,
+   "stage1_solver_status": "memory_limit",
+   "stage1_solver_mip_gap_ratio": null,
+   "stage1_certified_mip_gap_ratio": 0.4631746847464741,
+   "stage1_objective_value": 4172679.5222801995,
+   "stage1_certified_best_bound": 2240000.0,
+   "stage2_solver_status": "memory_limit",
+   "stage2_mip_gap_ratio": 0.4672436991804222,
+   "final_gap": 0.4672436991804222,
+   "lns_applied": true,
+   "lns_initial_objective": 4209331.294786981,
+   "lns_best_objective": 4172679.5222801995,
+   "lns_improvement_yen": 36651.772506781854,
+   "lns_accepted": 11,
+   "lns_iterations": 18,
+   "lns_error": null,
+   "lns_final_solve_out_of_memory": false,
+   "job_id": "101ad527-c76a-595c-995a-157f32b3f71c",
+   "worker_id": "desktop-6ae0mir",
+   "archive_sha256": "368d8395fdd1eaa803b0adab1348dc68c815a7aaf0898b2ca3232e0de8b2ecfe"
+  },
+  {
+   "grid_limit_kw": 90,
+   "week": "2025-04-07",
+   "season": "春（4月）",
+   "case": "C:\\master-course\\output\\midterm_20261128\\rc20\\hs090\\2025-04-07",
+   "status": "PENDING:RUNNING"
+  },
+  {
+   "grid_limit_kw": 90,
+   "week": "2025-07-07",
+   "season": "夏（7月）",
+   "case": "C:\\master-course\\output\\midterm_20261128\\rc20\\hs090\\2025-07-07",
+   "status": "PENDING:RUNNING"
+  },
+  {
+   "grid_limit_kw": 200,
+   "week": "2025-01-06",
+   "season": "冬（1月）",
+   "case": "C:\\master-course\\output\\midterm_20261128\\rc20\\hs200\\2025-01-06",
+   "status": "PENDING:RUNNING"
+  }
+ ],
  "first_attempt_failures": [
   "wk090/2025-07-07",
   "wk400/2025-01-06"
