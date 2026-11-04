@@ -1,5 +1,25 @@
 # 分散計算の使い方
 
+## 2026-11-04 追加: 新規worker 3台の導入（割当停止で登録）
+
+新しい台は次の順で導入する。研究計算への割当（`enabled`/`gurobi`）とコード固定版の配置は、この手順に含めない。
+
+1. 親機から `tools/cluster/onboard_worker_machine.ps1` と `controller.pub`（親機 `id_ed25519.pub`）を Taildrop で送る。
+2. 対象PCの管理者PowerShellで `powershell -ExecutionPolicy Bypass -File $HOME\Downloads\onboard_worker_machine.ps1` を実行する。
+   OpenSSHの導入（無い場合のみ標準版）・自動起動・現在ユーザーへの鍵登録・状態報告を行い、ログを親機の `Downloads` へ返す。
+   手動導入のWin32-OpenSSH（`Program Files (x86)`）はMicrosoft署名が有効ならそのまま使う。標準版の再起動待ち、削除予定(1072)、未署名、サービス未登録では何も変えずに停止する。
+3. 親機で `.venv/Scripts/python.exe tools/cluster/onboard_worker.py <IP> <ユーザー>` を実行する。uv bootstrap（SHA256照合）で `C:\mc-worker\venv` を作り、`enabled=false`・`gurobi=false` で `config/cluster/workers.local.json` に登録する。
+4. Named-Userライセンスの発行・導入は別操作（[ライセンス記録](notes/GUROBI_LICENSE_DEPLOYMENT_20261010.md)）。AC電源時のスリープ無効化は `output/cluster-deployment/configure-ac-power.ps1`（DC側は変更しない）。
+
+| 子機ID | 実機名 | Tailscale IP | ユーザー | RAM | 環境 | 状態 |
+|---|---|---|---|---|---|---|
+| desktop-mr7177o | DESKTOP-MR7177O | 100.87.255.66 | pslab | 15.9 GiB | Python 3.14.7 / gurobipy 13.0.1 | 11/04 時点でTCP22不通。手動版OpenSSHと標準版の混在（標準版はInstallPending、SCMは削除予定）。現地で上記2.の再実行が必要 |
+| pslab-mouse | PSLAB_MOUSE | 100.104.185.18 | pslab | 31.8 GiB | 同上 | SSH・ライセンス・極小LPのOPTIMALを確認 |
+| cyliu-thinkbook | CYLIU_THINKBOOK | 100.124.152.124 | a0411 | 23.8 GiB | 同上 | SSH・ライセンス・極小LPのOPTIMALを確認。C:空き31 GiB |
+
+3台とも割当停止。RAMの表示値はいずれも[搭載32GB以上の条件](notes/GUROBI_ADMISSION_POLICY_20260925.md)を満たす確認になっていない（PSLAB_MOUSEの31.8 GiBは32GB機の表示値と考えられるが未確認）。
+研究コード（固定版リリース）は未配置のため、`check_workers.py` のprobe・診断ジョブは未実施。極小LPは研究計算ではない。
+
 ## 2026-09-24 更新: SSH中断時の安全な復旧と投入前Prepared照合（未配置）
 
 計算中の一時的なSSH timeout／ネットワーク切断は、同じ要求・同じattempt IDで最大1回だけ再試行する。認証拒否・ホスト鍵不一致では再試行しない。再試行後も結果が不明なattemptは `LOST` としてPC枠とGurobi予約を保持し、同じattemptの開始記録・成果物を照合する。新しいIDで自動再投入しない。接続失敗したworkerは次のSSH probeが成功するまで新規割当から外し、再確認間隔は失敗回数に応じて最大120秒まで広げる。

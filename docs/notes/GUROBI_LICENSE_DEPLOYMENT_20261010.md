@@ -1,5 +1,23 @@
 # 2026-10-10 Gurobiライセンス導入の作業メモ
 
+## 2026-11-03〜04 新規3台
+
+ユーザーの明示指示で、Free Academic Named-User（Gurobi 13）を各1件発行・導入した。
+発行はagent-browserの別セッション `mr7177o-gurobi`（ログイン済みポータル）、配置は既存 `deploy_named.py` の
+`INSTALL_SCRIPT` をSSHで使った。キーコードはメモリ上でSSH stdinへ渡し、記録・Gitには残していない。
+
+| 子機ID | 実機名 | ユーザー | ライセンスID | 期限 |
+|---|---|---|---|---|
+| desktop-mr7177o | DESKTOP-MR7177O | pslab | 2880832 | 2027-11-03 |
+| pslab-mouse | PSLAB_MOUSE | pslab | 2881169 | 2027-11-04 |
+| cyliu-thinkbook | CYLIU_THINKBOOK | a0411 | 2881171 | 2027-11-04 |
+
+3台とも `%USERPROFILE%\gurobi.lic`（保護ACL）とUser環境変数 `GRB_LICENSE_FILE` を設定。
+CYLIU_THINKBOOKの既存 `gurobi.lic` は `.before-20261010-*.bak` に退避した。
+PSLAB_MOUSE・CYLIU_THINKBOOKでは venv の gurobipy 13.0.1 で Threads=1 の極小LPがOPTIMALになることを確認した（研究計算ではない）。
+ポータルは2回目の発行からEULA同意フォームを表示した。ページ読込直後の「今すぐ発行!」クリックは無反応のことがあり、
+一覧で新規IDが無いことを確認してから再操作した。重複発行はない。研究計算への割当許可は意味しない。
+
 ## 2026-10-12 追加導入
 
 初回にオフラインだった2台が起動した後、既存SSH鍵で接続し、Free Academic
