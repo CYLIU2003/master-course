@@ -349,6 +349,22 @@ bullets(s, [
   "日をまたいで蓄電池の使い方を計画し直す方法を、柱Bで調べる"], RB);
 s.addNotes("考察の1つ目です。前日の計画では、過去の実績から作った平年値で太陽光を予報しているので、毎日ほぼ同じ3,400 kWh程度を見込んでいます。一方、実際の発電は冬の週で1日1,400から5,100 kWhと大きく変わります。晴れの日は蓄電池が満杯になって太陽光を捨て、曇りの日は蓄電池が空になって夜に買電します。そのため、曇りの日の不足を前もって見込めず、厳しい上限では超過が起きます。");
 
+// ---- Discussion 2 (premise): per-km cost and CO2 depend on where the electricity comes from (input facts)
+const GRID_CO2 = 0.5, ICE_CO2_L = 2.62, CO2_JPY = 1;
+const bevGridCo2 = KWH_PER_KM / CHARGE_EFF * GRID_CO2, iceCo2 = ICE_CO2_L / KM_PER_L, iceTotal = iceePerKm + iceCo2 * CO2_JPY;
+const breakEvenGrid = (iceTotal / (KWH_PER_KM / CHARGE_EFF)) - GRID_CO2 * CO2_JPY, breakEvenFactor = iceCo2 * CHARGE_EFF / KWH_PER_KM;
+const KM_LABELS = ["電気バス（太陽光・蓄電池で充電）", "電気バス（買電で充電）", "燃料バス（軽油）"];
+s = page(S5, "考察(2)の前提　1 kmあたりの費用とCO₂は、電気の出どころで逆転する");
+takeaway(s, "買電で走るなら燃料バスの方が安くCO₂も少ない。電気バスが得なのは太陽光・蓄電池の電気のとき");
+s.addChart(pres.charts.BAR, [{ name: "費用", labels: KM_LABELS, values: [0, Math.round((bevGridPerKm + bevGridCo2 * CO2_JPY) * 10) / 10, Math.round(iceTotal * 10) / 10] }],
+  chart({ x: 0.6, y: 2.25, w: 6.0, h: 3.9, barDir: "bar", chartColors: [BLUE], showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0",
+    showLegend: false, valAxisMinVal: 0, showTitle: true, title: "1 kmあたりの費用 [円/km]（CO₂費1円/kgを含む）", titleFontSize: 13, catAxisLabelFontSize: 11 }));
+s.addChart(pres.charts.BAR, [{ name: "CO₂", labels: KM_LABELS, values: [0, Math.round(bevGridCo2 * 100) / 100, Math.round(iceCo2 * 100) / 100] }],
+  chart({ x: 6.75, y: 2.25, w: 6.0, h: 3.9, barDir: "bar", chartColors: [GREY], showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.00",
+    showLegend: false, valAxisMinVal: 0, showTitle: true, title: "1 kmあたりのCO₂ [kg/km]", titleFontSize: 13, catAxisLabelFontSize: 11 }));
+caption(s, `図7b　モデルに入れた係数から計算した値（計算結果ではない）。電費1.316 kWh/km、充電効率0.95、買電30円/kWh・${GRID_CO2} kg/kWh（仮）、軽油150円/L・4.52 km/L・${ICE_CO2_L} kg/L。損益分岐は買電${breakEvenGrid.toFixed(1)}円/kWh（CO₂費込み）、CO₂は電力の係数${breakEvenFactor.toFixed(2)} kg/kWh`, 0.6, 6.25, 12.1, 0.55);
+s.addNotes(`考察の前に、費用の前提を確認します。左はバスが1 km走るのにかかる費用、右はCO₂です。電気バスは、太陽光や蓄電池の電気で走るときは燃料代がかからず、CO₂も出ません。ところが、電力会社から買った電気で走ると1 kmあたり約${Math.round(bevGridPerKm + bevGridCo2)}円で、燃料バスの約${Math.round(iceTotal)}円より高くなります。CO₂も、電力の係数を0.5とすると、買電で走る電気バスの方が多くなります。つまり、このモデルで電気バスが多く選ばれているのは、営業所の太陽光と蓄電池がバスの充電の8〜9割をまかなっているからだと考えています。これを確かめるため、太陽光と蓄電池を減らした計算を回しています。`);
+
 // ---- Discussion 2: why the share does not move
 s = page(S5, "考察(2)　電気バスの担当便が受電上限で変わらない理由");
 takeaway(s, "便割当は前日に決まり、その時点では超過が見えない。見えなければ電気バスの方が得なまま");
@@ -497,7 +513,7 @@ s.addTable([FHEAD,
     "電気バスが得なのは太陽光・蓄電池の電気で走る分。設備の規模が変われば結論も変わりうる"),
   fRow(10, "厳しい上限ほど解きにくく、完走も台と実行に左右される",
     `毎時の立て直し175回中の時間切れは90 kWで${rg(tlOf(90))}回、200 kW冬で${tl(200, WIN)}回、400 kW以上で0回。便割当のギャップは全件で約45%`,
-    "本番の1回目に2件、解き直しは5件中3件が完走せず。完走したものどうしの差は0.4%以内"),
+    "本番の1回目に2件、解き直しは6件中4件が完走せず。完走したものどうしの差は0.4%以内"),
   fRow(11, "便割当の見込みの修正（rc18→rc20）でも、担当便の結論は変わらない",
     `費用の差は${RC18.dMin}〜+${RC18.dMax}万円（最大1.8%）。担当便はrc18で${RC18.shareMin}〜${RC18.shareMax}%、rc20で${shareMin}〜${shareMax}%`,
     "結論1は、便割当の段階の見込みの修正に対して頑健")],
