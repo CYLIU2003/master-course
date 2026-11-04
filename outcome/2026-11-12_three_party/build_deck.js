@@ -28,8 +28,9 @@ const man = (n) => (n / 1e4).toFixed(1);
 const nVerified = cases.length, nAll = allCases.length;
 const pending = allCases.filter((r) => r.status !== "VERIFIED").map((r) => `${r.grid_limit_kw} kW ${SEASONS.find((s) => s[0] === r.week)[1]}`);
 // Unit economics from the model's own coefficients (input facts, not results).
-const KWH_PER_KM = 1.316, KM_PER_L = 4.52, GRID_JPY = 30, DIESEL_JPY = 150, OVERAGE_JPY = 500, VDAY_JPY = 20000;
-const bevGridPerKm = KWH_PER_KM * GRID_JPY, iceePerKm = DIESEL_JPY / KM_PER_L, bevOveragePerKm = KWH_PER_KM * (GRID_JPY + OVERAGE_JPY);
+const KWH_PER_KM = 1.316, CHARGE_EFF = 0.95, KM_PER_L = 4.52, GRID_JPY = 30, DIESEL_JPY = 150, OVERAGE_JPY = 500, VDAY_JPY = 20000;
+// Same formulas as the solver's powertrain_marginal_cost_audit.json (charging loss 0.95 included).
+const bevGridPerKm = KWH_PER_KM / CHARGE_EFF * GRID_JPY, iceePerKm = DIESEL_JPY / KM_PER_L, bevOveragePerKm = KWH_PER_KM / CHARGE_EFF * (GRID_JPY + OVERAGE_JPY);
 
 const BLUE = "0485D7", BLUE_DARK = "0268B0", BLUE_LIGHT = "7AB8E8", GREY = "9A9A9A", INK = "222222", SUB = "555555", GRID = "DDDDDD", HEAD = "F2F2F2";
 const THEME = { name: "TCU white", headFontFace: "Yu Gothic", bodyFontFace: "Yu Gothic",
@@ -353,7 +354,7 @@ s = page(S5, "考察(2)　電気バスの担当便が受電上限で変わらな
 takeaway(s, "便割当は前日に決まり、その時点では超過が見えない。見えなければ電気バスの方が得なまま");
 s.addTable([
   [H("1 kmあたりの費用（モデルの係数から）"), H("円/km")],
-  ["電気バス：買電で充電（1.316 kWh/km × 30円/kWh）", { text: bevGridPerKm.toFixed(1), options: { align: "right" } }],
+  ["電気バス：買電で充電（1.316 kWh/km ÷ 充電効率0.95 × 30円/kWh）", { text: bevGridPerKm.toFixed(1), options: { align: "right" } }],
   ["燃料バス：軽油（150円/L ÷ 4.52 km/L）", { text: iceePerKm.toFixed(1), options: { align: "right" } }],
   ["電気バス：上限を超えて買電（30＋500円/kWh）", { text: fmt(bevOveragePerKm), options: { align: "right", bold: true, color: BLUE_DARK } }],
   ["電気バス：太陽光・蓄電池で充電", { text: "購入費なし", options: { align: "right" } }],
@@ -361,11 +362,11 @@ s.addTable([
   tableOpts({ x: 0.6, y: 2.3, w: 6.6, colW: [5.1, 1.5], fontSize: 13, rowH: 0.48 }));
 caption(s, "表4　入力の係数から計算した値（計算結果ではない）。CO₂費（1円/kg）は1 kmあたり1円未満。太陽光・蓄電池の設備費は未計上", 0.6, 5.25, 6.6, 0.5);
 bullets(s, [
-  "買電どうしなら燃料バスの方が約6円/km安いが、車両の追加（2万円/日）に比べて小さい",
-  "超過する電気で走ると約700円/kmで、燃料バスに回す理由になる。ところが前日計画は全ケースで超過0と見込む",
+  "買電どうしなら燃料バスの方が約8円/km安いが、車両の追加（2万円/日）に比べて小さい",
+  "超過する電気で走ると約730円/kmで、燃料バスに回す理由になる。ところが前日計画は全ケースで超過0と見込む",
   "割当は実行中に変えないので、実行中に現れる超過は割当に効かない",
   "確かめ方：実際の天気で前日計画を立てると割当が変わるか（結果は次のページ）"], { x: 7.5, y: 2.3, w: 5.2, h: 4.5, fontSize: 14 });
-s.addNotes(`考察の2つ目、なぜ電気バスの担当便が受電上限で変わらないのかです。左の表は、モデルに入れた係数から計算した1 kmあたりの費用です。買電で充電した電気バスは約${bevGridPerKm.toFixed(0)}円/km、燃料バスは約${iceePerKm.toFixed(0)}円/kmで、買電どうしなら燃料バスの方が少し安いのですが、その差は約6円/kmで、車両を1台・1日余分に使う2万円に比べるとわずかです。一方、上限を超える電気で走ると約${fmt(bevOveragePerKm)}円/kmになり、燃料バスに回す理由になります。ところが、便の割当を決める前日の計画では、どのケースも超過を0と見込んでいて、超過は実行中にしか現れません。割当は実行中に変えないので、超過は割当に効かないというのが現時点の考えです。これを確かめるため、実際の天気で前日計画を立てた場合に割当が変わるかを計算しています。`);
+s.addNotes(`考察の2つ目、なぜ電気バスの担当便が受電上限で変わらないのかです。左の表は、モデルに入れた係数から計算した1 kmあたりの費用です。買電で充電した電気バスは約${bevGridPerKm.toFixed(0)}円/km、燃料バスは約${iceePerKm.toFixed(0)}円/kmで、買電どうしなら燃料バスの方が少し安いのですが、その差は約8円/kmで、車両を1台・1日余分に使う2万円に比べるとわずかです。一方、上限を超える電気で走ると約${fmt(bevOveragePerKm)}円/kmになり、燃料バスに回す理由になります。ところが、便の割当を決める前日の計画では、どのケースも超過を0と見込んでいて、超過は実行中にしか現れません。割当は実行中に変えないので、超過は割当に効かないというのが現時点の考えです。これを確かめるため、実際の天気で前日計画を立てた場合に割当が変わるかを計算しています。`);
 
 // ---- Discussion 2 (cont.): day-ahead plan on actual PV (hindsight diagnostic)
 const HS = (DATA.hindsight || []).filter((r) => r.status === "VERIFIED" && get(r.grid_limit_kw, r.week));
