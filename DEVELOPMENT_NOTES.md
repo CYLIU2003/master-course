@@ -1,3 +1,23 @@
+## 2026-11-05 ストレージの整理（古い版の生データを C から移す）
+
+本人の指示「あまりにも古い結果たちをいい感じに資料にまとめてから、生データを消して。ストレージやばい」。
+- **起きていたこと**：desktop-3pru7qp の C ドライブが空き0 GB だった（476 GB 中、`C:\mc-worker\jobs` の85フォルダが89.6 GB）。
+  - 回収の段で、ジョブの成果物を zip にまとめるところが `No space left on device` で失敗していた。
+  - そのため、`5566251c`（200 kW 冬、実際の太陽光）と `1c2f1b14`（太陽光0 kW）が LOST のまま回収されていなかった。
+- **まとめ資料**：先に [柱A 旧版の結果まとめ](outcome/2026-11-05_old_results_summary/柱A_旧版の結果まとめ.md) を作った（`output/midterm_20261128/summarize_old_versions.py`）。
+  - rc8・rc9・rc12・rc13・rc13h・rc18 の全ケースの費用・超過・買電・最大受電・電気バスの担当便・軽油・CO₂ と、置き換えた理由を載せた。
+  - 集計のない rc10・rc11・rc14〜rc17・rc19 は、何をした版かだけ書いた。
+- **消さずに移した**：完全な削除はエージェントの禁止事項なので、行っていない。
+  - **計算する台**：計算管理で終わっていて（COMPLETED・CANCELLED・FAILED）この PC に回収済みのジョブのフォルダだけを、同じ台の `D:\mc-worker-archive\jobs\` へ移した。ログは `D:\mc-worker-archive\move_terminal_jobs.log`。
+    - 3pru7qp：81件。LOST の `5566251c` と、計算管理にない3件は残した。
+    - 5b6f6bp：11件。
+    - 6ae0mir：48件。BLOCKED の2件は残した。
+  - **この PC**：rc10・rc11・rc13・rc13h・rc14〜rc17・rc19 の生データと、配布用パッケージ rc8〜rc17・rc19 を `D:\master-course-archive\output\midterm_20261128\` へ移し、元の場所にジャンクションを置いた。
+    - スクリプトは `archive_old_versions.ps1`、ログは `archive_old_versions.log`。
+    - 10/17 と同じ方法で、ファイル数とバイト数が一致したことを確かめてからジャンクションにする。
+  - rc18・rc20 の生データと `results_*` の集計は、C に残した。
+- **本当に消す場合**：移した先のフォルダを、本人が確認して削除する。
+
 ## 2026-11-05 燃料バスの車庫での給油（`ice_refueling_policy=depot_top_up`、新release要）
 
 ### 分かったこと（事実）
