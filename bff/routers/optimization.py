@@ -996,7 +996,7 @@ class RunOptimizationBody(BaseModel):
     stage1_gurobi_scale_flag: Literal[-1, 0, 1, 2, 3] = -1
     # Day-ahead Stage 2 binary MIP start (a proposal, never fixed charging).
     # Rolling windows keep their own policy; see charging_mip_start.py.
-    stage2_charging_start_policy: Literal["none", "stage1_recourse_binary"] = "none"
+    stage2_charging_start_policy: Literal["none", "stage1_recourse_binary", "stage1_recourse_hints"] = "none"
     stage1_root_lp_diagnostic_enabled: bool = False
     stage1_root_lp_diagnostic_time_limit_seconds: int = Field(
         default=30,

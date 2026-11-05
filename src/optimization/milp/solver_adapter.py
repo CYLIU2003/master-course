@@ -50,8 +50,8 @@ from src.optimization.milp.auxiliary_bess import add_auxiliary_bess_constraints
 from src.optimization.milp.charging_window_support import ChargingWindowSupportEvents, VehicleAwayEvents
 from src.optimization.milp.charging_session_relaxation import add_session_time_relaxation
 from src.optimization.milp.charging_mip_start import (
-    FIXED_ASSIGNMENT_SOURCE, RECOURSE_SOURCE, RECOURSE_START_POLICY,
-    apply_charging_mip_start, recourse_charging_slots,
+    FIXED_ASSIGNMENT_SOURCE, RECOURSE_HINT_POLICY, RECOURSE_SOURCE, RECOURSE_START_POLICY,
+    apply_charging_mip_start, apply_recourse_hints, recourse_charging_slots,
 )
 from src.optimization.milp.depot_connection_factors import (
     ArcDomain, SuccessorRow, FactoredConnectionVariables,
@@ -23460,8 +23460,9 @@ class GurobiMILPAdapter:
                         for vehicle_id in assigned_bev_ids
                     },
                 )
+        hint_policy = config.stage2_charging_start_policy == RECOURSE_HINT_POLICY
         charging_start_audit = apply_charging_mip_start(
-            stage2, policy=config.stage2_charging_start_policy,
+            stage2, policy="none" if hint_policy else config.stage2_charging_start_policy,
             warm_start=config.warm_start,
             source=start_source, source_audit=start_source_audit,
             charging_slots=start_slots,
@@ -23471,6 +23472,22 @@ class GurobiMILPAdapter:
             connected_chargers=config.rolling_connected_charger_by_vehicle,
             active_session_vehicle_ids=config.rolling_active_charge_session_vehicle_ids,
         )
+        if hint_policy:
+            # Day-ahead only, like the recourse start: a rolling window starts from
+            # measured state that the day-ahead recourse does not describe.
+            recourse = (stage1_plan.metadata or {}).get("stage1_time_indexed_energy_recourse_result")
+            if is_remaining_day_reoptimization:
+                charging_start_audit = {**charging_start_audit, "policy": RECOURSE_HINT_POLICY,
+                                        "hints": {"status": "NOT_APPLIED", "reason": "rolling_window_not_supported"}}
+            elif not isinstance(recourse, Mapping):
+                charging_start_audit = {**charging_start_audit, "policy": RECOURSE_HINT_POLICY,
+                                        "hints": {"status": "NOT_APPLIED", "reason": "no_recourse_source"}}
+            else:
+                charging_start_audit = {**charging_start_audit, "policy": RECOURSE_HINT_POLICY,
+                                        "hints": apply_recourse_hints(
+                                            recourse=recourse, slot_indices=slot_indices,
+                                            bess_soc_vars=bess_soc_var, grid_import_vars=grid_import_var,
+                                            charge_on_vars=charge_on_var, vehicle_ids=assigned_bev_ids)}
         optimize_model(stage2)
 
         if stage2.Status == GRB.INF_OR_UNBD:

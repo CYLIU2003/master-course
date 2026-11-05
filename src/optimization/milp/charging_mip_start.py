@@ -10,8 +10,9 @@ from typing import Any
 from src.optimization.common.problem import ChargingSlot
 
 
-CHARGING_START_POLICIES = ("none", "fixed_assignment_binary", "stage1_recourse_binary")
+CHARGING_START_POLICIES = ("none", "fixed_assignment_binary", "stage1_recourse_binary", "stage1_recourse_hints")
 RECOURSE_START_POLICY = "stage1_recourse_binary"
+RECOURSE_HINT_POLICY = "stage1_recourse_hints"
 FIXED_ASSIGNMENT_SOURCE = "fixed_assignment.charging_slots"
 RECOURSE_SOURCE = "stage1_time_indexed_energy_recourse.charge_power_kw_by_vehicle_slot"
 
@@ -168,3 +169,50 @@ def apply_charging_mip_start(
         "charger_variables": len(variables) - charge_on_count,
         "source_positive_slots": len(active), "omitted_connection_slots": len(omitted),
         "source_support_sha256": hashlib.sha256(json.dumps(source_rows, separators=(",", ":")).encode()).hexdigest()}
+
+
+def apply_recourse_hints(
+    *, recourse: Mapping[str, Any], slot_indices: Iterable[int],
+    bess_soc_vars: Mapping[tuple[str, int], Any],
+    grid_import_vars: Mapping[tuple[str, int], Any],
+    charge_on_vars: Mapping[tuple[str, int], Any],
+    vehicle_ids: Iterable[str],
+) -> dict[str, Any]:
+    """Guide the day-ahead Stage 2 search with the Stage 1 energy recourse plan.
+
+    Gurobi variable hints (VarHintVal) steer heuristics and branching only:
+    no bound, constraint, objective term, or MIP start is added, so the model,
+    its feasible set, and its optimum are unchanged and an infeasible hint is
+    harmless. Hinted: stationary-battery SOC and grid import per depot/slot,
+    and BEV charge-on per vehicle/slot (on where the recourse charges).
+    """
+    slots = set(int(s) for s in slot_indices)
+    audit: dict[str, Any] = {"policy": RECOURSE_HINT_POLICY, "scope": "variable_hints_only",
+                             "bess_soc_hints": 0, "grid_import_hints": 0, "charge_on_hints": 0}
+
+    def value(table: Any, key: Any, slot: int) -> float | None:
+        row = (table or {}).get(key) if isinstance(table, Mapping) else None
+        raw = None if not isinstance(row, Mapping) else row.get(str(slot), row.get(slot))
+        return None if raw is None or not math.isfinite(float(raw)) else float(raw)
+
+    for (depot_id, slot), var in bess_soc_vars.items():
+        hint = value(recourse.get("bess_soc_kwh_by_depot_slot"), str(depot_id), int(slot))
+        if int(slot) in slots and hint is not None:
+            var.VarHintVal = hint
+            audit["bess_soc_hints"] += 1
+    for (depot_id, slot), var in grid_import_vars.items():
+        hint = value(recourse.get("grid_import_kwh_by_depot_slot"), str(depot_id), int(slot))
+        if int(slot) in slots and hint is not None:
+            var.VarHintVal = max(hint, 0.0)
+            audit["grid_import_hints"] += 1
+    wanted = {str(v) for v in vehicle_ids}
+    power = recourse.get("charge_power_kw_by_vehicle_slot") or {}
+    for (vehicle_id, slot), var in charge_on_vars.items():
+        if str(vehicle_id) not in wanted or int(slot) not in slots:
+            continue
+        kw = value(power, str(vehicle_id), int(slot))
+        if kw is not None:
+            var.VarHintVal = 1.0 if kw > 1e-6 else 0.0
+            audit["charge_on_hints"] += 1
+    audit["status"] = "APPLIED" if any(audit[k] for k in ("bess_soc_hints", "grid_import_hints", "charge_on_hints")) else "NO_SOURCE"
+    return audit
