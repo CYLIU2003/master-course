@@ -1,3 +1,24 @@
+## 2026-11-05 rc21（`bdbc0f4b`）：燃料バスを車庫で給油、太陽光4段階（DIAGNOSTIC）
+
+本人の指示「rc21作って太陽光4段階回して。従来と違うなら進捗報告資料とポスターに反映」。
+- **版**：`output/cluster-deployment/release-midterm-bdbc0f4b`（HEAD からの固定クローン、clean）。
+  - データ5か所は rc20 の版から写し、ハッシュの一致を確かめた。
+  - パッケージは `package_rc21/`。
+  - `release.py stage` で5台を照合し、すべて VERIFIED（`stage-checks-v22`、`workers.deployed.v22.json`）。
+  - 1回目は Git Bash の `ssh` が使われ、ホストの照合で4台が `RELEASE_REMOTE_FAILED: exit=255` になった。記録は `*.blocked-gitssh` の名前で残した。PowerShell から Windows の OpenSSH で配置し直して通った。
+- **計算管理**：`controller-settings.rc21.json`。rc20 の設定から release・config・git_sha・source_digest だけを変えた。uv.lock のハッシュは同じ。
+  - `watchdog_settings.txt` を rc21 にした（rc20 の控えは `watchdog_settings.rc20.bak.txt`）。
+  - 計算中のジョブが0件なのを確かめてから、8891 を keepalive で起動し直した。
+- **シナリオ**：`make_refuel_scenarios.py`（`refuel_scenarios.json`）。親は rc20 の 900 kW、冬。
+  - 燃料バスは `depot_top_up`、運用20〜100%。初期は20〜90%の一様乱数（seed 20261105、車両 ID ごとに1回）で、22.6〜87.2% になった。
+  - 太陽光は1,000・500・250・0 kW。
+  - 準備した入力に、給油の方式・燃料の範囲・太陽光の容量・初期の軽油が入っていることを確かめた。
+- **batch**：rc20 の 900 kW 冬との差は `prepared_input_id` だけ。出発点の割当は `rc20_seed_800_2025-01-06`。
+- **台**：rf1000 → matlab、rf500 → 6ae0mir、rf000 → 3pru7qp（2.4倍）、rf250 → 5b6f6bp（1.6倍）の予定だった。
+  - 5b6f6bp は commit の余りが17.6 GB で、必要な14＋4 GB に届かなかった。Python は動いておらず、2025-12 から再起動されていない OS 側の使用と見られる（推測）。
+  - そのため、待ちの rf250 は取り消した。同じ準備済みの入力を `rc21/rf250m` として、matlab の2件目に固定した。
+  - キュー外の台では回収の来歴を偽らずに集められないので、使わなかった。
+
 ## 2026-11-05 ストレージの整理（古い版の生データを C から移す）
 
 本人の指示「あまりにも古い結果たちをいい感じに資料にまとめてから、生データを消して。ストレージやばい」。
