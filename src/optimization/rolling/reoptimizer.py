@@ -12,6 +12,7 @@ from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
     OptimizationConfig,
     OptimizationMode,
+    RefuelSlot,
 )
 from src.optimization.common.soc_helpers import (
     BEV_TERMINAL_SOC_TARGET_KWH_BY_VEHICLE_KEY,
@@ -174,8 +175,20 @@ def assignment_plan_from_serialized_result(
             "charging_recomputed_by_hourly_reoptimizer": True,
         }
     )
+    # Engine-bus refueling under depot_top_up is a day-ahead decision of the
+    # fixed paths (charging is recomputed hourly, refueling is not).
+    refuel_slots = tuple(
+        RefuelSlot(
+            vehicle_id=str(raw["vehicle_id"]),
+            slot_index=int(raw["slot_index"]),
+            refuel_liters=float(raw["refuel_liters"]),
+            location_id=None if raw.get("location_id") is None else str(raw["location_id"]),
+        )
+        for raw in list(serialized_result.get("refueling_schedule") or [])
+    )
     plan = AssignmentPlan(
         duties=tuple(duties),
+        refuel_slots=refuel_slots,
         served_trip_ids=served_trip_ids,
         unserved_trip_ids=unserved_trip_ids,
         metadata=metadata,

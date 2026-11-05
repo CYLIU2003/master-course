@@ -1556,6 +1556,7 @@ class ProblemBuilder:
                 "milp_max_successors_per_trip": milp_max_successors_per_trip,
                 "planning_days": planning_days,
                 "bev_soc_deadline_mode": input_config.get("bev_soc_deadline_mode", "legacy_day_end"),
+                "ice_refueling_policy": input_config.get("ice_refueling_policy") or "no_refueling",
                 "next_morning_shortfall_penalty_yen_per_kwh": float(
                     input_config.get("next_morning_shortfall_penalty_yen_per_kwh") or 0.0
                 ),

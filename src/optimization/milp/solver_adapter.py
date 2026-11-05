@@ -19,6 +19,9 @@ from typing import Any, Callable, Collection, Dict, Iterable, Iterator, List, Li
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.dispatch.daily_return import checked_deadhead_minutes, connection_deadhead_minutes, requires_daily_return
+from src.optimization.common.ice_refueling import (
+    DEPOT_TOP_UP, NO_REFUELING, depot_top_up_refuel_slots, ice_refueling_policy, replay_fixed_ice_fuel,
+)
 from src.optimization.common.vehicle_timeline import build_vehicle_timeline, connection_energy_events, fixed_path_slot_loads, fixed_path_soc_target_slots
 from src.dispatch.route_band import duty_route_band_ids, fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
@@ -15269,6 +15272,13 @@ class GurobiMILPAdapter:
         stage1_ice_fuel_inventory_audit = self._add_stage1_ice_fuel_inventory_constraints(
             problem, stage1, ice_fuel_by_vehicle,
             aggregate_vehicle_ids=stage1_exact_clone_vehicle_ids,
+            daily_fuel_by_vehicle_day=(
+                self._stage1_ice_fuel_expressions(
+                    problem, y, x, start_arc, end_arc,
+                    startup_energy_precheck_by_assignment, by_day=True,
+                )
+                if ice_refueling_policy(problem) == DEPOT_TOP_UP else None
+            ),
         )
         if diesel_price > 0.0 or co2_price > 0.0:
             for vehicle_id, fuel_expression in ice_fuel_by_vehicle.items():
@@ -22051,6 +22061,55 @@ class GurobiMILPAdapter:
         )
         return audit
 
+    def _stage1_ice_fuel_terms(
+        self,
+        problem: CanonicalOptimizationProblem,
+        y: Mapping[Tuple[str, str], Any],
+        x: Mapping[Tuple[str, str, str], Any],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        startup_prechecks: Mapping[Tuple[str, str], Any],
+    ) -> Iterator[Tuple[str, str, float, Any]]:
+        """Exact liters per Stage 1 variable as (vehicle, trip that dates the term, liters, var).
+
+        A connection is dated by its target trip, a startup or return deadhead
+        by its own trip.
+        """
+        vehicles = {
+            str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
+            if vehicle.available and str(vehicle.vehicle_type).upper() not in {"BEV", "PHEV", "FCEV"}
+        }
+        for vehicle_id in vehicles:
+            yield vehicle_id, "", 0.0, None
+        for (vehicle_id, trip_id), var in y.items():
+            if vehicle_id in vehicles:
+                yield vehicle_id, trip_id, self._trip_fuel_l(problem, vehicles[vehicle_id], trip_id), var
+        for (vehicle_id, origin, target), var in x.items():
+            if vehicle_id in vehicles:
+                yield vehicle_id, target, self._deadhead_fuel_l(problem, vehicles[vehicle_id], origin, target), var
+        if isinstance(x, FactoredConnectionVariables):
+            for variables in x.factors:
+                vehicle_id = variables.factor.vehicle_id
+                if vehicle_id in vehicles:
+                    for target, liters, var in zip(variables.factor.targets, variables.factor.target_fuel_l, variables.targets):
+                        yield vehicle_id, target, liters, var
+        for key, var in start_arc.items():
+            vehicle_id, trip_id = key
+            if vehicle_id not in vehicles:
+                continue
+            minutes = int(getattr(startup_prechecks.get(key), "startup_deadhead_min", 0) or 0)
+            rate = max(float(vehicles[vehicle_id].fuel_consumption_l_per_km or 0.0), 0.0)
+            yield vehicle_id, trip_id, self._deadhead_distance_km(problem, minutes) * rate, var
+        trips = problem.trip_by_id()
+        for (vehicle_id, trip_id), var in end_arc.items():
+            if vehicle_id not in vehicles:
+                continue
+            vehicle = vehicles[vehicle_id]
+            exists, minutes = return_deadhead_min_to_home(problem, vehicle, trips[trip_id])
+            if exists and minutes > 0:
+                rate = max(float(vehicle.fuel_consumption_l_per_km or 0.0), 0.0)
+                yield vehicle_id, trip_id, self._deadhead_distance_km(problem, minutes) * rate, var
+
     def _stage1_ice_fuel_expressions(
         self,
         problem: CanonicalOptimizationProblem,
@@ -22059,44 +22118,25 @@ class GurobiMILPAdapter:
         start_arc: Mapping[Tuple[str, str], Any],
         end_arc: Mapping[Tuple[str, str], Any],
         startup_prechecks: Mapping[Tuple[str, str], Any],
-    ) -> Dict[str, Any]:
-        """Share exact liters between the Stage 1 objective and inventory rows."""
+        *,
+        by_day: bool = False,
+    ) -> Dict[Any, Any]:
+        """Share exact liters between the Stage 1 objective and inventory rows.
+
+        Keys are vehicle IDs, or (vehicle ID, day index) with ``by_day``.
+        """
         gp, _ = ensure_gurobi()
-        vehicles = {
-            str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
-            if vehicle.available and str(vehicle.vehicle_type).upper() not in {"BEV", "PHEV", "FCEV"}
-        }
-        fuel = {vehicle_id: gp.LinExpr() for vehicle_id in vehicles}
-        for (vehicle_id, trip_id), var in y.items():
-            if vehicle_id in fuel:
-                fuel[vehicle_id].addTerms(self._trip_fuel_l(problem, vehicles[vehicle_id], trip_id), var)
-        for (vehicle_id, origin, target), var in x.items():
-            if vehicle_id in fuel:
-                fuel[vehicle_id].addTerms(
-                    self._deadhead_fuel_l(problem, vehicles[vehicle_id], origin, target), var
-                )
-        if isinstance(x, FactoredConnectionVariables):
-            for variables in x.factors:
-                vehicle_id = variables.factor.vehicle_id
-                if vehicle_id in fuel:
-                    for liters, var in zip(variables.factor.target_fuel_l, variables.targets):
-                        fuel[vehicle_id].addTerms(liters, var)
-        for key, var in start_arc.items():
-            vehicle_id, _trip_id = key
-            if vehicle_id not in fuel:
-                continue
-            minutes = int(getattr(startup_prechecks.get(key), "startup_deadhead_min", 0) or 0)
-            rate = max(float(vehicles[vehicle_id].fuel_consumption_l_per_km or 0.0), 0.0)
-            fuel[vehicle_id].addTerms(self._deadhead_distance_km(problem, minutes) * rate, var)
         trips = problem.trip_by_id()
-        for (vehicle_id, trip_id), var in end_arc.items():
-            if vehicle_id not in fuel:
+        fuel: Dict[Any, Any] = {}
+        for vehicle_id, trip_id, liters, var in self._stage1_ice_fuel_terms(
+            problem, y, x, start_arc, end_arc, startup_prechecks,
+        ):
+            if var is None:
+                if not by_day:
+                    fuel.setdefault(vehicle_id, gp.LinExpr())
                 continue
-            vehicle = vehicles[vehicle_id]
-            exists, minutes = return_deadhead_min_to_home(problem, vehicle, trips[trip_id])
-            if exists and minutes > 0:
-                rate = max(float(vehicle.fuel_consumption_l_per_km or 0.0), 0.0)
-                fuel[vehicle_id].addTerms(self._deadhead_distance_km(problem, minutes) * rate, var)
+            key = (vehicle_id, self._trip_day_index(problem, trips[trip_id].departure_min)) if by_day else vehicle_id
+            fuel.setdefault(key, gp.LinExpr()).addTerms(liters, var)
         return fuel
 
     @staticmethod
@@ -22122,11 +22162,23 @@ class GurobiMILPAdapter:
         fuel_by_vehicle: Mapping[str, Any],
         *,
         aggregate_vehicle_ids: Collection[str] = (),
+        daily_fuel_by_vehicle_day: Optional[Mapping[Tuple[str, int], Any]] = None,
     ) -> Dict[str, Any]:
-        """No-refuel nonnegative consumption makes the terminal budget sufficient."""
+        """Fuel inventory rows of the configured refueling policy.
+
+        no_refueling: nonnegative consumption makes the terminal budget
+        (materialized initial liters minus the reserve) sufficient.
+        depot_top_up: the bus is home before every service day's first
+        departure (daily return) and may fill up there, so each day's liters
+        are bounded by the usable tank (capacity minus reserve). This is a
+        sufficient Stage 1 condition; the exact refueling decisions and the
+        fuel range are produced and checked on the fixed paths afterwards.
+        """
+        policy = ice_refueling_policy(problem)
         aggregate_ids = set(aggregate_vehicle_ids)
         budgets: Dict[str, float] = {}
         unmodeled: List[str] = []
+        constraint_count = 0
         for vehicle in problem.vehicles:
             vehicle_id = str(vehicle.vehicle_id)
             if vehicle_id not in fuel_by_vehicle or vehicle_id in aggregate_ids:
@@ -22135,14 +22187,26 @@ class GurobiMILPAdapter:
             if budget is None:
                 unmodeled.append(vehicle_id)
                 continue
+            if policy == DEPOT_TOP_UP:
+                if daily_fuel_by_vehicle_day is None:
+                    raise ValueError("depot_top_up needs day-indexed Stage 1 fuel expressions")
+                usable_tank = float(vehicle.fuel_tank_capacity_l) - float(vehicle.fuel_reserve_l or 0.0)
+                for (row_vehicle_id, day), expression in daily_fuel_by_vehicle_day.items():
+                    if row_vehicle_id == vehicle_id:
+                        model.addConstr(expression <= usable_tank,
+                                        name=f"stage1_ice_daily_fuel_{vehicle_id}_{day}")
+                        constraint_count += 1
+                budgets[vehicle_id] = usable_tank
+                continue
             model.addConstr(fuel_by_vehicle[vehicle_id] <= budget,
                             name=f"stage1_ice_fuel_inventory_{vehicle_id}")
+            constraint_count += 1
             budgets[vehicle_id] = budget
         return {
             "schema_version": "phase3_ice_fuel_inventory_v1",
-            "refueling_policy": "no_refueling",
-            "constraint_count": len(budgets),
-            "usable_initial_fuel_l_by_vehicle": budgets,
+            "refueling_policy": policy,
+            "constraint_count": constraint_count,
+            "usable_initial_fuel_l_by_vehicle" if policy == NO_REFUELING else "usable_tank_per_service_day_l_by_vehicle": budgets,
             "unmodeled_legacy_vehicle_ids": unmodeled,
             "excluded_unavailable_vehicles": [
                 {"vehicle_id": str(vehicle.vehicle_id), "reason": "vehicle.available=false"}
@@ -22150,7 +22214,9 @@ class GurobiMILPAdapter:
                 and str(vehicle.vehicle_type).upper() not in {"BEV", "PHEV", "FCEV"}
             ],
             "aggregate_vehicle_ids_with_separate_capacity_certificate": sorted(aggregate_ids),
-            "semantics": "materialized_initial_liters_minus_reserve;service_connection_startup_return_consumption;no_daily_reset",
+            "semantics": ("materialized_initial_liters_minus_reserve;service_connection_startup_return_consumption;no_daily_reset"
+                          if policy == NO_REFUELING else
+                          "tank_capacity_minus_reserve_per_service_day;connections_dated_by_target_trip;depot_refuel_before_each_day"),
         }
 
     def _fixed_ice_fuel_inventory_audit(
@@ -22160,13 +22226,20 @@ class GurobiMILPAdapter:
         slot_indices: Sequence[int],
     ) -> Dict[str, Any]:
         """Replay the fixed daily-return ICE paths over the actual solve window."""
+        policy = ice_refueling_policy(problem)
         audit: Dict[str, Any] = {
             "schema_version": "fixed_ice_fuel_inventory_v1",
-            "refueling_policy": "no_refueling", "checked": False,
+            "refueling_policy": policy, "checked": False,
             "accepted": True, "vehicles": {}, "violations": [],
         }
         if not slot_indices or not str(getattr(problem.dispatch_context, "daily_return_depot_id", "") or ""):
             audit["reason"] = "not_a_daily_return_window"
+            return audit
+        if policy == DEPOT_TOP_UP:
+            first, stop = min(slot_indices), max(slot_indices) + 1
+            replay = replay_fixed_ice_fuel(problem, plan, first, stop)
+            audit.update(vehicles=replay["vehicles"], violations=replay["violations"], checked=True,
+                         accepted=not replay["violations"], start_slot_index=first, stop_slot_index=stop)
             return audit
         vehicles = {
             str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
@@ -22304,6 +22377,11 @@ class GurobiMILPAdapter:
         }
         assigned_paths = stage1_plan.vehicle_paths()
         assigned_bev_ids = sorted(set(assigned_paths).intersection(bev_vehicle_ids))
+        if (ice_refueling_policy(problem) == DEPOT_TOP_UP and not is_remaining_day_reoptimization
+                and not stage1_plan.refuel_slots):
+            # Day-ahead: derive the refueling decisions of the fixed paths once.
+            # Rolling windows restore them from the day-ahead result instead.
+            stage1_plan = replace(stage1_plan, refuel_slots=depot_top_up_refuel_slots(problem, stage1_plan))
         fuel_audit = self._fixed_ice_fuel_inventory_audit(problem, stage1_plan, slot_indices)
         stage1_plan = replace(stage1_plan, metadata={
             **dict(stage1_plan.metadata or {}), "stage2_ice_fuel_inventory_audit": fuel_audit,
@@ -22316,7 +22394,9 @@ class GurobiMILPAdapter:
                 "stage1_mip_gap_ratio": stage1_gap, "stage1_runtime_seconds": stage1_runtime_sec,
                 "stage2_solver_status": "fixed_ice_fuel_inventory_infeasible",
                 "stage2_has_feasible_incumbent": False, "stage2_feasible": False,
-                "stage2_reason": "fixed_ice_paths_exceed_materialized_fuel_inventory_without_refueling",
+                "stage2_reason": ("fixed_ice_paths_exceed_materialized_fuel_inventory_without_refueling"
+                                  if ice_refueling_policy(problem) == NO_REFUELING else
+                                  "fixed_ice_paths_leave_the_fuel_range_with_depot_refueling"),
                 "stage2_runtime_seconds": time.perf_counter() - started,
                 "research_kpi_eligible": False, "postsolve_repair_allowed": False,
             }
