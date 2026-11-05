@@ -1,3 +1,30 @@
+## 2026-11-05 rc21 の全組み合わせ（太陽光4段階×3季節×90/400/900 kW、DIAGNOSTIC）
+
+本人の指示「使える台は全部使って。太陽光数パターンに季節と受電上限で爆速に」。
+- **組み合わせ**：本人の選択で、太陽光1,000・500・250・0 kW × 冬春夏 × 90・400・900 kW の36件。
+  - 900 kW 冬の4件はすでに計算中なので、新しいのは32件。
+  - 本人の指示で、太陽光0 kW は最後に回す。
+  - 90 kW と 400 kW のシナリオは、`make_refuel_scenarios.py` に親と名前の頭を引数で渡せるようにして作った（`refuel_scenarios_090.json`、`_400.json`）。燃料バスの初期の軽油は 900 kW と同じ値。
+  - 指示ファイルは `operation.rc21_<key>_<週>.json`。出発点の割当・時間の制限は rc20 の同じ上限・同じ週と同じ。
+- **Prepare**：`prepare_ahead.py` を3本並行で流した。優先順は `rc21_prepare_order.txt`。
+- **台**：a709・pslab-mouse を計算管理に加えた（`workers.stage-input.v23.json` → `workers.deployed.v23.json`、7台を照合して VERIFIED）。
+  - `global_gurobi_slots` を7にした（rc20 と同じ）。
+  - 8891 を起動し直したので、計算中の3件は LOST になった。各台での計算は続いていて、`lost_collector.ps1` が回収する。
+- **自動投入**：`rc21_feeder.py`（rc20 版の名前の置き換え）。
+- **台の固定**：`pin_rc21_batches.py` で、32件すべての固定先を先に決めた。
+  - 決め方：目安の時間（90 kW 8時間・400 kW 6時間・900 kW 5時間）×台の係数で、優先順に、一番早く空く枠へ入れる。
+  - 係数：a709 1.6、mouse 1.0。
+- **5b6f6bp**：本人の指示「再起動はまずい。いらないタスクを消して」。
+  - M365Copilot（配下の WebView2 ごと）・SearchApp・PhoneExperienceHost・SystemSettings を止めた。SearchApp はすぐ自動で立ち上がり直した。
+  - Windows のサービスは止めていない。一番大きい svchost（4.0 GB）は `wuauserv`。
+  - commit の余りは17.53→18.38 GB で、必要な18 GB を上回った。
+  - まだ batch になっていない24件の固定先を、5b6f6bp を含めて割り振り直した（5b6f6bp に4件）。
+- **計算結果の D への退避**：本人の指示「計算結果を適宜Dドライブに退避」。
+  - `archive_worker_jobs.py` を WMI で切り離して起動した。30分ごとに動き、ログは `archive_worker_jobs.log`。
+  - 計算管理で終わっている（COMPLETED は回収済み、CANCELLED、FAILED）ジョブのフォルダを、同じ台の `D:\mc-worker-archive\jobs` へ移す。
+  - 対象は 3pru7qp・5b6f6bp・6ae0mir の D。
+  - matlab と mouse は2台目のドライブがなく、C の空きも十分（347・827 GB）。a709 の G は SSH から書けなかった。
+
 ## 2026-11-05 rc21（`bdbc0f4b`）：燃料バスを車庫で給油、太陽光4段階（DIAGNOSTIC）
 
 本人の指示「rc21作って太陽光4段階回して。従来と違うなら進捗報告資料とポスターに反映」。
