@@ -583,7 +583,7 @@ const RC23 = {
   "90/2025-01-06": { base: null, hint: [1395, 644], hintbf: [1442, 593] },
   "200/2025-01-06": { base: [532, 609], hint: [503, 578], hintbf: [542, 450] },
   "90/2025-04-07": { base: null, hint: [133, 198], hintbf: [308, 280] },
-  "90/2025-07-07": { base: null, hint: [285, 267], hintbf: null } };
+  "90/2025-07-07": { base: null, hint: [285, 267], hintbf: [258, 237] } };
 const ovCell = (v) => (v ? `${fmt(v[0])} kWh／${fmt(v[1])} kW` : { text: "計算中", options: { color: GREY } });
 s = page(S5, "対策の試算（rc23）：同じ条件での揺れのほうが大きい");
 takeaway(s, "対策の違いによる差は、同じ設定の結果の揺れ（春 133〜308 kWh）に埋もれ、効いたとは言えない");
