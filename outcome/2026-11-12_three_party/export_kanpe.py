@@ -6,7 +6,11 @@ from pathlib import Path
 
 here = Path(__file__).parent
 z = zipfile.ZipFile(here / "three_party_20261112.pptx")
-slides = sorted((n for n in z.namelist() if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)), key=lambda n: int(re.search(r"(\d+)", n).group(1)))
+# Presentation order (build_deck.js reorders <p:sldIdLst>), not file-name order.
+_pres = z.read("ppt/presentation.xml").decode("utf-8")
+_rels = z.read("ppt/_rels/presentation.xml.rels").decode("utf-8")
+_target = {m[0]: m[1] for m in re.findall(r'Id="([^"]+)"[^>]*Target="(slides/slide\d+\.xml)"', _rels)}
+slides = ["ppt/" + _target[rid] for rid in re.findall(r'<p:sldId [^>]*r:id="([^"]+)"', _pres)]
 lines = ["# 三者ミーティング（2026年11月12日）カンペ", "", "スライドのノートと同じ内容。発表時間の目安は1ページ約40〜60秒。", ""]
 for i, name in enumerate(slides, 1):
     xml = z.read(name).decode("utf-8")
