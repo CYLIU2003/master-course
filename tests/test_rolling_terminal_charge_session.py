@@ -159,3 +159,33 @@ def test_reference_session_metadata_requires_both_sides_and_restores_at_evaluati
         problem, plan, current_min=24 * 60, lookahead_hours=24
     )
     assert "rolling_window_terminal_reference" not in evaluation_end.metadata
+
+
+def test_boundary_continuation_does_not_force_a_full_battery_to_charge() -> None:
+    """rc22 summer step 113: measured PV filled the bus before the reference session ended."""
+
+    gp = pytest.importorskip("gurobipy")
+    try:
+        model = gp.Model("full_battery_at_continued_boundary")
+    except gp.GurobiError as exc:  # pragma: no cover - license-dependent CI
+        pytest.skip(f"Gurobi model creation unavailable: {exc}")
+    model.Params.OutputFlag = 0
+    charge_on = model.addVar(vtype=gp.GRB.BINARY, name="charge_on")
+    charge_power = model.addVar(lb=0.0, ub=90.0, name="charge_power")
+    soc = model.addVar(lb=0.0, ub=282.6, name="soc")
+    model.addConstr(charge_power <= 90.0 * charge_on)
+    model.addConstr(soc == 282.6)
+    model.addConstr(soc + 0.25 * 0.95 * charge_power <= 282.6, name="soc_upper_terminal")
+    GurobiMILPAdapter()._add_piecewise_charge_power_constraints(
+        model=model, gp=gp, GRB=gp.GRB,
+        problem=_piecewise_boundary_problem(minimum_charge_session_minutes=30),
+        vehicle_id="ev-1", slot_indices=(547,),
+        soc_var={("ev-1", 547): soc}, charge_power_var={("ev-1", 547): charge_power},
+        charge_on_var={("ev-1", 547): charge_on}, capacity_kwh=314.0, charge_max_kw=90.0,
+        timestep_h=0.25, session_start_var=None, name_prefix="rolling_terminal",
+        terminal_session_continuation_slots=1,
+    )
+    model.optimize()
+    assert model.Status == gp.GRB.OPTIMAL
+    assert charge_on.X == pytest.approx(0.0) and charge_power.X == pytest.approx(0.0)
+    model.dispose()

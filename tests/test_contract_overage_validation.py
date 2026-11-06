@@ -240,3 +240,41 @@ def test_negative_sub_micro_kwh_is_not_accepted_as_accounting_roundoff(flow_name
 
     assert report.feasible is False
     assert report.metrics["contract_overage_accounting_violation_count"] == 1
+
+
+def test_solver_overage_slack_is_reported_as_the_flow_definition() -> None:
+    """rc22 l200base step 24: an incumbent left 2.5e-5 kWh slack on the overage variable."""
+
+    from src.optimization.milp.solver_adapter import _definitional_contract_overage_kwh
+
+    problem = _problem(depots=(_depot(import_limit_kw=200.0),))
+    grid_to_bus = {"depot-a": {94: 52.500025, 95: 40.0}}
+    solver = {"depot-a": {94: 2.50005, 95: 0.0}}
+    stale = _report(problem, _plan(grid_to_bus=grid_to_bus, reported_overage=solver))
+    assert stale.metrics["contract_overage_accounting_violation_count"] == 1
+
+    overage, audit = _definitional_contract_overage_kwh(
+        problem=problem,
+        grid_to_bus_kwh_by_depot_slot=grid_to_bus,
+        grid_to_bess_kwh_by_depot_slot={},
+        solver_overage_kwh_by_depot_slot=solver,
+    )
+    assert overage == {"depot-a": {94: pytest.approx(2.500025)}}
+    assert audit["max_solver_slack_kwh"] == pytest.approx(2.5e-5)
+    assert audit["solver_variable_total_kwh"] - audit["reported_total_kwh"] == pytest.approx(2.5e-5)
+    assert audit["max_solver_shortfall_kwh"] == 0.0
+    fixed = _report(problem, _plan(grid_to_bus=grid_to_bus, reported_overage=overage))
+    assert fixed.metrics["contract_overage_accounting_violation_count"] == 0
+
+
+def test_definitional_overage_counts_grid_to_bess_and_ignores_an_unbounded_depot() -> None:
+    from src.optimization.milp.solver_adapter import _definitional_contract_overage_kwh
+
+    problem = _problem(depots=(_depot("a", 100.0), _depot("b", 0.0)))
+    overage, _ = _definitional_contract_overage_kwh(
+        problem=problem,
+        grid_to_bus_kwh_by_depot_slot={"a": {1: 20.0}, "b": {1: 999.0}},
+        grid_to_bess_kwh_by_depot_slot={"a": {1: 10.0}},
+        solver_overage_kwh_by_depot_slot={"a": {1: 5.0}},
+    )
+    assert overage == {"a": {1: pytest.approx(5.0)}}

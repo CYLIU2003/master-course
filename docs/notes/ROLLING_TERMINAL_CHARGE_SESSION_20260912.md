@@ -99,3 +99,30 @@ failures in 99.12 seconds, recorded in
 The failure-result branch also records the boundary audit after review.
 Fresh clean-commit Prepare and all four 168-hour chains remain
 required. All seasonal outputs are DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS.
+
+## 2026-11-06 amendment: the boundary no longer forces the terminal slot on
+
+Found in rc22 (`c5654e1d`, 90 kW summer, step 113, both the hint and the
+hint + bound_first variants, same vehicle `bf789db6`): the window starts with
+the bus at its SOC maximum 282.6 kWh and no driving until the boundary, while
+the day-ahead reference still charges across the boundary. `on == 1` at the
+terminal slot implies `charge_power >= 1e-4` (active-power lower bound), which
+the terminal SOC upper bound cannot absorb. Gurobi proved the step infeasible
+(IIS: 194 constraints, all of that vehicle), and the chain stopped.
+
+Change (`_add_piecewise_charge_power_constraints`): the `on_boundary_continuation`
+equality is removed. The other parts of the contract stay:
+
+- `end == 0` at the terminal slot when the reference continues, so an active
+  terminal slot pays no teardown inside the window;
+- a session that starts in the tail shorter than the minimum duration must stay
+  on to the boundary (minimum-session continuity over the remaining slots);
+- a session that ends before the boundary pays teardown through the interior
+  end constraints.
+
+Effect: the feasible set only grows by "stop charging before the boundary and
+pay the teardown"; no physical or accounting constraint is relaxed. Results of
+rolling chains with a continued boundary session can differ from earlier SHAs;
+they are not comparable to rc22 and older outputs without a fresh run.
+Regression: `test_boundary_continuation_does_not_force_a_full_battery_to_charge`
+(fails on `c5654e1d`, passes after the change).

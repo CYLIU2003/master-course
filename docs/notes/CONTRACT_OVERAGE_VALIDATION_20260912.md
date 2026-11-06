@@ -33,3 +33,29 @@
 修正後の秋の保持状態159〜167時は全9回の求解・履歴推定PV実行を通過した。証拠は `output/rolling_autumn_contract_policy_final_diagnostic`。各回の契約・計上違反は0件で、初回の超過量17.326092737359176 kWhと計上17.326092737359165 kWhは一致した。最終BESSは1199.9999999999998 kWhで、既存物理許容差内の下限1200 kWhを保持する。新しいclean SHAで全四季を再Prepare・再求解する。保持入力の再現は診断であり、新規計算の代替証拠にはしない。最終週間費用は accepted rolling chain の `executed_day_accounting.json` のみを採用する。
 
 新clean SHAによる四季完走は本記録作成時点で未完了。既存PowerPoint証拠2件、宣言10%のギャップ未達、正式fleet-contractの未宣言、2026時刻表・2025評価日、2024年だけの学習という制限は残る。PVは履歴推定PVであり実測発電量と称さない。結果は引き続き **DIAGNOSTIC / NOT USED FOR RESEARCH CONCLUSIONS**、研究リリースは **BLOCKED**。
+
+## 2026-11-06 amendment: reported overage is the flow definition
+
+Found in rc22 (`c5654e1d`, 200 kW winter base, rolling step 24, slot 94):
+grid import 52.500025 kWh against 50 kWh allowed, i.e. excess 2.500025 kWh,
+but the plan reported 2.50005 kWh. The checker requires
+`|reported - max(grid_to_bus + grid_to_bess - limit * dt, 0)| <= 1e-6 kWh`, so
+the step failed accounting and the chain stopped.
+
+Cause: the MILP uses `grid_import <= limit * dt + over`, `over >= 0`. Only the
+positive penalty pushes `over` down, so a time-limit or gap-limited incumbent
+may leave slack (here 2.5e-5 kWh). The auxiliary variable is not physical
+evidence, the same situation as the BESS terminal-deviation variable.
+
+Change (`solver_adapter._definitional_contract_overage_kwh`, used by the Stage 2
+and integrated MILP extractions): the plan reports
+`max(grid_to_bus + grid_to_bess - limit * dt, 0)` from the solved flows; the
+schedule is unchanged, so this is not a repair. Stage 2 metadata
+`stage2_contract_overage_reporting` keeps the solver total, the reported total,
+the maximum slack and shortfall. The Stage 2 objective used for accounting
+reconciliation subtracts `penalty * (solver total - reported total)`, the same
+way it already subtracts the next-morning shortfall penalty.
+
+Effect: overage kWh and overage cost can only decrease, by the slack of the
+incumbent (observed 2.5e-5 kWh, i.e. about 0.01 JPY). Regressions in
+`tests/test_contract_overage_validation.py`.

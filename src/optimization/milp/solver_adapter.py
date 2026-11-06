@@ -1292,6 +1292,79 @@ def _actual_bess_terminal_soc_deviation_by_depot(
     return deviations
 
 
+def _definitional_contract_overage_kwh(
+    *,
+    problem: Any,
+    grid_to_bus_kwh_by_depot_slot: Mapping[str, Mapping[int, float]],
+    grid_to_bess_kwh_by_depot_slot: Mapping[str, Mapping[int, float]],
+    solver_overage_kwh_by_depot_slot: Mapping[str, Mapping[int, float]],
+) -> Tuple[Dict[str, Dict[int, float]], Dict[str, Any]]:
+    """Return the contract overage defined by the solved grid flows.
+
+    The MILP models overage with ``grid_import <= limit * dt + over`` and
+    ``over >= 0``.  Only a positive penalty pushes ``over`` down, so a
+    time-limit or gap-limited incumbent may leave ``over`` above the actual
+    excess (observed: 2.5e-5 kWh at 200 kW).  Like the BESS terminal
+    deviation above, the auxiliary variable is not physical evidence: the
+    reported overage is ``max(grid_to_bus + grid_to_bess - limit * dt, 0)``,
+    the same definition the feasibility checker applies.  The schedule is not
+    changed; the solver value and its slack are kept in the audit.
+    """
+
+    timestep_h = max(
+        float(getattr(problem.scenario, "timestep_min", 0) or 0.0), 1.0
+    ) / 60.0
+    limit_by_depot = {
+        str(getattr(depot, "depot_id", "") or ""): float(
+            getattr(depot, "import_limit_kw", 0.0) or 0.0
+        )
+        for depot in list(getattr(problem, "depots", ()) or ())
+    }
+    keys = {
+        (str(depot_id), int(slot_idx))
+        for mapping in (
+            grid_to_bus_kwh_by_depot_slot,
+            grid_to_bess_kwh_by_depot_slot,
+            solver_overage_kwh_by_depot_slot,
+        )
+        for depot_id, slots in mapping.items()
+        for slot_idx in slots
+    }
+    overage: Dict[str, Dict[int, float]] = {}
+    max_slack_kwh = 0.0
+    max_shortfall_kwh = 0.0
+    solver_total_kwh = 0.0
+    for depot_id, slot_idx in sorted(keys):
+        limit_kw = max(limit_by_depot.get(depot_id, 0.0), 0.0)
+        imported_kwh = float(
+            (grid_to_bus_kwh_by_depot_slot.get(depot_id) or {}).get(slot_idx, 0.0)
+        ) + float(
+            (grid_to_bess_kwh_by_depot_slot.get(depot_id) or {}).get(slot_idx, 0.0)
+        )
+        # A nonpositive import limit denotes no finite cap (feasibility.py).
+        excess_kwh = (
+            max(imported_kwh - limit_kw * timestep_h, 0.0) if limit_kw > 0.0 else 0.0
+        )
+        solver_kwh = float(
+            (solver_overage_kwh_by_depot_slot.get(depot_id) or {}).get(slot_idx, 0.0)
+        )
+        solver_total_kwh += solver_kwh
+        max_slack_kwh = max(max_slack_kwh, solver_kwh - excess_kwh)
+        max_shortfall_kwh = max(max_shortfall_kwh, excess_kwh - solver_kwh)
+        if excess_kwh > 1.0e-9:
+            overage.setdefault(depot_id, {})[slot_idx] = excess_kwh
+    audit = {
+        "source": "definition_from_solved_grid_flows",
+        "solver_variable_total_kwh": solver_total_kwh,
+        "reported_total_kwh": sum(
+            value for slots in overage.values() for value in slots.values()
+        ),
+        "max_solver_slack_kwh": max_slack_kwh,
+        "max_solver_shortfall_kwh": max_shortfall_kwh,
+    }
+    return overage, audit
+
+
 def classify_bev_frontier_status(
     solver_status: str,
     solution_count: int,
@@ -12393,8 +12466,18 @@ class GurobiMILPAdapter:
             bess_soc_start_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = soc_start
             bess_soc_end_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = soc_end
             bess_soc_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = soc_end
-        for (depot_id, slot_idx), var in contract_over_limit_var.items():
-            contract_over_limit_kwh_by_depot_slot.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        if contract_over_limit_var:
+            # Report the overage defined by the solved flows, not the
+            # auxiliary variable (see _definitional_contract_overage_kwh).
+            solver_over_limit: Dict[str, Dict[int, float]] = {}
+            for (depot_id, slot_idx), var in contract_over_limit_var.items():
+                solver_over_limit.setdefault(depot_id, {})[slot_idx] = max(_var_val(var), 0.0)
+            contract_over_limit_kwh_by_depot_slot, _ = _definitional_contract_overage_kwh(
+                problem=problem,
+                grid_to_bus_kwh_by_depot_slot=grid_to_bus_kwh_by_depot_slot,
+                grid_to_bess_kwh_by_depot_slot=grid_to_bess_kwh_by_depot_slot,
+                solver_overage_kwh_by_depot_slot=solver_over_limit,
+            )
         for (vehicle_id, slot_idx), var in s_var.items():
             vehicle_soc_kwh_by_vehicle_slot.setdefault(vehicle_id, {})[slot_idx] = max(_var_val(var), 0.0)
 
@@ -23876,12 +23959,22 @@ class GurobiMILPAdapter:
             value = max(_var_val(var), 0.0)
             if value > 1.0e-9:
                 pv_curtail.setdefault(depot_id, {})[slot_idx] = value
+        # Unfiltered solver values: the objective prices every one of them.
+        solver_contract_over_limit: Dict[str, Dict[int, float]] = {}
         for (depot_id, slot_idx), var in contract_over_limit_var.items():
-            value = max(_var_val(var), 0.0)
-            if value > 1.0e-9:
-                contract_over_limit.setdefault(depot_id, {})[
-                    slot_idx
-                ] = value
+            solver_contract_over_limit.setdefault(depot_id, {})[
+                slot_idx
+            ] = max(_var_val(var), 0.0)
+        contract_overage_reporting: Dict[str, Any] = {}
+        if enable_contract_overage_penalty:
+            contract_over_limit, contract_overage_reporting = (
+                _definitional_contract_overage_kwh(
+                    problem=problem,
+                    grid_to_bus_kwh_by_depot_slot=grid_to_bus,
+                    grid_to_bess_kwh_by_depot_slot=grid_to_bess,
+                    solver_overage_kwh_by_depot_slot=solver_contract_over_limit,
+                )
+            )
         for (depot_id, slot_idx), var in bess_soc_var.items():
             asset = depot_energy_assets.get(depot_id)
             eta_ch = max(float(getattr(asset, "bess_charge_efficiency", 0.95) or 0.95), 1.0e-6)
@@ -24060,6 +24153,19 @@ class GurobiMILPAdapter:
         next_morning_shortfall_kwh = sum(float(var.X) for var in next_morning_shortfall_var.values())
         next_morning_shortfall_penalty_jpy = next_morning_shortfall_penalty * next_morning_shortfall_kwh
         stage2_energy_objective = float(getattr(stage2, "ObjVal", 0.0) or 0.0) - next_morning_shortfall_penalty_jpy
+        # The objective priced the overage variable; the plan reports the
+        # overage defined by the flows. Remove the priced slack so the Stage 2
+        # objective stays reconcilable with the canonical accounting.
+        contract_overage_slack_penalty_jpy = 0.0
+        if contract_overage_reporting and component_flags.get("contract_overage_penalty", True):
+            contract_overage_slack_penalty_jpy = contract_overage_penalty * (
+                float(contract_overage_reporting["solver_variable_total_kwh"])
+                - float(contract_overage_reporting["reported_total_kwh"])
+            )
+            contract_overage_reporting["slack_penalty_removed_from_stage2_objective_jpy"] = (
+                contract_overage_slack_penalty_jpy
+            )
+        stage2_energy_objective -= contract_overage_slack_penalty_jpy
         metadata = {
             **dict(stage1_plan.metadata or {}),
             "status": solver_status,
@@ -24111,6 +24217,7 @@ class GurobiMILPAdapter:
                 for values in contract_over_limit.values()
                 for value in values.values()
             ),
+            "stage2_contract_overage_reporting": contract_overage_reporting,
             "stage1_time_limit_sec_effective": (
                 0
                 if stage1_status == "phase1_fixed_assignment"
@@ -32166,16 +32273,15 @@ class GurobiMILPAdapter:
                 )
             if pos == len(slot_indices) - 1:
                 # A fixed forecast reference can continue beyond an artificial
-                # lookahead boundary. Match its active state without charging
-                # teardown time before that session actually ends.
-                if terminal_session_continuation_slots > 0:
-                    model.addConstr(
-                        on_var == 1,
-                        name=(
-                            f"{name_prefix}_on_boundary_continuation__"
-                            f"{vehicle_id}__slot_{slot_idx}"
-                        ),
-                    )
+                # lookahead boundary. A session still active at that boundary
+                # then pays no teardown time inside the window. The reference
+                # does not force the terminal slot on: measured PV can fill a
+                # battery earlier than forecast, and a full battery cannot
+                # take the positive charge an active slot requires (rc22,
+                # 2026-11-06). A session that ends earlier pays its teardown
+                # through the interior end constraints; one that starts in the
+                # short tail still has to stay on to the boundary through the
+                # minimum-session continuity constraint below.
                 model.addConstr(
                     end == (0 if terminal_session_continuation_slots > 0 else on_var),
                     name=(
