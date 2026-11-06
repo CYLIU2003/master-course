@@ -449,6 +449,12 @@ def test_ice_inventory_includes_daily_returns_and_both_startups():
     depleted = replace(problem,vehicles=(replace(vehicle,initial_fuel_l=20),))
     assert any("[FUEL]" in error for error in FeasibilityChecker()._evaluate_soc(depleted,plan))
     assert validate_physical_event_schedule(problem=depleted,serialized_result=ResultSerializer.serialize_plan(plan))["metrics"]["fuel_lower_violation_count"] > 0
+    # A full tank carried by the rolling chain arrives with float noise (rc21/rc23 ICE-start
+    # chains stopped on 160.00000000000003 of 160 L). That is full, not over-filled.
+    full = replace(problem,vehicles=(replace(vehicle,initial_fuel_l=40.00000000000003),))
+    assert not FeasibilityChecker()._evaluate_soc(full,plan)
+    overfilled = replace(problem,vehicles=(replace(vehicle,initial_fuel_l=40.001),))
+    assert any("invalid initial fuel inventory" in error for error in FeasibilityChecker()._evaluate_soc(overfilled,plan))
 
 
 def test_two_day_native_charging_solve_matches_the_physical_replay(admitted_gurobi_session):

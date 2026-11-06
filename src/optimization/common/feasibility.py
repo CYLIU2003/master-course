@@ -799,7 +799,10 @@ class FeasibilityChecker:
                     if refuel.slot_index not in allowed:
                         errors.append(f"[FUEL] vehicle={vid} refuels away from the depot")
                     fuel_events.append((start_min+(refuel.slot_index+1)*step, float(refuel.refuel_liters)))
-                if capacity <= 0 or not reserve <= fuel <= capacity:
+                # Same 1e-6 L tolerance as the trajectory check below, ice_refueling.py and the
+                # physical validator: a tank refilled to full is carried into the next rolling step
+                # as e.g. 160.00000000000003 L, which is full, not an over-filled tank.
+                if capacity <= 0 or not reserve - 1e-6 <= fuel <= capacity + 1e-6:
                     errors.append(f"[FUEL] vehicle={vid} invalid initial fuel inventory")
                 for time_min, change in sorted(fuel_events):
                     fuel += change
