@@ -150,6 +150,7 @@ class Scheduler:
         self.stop_event = threading.Event()
         self.thread = None
         self.recovering: set[str] = set()
+        self.following: set[str] = set()  # re-attached attempts with a live status poller
         self.reconcile_locks: dict[str, threading.Lock] = {}
         self.store.recover()
         for row in self.store.rows():
@@ -500,17 +501,49 @@ class Scheduler:
             self.mirror(job_id, "running", "別PCで実行中")
             response = self.invoke_worker(worker, {"operation": "submit", "id": job_id, "manifest": row["manifest"], "bundle": bundle}, directory, timeout=30)
             self.store.record_progress(job_id, response)
-            while response.get("state") == "RUNNING":
-                if self.stop_event.wait(3):
-                    return  # The child continues; restart recovery retains its reservation as LOST.
-                response = self.invoke_worker(worker, {"operation": "status", "id": job_id}, directory / "status", timeout=20)
-                self.store.record_progress(job_id, response)
-            response = self.invoke_worker(worker, {"operation": "collect", "id": job_id, "stream_artifacts": True}, directory / "collect")
-            self.finish(row, response)
+            self._follow(row, worker, directory, response)
         except Exception as exc:
-            if self.store.transition(job_id, "LOST", expected=RESERVED, error=str(exc)):
-                self.licenses.mark_uncertain(job_id)
-                self.mirror(job_id, "running", "通信または結果検証に失敗。分散計算画面で照合してください。")
+            self._mark_lost(job_id, exc)
+
+    # A read-only status poll may fail transiently (SSH timeout, a busy worker). The attempt is
+    # only marked LOST after this many consecutive failures; the worker child is never touched.
+    STATUS_POLL_RETRIES = 3
+
+    def _follow(self, row: dict, worker: Worker, directory: Path, response: dict):
+        """Poll a launched attempt until the worker confirms a terminal state, then collect it."""
+        job_id = row["id"]
+        failures = 0
+        while response.get("state") == "RUNNING":
+            if self.stop_event.wait(3 if failures == 0 else min(60, 15 * failures)):
+                return  # The child continues; restart recovery retains its reservation as LOST.
+            try:
+                response = self.invoke_worker(worker, {"operation": "status", "id": job_id}, directory / "status", timeout=20)
+            except (SSHTransportError, OSError, subprocess.TimeoutExpired) as exc:
+                failures += 1
+                if failures > self.STATUS_POLL_RETRIES:
+                    raise
+                log.warning("Status poll %s failed (%d/%d): %s", job_id, failures, self.STATUS_POLL_RETRIES, exc)
+                response = {"id": job_id, "state": "RUNNING"}
+                continue
+            failures = 0
+            self.store.record_progress(job_id, response)
+        response = self.invoke_worker(worker, {"operation": "collect", "id": job_id, "stream_artifacts": True}, directory / "collect")
+        self.finish(row, response)
+
+    def _mark_lost(self, job_id: str, exc: Exception):
+        if self.store.transition(job_id, "LOST", expected=RESERVED, error=str(exc)):
+            self.licenses.mark_uncertain(job_id)
+            self.mirror(job_id, "running", "通信または結果検証に失敗。分散計算画面で照合してください。")
+
+    def _follow_reattached(self, job_id: str):
+        try:
+            row = self.store.get(job_id)
+            self._follow(row, self.worker(row["worker_id"]), self.store.root / "jobs" / job_id, {"id": job_id, "state": "RUNNING"})
+        except Exception as exc:
+            self._mark_lost(job_id, exc)
+        finally:
+            with self.lock:
+                self.following.discard(job_id)
 
     def finish(self, row: dict, response: dict):
         if response.get("state") not in {"COMPLETED", "FAILED", "BLOCKED", "CANCELLED"}:
@@ -590,8 +623,20 @@ class Scheduler:
         if response.get("state") == "RUNNING":
             if response.get("id") != job_id or response.get("manifest_sha256") != digest(canonical(row["manifest"])):
                 raise ValueError("Running receipt belongs to a different attempt")
-            self.store.defer_recovery(job_id, time.time())
-            return self.store.get(job_id)  # LOST means reconciling, not failed; poll without releasing its slot.
+            # The worker confirmed this exact attempt is still running: re-attach instead of leaving it
+            # LOST until it ends. The reservation and license were never released, so nothing is
+            # re-admitted and nothing is resubmitted; a later failure returns it to LOST.
+            with self.lock:
+                if job_id in self.following or not self.store.transition(
+                        job_id, "RUNNING", expected={"LOST"}, error="Re-attached after the worker confirmed the running attempt"):
+                    self.store.defer_recovery(job_id, time.time())
+                    return self.store.get(job_id)
+                self.following.add(job_id)
+            self.licenses.mark_active(job_id)
+            self.store.record_progress(job_id, response)
+            self.mirror(job_id, "running", "別PCで実行中（再接続）")
+            threading.Thread(target=self._follow_reattached, args=(job_id,), daemon=True).start()
+            return self.store.get(job_id)
         self.finish(row, response)
         return self.store.get(job_id)
 

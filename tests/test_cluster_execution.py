@@ -715,6 +715,80 @@ def test_reconciliation_retrieves_terminal_result_without_resubmitting(scheduler
     assert called == ["fence-unstarted", "collect"]
 
 
+def _lost_running_attempt(scheduler, tmp_path):
+    row = scheduler.enqueue("diagnostic", {}, "local")
+    scheduler.store.transition(row["id"], "RUNNING", expected={"QUEUED"}, worker_id="local")
+    scheduler.store.recover()  # a controller restart
+    assert scheduler.store.get(row["id"])["state"] == "LOST"
+    manifest = row["manifest"]
+    directory = tmp_path / "completed-worker"
+    directory.mkdir(parents=True)
+    final = {"id": row["id"], "state": "COMPLETED", "manifest_sha256": digest(canonical(manifest)), "result": {}}
+    (directory / "manifest.json").write_bytes(canonical(manifest))
+    (directory / "state.json").write_bytes(canonical(final))
+    return row, manifest, directory, final
+
+
+def _wait_for_state(scheduler, job_id, states, seconds=20):
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        if scheduler.store.get(job_id)["state"] in states:
+            break
+        time.sleep(0.05)
+    return scheduler.store.get(job_id)["state"]
+
+
+def test_reconciliation_reattaches_a_confirmed_running_attempt_without_resubmitting(scheduler, monkeypatch, tmp_path):
+    row, manifest, directory, final = _lost_running_attempt(scheduler, tmp_path)
+    receipt = {"id": row["id"], "state": "RUNNING", "manifest_sha256": digest(canonical(manifest))}
+    called, polls = [], []
+    def fake_invoke(worker, request, target, **kwargs):
+        called.append(request["operation"])
+        if request["operation"] == "fence-unstarted":
+            return {"id": row["id"], "state": "EXISTS", "manifest_sha256": digest(canonical(manifest))}
+        if request["operation"] == "status":
+            polls.append(1)
+            return receipt if len(polls) < 2 else final
+        if request["operation"] == "collect" and len(polls) < 2:
+            return receipt
+        return archive_result(directory, final)
+    monkeypatch.setattr(module, "invoke", fake_invoke)
+    monkeypatch.setattr(scheduler.stop_event, "wait", lambda seconds: False)
+    assert scheduler.reconcile(row["id"])["state"] == "RUNNING"
+    assert _wait_for_state(scheduler, row["id"], {"COMPLETED", "LOST"}) == "COMPLETED"
+    assert "submit" not in called
+    assert called[:2] == ["fence-unstarted", "collect"] and called.count("status") == 2
+    with pytest.raises(ValueError, match="Only LOST"):
+        scheduler.reconcile(row["id"])
+
+
+def test_transient_status_failures_do_not_mark_a_running_attempt_lost(scheduler, monkeypatch, tmp_path):
+    row, manifest, directory, final = _lost_running_attempt(scheduler, tmp_path)
+    scheduler.store.transition(row["id"], "RUNNING", expected={"LOST"})
+    running = {"id": row["id"], "state": "RUNNING"}
+    outcomes = [SSHTransportError("status", "SSH_TIMEOUT", 2)] * Scheduler.STATUS_POLL_RETRIES + [final]
+    def fake_invoke(worker, request, target, **kwargs):
+        if request["operation"] == "status":
+            item = outcomes.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+        return archive_result(directory, final)
+    monkeypatch.setattr(module, "invoke", fake_invoke)
+    monkeypatch.setattr(scheduler.stop_event, "wait", lambda seconds: False)
+    scheduler._follow(scheduler.store.get(row["id"]), scheduler.worker("local"), tmp_path / "poll", running)
+    assert scheduler.store.get(row["id"])["state"] == "COMPLETED"
+
+    other, *_ = _lost_running_attempt(scheduler, tmp_path / "second")
+    scheduler.store.transition(other["id"], "RUNNING", expected={"LOST"})
+    def always_down(worker, request, target, **kwargs):
+        raise SSHTransportError("status", "SSH_TIMEOUT", 2)
+    monkeypatch.setattr(module, "invoke", always_down)
+    with pytest.raises(SSHTransportError):
+        scheduler._follow(scheduler.store.get(other["id"]), scheduler.worker("local"), tmp_path / "poll2",
+                          {"id": other["id"], "state": "RUNNING"})
+
+
 def test_api_is_loopback_only_and_queue_cancel_is_atomic(scheduler, monkeypatch):
     from bff.routers import cluster
     monkeypatch.setattr(cluster, "get_scheduler", lambda: scheduler)

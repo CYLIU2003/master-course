@@ -86,6 +86,12 @@ class LicenseBroker:
             db.execute("UPDATE license_reservations SET state='RECONCILING',updated_at=? WHERE id=? AND state='ACTIVE'",
                        (now(), reservation_id))
 
+    def mark_active(self, reservation_id: str):
+        """A worker receipt confirmed the attempt is still running: the grant is held, not uncertain."""
+        with self.store.connect() as db:
+            db.execute("UPDATE license_reservations SET state='ACTIVE',updated_at=? WHERE id=? AND state='RECONCILING'",
+                       (now(), reservation_id))
+
     def snapshot(self) -> list[dict]:
         with self.store.connect() as db:
             # Owner process identity is never exposed to the browser.
