@@ -556,6 +556,12 @@ class OptimizationConfig:
     # horizon continues those sessions, so setup time must not be charged twice.
     rolling_active_charge_session_vehicle_ids: Tuple[str, ...] = ()
     rolling_connected_charger_by_vehicle: Mapping[str, str] = field(default_factory=dict)
+    # Receding-horizon warm start (2026-11-07): the previous rolling step's charging
+    # plan, submitted as a partial binary MIP start for the slots both windows share
+    # (absolute slot index < ``rolling_start_slot_limit``). Never a constraint or an
+    # incumbent: Gurobi alone decides whether it is feasible for the new state.
+    rolling_start_charging_slots: Tuple[Any, ...] = ()
+    rolling_start_slot_limit: Optional[int] = None
     target_gap_to_baseline: Optional[float] = None
     warm_start: bool = True
     acceptance: str = "simulated_annealing"

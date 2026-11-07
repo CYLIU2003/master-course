@@ -51,7 +51,7 @@ from src.optimization.milp.charging_window_support import ChargingWindowSupportE
 from src.optimization.milp.charging_session_relaxation import add_session_time_relaxation
 from src.optimization.milp.charging_mip_start import (
     FIXED_ASSIGNMENT_SOURCE, RECOURSE_HINT_POLICY, RECOURSE_SOURCE, RECOURSE_START_POLICY,
-    apply_charging_mip_start, apply_recourse_hints, recourse_charging_slots,
+    apply_charging_mip_start, apply_recourse_hints, recourse_charging_slots, PREVIOUS_ROLLING_STEP_SOURCE,
 )
 from src.optimization.milp.depot_connection_factors import (
     ArcDomain, SuccessorRow, FactoredConnectionVariables,
@@ -23549,10 +23549,17 @@ class GurobiMILPAdapter:
                     },
                 )
         hint_policy = config.stage2_charging_start_policy == RECOURSE_HINT_POLICY
+        start_policy = "none" if hint_policy else config.stage2_charging_start_policy
+        start_slot_limit = None
+        if is_remaining_day_reoptimization and config.rolling_start_charging_slots:
+            # Receding-horizon warm start: the previous step's plan for the shared slots.
+            start_policy, start_source = "fixed_assignment_binary", PREVIOUS_ROLLING_STEP_SOURCE
+            start_slots, start_slot_limit = tuple(config.rolling_start_charging_slots), config.rolling_start_slot_limit
         charging_start_audit = apply_charging_mip_start(
-            stage2, policy="none" if hint_policy else config.stage2_charging_start_policy,
+            stage2, policy=start_policy,
             warm_start=config.warm_start,
             source=start_source, source_audit=start_source_audit,
+            slot_limit=start_slot_limit,
             charging_slots=start_slots,
             charge_on_vars=charge_on_var,
             charger_vars=physical_charger_assignment_var,

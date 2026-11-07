@@ -14,6 +14,7 @@ CHARGING_START_POLICIES = ("none", "fixed_assignment_binary", "stage1_recourse_b
 RECOURSE_START_POLICY = "stage1_recourse_binary"
 RECOURSE_HINT_POLICY = "stage1_recourse_hints"
 FIXED_ASSIGNMENT_SOURCE = "fixed_assignment.charging_slots"
+PREVIOUS_ROLLING_STEP_SOURCE = "previous_rolling_step.charging_slots"
 RECOURSE_SOURCE = "stage1_time_indexed_energy_recourse.charge_power_kw_by_vehicle_slot"
 
 
@@ -97,6 +98,7 @@ def apply_charging_mip_start(
     active_session_vehicle_ids: Iterable[str],
     source: str = FIXED_ASSIGNMENT_SOURCE,
     source_audit: Mapping[str, Any] | None = None,
+    slot_limit: int | None = None,
 ) -> dict[str, Any]:
     """Submit a partial MIP start to native validation, not an incumbent.
 
@@ -119,7 +121,10 @@ def apply_charging_mip_start(
         return {**audit, "reason": "no_charging_variables"}
     if type(window_start_slot) is not int or window_start_slot < 0:
         raise ValueError("Stage2 charging start requires the actual window start slot")
-    current_slots = {slot for _, slot in charge_on_vars}
+    # ``slot_limit``: only slots the source plan actually covered get values; later
+    # slots (a rolling window reaching past the previous one) are left to Gurobi.
+    covered = (lambda slot: True) if slot_limit is None else (lambda slot: slot < slot_limit)
+    current_slots = {slot for _, slot in charge_on_vars if covered(slot)}
     power: dict[tuple[str, int, str | None], float] = {}
     for charge in charging_slots:
         if charge.slot_index not in current_slots:
@@ -150,12 +155,12 @@ def apply_charging_mip_start(
                and connected_chargers.get(vehicle) != active[(vehicle, first_slot)]}
     variables, values = [], []
     for key, var in charge_on_vars.items():
-        if key not in omitted:
+        if key not in omitted and covered(key[1]):
             variables.append(var)
             values.append(int(key in active))
     charge_on_count = len(variables)
     for (vehicle, charger, slot), var in charger_vars.items():
-        if (vehicle, slot) not in omitted:
+        if (vehicle, slot) not in omitted and covered(slot):
             variables.append(var)
             values.append(int(active.get((vehicle, slot)) == charger))
     if not variables:

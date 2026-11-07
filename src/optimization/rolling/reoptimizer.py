@@ -307,6 +307,8 @@ class RollingReoptimizer:
         execution_minutes: int = 60,
         bess_terminal_policy: str = "scenario",
         lookahead_hours: int | None = None,
+        start_charging_slots: tuple = (),
+        start_slot_limit: int | None = None,
     ):
         """Return a remaining-day charging plan for receding-horizon control.
 
@@ -513,6 +515,8 @@ class RollingReoptimizer:
                 normalized_active_charge_session_vehicle_ids
             ),
             rolling_connected_charger_by_vehicle=dict(connected_charger_by_vehicle or {}),
+            rolling_start_charging_slots=tuple(start_charging_slots or ()),
+            rolling_start_slot_limit=start_slot_limit,
         )
         return self._engine.solve(problem, rolling_config)
 

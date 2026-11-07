@@ -204,3 +204,37 @@ def test_rolling_cli_does_not_offer_the_day_ahead_recourse_policy():
     import scripts.run_hourly_charging_reoptimization as rolling
     import inspect
     assert '"stage1_recourse_binary"' not in inspect.getsource(rolling)
+
+
+def test_previous_step_start_writes_only_slots_the_previous_window_covered():
+    """Receding-horizon warm start (11/07): slots past the previous window are left to Gurobi."""
+    args = inputs()
+    audit = apply_charging_mip_start(**args, slot_limit=101)
+    assert audit["status"] == "SUBMITTED"
+    assert args["charge_on_vars"][("v", 100)].Start == 1
+    assert args["charge_on_vars"][("v", 101)].Start is None
+    assert [args["charger_vars"][("v", c, 101)].Start for c in ("a", "b")] == [None, None]
+    assert audit["submitted_variables"] == 3
+
+
+def test_rolling_entry_passes_the_previous_step_plan_as_start_only():
+    from src.optimization.rolling.reoptimizer import RollingReoptimizer
+    from test_multiday_rolling_contract import _two_day_problem, _fixed_plan
+
+    problem = _two_day_problem()
+    charger = problem.chargers[0].charger_id
+    plan = _fixed_plan(problem)
+    previous = (ChargingSlot("bev-1", 5, charger, charge_kw=10),)
+    rolling = RollingReoptimizer()
+    rolling._engine = SimpleNamespace(solve=lambda problem, config: config)
+    effective = rolling.reoptimize_charging_hour(problem, plan, OptimizationConfig(), 0,
+                                                 start_charging_slots=previous, start_slot_limit=96)
+    assert effective.rolling_start_charging_slots == previous
+    assert effective.rolling_start_slot_limit == 96
+    assert effective.fixed_assignment is plan          # the assignment and its charging stay the day-ahead plan
+    assert effective.stage2_charging_start_policy == "none"
+
+
+def test_rolling_request_defaults_to_the_previous_step_start():
+    request = RollingChainRequest("s", "p", "2025-01-06", "r", "o")
+    assert request.rolling_start == "previous_step"

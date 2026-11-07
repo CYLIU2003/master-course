@@ -1270,6 +1270,10 @@ class RollingChainRequest:
     research_run: bool = True
     stage2_charging_start_policy: str = "none"
     charging_search: str = "feasibility_first"
+    # 2026-11-07: start each rolling step from the previous step's plan ("previous_step")
+    # instead of from nothing ("none"). rc29 90 kW winter stopped twice at step 1 with no
+    # incumbent in 120 s although step 0 had just produced a plan for the same night.
+    rolling_start: str = "previous_step"
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "RollingChainRequest":
@@ -1295,6 +1299,7 @@ class RollingChainRequest:
             pv_actuals_json=getattr(args, 'pv_actuals_json', None),
             stage2_charging_start_policy=getattr(args, "stage2_charging_start_policy", "none"),
             charging_search=getattr(args, "charging_search", "feasibility_first"),
+            rolling_start=getattr(args, "rolling_start", "previous_step"),
             bess_terminal_policy=str(args.bess_terminal_policy),
             bess_terminal_min_kwh=(
                 None if args.bess_terminal_min_kwh is None else float(args.bess_terminal_min_kwh)
@@ -1603,6 +1608,11 @@ def run_rolling_chain(
     day_ahead_charger_hash = _charger_configuration_hash(problem)
     input_audit_sha256 = hashlib.sha256(input_audit_path.read_bytes()).hexdigest()
     chain_failure_reason: Optional[str] = None
+    if request.rolling_start not in ("none", "previous_step"):
+        raise ValueError("Unknown rolling start: " + str(request.rolling_start))
+    previous_charging_slots: tuple = ()
+    previous_window_end_slot: Optional[int] = None
+    step_minutes_per_slot = int(problem.scenario.timestep_min)
     while True:
         current_label = _minute_label(current_min)
         # The paid overnight horizon can end at 05:45 while normal rolling
@@ -1655,7 +1665,16 @@ def run_rolling_chain(
                 execution_minutes=step_execution_minutes,
                 bess_terminal_policy=request.bess_terminal_policy,
                 lookahead_hours=request.lookahead_hours,
+                start_charging_slots=previous_charging_slots if request.rolling_start == "previous_step" else (),
+                start_slot_limit=previous_window_end_slot,
             )
+            if request.rolling_start == "previous_step" and getattr(result, "plan", None) is not None:
+                previous_charging_slots = tuple(result.plan.charging_slots)
+                from src.optimization.common.soc_helpers import horizon_start_min as _horizon_start
+                window_start_slot = (current_min - _horizon_start(problem)) // step_minutes_per_slot
+                previous_window_end_slot = (
+                    None if request.lookahead_hours is None
+                    else window_start_slot + int(request.lookahead_hours) * 60 // step_minutes_per_slot)
         except Exception as exc:
             elapsed = time.perf_counter() - started
             summary = {
