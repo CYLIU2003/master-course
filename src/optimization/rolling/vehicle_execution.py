@@ -48,7 +48,9 @@ def advance_vehicle_prefix(problem: Any, plan: Any, *, start_min: int, stop_min:
         value = float((prior_fuel_l or {}).get(vid, vehicle.initial_fuel_l))
         capacity = float(vehicle.fuel_tank_capacity_l or 0.0)
         minimum = float(vehicle.fuel_reserve_l or 0.0)
-        if not math.isfinite(value) or not minimum <= value <= capacity or capacity <= 0:
+        # Same 1e-6 L tolerance as the inventory check below: a tank refilled to full in the previous
+        # step is handed over as e.g. 160.00000000000003 of 160 L (rc24 900 kW ICE-start, step 78).
+        if not math.isfinite(value) or not minimum-1e-6 <= value <= capacity+1e-6 or capacity <= 0:
             raise ValueError(f"Invalid executed fuel start for {vid}")
         changes = []
         for event in timelines.get(vid, ()):

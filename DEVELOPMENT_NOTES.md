@@ -1,3 +1,10 @@
+## 2026-11-07 同じ丸め誤差の2か所目：毎時の状態の引き継ぎ（rc24 で判明）
+
+- **事実**：rc24（`026f8169`）の燃料バス寄り 900 kW 冬・太陽光 1,000 kW は、78回目（step 78）で FAILED。その回の Stage 2 は optimal、検査は合格（`all_steps_feasible` は True）。止まったのは次の回への引き継ぎで、`state_handoff_error: Invalid executed fuel start for d7a6ea87-...`（rc21 と同じ車両）。
+- **原因**：`src/optimization/rolling/vehicle_execution.py` の `advance_vehicle_prefix` で、引き継いだ燃料の始まりの値だけが許容幅なし（`minimum <= value <= capacity`）。同じ関数の推移の検査、`reoptimizer.py` の引き継ぎの検査は 1e-6 L の許容幅を使う。026f8169 では検査の側は直ったが、満タンの 160.00000000000003 L は次の引き継ぎでここに当たる。前回の調べで `fuel` という名前の検査だけを探し、`value` の名前のここを見落とした。
+- **修正**：`minimum-1e-6 <= value <= capacity+1e-6`。0.001 L 超過は今までどおり不合格（`test_execution_state_tracks_partial_trip_and_continuous_fuel` に追加。修正前は失敗、修正後は合格）。燃料・SOC の上下限の検査を `src`・`bff`・`scripts` で探し直し、許容幅なしで毎時の引き継ぎに関わるものはここだけだった（他は Prepare 時の入力の検査）。関連のテスト 241件合格・20件スキップ。
+- **影響**：026f8169 で計算中の rc24 の残り4件（燃料バス寄り 90 kW 冬、900 kW 冬・太陽光 500・250・0 kW）も、満タンまで給油した次の回で同じように止まる見込み（rc21 では step 78 か 102、推定）。
+
 ## 2026-11-07 分散計算：LOST から計算中への再接続（本人の指示「Lostにならないようにできる施策ないか」「2で」）
 
 - **事実（キューの記録 `cluster.sqlite3`、11/03以降）**：LOST になった26件のうち25件はコントローラの再起動（版の切り替え rc21〜24 と、11/06 に入れた SSH 停止時の自動再起動）、1件はディスク不足の通信エラー。26件の行き先は、完了18・失敗6（実行不能・メモリ上限・燃料の検査で、LOST とは無関係）・計算中2。結果が失われた試行は0。LOST のあいだも照合（`_reconcile_attempt`）が約2分おきに子機へ問い合わせ、終わったら回収していた。困るのは、終わるまで LOST の表示のままで、進み具合（`record_progress`）も止まること。

@@ -501,6 +501,11 @@ def test_execution_state_tracks_partial_trip_and_continuous_fuel():
     assert fuel["bev-1"] == pytest.approx(7.8)
     with pytest.raises(ValueError,match="missing"):
         advance_vehicle_prefix(problem,plan,start_min=1440,stop_min=1500)
+    # A full tank handed over with float noise is full, not over-filled; 0.001 L over is still rejected.
+    fuel,_,_,_ = advance_vehicle_prefix(problem,plan,start_min=1440,stop_min=2880,prior_fuel_l={"bev-1":40.00000000000003})
+    assert fuel["bev-1"] == pytest.approx(40.00000000000003-11.1)
+    with pytest.raises(ValueError,match="Invalid executed fuel start"):
+        advance_vehicle_prefix(problem,plan,start_min=1440,stop_min=2880,prior_fuel_l={"bev-1":40.001})
 
 
 def test_48_hourly_prefixes_preserve_state_and_reject_changed_location(admitted_gurobi_session):
