@@ -34,6 +34,11 @@ import numpy as np
 # "full_day" (all trips of one day) was never accepted in rc7 (0/44) and is the
 # neighbourhood most likely to hit the memory cap; it stays available but unused.
 OPERATORS = ("time_window", "random_trips", "route_day")
+# "vehicle_day" (2026-11-07, user "C"): free every trip that a few battery and a few
+# engine buses serve on one day in the incumbent, so whole duties can move between
+# vehicles and powertrains. Trip-sample neighbourhoods almost never free a complete
+# duty, so the seed's BEV/ICE split could not change (rc29: 0.5 % improvement in 1 h).
+ALL_OPERATORS = OPERATORS + ("vehicle_day",)
 
 
 @dataclass(frozen=True)
@@ -83,7 +88,33 @@ class _Neighbourhoods:
         self.trips, self.settings, self.rng = trips, settings, rng
         self.start = np.array([trip.start_min for trip in trips], dtype=np.int64)
         self.days = sorted({trip.day_index for trip in trips})
-        self.scale = {name: 1.0 for name in OPERATORS}
+        self.scale = {name: 1.0 for name in ALL_OPERATORS}
+        self.assignment: Optional[Dict[int, str]] = None   # trip index -> vehicle in the incumbent
+        self.vehicle_types: Mapping[str, str] = {}
+
+    def vehicle_day_mask(self) -> np.ndarray:
+        """All trips of ``k`` battery and ``k`` engine buses on one day (k = 3 x scale)."""
+        n = len(self.trips)
+        mask = np.zeros(n, dtype=bool)
+        if not self.assignment:
+            return mask
+        day = self.rng.choice(self.days)
+        by_vehicle: Dict[str, List[int]] = {}
+        for index, vehicle in sorted(self.assignment.items()):
+            if self.trips[index].day_index == day:
+                by_vehicle.setdefault(vehicle, []).append(index)
+        k = max(1, round(3 * self.scale["vehicle_day"]))
+        groups: Dict[bool, List[str]] = {True: [], False: []}
+        for vehicle in sorted(by_vehicle):
+            kind = str(self.vehicle_types.get(vehicle, "")).upper()
+            groups[kind in {"BEV", "PHEV", "FCEV"}].append(vehicle)
+        chosen: List[str] = []
+        for electric in (True, False):
+            pool = groups[electric]
+            chosen += self.rng.sample(pool, min(k, len(pool)))
+        for vehicle in chosen:
+            mask[by_vehicle[vehicle]] = True
+        return mask
 
     def free_mask(self, operator: str) -> np.ndarray:
         n = len(self.trips)
@@ -97,6 +128,8 @@ class _Neighbourhoods:
         elif operator == "random_trips":
             count = max(2, int(n * min(self.settings.random_fraction * scale, 0.5)))
             mask[self.rng.sample(range(n), min(count, n))] = True
+        elif operator == "vehicle_day":
+            mask = self.vehicle_day_mask()
         elif operator == "route_day":
             day = self.rng.choice(self.days)
             keys = sorted({t.route_key for t in self.trips if t.day_index == day})
@@ -124,6 +157,7 @@ def run_stage1_lns(
     settings: LnsSettings,
     optimize: Callable[[Any], None],
     log: Callable[[str], None] = lambda message: None,
+    vehicle_types: Optional[Mapping[str, str]] = None,
 ) -> Dict[str, Any]:
     """Improve the model's incumbent in place; return auditable telemetry."""
     began = time.monotonic()
@@ -156,8 +190,19 @@ def run_stage1_lns(
         binary = np.fromiter((kind == GRB.BINARY for kind in vtypes), dtype=bool, count=len(vtypes))
         # Names are read in chunks: 6.8M Python strings at once would cost ~1.5 GB.
         trip_ids = [trip.trip_id for trip in trips]
-        parts = [trip_index_arrays(model.getAttr("VarName", variables[i:i + 250_000]), trip_ids)
-                 for i in range(0, len(variables), 250_000)]
+        trip_lookup = {trip_id: index for index, trip_id in enumerate(trip_ids)}
+        assignment_positions: List[tuple] = []   # (position, vehicle, trip index) of y_<vehicle>_<trip>
+        parts = []
+        for i in range(0, len(variables), 250_000):
+            chunk_names = model.getAttr("VarName", variables[i:i + 250_000])
+            parts.append(trip_index_arrays(chunk_names, trip_ids))
+            if "vehicle_day" in settings.operators:
+                for offset, name in enumerate(chunk_names):
+                    if name.startswith("y_"):
+                        vehicle, _, trip_id = name[2:].rpartition("_")
+                        if trip_id in trip_lookup:
+                            assignment_positions.append((i + offset, vehicle, trip_lookup[trip_id]))
+            del chunk_names
         first = np.concatenate([part[0] for part in parts]) if parts else np.zeros(0, dtype=np.int32)
         second = np.concatenate([part[1] for part in parts]) if parts else np.zeros(0, dtype=np.int32)
         many = np.concatenate([part[2] for part in parts]) if parts else np.zeros(0, dtype=bool)
@@ -168,6 +213,14 @@ def run_stage1_lns(
         original_ub = np.array(model.getAttr("UB", candidate_vars), dtype=float)
         result["trip_indexed_binary_count"] = int(len(candidates))
         neighbourhoods = _Neighbourhoods(trips, settings, rng)
+        neighbourhoods.vehicle_types = dict(vehicle_types or {})
+
+        def refresh_assignment() -> None:
+            if assignment_positions:
+                neighbourhoods.assignment = {trip: vehicle for position, vehicle, trip in assignment_positions
+                                             if best[position] > 0.5}
+        refresh_assignment()
+        result["assignment_binary_count"] = len(assignment_positions)
         weights = {name: 1.0 for name in settings.operators}
         model.Params.SolutionLimit = 2_000_000_000
         model.Params.MIPFocus = 1
@@ -217,6 +270,7 @@ def run_stage1_lns(
                 if improved:
                     best = np.array(model.getAttr("X", variables), dtype=float)
                     best_objective = objective
+                    refresh_assignment()
             finally:
                 model.setAttr("LB", candidate_vars, original_lb.tolist())
                 model.setAttr("UB", candidate_vars, original_ub.tolist())
@@ -292,3 +346,4 @@ def lns_settings_from_controls(controls: Mapping[str, Any], *, stage_time_limit_
     return LnsSettings(time_budget_sec=budget, iteration_time_limit_sec=iteration,
                        initial_time_limit_sec=float(controls.get("lns_initial_time_limit_sec", 1800.0)),
                        seed=int(seed), operators=tuple(controls.get("lns_operators", OPERATORS)))
+

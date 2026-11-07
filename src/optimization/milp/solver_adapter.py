@@ -2123,7 +2123,7 @@ def _configured_stage1_gurobi_search_controls(
                 **({"node_method": 2, "crossover": 0} if no_crossover else {}),
                 "no_rel_heur_work": 120.0 if profile == "bounded_presolve_norel" else 0.0,
                 "soft_mem_limit_gb": 18.0}
-    if profile in ("lns_dual", "lns_dual_no_time_window"):
+    if profile in ("lns_dual", "lns_dual_no_time_window", "lns_dual_vehicle_day"):
         # bounded_presolve_dual controls for the final full-model solve, preceded
         # by an MIP-based LNS on the same model (src/optimization/milp/stage1_lns.py).
         return {**default_controls, "profile": profile, "mip_focus": 1,
@@ -2133,12 +2133,16 @@ def _configured_stage1_gurobi_search_controls(
                 "lns_initial_time_limit_sec": 1800.0, "lns_final_reserve_sec": 1800.0,
                 # time_window used 18 % of the rc13 LNS time for 3 % of its improvement.
                 **({"lns_operators": ("random_trips", "route_day")}
-                   if profile == "lns_dual_no_time_window" else {})}
+                   if profile == "lns_dual_no_time_window" else {}),
+                # 2026-11-07: add whole-duty moves between vehicles and powertrains.
+                **({"lns_operators": ("random_trips", "route_day", "vehicle_day")}
+                   if profile == "lns_dual_vehicle_day" else {})}
     raise ValueError(
         "stage1_gurobi_search_profile must be 'default', 'bound_focus', "
         "'root_cut_focus', 'incumbent_focus', 'bounded_presolve', "
         "'bounded_presolve_barrier', 'bounded_presolve_dual', 'bounded_presolve_norel', "
-        "'bounded_presolve_barrier_no_crossover', 'lns_dual', or 'lns_dual_no_time_window'"
+        "'bounded_presolve_barrier_no_crossover', 'lns_dual', 'lns_dual_no_time_window', "
+        "or 'lns_dual_vehicle_day'"
     )
 
 
@@ -16093,6 +16097,7 @@ class GurobiMILPAdapter:
                     settings=stage1_lns_settings,
                     optimize=lambda model: optimize_model(model, _stage1_search_callback),
                     log=print,
+                    vehicle_types={str(v.vehicle_id): str(v.vehicle_type) for v in problem.vehicles},
                 )
             except ExecutionCancelled:
                 raise

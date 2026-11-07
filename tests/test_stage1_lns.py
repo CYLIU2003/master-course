@@ -194,3 +194,50 @@ def test_no_time_window_profile_only_removes_that_operator():
                                                  operators=settings.operators))
     assert {item["operator"] for item in result["iterations"]} <= set(settings.operators)
     assert result["best_objective"] == pytest.approx(13)
+
+
+def _duty_swap_model():
+    """Two 4-trip duties that must stay whole; the seed has them on the wrong powertrains."""
+    env = gp.Env(params={"OutputFlag": 0})
+    model = gp.Model(env=env)
+    vehicles = ["B1", "I1"]
+    y = {(v, t): model.addVar(vtype=GRB.BINARY, name=f"y_{v}_{t}") for v in vehicles for t in TRIPS}
+    for t in TRIPS:
+        model.addConstr(gp.quicksum(y[v, t] for v in vehicles) == 1)
+    for v in vehicles:
+        for block in (TRIPS[:4], TRIPS[4:]):
+            for a, b in zip(block, block[1:]):
+                model.addConstr(y[v, a] == y[v, b])
+        model.addConstr(gp.quicksum(y[v, t] for t in TRIPS) <= 4)   # one duty per vehicle
+    # Block A is cheap on the engine bus, block B on the battery bus.
+    cost = {("B1", 0): 5, ("I1", 0): 1, ("B1", 1): 1, ("I1", 1): 5}
+    model.setObjective(gp.quicksum(cost[v, i // 4] * y[v, t] for (v, t) in y for i in [TRIPS.index(t)]))
+    for (v, t), var in y.items():  # seed: block A on B1, block B on I1 (cost 40)
+        var.Start = 1.0 if (v == "B1") == (TRIPS.index(t) < 4) else 0.0
+    return model
+
+
+def test_vehicle_day_moves_whole_duties_between_powertrains():
+    trips = [LnsTrip(trip_id=t, start_min=60 * i, day_index=0, route_key=f"R{i}") for i, t in enumerate(TRIPS)]
+    types = {"B1": "BEV", "I1": "ICE"}
+    # Two-trip neighbourhoods cannot move a 4-trip duty: the seed stays.
+    stuck = run_stage1_lns(_duty_swap_model(), GRB, trips=trips, optimize=lambda m: m.optimize(),
+                           settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=1, max_iterations=12,
+                                                random_fraction=0.01, operators=("random_trips",)), vehicle_types=types)
+    assert stuck["best_objective"] == pytest.approx(40)
+    moved = run_stage1_lns(_duty_swap_model(), GRB, trips=trips, optimize=lambda m: m.optimize(),
+                           settings=LnsSettings(time_budget_sec=60, iteration_time_limit_sec=2, seed=1, max_iterations=4,
+                                                operators=("vehicle_day",)), vehicle_types=types)
+    assert moved["assignment_binary_count"] == 16
+    assert moved["best_objective"] == pytest.approx(8)
+    assert all(item["free_trips"] == 8 for item in moved["iterations"])
+
+
+def test_vehicle_day_profile_adds_only_that_operator():
+    from types import SimpleNamespace
+    fast = _configured_stage1_gurobi_search_controls(SimpleNamespace(stage1_gurobi_search_profile="lns_dual_no_time_window"))
+    duty = _configured_stage1_gurobi_search_controls(SimpleNamespace(stage1_gurobi_search_profile="lns_dual_vehicle_day"))
+    ignored = ("profile", "lns_operators")
+    assert {k: v for k, v in duty.items() if k not in ignored} == {k: v for k, v in fast.items() if k not in ignored}
+    assert lns_settings_from_controls(duty, stage_time_limit_sec=21600, seed=42).operators == (
+        "random_trips", "route_day", "vehicle_day")

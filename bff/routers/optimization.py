@@ -982,7 +982,8 @@ class RunOptimizationBody(BaseModel):
     stage1_gurobi_search_profile: Literal[
         "default", "bound_focus", "root_cut_focus", "incumbent_focus", "bounded_presolve",
         "bounded_presolve_barrier", "bounded_presolve_dual", "bounded_presolve_norel",
-        "bounded_presolve_barrier_no_crossover", "lns_dual", "lns_dual_no_time_window"
+        "bounded_presolve_barrier_no_crossover", "lns_dual", "lns_dual_no_time_window",
+        "lns_dual_vehicle_day"
     ] = "default"
     # Hourly rolling step limit; None keeps the shared stage2 limit. The
     # day-ahead Stage 2 needs a long limit, the rolling steps do not.
