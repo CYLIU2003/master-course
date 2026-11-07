@@ -1,6 +1,6 @@
 # 2026-10-10 Gurobiライセンス導入の作業メモ
 
-## 2026-11-03〜04 新規3台
+## 2026-11-03〜07 新規5台
 
 ユーザーの明示指示で、Free Academic Named-User（Gurobi 13）を各1件発行・導入した。
 発行はagent-browserの別セッション `mr7177o-gurobi`（ログイン済みポータル）、配置は既存 `deploy_named.py` の
@@ -11,6 +11,12 @@
 | desktop-mr7177o | DESKTOP-MR7177O | pslab | 2880832 | 2027-11-03 |
 | pslab-mouse | PSLAB_MOUSE | pslab | 2881169 | 2027-11-04 |
 | cyliu-thinkbook | CYLIU_THINKBOOK | a0411 | 2881171 | 2027-11-04 |
+| desktop-baia67v | DESKTOP-BAIA67V | pslab | 2882313 | 2027-11-07 |
+| desktop-gsfgtj2 | DESKTOP-GSFGTJ2 | pslab | 2882314 | 2027-11-07 |
+
+11/07の2件はユーザーの明示指示による追加。DESKTOP-GSFGTJ2の既存 `gurobi.lic` は `.bak` に退避した。
+ポータル一覧は22件→24件で、重複発行はない。2882313はEULAフォームを経ず1クリックで発行されたため、
+発行補助は各クリック後に「作成されました」を検出して再クリックしない形に修正した。
 
 3台とも `%USERPROFILE%\gurobi.lic`（保護ACL）とUser環境変数 `GRB_LICENSE_FILE` を設定。
 CYLIU_THINKBOOKの既存 `gurobi.lic` は `.before-20261010-*.bak` に退避した。

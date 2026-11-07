@@ -1,6 +1,6 @@
 # 分散計算の使い方
 
-## 2026-11-04 追加: 新規worker 3台の導入（割当停止で登録）
+## 2026-11-04〜07 追加: 新規worker 5台の導入（割当停止で登録）
 
 新しい台は次の順で導入する。研究計算への割当（`enabled`/`gurobi`）とコード固定版の配置は、この手順に含めない。
 
@@ -16,8 +16,13 @@
 | desktop-mr7177o | DESKTOP-MR7177O | 100.87.255.66 | pslab | 15.9 GiB | Python 3.14.7 / gurobipy 13.0.1 | 11/04 時点でTCP22不通。手動版OpenSSHと標準版の混在（標準版はInstallPending、SCMは削除予定）。現地で上記2.の再実行が必要 |
 | pslab-mouse | PSLAB_MOUSE | 100.104.185.18 | pslab | 31.8 GiB | 同上 | SSH・ライセンス・極小LPのOPTIMALを確認 |
 | cyliu-thinkbook | CYLIU_THINKBOOK | 100.124.152.124 | a0411 | 23.8 GiB | 同上 | SSH・ライセンス・極小LPのOPTIMALを確認。C:空き31 GiB |
+| desktop-baia67v | DESKTOP-BAIA67V | 100.127.206.82 | pslab | 31.7 GiB | 同上（11/07追加、Windows 10 Pro for Workstations） | SSH（手動版OpenSSH）・ライセンス・極小LPのOPTIMALを確認 |
+| desktop-gsfgtj2 | DESKTOP-GSFGTJ2 | 100.90.178.118 | pslab | 63.7 GiB | 同上（11/07追加） | SSH（手動版OpenSSH）・ライセンス・極小LPのOPTIMALを確認。RAM条件を満たす唯一の新規台 |
 
-3台とも割当停止。RAMの表示値はいずれも[搭載32GB以上の条件](notes/GUROBI_ADMISSION_POLICY_20260925.md)を満たす確認になっていない（PSLAB_MOUSEの31.8 GiBは32GB機の表示値と考えられるが未確認）。
+11/07、ユーザー指示で DESKTOP-GSFGTJ2 を元台帳 `config/cluster/workers.local.json` で `enabled=true`・`gurobi=true`（slots 1、cooldown 0）にした。
+稼働中の週次計算（8891、`workers.deployed.v32.json`）は変更していない。次回 `release.py stage` で固定版を配置した設定から対象になる。
+残り4台は割当停止。DESKTOP-GSFGTJ2（63.7 GiB）以外は[搭載32GB以上の条件](notes/GUROBI_ADMISSION_POLICY_20260925.md)を満たす確認になっていない（PSLAB_MOUSE 31.8 GiB・DESKTOP-BAIA67V 31.7 GiBは32GB機の表示値と考えられるが未確認）。
+既存の desktop-1800n4s（100.64.231.27）は増設後の表示RAM 23.9 GiBをSSHで確認した（11/07）。台帳の設定は変更していない。
 研究コード（固定版リリース）は未配置のため、`check_workers.py` のprobe・診断ジョブは未実施。極小LPは研究計算ではない。
 
 ## 2026-09-24 更新: SSH中断時の安全な復旧と投入前Prepared照合（未配置）
