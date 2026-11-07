@@ -508,6 +508,10 @@ class Scheduler:
     # A read-only status poll may fail transiently (SSH timeout, a busy worker). The attempt is
     # only marked LOST after this many consecutive failures; the worker child is never touched.
     STATUS_POLL_RETRIES = 3
+    # A terminal collect zips the whole attempt on the worker (bundle + several hundred artifacts) before
+    # it answers; on 11/07 that took longer than 30 s and kept a COMPLETED attempt LOST for 16 hours.
+    # Execute's own collect has no limit; reconciliation keeps a bound so a hung SSH frees its slot.
+    RECONCILE_COLLECT_TIMEOUT_SECONDS = 1800
 
     def _follow(self, row: dict, worker: Worker, directory: Path, response: dict):
         """Poll a launched attempt until the worker confirms a terminal state, then collect it."""
@@ -619,7 +623,8 @@ class Scheduler:
         if fence.get("state") != "EXISTS":
             raise ValueError("Unknown worker fence state")
         response = self.invoke_worker(self.worker(row["worker_id"]), {"operation": "collect", "id": job_id, "stream_artifacts": True},
-                                      self.store.root / "jobs" / job_id / "reconcile", timeout=30)
+                                      self.store.root / "jobs" / job_id / "reconcile",
+                                      timeout=self.RECONCILE_COLLECT_TIMEOUT_SECONDS)
         if response.get("state") == "RUNNING":
             if response.get("id") != job_id or response.get("manifest_sha256") != digest(canonical(row["manifest"])):
                 raise ValueError("Running receipt belongs to a different attempt")

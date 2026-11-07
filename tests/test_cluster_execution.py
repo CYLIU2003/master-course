@@ -715,6 +715,20 @@ def test_reconciliation_retrieves_terminal_result_without_resubmitting(scheduler
     assert called == ["fence-unstarted", "collect"]
 
 
+def test_reconciliation_gives_a_terminal_collect_time_to_archive(scheduler, monkeypatch, tmp_path):
+    row, manifest, directory, final = _lost_running_attempt(scheduler, tmp_path)
+    timeouts = {}
+    def fake_invoke(worker, request, target, **kwargs):
+        timeouts[request["operation"]] = kwargs.get("timeout")
+        if request["operation"] == "fence-unstarted":
+            return {"id": row["id"], "state": "EXISTS", "manifest_sha256": digest(canonical(manifest))}
+        return archive_result(directory, final)
+    monkeypatch.setattr(module, "invoke", fake_invoke)
+    assert scheduler.reconcile(row["id"])["state"] == "COMPLETED"
+    assert timeouts["fence-unstarted"] == 30
+    assert timeouts["collect"] >= 600  # the worker zips the attempt before it answers
+
+
 def _lost_running_attempt(scheduler, tmp_path):
     row = scheduler.enqueue("diagnostic", {}, "local")
     scheduler.store.transition(row["id"], "RUNNING", expected={"QUEUED"}, worker_id="local")
