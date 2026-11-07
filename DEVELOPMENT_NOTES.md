@@ -12826,3 +12826,11 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
 - **変更**：`fragment_transition_diagnostic` は、前の区間の最終日と次の区間の初日を比べ、その日に各区間が走る路線帯どうしを比べる（`duty_last_service_day_index`、`duty_route_band_ids_on_day`）。1日だけの区間の判定は以前と同じなので、これまで受理された結果は変わらない。
 - **確認**：失敗した計画の同じ日のつなぎ30か所は、新しい判定で違反0。回帰テスト2件（修正前は失敗）を `tests/test_route_band_transition_reason_codes.py` に追加。関係テスト 467件 通過（`test_stale_prepared_input_does_not_persist_rejected_scope` は修正前から失敗、無関係）。
 - **影響**：受理の判定（検証）の変更。弱めたのではなく、既存の1日ごとの規則に合わせた。c900 は新しい版で計算し直す。
+
+## 2026-11-08 warm start は 0/1 の変数をすべて埋める（rc31 e090 冬の 29回目）
+
+- **事実**：rc31 e090（90 kW・冬・電気バス寄り、1800n4s、job ebbde49a）は、rc29 で止まった 1回目（1:00）を通り、0〜28回目を受理した（16回目以降の多くは optimal）。29回目（29:00）は Stage 2 の抽出で `Positive Stage 2 charging power has no selected physical charger`（charge_on = 2.6754e-6、charge_kw = 1.6e-4）で止まった。Gurobi のログは「Loaded user MIP start」の解だけで時間切れになり、`Warning: max integrality violation (2.6754e-06) exceeds tolerance`（IntFeasTol = 1e-9）。presolve は 0。
+- **原因**：前のステップの計画を開始値に使うとき、前の計算期間（先読み24時間、28回目は slot 112〜208）に入らない slot は値を渡していなかった。その残りの 0/1 変数を Gurobi が自分で埋めるときに、許容誤差を超える値が残った。違反した slot 210 は、29回目の計算期間（116〜212）にしかない。0〜28回目の整数違反は 0。
+- **変更**：前の計算期間に入らない slot は「充電しない（0）」として、0/1 の変数をすべて開始値で埋める（`apply_charging_mip_start` の `slot_limit`）。Gurobi は連続量だけを決めればよい。開始値が成り立たないときは Gurobi が捨てて普通に探す。解を後から直すことはしない。抽出の検査は変えない。
+- **確認**：`tests/test_charging_mip_start.py` の slot_limit テストを、全変数に開始値が入ることの確認に書き換え。関係テスト 407件 通過。Gurobi の時間切れの経路そのものは再現していない（推定は上のログと slot の範囲に基づく）。
+- **影響**：rc31 の結果のうち受理されたものは有効。この変更以降は rc33 として計算する。

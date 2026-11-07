@@ -121,8 +121,13 @@ def apply_charging_mip_start(
         return {**audit, "reason": "no_charging_variables"}
     if type(window_start_slot) is not int or window_start_slot < 0:
         raise ValueError("Stage2 charging start requires the actual window start slot")
-    # ``slot_limit``: only slots the source plan actually covered get values; later
-    # slots (a rolling window reaching past the previous one) are left to Gurobi.
+    # ``slot_limit``: slots the source plan did not cover (a rolling window reaching
+    # past the previous one) start at 0 (no charging), so the start is complete in
+    # the binaries. A partial start made Gurobi complete those binaries in its own
+    # sub-MIP, which returned charge_on = 2.7e-6 above IntFeasTol = 1e-9 (rc31 e090
+    # winter step 29, "max integrality violation exceeds tolerance"). A complete
+    # binary start leaves Gurobi only the continuous recourse; if that is infeasible
+    # Gurobi discards the start and searches as without one.
     covered = (lambda slot: True) if slot_limit is None else (lambda slot: slot < slot_limit)
     current_slots = {slot for _, slot in charge_on_vars if covered(slot)}
     power: dict[tuple[str, int, str | None], float] = {}
@@ -155,12 +160,12 @@ def apply_charging_mip_start(
                and connected_chargers.get(vehicle) != active[(vehicle, first_slot)]}
     variables, values = [], []
     for key, var in charge_on_vars.items():
-        if key not in omitted and covered(key[1]):
+        if key not in omitted:
             variables.append(var)
             values.append(int(key in active))
     charge_on_count = len(variables)
     for (vehicle, charger, slot), var in charger_vars.items():
-        if (vehicle, slot) not in omitted and covered(slot):
+        if (vehicle, slot) not in omitted:
             variables.append(var)
             values.append(int(active.get((vehicle, slot)) == charger))
     if not variables:

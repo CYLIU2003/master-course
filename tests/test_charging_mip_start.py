@@ -206,15 +206,19 @@ def test_rolling_cli_does_not_offer_the_day_ahead_recourse_policy():
     assert '"stage1_recourse_binary"' not in inspect.getsource(rolling)
 
 
-def test_previous_step_start_writes_only_slots_the_previous_window_covered():
-    """Receding-horizon warm start (11/07): slots past the previous window are left to Gurobi."""
+def test_previous_step_start_sets_slots_past_the_previous_window_to_no_charging():
+    """Receding-horizon warm start: the source plan is used only for the slots the previous
+    window covered; later slots start at 0, so every binary has a start value (11/08: a
+    partial start let Gurobi's completion return a binary 2.7e-6 above IntFeasTol)."""
     args = inputs()
+    args["charging_slots"] = args["charging_slots"] + (ChargingSlot("v", 101, "b", charge_kw=20),)
     audit = apply_charging_mip_start(**args, slot_limit=101)
     assert audit["status"] == "SUBMITTED"
     assert args["charge_on_vars"][("v", 100)].Start == 1
-    assert args["charge_on_vars"][("v", 101)].Start is None
-    assert [args["charger_vars"][("v", c, 101)].Start for c in ("a", "b")] == [None, None]
-    assert audit["submitted_variables"] == 3
+    assert args["charge_on_vars"][("v", 101)].Start == 0
+    assert [args["charger_vars"][("v", c, 101)].Start for c in ("a", "b")] == [0, 0]
+    assert all(var.Start is not None for var in args["charge_on_vars"].values())
+    assert all(var.Start is not None for var in args["charger_vars"].values())
 
 
 def test_rolling_entry_passes_the_previous_step_plan_as_start_only():
