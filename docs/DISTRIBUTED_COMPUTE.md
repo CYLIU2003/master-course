@@ -21,7 +21,7 @@
 
 11/07、ユーザー指示で DESKTOP-GSFGTJ2 を元台帳 `config/cluster/workers.local.json` で `enabled=true`・`gurobi=true`（slots 1、cooldown 0）にした。
 稼働中の週次計算（8891、`workers.deployed.v32.json`）は変更していない。次回 `release.py stage` で固定版を配置した設定から対象になる。
-残り4台は割当停止。DESKTOP-GSFGTJ2（63.7 GiB）以外は[搭載32GB以上の条件](notes/GUROBI_ADMISSION_POLICY_20260925.md)を満たす確認になっていない（PSLAB_MOUSE 31.8 GiB・DESKTOP-BAIA67V 31.7 GiBは32GB機の表示値と考えられるが未確認）。
+（2026-11-07：本人の判断で Gurobi の受け入れ条件を搭載24GB以上に下げた。`GUROBI_MINIMUM_INSTALLED_RAM_GB`。空きRAM・コミット余裕・1件あたりのメモリ予算（搭載−8 GiB）の確認は今までどおり。24GB機では Stage 2 の SoftMemLimit 32 GB より先に物理メモリが尽きうるので、その台の結果は台名とRAMを添えて扱う）残り4台は割当停止。DESKTOP-GSFGTJ2（63.7 GiB）以外は[搭載32GB以上の条件](notes/GUROBI_ADMISSION_POLICY_20260925.md)を満たす確認になっていない（PSLAB_MOUSE 31.8 GiB・DESKTOP-BAIA67V 31.7 GiBは32GB機の表示値と考えられるが未確認）。
 既存の desktop-1800n4s（100.64.231.27）は増設後の表示RAM 23.9 GiBをSSHで確認した（11/07）。台帳の設定は変更していない。
 研究コード（固定版リリース）は未配置のため、`check_workers.py` のprobe・診断ジョブは未実施。極小LPは研究計算ではない。
 

@@ -179,7 +179,7 @@ class WorkerRegistry:
             reasons.append("Gurobiのインストールと利用枠の設定が必要です")
         from .resource_policy import gurobi_ram_eligible
         if not gurobi_ram_eligible(capability):
-            reasons.append("Gurobiは搭載RAM 32GB以上が必要です（不足または未確認）")
+            reasons.append("Gurobiは搭載RAM 24GB以上が必要です（不足または未確認）")
         ready = not reasons
         active = [job for job in jobs if job["worker_id"] == worker.id and job["state"] in {"STAGING", "RUNNING", "COLLECTING", "LOST"}]
         state = "READY" if ready else "SSH_READY" if ssh_ready and recent else "TAILSCALE_ONLINE" if online is True else "OFFLINE" if online is False else "UNKNOWN"

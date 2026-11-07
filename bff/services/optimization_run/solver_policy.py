@@ -51,7 +51,7 @@ def local_license_callbacks(job_id: str):
         from bff.services.cluster.system_metrics import memory_metrics
         from bff.services.cluster.resource_policy import gurobi_ram_eligible
         if not gurobi_ram_eligible(memory_metrics()):
-            raise SolverPolicyViolation("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
+            raise SolverPolicyViolation("GUROBI_REQUIRES_24GB_INSTALLED_RAM")
         broker.reconcile_local_owners()
         while not broker.acquire(reservation_id, owner_kind="local", owner_identity=identity):
             from src.execution_control import check_cancelled

@@ -27,7 +27,7 @@ def test_worker_mode_cannot_be_bypassed(mode):
 
 
 @pytest.mark.parametrize("change,reason", [
-    ({"installed_ram_gb": 16}, "GUROBI_REQUIRES_32GB"),
+    ({"installed_ram_gb": 16}, "GUROBI_REQUIRES_24GB"),
     ({"commit_available_gb": 8}, "COMMIT_CAPACITY"),
     ({"ram_free_gb": None}, "UNKNOWN_RAM"),
 ])

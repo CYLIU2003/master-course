@@ -466,7 +466,7 @@ class Scheduler:
             if commit_error:
                 raise ValueError(commit_error)
             if row["manifest"]["requires_gurobi"] and not gurobi_ram_eligible(capability):
-                raise ValueError("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
+                raise ValueError("GUROBI_REQUIRES_24GB_INSTALLED_RAM")
             if capability["git"] != row["manifest"]["git"] or capability["source_digest"] != row["manifest"]["source_digest"]:
                 raise ValueError("Worker code does not match the frozen controller code")
             if (row["manifest"]["requires_gurobi"]

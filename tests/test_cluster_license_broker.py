@@ -47,7 +47,7 @@ def test_local_gurobi_rejects_16gb_before_reserving_or_starting_env(tmp_path, mo
     monkeypatch.setattr(contracts, "read_config", lambda: contracts.ClusterConfig())
     monkeypatch.setattr(system_metrics, "memory_metrics", lambda: {"installed_ram_gb": 16, "ram_gb": 15.8})
     acquire, _ = local_license_callbacks("small-host")
-    with pytest.raises(SolverPolicyViolation, match="32GB"):
+    with pytest.raises(SolverPolicyViolation, match="24GB"):
         acquire()
     assert LicenseBroker(JobStore(tmp_path / "queue"), total=2, external=0).snapshot() == []
 

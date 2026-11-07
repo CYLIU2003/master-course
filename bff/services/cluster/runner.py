@@ -447,7 +447,7 @@ def handle(request: dict, workspace: Path) -> dict:
             if commit_error:
                 raise ValueError(commit_error)
             if manifest.get("requires_gurobi") and not gurobi_ram_eligible(provenance):
-                raise ValueError("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
+                raise ValueError("GUROBI_REQUIRES_24GB_INSTALLED_RAM")
             from .resource_policy import machine_memory_budget
             task_budget = (manifest.get("resource_requirements") or {}).get("task_memory_budget_gib")
             if task_budget is not None and (machine_memory_budget(provenance) is None or task_budget > machine_memory_budget(provenance)):

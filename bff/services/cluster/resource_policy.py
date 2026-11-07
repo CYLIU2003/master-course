@@ -7,7 +7,10 @@ import math
 
 from .contracts import RESERVED, Worker
 
-GUROBI_MINIMUM_INSTALLED_RAM_GB = 32
+# 2026-11-07 user decision: 24 GB machines also run Gurobi jobs ("24GB機器もメモリ解放してよいので
+# ちゃんと計算に使って"). Was 32 (2026-09-25 policy). Free RAM, commit headroom and the per-task
+# memory budget (installed - 8 GiB, 16 GiB here) are still checked separately at admission.
+GUROBI_MINIMUM_INSTALLED_RAM_GB = 24
 
 
 def gurobi_ram_eligible(capability: dict) -> bool:
@@ -77,7 +80,7 @@ def resource_fit(worker: Worker, capability: dict, manifest: dict, jobs: list[di
     if commit_error:
         reasons.append(commit_error)
     if manifest.get("requires_gurobi") and not gurobi_ram_eligible(capability):
-        reasons.append("GUROBI_REQUIRES_32GB_INSTALLED_RAM")
+        reasons.append("GUROBI_REQUIRES_24GB_INSTALLED_RAM")
     if len(active) >= worker.slots:
         reasons.append("WORKER_SLOTS_RESERVED")
     if available_ram is None or available_ram < required_ram:

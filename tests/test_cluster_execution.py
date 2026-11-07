@@ -114,7 +114,7 @@ def test_preflight_rejects_16gb_before_submit_even_for_pinned_attempt(scheduler,
     scheduler.execute(row["id"], scheduler.worker("local"))
     assert requests == ["probe"]
     assert scheduler.store.get(row["id"])["state"] == "BLOCKED"
-    assert "GUROBI_REQUIRES_32GB" in scheduler.store.get(row["id"])["error"]
+    assert "GUROBI_REQUIRES_24GB" in scheduler.store.get(row["id"])["error"]
 
 
 def test_preflight_preserves_headroom_when_ram_drops_after_allocation(scheduler, monkeypatch):
