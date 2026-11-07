@@ -66,11 +66,70 @@ def test_fixed_path_has_identical_movement_postings_and_complete_home_slots(spar
             assert model.Status == gp.GRB.OPTIMAL
             actual = {slot for slot, var in enumerate(available) if var.X > .99}
             assert actual == expected.home_slots["bev-1"]
-            # 11/07: no fractional opportunity either. Stage 2 charges only in slots spent wholly
-            # at home; the old away fraction let the pull-out/return deadhead slots and partly
-            # away slots charge pro rata (rc23 90 kW winter: 1,356 kWh Stage 2 could not deliver).
+            # 11/07: the daily return through home has no fractional opportunity: Stage 2 charges
+            # only in slots spent wholly at home; the old away fraction let the pull-out/return
+            # deadhead slots and partly away slots charge pro rata (rc23 90 kW winter: 1,356 kWh
+            # Stage 2 could not deliver). Only the path's own first leave and last return keep an
+            # exact-minute step (one boundary slot each).
             partial = {slot for slot, var in enumerate(available) if var.X > 1e-6}
-            assert partial == expected.home_slots["bev-1"]
+            assert len(partial - expected.home_slots["bev-1"]) <= 2
+            assert not (partial - expected.home_slots["bev-1"]) & expected.service_active["bev-1"]
+
+
+@pytest.mark.parametrize("arrival,gap", [(574, 13), (574, 14), (551, 30)])
+def test_a_home_visit_shorter_than_a_slot_stays_away_and_feasible(arrival, gap):
+    """rc27 (11/07): whole-slot rounding put the return step at the ceiling slot and the
+    leave step at an earlier floor slot, so a depot visit without one complete slot made
+    the away level 2 and forced charge <= P (1 - 2) < 0. Every seed through such a visit
+    became infeasible and Stage 1 stopped with no incumbent. The visit must simply leave
+    the bus away, as in Stage 2."""
+    gp = pytest.importorskip("gurobipy")
+    problem = daily_problem()
+    first, second = problem.trips
+    context = problem.dispatch_context
+    rules = {**context.deadhead_rules, ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 17)}
+    first = replace(first, arrival_min=arrival)
+    ready = arrival + context.get_turnaround_min("B")
+    departure = ready + 17 + gap
+    second = replace(second, origin="DEPOT", departure_min=departure, arrival_min=departure + 60,
+                     service_date=first.service_date, day_index=first.day_index)
+    clock = lambda m: f"{m // 60:02d}:{m % 60:02d}"
+    dispatch = [replace(context.trips[0], arrival_time=clock(arrival)),
+                replace(context.trips[1], origin="DEPOT", departure_time=clock(departure),
+                        arrival_time=clock(departure + 60), service_date=context.trips[0].service_date,
+                        day_index=context.trips[0].day_index)]
+    problem = replace(problem, trips=(first, second), depot_energy_assets={},
+        scenario=replace(problem.scenario, timestep_min=15),
+        dispatch_context=replace(context, trips=dispatch, deadhead_rules=rules),
+        price_slots=tuple(EnergyPriceSlot(i) for i in range(192)))
+    plan = AssignmentPlan(duties=(VehicleDuty("duty", "BEV", tuple(DutyLeg(t) for t in dispatch)),),
+        served_trip_ids=(first.trip_id, second.trip_id), metadata={"duty_vehicle_map": {"duty": "bev-1"}})
+    expected = fixed_path_slot_loads(problem, plan, list(range(192)))
+    vehicle = problem.vehicles[0]
+    adapter = GurobiMILPAdapter()
+    with gp.Env(empty=True) as env:
+        env.setParam("OutputFlag", 0)
+        env.start()
+        with gp.Model(env=env) as model:
+            one = lambda: model.addVar(lb=1, ub=1, vtype=gp.GRB.BINARY)
+            adapter._add_stage1_time_indexed_soc_relaxation(model, gp=gp, grb=gp.GRB,
+                problem=problem, trip_by_id=problem.trip_by_id(), vehicles=(vehicle,),
+                assignment_trip_ids_by_vehicle={"bev-1": plan.served_trip_ids},
+                startup_energy_precheck_by_assignment={("bev-1", first.trip_id):
+                    adapter._startup_energy_precheck(problem, vehicle, first)},
+                y={("bev-1", t.trip_id): one() for t in problem.trips},
+                x={("bev-1", first.trip_id, second.trip_id): one()},
+                start_arc={("bev-1", first.trip_id): one()},
+                end_arc={("bev-1", second.trip_id): one()}, used_vehicle={"bev-1": one()})
+            model.update()
+            available = [model.getVarByName(f"stage1_charge_available__bev-1__slot_{slot}")
+                         for slot in range(192)]
+            model.setObjective(gp.quicksum(available), gp.GRB.MAXIMIZE)
+            model.optimize()
+            assert model.Status == gp.GRB.OPTIMAL
+            wholly = {slot for slot, var in enumerate(available) if var.X > .99}
+            between = set(range(arrival // 15, departure // 15 + 1))
+    assert wholly & between == expected.home_slots["bev-1"] & between
 
 
 @pytest.mark.parametrize("sparse", [False, True])
@@ -130,7 +189,12 @@ def test_two_fragments_do_not_open_charging_windows_over_each_other(sparse, away
     if away_exclusion:
         assert not actual & service
         assert expected.home_slots["bev-1"] <= actual
-        assert {slot for slot, x in partial.items() if x > 1e-6} == expected.home_slots["bev-1"]
+        # Separate fragments keep exact-minute (pro-rata) steps at their own start and end so a
+        # visit shorter than a slot cannot invert two variables; at most the boundary slot of
+        # each of the four fragment ends is partly available, never a slot on the road.
+        extra = {slot: x for slot, x in partial.items() if x > 1e-6 and slot not in expected.home_slots["bev-1"]}
+        assert len(extra) <= 4 and all(x < 1 - 1e-6 for x in extra.values())
+        assert not set(extra) & service
         assert metadata["away_charge_exclusion"]["exact_movements_whole_slot"] is True
     else:
         assert actual & service

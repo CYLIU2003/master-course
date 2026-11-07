@@ -84,9 +84,25 @@ class VehicleAwayEvents:
     def _position(self, slot: int) -> int:
         return bisect_left(self.slots, slot)
 
-    def add_step(self, minute: float, variable: Any, sign: float) -> None:
-        offset = float(minute) - self.horizon_start_min
+    def add_home_visit(self, return_minute: float, leave_minute: float, variable: Any) -> None:
+        """Back home at ``return_minute`` and out again at ``leave_minute`` on one arc.
+
+        In whole-slot mode a visit that contains no complete slot leaves the vehicle away:
+        adding the return step at the ceiling slot and the leave step at an earlier floor
+        slot would make the away level 2 in between, which forces charge <= P (1 - 2) < 0
+        and makes every path through such a short visit infeasible (rc27, 11/07).
+        """
         if self.whole_slot:
+            back = int(-((-(float(return_minute) - self.horizon_start_min)) // self.step_min))
+            out = int((float(leave_minute) - self.horizon_start_min) // self.step_min)
+            if out < back:
+                return
+        self.add_step(return_minute, variable, -1.0)
+        self.add_step(leave_minute, variable, 1.0)
+
+    def add_step(self, minute: float, variable: Any, sign: float, *, whole_slot: bool | None = None) -> None:
+        offset = float(minute) - self.horizon_start_min
+        if self.whole_slot if whole_slot is None else whole_slot:
             if sign > 0:
                 slot = int(offset // self.step_min)
             else:

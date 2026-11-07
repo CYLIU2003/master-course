@@ -29853,7 +29853,10 @@ class GurobiMILPAdapter:
                         )
                 start_var = start_arc.get(assignment_key)
                 if away_events is not None and start_var is not None:
-                    away_events.add_step(leave_home_min(trip), start_var, 1.0)
+                    # Fragment ends use the exact-minute (fractional) step: the end of one
+                    # fragment and the start of the vehicle's next one are separate variables, so
+                    # whole-slot rounding could invert them (away 2) on a visit shorter than a slot.
+                    away_events.add_step(leave_home_min(trip), start_var, 1.0, whole_slot=False)
                 startup_precheck = startup_energy_precheck_by_assignment.get(
                     assignment_key
                 )
@@ -29882,7 +29885,7 @@ class GurobiMILPAdapter:
                 if end_var is None:
                     continue
                 if away_events is not None:
-                    away_events.add_step(back_home_min(trip), end_var, -1.0)
+                    away_events.add_step(back_home_min(trip), end_var, -1.0, whole_slot=False)
                 return_exists, return_deadhead_min = return_deadhead_min_to_home(
                     problem,
                     vehicle,
@@ -29973,8 +29976,7 @@ class GurobiMILPAdapter:
                         else:
                             returned = ready + checked_deadhead_minutes(
                                 problem.dispatch_context, previous_trip.destination, next_trip.origin)
-                    away_events.add_step(returned, arc_var, -1.0)
-                    away_events.add_step(leaving, arc_var, 1.0)
+                    away_events.add_home_visit(returned, leaving, arc_var)
                 if daily_timeline:
                     for event_end, energy in connection_energy_events(problem, vehicle, previous_trip, next_trip):
                         posting = slot_index_ceil(problem, event_end) - 1
