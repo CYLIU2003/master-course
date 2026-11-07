@@ -66,6 +66,27 @@ def duty_route_band_ids(duty: Any) -> Tuple[str, ...]:
     return tuple(sorted(bands))
 
 
+def duty_last_service_day_index(duty: Any, *, horizon_start_min: int = 0) -> int:
+    legs = tuple(getattr(duty, "legs", ()) or ())
+    if not legs:
+        return 0
+    trip = getattr(legs[-1], "trip", None)
+    if trip is None:
+        return 0
+    return trip_service_day_index(trip, horizon_start_min=horizon_start_min)
+
+
+def duty_route_band_ids_on_day(duty: Any, day_index: int, *, horizon_start_min: int = 0) -> Tuple[str, ...]:
+    """Route bands of the duty's trips on one service day."""
+    bands = set()
+    for leg in tuple(getattr(duty, "legs", ()) or ()):
+        trip = getattr(leg, "trip", None)
+        if trip is not None and trip_service_day_index(trip, horizon_start_min=horizon_start_min) == day_index:
+            bands.add(trip_route_band_key(trip))
+    bands.discard("")
+    return tuple(sorted(bands))
+
+
 def duties_route_band_ids(duties: Iterable[Any]) -> Tuple[str, ...]:
     bands = {
         band
@@ -278,12 +299,19 @@ def fragment_transition_diagnostic(
 ) -> FragmentTransitionDiagnostic:
     if not horizon_start_min and dispatch_context is not None:
         horizon_start_min = int(getattr(dispatch_context, "horizon_start_min", 0) or 0)
-    from_band = duty_route_band_ids(from_duty)
-    to_band = duty_route_band_ids(to_duty)
-    same_day = duty_service_day_index(from_duty, horizon_start_min=horizon_start_min) == duty_service_day_index(
-        to_duty,
-        horizon_start_min=horizon_start_min,
-    )
+    # Fixed route-band mode forbids a same-day change of band (the connection rule in
+    # dispatch/feasibility.py); an overnight change is allowed. A weekly fragment can
+    # span several days, so the transition compares the bands each fragment serves on
+    # the transition day: the last service day of ``from_duty`` and the first service
+    # day of ``to_duty`` (2026-11-08; before, the bands of the whole fragment and its
+    # first day were compared, which flagged a lawful overnight change days later and
+    # missed a same-day change after a multi-day fragment). Single-day fragments are
+    # judged exactly as before.
+    from_day = duty_last_service_day_index(from_duty, horizon_start_min=horizon_start_min)
+    to_day = duty_service_day_index(to_duty, horizon_start_min=horizon_start_min)
+    same_day = from_day == to_day
+    from_band = duty_route_band_ids_on_day(from_duty, from_day, horizon_start_min=horizon_start_min)
+    to_band = duty_route_band_ids_on_day(to_duty, to_day, horizon_start_min=horizon_start_min)
     direct_exists, _direct_deadhead, direct_reason = (
         fragment_transition_direct_deadhead_diagnostic(
             from_duty,

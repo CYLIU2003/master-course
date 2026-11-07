@@ -12818,3 +12818,11 @@ recover_weekly_reporting.pyと共通週次出力を追加。月別集計は明�
 `configure_doc(planning_pv_source="actual_hindsight")` lets the day-ahead plan and rolling look-ahead see the actual PV of the evaluation week. Default `forecast` is unchanged. Execution still uses the same actual file, and `date_series_contract.planning_pv_source` records the choice.
 
 Mathematical effect: only the plan-side PV input changes; formulas, costs and constraints do not. A hindsight result assumes information no operator has, so it is a diagnostic bound on forecast error, not a realistic operation or an optimality claim. The next-morning extension slots use the same actual PV in that mode.
+
+## 2026-11-08 区間のつなぎの路線帯判定を「その日」の比較に（rc30 c900 の失敗）
+
+- **事実**：rc30 c900（900 kW・冬・電気バス寄り、a709、job b70c5b33）は Stage 1・Stage 2 とも解が出たが、前日計画の検証で `fragment_transition`／`route_band_blocked` が2か所出て、毎時の立て直しが始まらなかった（FAILED、正しく止まった）。
+- **原因**：便のつなぎの規則（`src/dispatch/feasibility.py`）と1日ごとの路線帯検査（`_evaluate_route_band_integrity`）は「同じ日に路線帯を変えない」で、夜をまたぐ変更は許す。一方 `fragment_transition_diagnostic` は区間（duty）全体の路線帯の集合と、区間の初日どうしを比べていた。週をまたぐ区間（例：1/6〜1/12、最終日だけ渋22）があると、1/6 の正当なつなぎが違反になる。逆に、複数日の区間の最終日と同じ日に始まる区間の路線帯の違いは見逃していた。Stage 1 の遅延制約（lazy separator）は両端の便だけで判定するので、モデルは規則どおりの解を出していた。新しい探索（vehicle_day、仕業を日ごと入れ替える）で初めて表に出た。
+- **変更**：`fragment_transition_diagnostic` は、前の区間の最終日と次の区間の初日を比べ、その日に各区間が走る路線帯どうしを比べる（`duty_last_service_day_index`、`duty_route_band_ids_on_day`）。1日だけの区間の判定は以前と同じなので、これまで受理された結果は変わらない。
+- **確認**：失敗した計画の同じ日のつなぎ30か所は、新しい判定で違反0。回帰テスト2件（修正前は失敗）を `tests/test_route_band_transition_reason_codes.py` に追加。関係テスト 467件 通過（`test_stale_prepared_input_does_not_persist_rejected_scope` は修正前から失敗、無関係）。
+- **影響**：受理の判定（検証）の変更。弱めたのではなく、既存の1日ごとの規則に合わせた。c900 は新しい版で計算し直す。

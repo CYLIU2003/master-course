@@ -83,3 +83,61 @@ def test_transition_diagnostic_does_not_call_short_turnaround_deadhead_missing()
     assert diagnostic.reason_code == "insufficient_transition_time"
     assert diagnostic.deadhead_missing is False
     assert diagnostic.location_alias_missing is False
+
+
+def _dated_trip(trip_id: str, day: int, dep: str, arr: str, origin: str, destination: str, band: str) -> Trip:
+    return Trip(
+        trip_id=trip_id,
+        route_id=band,
+        origin=origin,
+        destination=destination,
+        departure_time=dep,
+        arrival_time=arr,
+        distance_km=1.0,
+        allowed_vehicle_types=("ICE",),
+        route_family_code=band,
+        service_date=f"2025-01-{6 + day:02d}",
+        day_index=day,
+    )
+
+
+def _multi(duty_id: str, *trips: Trip) -> VehicleDuty:
+    return VehicleDuty(duty_id=duty_id, vehicle_type="ICE", legs=tuple(DutyLeg(trip=t) for t in trips))
+
+
+_RESET = {("DEPOT", "C"): 5, ("B", "DEPOT"): 5, ("D", "DEPOT"): 5, ("DEPOT", "A"): 5}
+
+
+def test_transition_compares_bands_of_the_transition_day_for_multi_day_fragments() -> None:
+    # rc30 c900 (2026-11-08): a weekly fragment that starts on day 0 with FAM1 and changes
+    # to FAM2 overnight on day 6 (lawful: only a same-day change is forbidden) must not
+    # make the day-0 transition into it a route-band violation.
+    first = _multi("f1", _dated_trip("a", 0, "08:00", "08:10", "A", "B", "FAM1"))
+    weekly = _multi(
+        "f2",
+        _dated_trip("b", 0, "10:00", "10:10", "C", "D", "FAM1"),
+        _dated_trip("c", 6, "07:00", "07:10", "C", "D", "FAM2"),
+    )
+    diagnostic = fragment_transition_diagnostic(
+        first, weekly, home_depot_id="DEPOT", dispatch_context=_Context(_RESET),
+        fixed_route_band_mode=True, allow_same_day_depot_cycles=True,
+    )
+    assert diagnostic.route_band_blocked is False
+    assert diagnostic.feasible is True
+
+
+def test_transition_after_multi_day_fragment_still_blocks_a_same_day_band_change() -> None:
+    # The old first-day comparison missed this: the weekly fragment ends on day 6 with FAM1
+    # and the next fragment starts the same day with FAM2.
+    weekly = _multi(
+        "f1",
+        _dated_trip("a", 0, "08:00", "08:10", "A", "B", "FAM2"),
+        _dated_trip("b", 6, "08:00", "08:10", "A", "B", "FAM1"),
+    )
+    later = _multi("f2", _dated_trip("c", 6, "12:00", "12:10", "C", "D", "FAM2"))
+    diagnostic = fragment_transition_diagnostic(
+        weekly, later, home_depot_id="DEPOT", dispatch_context=_Context(_RESET),
+        fixed_route_band_mode=True, allow_same_day_depot_cycles=True,
+    )
+    assert diagnostic.reason_code == "route_band_blocked"
+    assert diagnostic.feasible is False
