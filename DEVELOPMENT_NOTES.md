@@ -4,6 +4,7 @@
 - **原因**：満タンまで給油した状態を次の回へ引き継ぐと、浮動小数点の誤差で容量をわずかに超える。`src/optimization/common/feasibility.py` の初期燃料の検査だけが許容幅なし（`reserve <= fuel <= capacity`）で、同じ関数の燃料の推移の検査、`ice_refueling.py`、物理検査はどれも 1e-6 L の許容幅を使っている。
 - **修正**：初期燃料の検査を `reserve - 1e-6 <= fuel <= capacity + 1e-6` にした。制約・費用・単位は変わらず、検査の許容幅を同じファイルの他の検査にそろえただけ。0.001 L 超過は今までどおり不合格（`tests/test_daily_return_policy.py::test_ice_inventory_includes_daily_returns_and_both_startups` に追加。修正前は失敗、修正後は合格）。
 - **比べ方への影響**：`ff7bdaed` の電気バス寄りのケースは満タン近くまで給油する燃料バスが少なく、この検査で止まっていないので結果は変わらない（推定。検査は受理／不受理しか変えない）。ただし燃料バス寄りを計算し直すと新しい版になり、rc23 のケースとは版が違う。版の違いは資料に書く。
+- **rc24 の計算（本人 11/07「どうぞやって」）**：`026f8169` を7台に配って照合（VERIFIED、`workers.deployed.v27.json`、全体の枠は8にした v28）。コントローラを rc24 の設定に切り替えた（計算中だった rc23 の2件、春の対策なし（matlab）と制限時間4倍（3pru）は各台で続き、rc23 の設定で回収する）。新たに Prepare して5件を投入：燃料バス寄り 90 kW 冬（`operation.rc24_i090base_2025-01-06.json`、6ae0mir）、燃料バス寄り 900 kW 冬の太陽光 1,000（mouse）・500（5b6f）・250（a709）・0 kW（3pru）。条件は元の rc23／rc21 の運用ファイルと同じで、版だけが違う（`pin_rc24_batches.py`、`rc24_pins.json`）。
 
 ## 2026-11-07 出発点2つの比較（90 kW 冬）と、11/12 資料の組み替え（DIAGNOSTIC）
 
