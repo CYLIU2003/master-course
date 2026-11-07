@@ -66,12 +66,19 @@ class VehicleAwayEvents:
     where ``H_m`` is the fraction of the slot at or after minute ``m``.
     """
 
-    def __init__(self, slots: Sequence[int], *, horizon_start_min: int, step_min: int):
+    def __init__(self, slots: Sequence[int], *, horizon_start_min: int, step_min: int,
+                 whole_slot: bool = False):
         self.slots = tuple(slots)
         if self.slots != tuple(sorted(set(self.slots))):
             raise ValueError("Away support requires sorted unique slots")
         self.horizon_start_min = int(horizon_start_min)
         self.step_min = max(int(step_min), 1)
+        # whole_slot: a slot is away if the vehicle is away for any part of it, which is
+        # exactly Stage 2's rule (charging only in slots spent wholly at home,
+        # vehicle_timeline.complete_home_slots). A leave step (+1) covers the whole slot
+        # holding the leave minute; a return step (-1) takes effect from the first slot
+        # that starts at or after the return minute.
+        self.whole_slot = bool(whole_slot)
         self.events: dict[int, list[Any]] = defaultdict(list)
 
     def _position(self, slot: int) -> int:
@@ -79,6 +86,15 @@ class VehicleAwayEvents:
 
     def add_step(self, minute: float, variable: Any, sign: float) -> None:
         offset = float(minute) - self.horizon_start_min
+        if self.whole_slot:
+            if sign > 0:
+                slot = int(offset // self.step_min)
+            else:
+                slot = int(-((-offset) // self.step_min))
+            position = self._position(slot)
+            if position < len(self.slots):
+                self.events[position].append(sign * variable)
+            return
         slot = int(offset // self.step_min)
         head = ((slot + 1) * self.step_min - offset) / self.step_min
         for target, coefficient in ((slot, head), (slot + 1, 1.0 - head)):

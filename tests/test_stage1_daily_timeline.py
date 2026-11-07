@@ -66,6 +66,11 @@ def test_fixed_path_has_identical_movement_postings_and_complete_home_slots(spar
             assert model.Status == gp.GRB.OPTIMAL
             actual = {slot for slot, var in enumerate(available) if var.X > .99}
             assert actual == expected.home_slots["bev-1"]
+            # 11/07: no fractional opportunity either. Stage 2 charges only in slots spent wholly
+            # at home; the old away fraction let the pull-out/return deadhead slots and partly
+            # away slots charge pro rata (rc23 90 kW winter: 1,356 kWh Stage 2 could not deliver).
+            partial = {slot for slot, var in enumerate(available) if var.X > 1e-6}
+            assert partial == expected.home_slots["bev-1"]
 
 
 @pytest.mark.parametrize("sparse", [False, True])
@@ -119,11 +124,14 @@ def test_two_fragments_do_not_open_charging_windows_over_each_other(sparse, away
             model.optimize()
             assert model.Status == gp.GRB.OPTIMAL
             actual = {slot for slot, var in enumerate(available) if var.X > .99}
+            partial = {slot: var.X for slot, var in enumerate(available)}
     service = expected.service_active["bev-1"]
     assert metadata["away_charge_exclusion"]["enabled"] is away_exclusion
     if away_exclusion:
         assert not actual & service
         assert expected.home_slots["bev-1"] <= actual
+        assert {slot for slot, x in partial.items() if x > 1e-6} == expected.home_slots["bev-1"]
+        assert metadata["away_charge_exclusion"]["exact_movements_whole_slot"] is True
     else:
         assert actual & service
 

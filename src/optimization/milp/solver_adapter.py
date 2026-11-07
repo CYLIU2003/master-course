@@ -29672,9 +29672,19 @@ class GurobiMILPAdapter:
         # charging by the certain away fraction (VehicleAwayEvents); Stage 2
         # charges only in wholly-home slots, so no Stage 2 schedule is removed.
         away_exclusion = problem.metadata.get("stage1_away_charge_exclusion", True) is not False
+        # 11/07: the away fraction counted the home-side deadhead legs as home and let a slot that
+        # is partly away charge pro rata. Stage 2 charges only in slots spent wholly at home
+        # (complete_home_slots), so Stage 1 credited charging that no schedule can deliver
+        # (rc23 90 kW winter: 1,356 kWh, about the executed 1,452 kWh overage). Exact mode, the
+        # default for the daily-return timeline, mirrors build_vehicle_timeline.
+        exact_away = bool(
+            getattr(problem.dispatch_context, "daily_return_depot_id", "")
+            and problem.metadata.get("stage1_away_exact_movements", True) is not False
+        )
         horizon_start_min = self._horizon_start_min(problem)
         away_audit = {
             "enabled": away_exclusion, "vehicle_count": 0, "endpoint_term_count": 0,
+            "exact_movements_whole_slot": exact_away,
             "additional_continuous_variables": 0, "additional_constraints": 0,
             "semantics": (
                 "charge_on <= 1 - away and charge_power <= P_max (1 - away); away is the "
@@ -29790,10 +29800,26 @@ class GurobiMILPAdapter:
             support_events = ChargingWindowSupportEvents(slot_indices) if sparse_windows else None
             away_events = (
                 VehicleAwayEvents(slot_indices, horizon_start_min=horizon_start_min,
-                                  step_min=int(problem.scenario.timestep_min))
+                                  step_min=int(problem.scenario.timestep_min),
+                                  whole_slot=exact_away)
                 if away_exclusion else None
             )
             home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+
+            def leave_home_min(trip):
+                """Minute the bus leaves home for ``trip`` (Stage 2: startup/daily_startup deadhead)."""
+                departure = self._service_minute(problem, int(trip.departure_min))
+                if not exact_away:
+                    return departure
+                return departure - checked_deadhead_minutes(problem.dispatch_context, home_depot_id, trip.origin)
+
+            def back_home_min(trip):
+                """Minute the bus is back home after ``trip`` (Stage 2: turnaround + return deadhead)."""
+                arrival = self._trip_service_arrival_min(problem, trip)
+                if not exact_away:
+                    return arrival
+                return (arrival + self._turnaround_min(problem, trip.destination)
+                        + checked_deadhead_minutes(problem.dispatch_context, trip.destination, home_depot_id))
             next_morning_terms: Dict[int, List[Any]] = {}
             slot_end_soc_by_slot: Dict[int, Any] = {}
 
@@ -29827,7 +29853,7 @@ class GurobiMILPAdapter:
                         )
                 start_var = start_arc.get(assignment_key)
                 if away_events is not None and start_var is not None:
-                    away_events.add_step(self._service_minute(problem, int(trip.departure_min)), start_var, 1.0)
+                    away_events.add_step(leave_home_min(trip), start_var, 1.0)
                 startup_precheck = startup_energy_precheck_by_assignment.get(
                     assignment_key
                 )
@@ -29856,7 +29882,7 @@ class GurobiMILPAdapter:
                 if end_var is None:
                     continue
                 if away_events is not None:
-                    away_events.add_step(self._trip_service_arrival_min(problem, trip), end_var, -1.0)
+                    away_events.add_step(back_home_min(trip), end_var, -1.0)
                 return_exists, return_deadhead_min = return_deadhead_min_to_home(
                     problem,
                     vehicle,
@@ -29932,8 +29958,23 @@ class GurobiMILPAdapter:
                     or self._locations_equivalent(problem, previous_trip.destination, home_depot_id)
                     or self._locations_equivalent(problem, next_trip.origin, home_depot_id)
                 ):
-                    away_events.add_step(self._trip_service_arrival_min(problem, previous_trip), arc_var, -1.0)
-                    away_events.add_step(self._service_minute(problem, int(next_trip.departure_min)), arc_var, 1.0)
+                    returned = self._trip_service_arrival_min(problem, previous_trip)
+                    leaving = self._service_minute(problem, int(next_trip.departure_min))
+                    if exact_away:
+                        # Mirror build_vehicle_timeline: a daily return drives home and back; a
+                        # connection ending at home waits there after the turnaround and leaves
+                        # one deadhead before the next trip; one starting from home arrives there
+                        # after the turnaround and connection deadhead.
+                        ready = returned + self._turnaround_min(problem, previous_trip.destination)
+                        if daily_return_arc:
+                            returned, leaving = back_home_min(previous_trip), leave_home_min(next_trip)
+                        elif self._locations_equivalent(problem, previous_trip.destination, home_depot_id):
+                            returned, leaving = ready, leave_home_min(next_trip)
+                        else:
+                            returned = ready + checked_deadhead_minutes(
+                                problem.dispatch_context, previous_trip.destination, next_trip.origin)
+                    away_events.add_step(returned, arc_var, -1.0)
+                    away_events.add_step(leaving, arc_var, 1.0)
                 if daily_timeline:
                     for event_end, energy in connection_energy_events(problem, vehicle, previous_trip, next_trip):
                         posting = slot_index_ceil(problem, event_end) - 1
@@ -29969,9 +30010,9 @@ class GurobiMILPAdapter:
                 # Every factored connection is a daily return through home.
                 for entry in x.by_vehicle.get(vehicle_id, ()):
                     for trip_id, var in zip(entry.factor.origins, entry.origins):
-                        away_events.add_step(self._trip_service_arrival_min(problem, trip_by_id[trip_id]), var, -1.0)
+                        away_events.add_step(back_home_min(trip_by_id[trip_id]), var, -1.0)
                     for trip_id, var in zip(entry.factor.targets, entry.targets):
-                        away_events.add_step(self._service_minute(problem, int(trip_by_id[trip_id].departure_min)), var, 1.0)
+                        away_events.add_step(leave_home_min(trip_by_id[trip_id]), var, 1.0)
             if next_morning_enabled and isinstance(x, FactoredConnectionVariables):
                 for entry in x.by_vehicle.get(vehicle_id, ()):
                     origin_days = {raw_day(trip_by_id[trip_id]) for trip_id in entry.factor.origins}
