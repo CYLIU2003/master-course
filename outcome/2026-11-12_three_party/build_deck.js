@@ -577,12 +577,12 @@ caption(s, "表8b　rc20の保存した結果から。DIAGNOSTIC", 0.6, 6.45, 12
 s.addNotes("超過がどこで生まれているかを、90 kWの冬で解剖しました。予報で前日の計画を立てた場合は、便割当の見積もりも前日の充電計画も超過は0ですが、実行すると買電が約3倍になり、超過が出ます。前日には曇りの日の不足が見えないためで、これは柱Bの論点です。実際の太陽光で前日の計画を立てた場合でも、充電計画の段階で超過が出ています。便割当の見積もりは、昼のうちに上限以内で買って蓄電池を夜まで残すことで超過を0にしていますが、充電計画は昼に買わず、夕方に蓄電池が下限に達して、夜に大きく買電しています。1週間で蓄電池から送った量は同じなので、違いは時間の使い方で、充電計画の探索が足りないことが原因です。対策として、便割当の見積もりを充電計画にヒントとして渡す方法と、毎時の立て直しの探索の設定を変える方法を、低い上限で試しています。");
 
 // ---- rc23 countermeasure trial (ff7bdaed, DIAGNOSTIC). Executed contract overage kWh / peak grid kW of the
-// accepted 175-step chain, from evaluate_multiface.py (output/midterm_20261128/rc23_eval/rc23_eval3-11.md).
+// accepted 175-step chain, from evaluate_multiface.py (output/midterm_20261128/rc23_eval/rc23_eval3-12.md).
 // null = still computing on 11/7: fill in when the case is collected.
 const RC23 = {
   "90/2025-01-06": { base: [1452, 711], hint: [1395, 644], hintbf: [1442, 593] },
   "200/2025-01-06": { base: [532, 609], hint: [503, 578], hintbf: [542, 450] },
-  "90/2025-04-07": { base: null, hint: [133, 198], hintbf: [308, 280] },
+  "90/2025-04-07": { base: [260, 290], hint: [133, 198], hintbf: [308, 280] },
   "90/2025-07-07": { base: [311, 414], hint: [285, 267], hintbf: [258, 237] } };
 const ovCell = (v) => (v ? `${fmt(v[0])} kWh／${fmt(v[1])} kW` : { text: "計算中", options: { color: GREY } });
 s = page(S5, "対策の試算（rc23）：同じ条件での揺れのほうが大きい");
