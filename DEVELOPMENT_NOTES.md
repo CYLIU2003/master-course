@@ -12848,3 +12848,11 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
 - **変更**：`OptimizationConfig.stage2_gurobi_integrality_focus`（既定 1）を Stage 2 の Gurobi 設定 `IntegralityFocus` に渡し、結果に `stage2_gurobi_integrality_focus` を記録する。解く前に宣言する設定で、実行可能領域・許容誤差・抽出の検査は変えない。失敗後の解き直しや解の書き換えはしない。
 - **確認**：`tests/test_stage2_numeric_aggregation.py` に、実 Gurobi で IntegralityFocus=1 が入ることと、範囲外の値を拒むことのテストを追加。既存の厳密境界テストも IntegralityFocus=1 で通過。rolling・Stage 2 関係 528件 通過。失敗したステップのモデルは保存されていないので、再現は rc35 の実行で確かめる。
 - **影響**：Stage 2 の探索が変わるので新しい版（rc35）。rc33 の受理済みの結果はそのまま有効。
+
+## 2026-11-09 案A（計画用の予報倍率）の結果：採らない。90 kW 冬の超過は系統→蓄電池なしの前提による構造
+
+- **事実（rc35、9a0fe044、DIAGNOSTIC）**：90 kW・冬・電気バス寄りで予報×0.5（a090s50）は 491.5万円・超過 1,134 kWh・電気バス担当 77.7%・CO₂ 3,504 kg。予報どおり（rc33 g090）は 479.4万円・1,291 kWh・93.1%・2,136 kg。燃料バス寄りの ×0.5（b090s50 434.9→439.7万円、b200s50 434.9→436.4万円）も改善しない。200 kW・電気バス寄り ×0.5（a200s50）は前日の Stage 2 が 3,600 秒で解なし（time_limit、実行不能の証明ではない）で、立て直しは始まらなかった。
+- **超過の中身（毎時の実行記録 `hourly_energy_flow_chart.csv` を日・時で集計）**：rc33 g090 の超過 1,291 kWh のうち 1,207 kWh が 2日目（火）0〜5時。このとき蓄電池は下限 1,200 kWh。1日目（月）の太陽光は 1,399 kWh、買電は 511 kWh で、超過なしの上限 2,160 kWh（90 kW×24 h）の約2割。シナリオは `allow_grid_to_bess: false`（`docs/guides/research_scenario/parameter_map_20261006.json`）なので、余った受電枠を蓄電池に貯めて夜に回せない。3〜5日目は太陽光を計 2,625 kWh 捨てている。
+- **判断**：予報の割引では直らないので案Aは採らない（機能は既定 1.0 のまま残す）。研究者の指示で系統→蓄電池は禁止のまま。貯められる場合の比較は今後の課題として資料に明記した。
+- **400 kW・冬・電気バス寄り（rc35 a400s10、倍率 1.0）**：415.7万円・CO₂ 2,268 kg・超過0・175回受理・VALID。rc33 h400（燃料バス寄り）439.9万円より 24.3万円安い。rc33 との違いは IntegralityFocus のみ（倍率 1.0 は従来と同じ問題）なので、資料では＊で版を明記した。
+- **資料**：`outcome/2026-11-12_three_party/build_deck.js`（400 kW の欄、超過の夜の頁を追加、目次と参考文献の更新）、`outcome/2026-11-28_midterm_poster/build_poster_rc33.js`（考察の差し替え、引用番号と参考文献欄）。参考文献の原本は `先行文献/2026-11-08_中間発表の参考文献/`（git 管理外）。

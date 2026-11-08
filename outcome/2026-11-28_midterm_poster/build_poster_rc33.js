@@ -85,29 +85,35 @@ text([
   { x: LX, y, w: COL, h: 4.3, paraSpaceAfter: 10, fontSize: 36 });
 y += 4.6;
 y = section("2．対象と条件", LX, y, COL);
-const rows = [["対象", "東急バス 渋21〜23系統（弦巻営業所）"], ["運行", "1週間 1,704便（平日264・土203・日祝181便/日）"], ["車両", "保有 電気バス35台・燃料バス25台（固定）"],
+const rows = [["対象", "東急バス 渋21〜23系統（弦巻営業所）、時刻表はODPT［3］"], ["運行", "1週間 1,704便（平日264・土203・日祝181便/日）"], ["車両", "保有 電気バス35台・燃料バス25台（固定）"],
   ["設備", "太陽光1,000 kW・蓄電池6,000 kWh・充電器90 kW×10"], ["受電上限", "90〜900 kWの5段階（超過は500円/kWh・仮）"], ["期間", "冬・春・夏の代表週（2025年）"],
-  ["毎朝の電池", "目標90%・下限80%"], ["単価", "電気30円/kWh（基本料金込み）・軽油150円/L"], ["CO₂", "軽油2.62 kg/L、電力0.5 kg/kWh（仮）"]];
+  ["毎朝の電池", "目標90%・下限80%"], ["単価", "電気30円/kWh（基本料金込み）・軽油150円/L"], ["CO₂", "軽油2.62 kg/L［1］、電力0.5 kg/kWh（仮）"]];
 s.addTable(rows.map(([k, v]) => [{ text: k, options: { bold: true } }, { text: v }]),
-  { x: LX, y, w: COL, colW: [3.4, COL - 3.4], fontSize: 32, fontFace: "Yu Gothic", color: INK, rowH: 0.78, valign: "middle",
+  { x: LX, y, w: COL, colW: [3.4, COL - 3.4], fontSize: 32, fontFace: "Yu Gothic", color: INK, rowH: 0.70, valign: "middle",
     border: { type: "solid", pt: 1, color: GRID } });
-y += rows.length * 0.78 + 1.0;
+y += rows.length * 0.70 + 1.0;
 y = section("3．手法", LX, y, COL);
 text([
-  { text: "便割当（Stage 1）：1,704便を60台に割り当てる混合整数計画問題。一部の便だけを解き直す大近傍探索（LNS）で90分改善した。毎朝の電池の不足分の重みを充電計画と共通にした。", options: { breakLine: true } },
-  { text: "充電計画（Stage 2）：割当を固定し、15分ごとの充電・太陽光・蓄電池・買電を最適化する。前日の計画では、太陽光を過去の実績から作った平年値で予報する。", options: { breakLine: true } },
+  { text: "便割当（Stage 1）：1,704便を60台に割り当てる混合整数計画問題。一部の便だけを解き直す大近傍探索（LNS）［5］で90分改善した（Gurobi［4］）。毎朝の電池の不足分の重みを充電計画と共通にした。", options: { breakLine: true } },
+  { text: "充電計画（Stage 2）：割当を固定し、15分ごとの充電・太陽光・蓄電池・買電を最適化する。前日の計画では、太陽光を過去の実績から作った平年値で予報する（斜面日射はpvlib［2］）。", options: { breakLine: true } },
   { text: "実行：実際の天気で1時間ごとに充電を立て直しながら1週間を運用し（175回、1回120秒）、その結果で費用を集計した。" }],
   { x: LX, y, w: COL, h: 6.0, paraSpaceAfter: 14, fontSize: 34 });
 y += 6.4;
 const FC = [3391, 3401, 3412, 3423, 3436, 3448, 3462], AC = [1399, 2640, 3836, 4871, 5059, 5079, 1693];
 const DAYS = ["月", "火", "水", "木", "金", "土", "日"];
 s.addChart(pres.charts.BAR, [{ name: "前日の予報（平年値）", labels: DAYS, values: FC }, { name: "実際", labels: DAYS, values: AC }],
-  { ...chart(), x: LX, y, w: COL, h: 5.2, barDir: "col", barGrouping: "clustered", chartColors: ["CFCFCF", BLUE], valAxisMinVal: 0,
+  { ...chart(), x: LX, y, w: COL, h: 3.8, barDir: "col", barGrouping: "clustered", chartColors: ["CFCFCF", BLUE], valAxisMinVal: 0,
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "太陽光 [kWh/日]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
-caption("図5　冬の代表週（2025年1月6日〜）の太陽光：前日の予報と実際（入力データ）", LX, y + 5.25, COL, 0.8, 28);
-y += 6.3;
+caption("図5　冬の代表週（2025年1月6日〜）の太陽光：前日の予報と実際（入力データ）", LX, y + 3.85, COL, 0.8, 28);
+y += 4.9;
 caption(`注：結果はすべて診断用（DIAGNOSTIC）。便割当は全件メモリ上限で停止（証明できるギャップ約45%）、2段階法のため全体の最適ではない。冬・90 kWの前日の充電計画は時間切れ。毎時の立て直しは最大${maxTimeouts}/175回が時間切れ。各上限の便割当は前の版の同じ上限（600・900 kWは800 kW）の割当から開始。遅い計算機は制限時間を延ばした。1回目の計算で2件が実行中に停止し、計算し直した。${DATA.cases.length - cases.length ? `${DATA.cases.length - cases.length}件は計算中。` : ""}最大受電は15分平均。`,
-  LX, y, COL, 45.5 - y, 26);
+  LX, y, COL, 45.5 - y - 2.5, 24);
+text([{ text: "参考文献（原本は 先行文献／2026-11-08_中間発表の参考文献）", options: { bold: true, breakLine: true } },
+  ...["［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）", "［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
+    "［3］公共交通オープンデータセンター：東急バス 時刻表データ（ODPT）", "［4］Gurobi Optimization, LLC: Gurobi Optimizer Reference Manual, Version 13.0",
+    "［5］P. Shaw: Using constraint programming and local search methods to solve vehicle routing problems, CP-98, LNCS 1520, 1998"]
+    .map((t, i, a) => ({ text: t, options: { breakLine: i < a.length - 1 } }))],
+  { x: LX, y: 45.5 - 2.4, w: COL, h: 2.4, fontSize: 20, color: SUB });
 
 // ---- Right column
 y = 12.5;
@@ -154,9 +160,9 @@ y += 4.7;
 
 y = section("5．考察とまとめ", RX, y, COL);
 text([
-  { text: "前日の計画（予報）では全ケースで超過0。超過は、実際の太陽光が予報（平年値）より少ない日の翌夜に生じた（図5。90 kW冬は1日目の発電が予報の41%）。前日の時点では見えないため、受電上限は便の割当に効かなかったと考える。", options: { breakLine: true } },
-  { text: "上限に余裕があれば電化は費用もCO₂も下げる（表1）。不利なのは上限が低い冬（90 kWで燃料バス寄りが約40万円安い、CO₂は約3倍）と太陽光がない場合（0 kWで約12万円高い）。今後：予報の外れへの余裕（計算中）、日をまたぐ計画。" }],
-  { x: RX, y, w: COL, h: 45.5 - y, paraSpaceAfter: 6, fontSize: 28 });
+  { text: "前日の計画では全ケースで超過0。90 kW冬の超過の9割は、曇りの月曜（発電は予報の41%、図5）の翌未明、蓄電池が空の時間に出た。系統から蓄電池へ貯めない前提のため、月曜に余った受電枠を夜に回せない。計画だけ予報を半分と見込んでも、超過は1割しか減らなかった。", options: { breakLine: true } },
+  { text: "上限に余裕があれば電化は費用もCO₂も下げる（表1）。不利なのは上限が低い冬（90 kWで燃料バス寄りが約40万円安く、CO₂は約3倍）と太陽光がない場合。今後：系統から蓄電池へ貯める場合との比較、日をまたぐ計画。" }],
+  { x: RX, y, w: COL, h: 45.5 - y, paraSpaceAfter: 6, fontSize: 26 });
 
 (async () => {
   const out = path.join(__dirname, process.env.POSTER_OUT || "midterm_poster_A0_rc33.pptx");
