@@ -9,13 +9,19 @@ const fs = require("fs");
 const pptxgen = require(path.join(process.env.DECK_NODE_MODULES, "pptxgenjs"));
 const { applyTheme } = require(path.join(process.env.PPTX_SKILL, "scripts", "apply_theme.js"));
 
-const DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "deck_data_rc20.json"), "utf8"));
+// 11/9: main numbers from the latest version (rc33 7dc38d95 / rc35 9a0fe044), prepare_deck_data_latest.py.
+// Each limit x season row is the cheaper of the two Stage 1 start points. Costs are shown with diesel
+// valued by the litres burnt (post-hoc, same as the 11/8 tables); the accounting total stays in total_cost_accounting.
+const DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "deck_data_latest.json"), "utf8"));
+DATA.cases.forEach((r) => { if (r.status === "VERIFIED") {
+  r.total_cost_accounting = r.total_cost; r.fuel_cost_accounting = r.fuel_cost;
+  r.total_cost = r.total_cost_fuel_consumed; r.fuel_cost = r.ice_fuel_consumed_l * 150; } });
 const allCases = DATA.cases;
 const cases = allCases.filter((r) => r.status === "VERIFIED");
 const iceHour = DATA.ice_by_hour;
 const eqSize = JSON.parse(fs.readFileSync(path.join(__dirname, "eq", "sizes.json"), "utf8"));
 const diesel = DATA.diesel;
-const LIMITS = [90, 200, 400, 600, 900];
+const LIMITS = DATA.limits;
 const SEASONS = [["2025-01-06", "冬"], ["2025-04-07", "春"], ["2025-07-07", "夏"]];
 const WIN = "2025-01-06";
 const get = (g, w) => cases.find((r) => r.grid_limit_kw === g && r.week === w);
@@ -90,6 +96,12 @@ const fuelL = cases.map((r) => r.ice_fuel_consumed_l);
 const w90 = get(90, WIN), w200 = get(200, WIN);
 const co2Cut = SEASONS.filter(([w]) => get(900, w)).map(([w]) => 1 - get(900, w).total_co2_kg / Number(diesel.find((d) => d.week === w).co2_kg));
 const pct = (v) => `${Math.round(v * 100)}%`;
+// Latest-version helpers: both start points per case (DATA.pairs) and which one is cheaper.
+const SEASON_OF = Object.fromEntries(SEASONS);
+const lab = (r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`;
+const iceWins = cases.filter((r) => r.selected_start === "ice"), bevWins = cases.filter((r) => r.selected_start === "bev");
+const rngTxt = (a, d = 0) => !a.length ? "—" : Math.min(...a).toFixed(d) === Math.max(...a).toFixed(d) ? Math.min(...a).toFixed(d) : `${Math.min(...a).toFixed(d)}〜${Math.max(...a).toFixed(d)}`;
+const startJa = (st) => (st === "ice" ? "燃料バス寄り" : "電気バス寄り");
 
 // ---- Title
 let s = pres.addSlide();
@@ -119,14 +131,15 @@ s = page(S0, "前回の三者ミーティング（10月8日）からの進捗");
 const ST = (t, done) => ({ text: t, options: { bold: true, align: "center", color: done ? BLUE_DARK : SUB, fill: { color: done ? "DCEBF7" : "F2F2F2" } } });
 s.addTable([
   [H("項目"), H("内容"), H("状況"), H("補足")],
-  [B("柱A の計算"), "冬・春・夏 × 受電上限 90/200/400/600/900 kW の15ケース", ST(nVerified === nAll ? "完了" : "ほぼ完了", nVerified === nAll), `${nVerified}件を検算済み。変更点は付録`],
+  [B("柱A の計算"), "冬・春・夏 × 受電上限 90/200/400/900 kW × 2つの出発点（最新版）", ST(nVerified === nAll ? "完了" : "計算中", nVerified === nAll), `${nVerified}／${nAll}件を検算済み。600 kWは最新版では計算しない`],
   [B("便割当の見込みの修正"), "10/22 の考察「便割当の段階の見込みが楽観的」への対応", ST("完了", true), "10/25に修正。11/3の監査で見つかった2つ目のずれも修正（5章）"],
   [B("研究室の質問"), "特別な週、季節ごとの電力量、充電の分散", ST("回答", true), "4章"],
-  [B("充電計画の改善"), "厳しい上限で充電計画の探索が不足する問題", ST("調査中", false), "初期解の試行は効果なし（原因は特定済み）。実行中の行き詰まりも課題"],
+  [B("計算の不具合"), "毎時の立て直しが途中で止まる問題（3種類）", ST("修正", true), "原因を特定して修正。修正後、立て直しまで進んだケースはすべて175回受理"],
+  [B("超過の原因"), "90 kW冬で電気バス寄りが超過する理由", ST("特定", true), "蓄電池が空になる火曜未明に集中。予報を控えめに見る対策は効果なし"],
   [B("柱B"), "日ごとの計画と、日をまたいだ計画の比較", ST("実装中", false), "設計を決定（10/30）。日ごとの計画をつなぐ部分を実装中"]],
-  tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.6, 4.3, 1.2, 4.0], fontSize: 14, rowH: 0.78 }));
+  tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.6, 4.3, 1.2, 4.0], fontSize: 14, rowH: 0.68 }));
 caption(s, "柱A：受電上限と電気バスの担当便（中間発表の主軸）、柱B：日をまたいだ計画の意味（年末まで）", 0.6, 6.45, 12.1);
-s.addNotes("前回からの進捗です。柱Aは、受電上限を5段階、季節を3つにして計算し直し、検算の済んだケースから結果をお見せします。10月22日の研究室で、便を割り当てる段階の見込みが楽観的だという考察をお話ししましたが、走行中にも充電できるとみなしていた点を10月25日に修正しました。11月3日の監査で、毎朝の条件の差による2つ目のずれも見つかり、これも直しました。5章でご説明します。研究室で出た3つの質問には4章でお答えします。一方で、厳しい受電上限では充電計画の探索が足りないという問題が残っています。初期解を与える対策は効果がなく、その原因は特定しました。柱Bは10月30日に設計を決め、日ごとの計画をつなぐ部分を実装しています。");
+s.addNotes("前回からの進捗です。柱Aは、最新の版で、受電上限4段階、季節3つ、便割当の出発点2つを計算し直しています。検算の済んだケースから結果をお見せします。計算が途中で止まる不具合が3種類見つかりましたが、原因を特定して直し、直した後は、毎時の立て直しまで進んだケースはすべて最後まで計算できています。90キロワットの冬で超過が出る理由も特定しました。10月22日の研究室で、便を割り当てる段階の見込みが楽観的だという考察をお話ししましたが、走行中にも充電できるとみなしていた点を10月25日に修正しました。11月3日の監査で、毎朝の条件の差による2つ目のずれも見つかり、これも直しました。5章でご説明します。研究室で出た3つの質問には4章でお答えします。一方で、厳しい受電上限では充電計画の探索が足りないという問題が残っています。初期解を与える対策は効果がなく、その原因は特定しました。柱Bは10月30日に設計を決め、日ごとの計画をつなぐ部分を実装しています。");
 
 // ---- Background and objective
 s = page(S1, "研究背景と目的");
@@ -189,14 +202,14 @@ s.addTable([
   ["対象", "東急バス 渋21〜23系統（弦巻営業所）、時刻表は公共交通オープンデータ［3］。1週間 1,704便"],
   ["車両", "電気バス35台・燃料バス25台（保有台数、固定）"],
   ["設備", "太陽光 1,000 kW（傾斜30°、pvlib［2］で斜面日射を算定）、蓄電池 6,000 kWh（使える範囲20〜80%）、充電器10基"],
-  ["受電上限", "90 / 200 / 400 / 600 / 900 kW（900 kWは急速充電器10基×90 kWを同時に使える上限。超過分に500円/kWhの追加費用、仮の値）"],
+  ["受電上限", "90 / 200 / 400 / 900 kW（900 kWは急速充電器10基×90 kWを同時に使える上限。超過分に500円/kWhの追加費用、仮の値）"],
   ["対象期間", "冬・春・夏の代表週（2025年1月6日・4月7日・7月7日から各1週間）"],
   ["毎朝の電池", "目標90%、下限80%（10月22日の結果では毎朝ほぼ満充電を必須にしていた）"],
   ["単価・係数", "電気 30円/kWh（基本料金を含む包括単価）、軽油 150円/L、車両使用費 2万円/台・日、CO₂ 軽油2.62 kg/L［1］・電力0.5 kg/kWh（仮の値）"],
   ["計画と実行", "前日に1週間分を計画（太陽光は過去の実績から作った平年値の予報）、実行は実際の天気で1時間ごとに充電を立て直す"]].map(([k, v]) => [B(k), v]),
   tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.0, 10.1], fontSize: 14, rowH: 0.6 }));
 caption(s, "表1　計算条件（10月8日からの変更の経緯は次ページ）", 0.6, 6.45, 12.1);
-s.addNotes("計算条件です。対象と車両、設備、代表週は10月22日と同じです。受電上限は、800 kWの代わりに、急速充電器10基をすべて同時に使える900 kWを入れ、600 kWも加えた5段階にしました。変わったのは毎朝の電池の条件で、以前は毎朝ほぼ満充電を必須にしていましたが、目標90%、下限80%としました。電気の単価30円は、基本料金を含めた包括的な単価として扱っています。また、前日の計画では太陽光を過去の実績から作った平年値で予報し、実行の段階では実際の天気に合わせて1時間ごとに充電を立て直しています。この予報の扱いが、後の考察で重要になります。");
+s.addNotes("計算条件です。対象と車両、設備、代表週は10月22日と同じです。受電上限は、急速充電器10基をすべて同時に使える900 kWを含む4段階です。変わったのは毎朝の電池の条件で、以前は毎朝ほぼ満充電を必須にしていましたが、目標90%、下限80%としました。電気の単価30円は、基本料金を含めた包括的な単価として扱っています。また、前日の計画では太陽光を過去の実績から作った平年値で予報し、実行の段階では実際の天気に合わせて1時間ごとに充電を立て直しています。この予報の扱いが、後の考察で重要になります。");
 
 // ---- What changed since the previous three-party meeting (10/8)
 s = page(SA, "前回の三者ミーティング（10月8日）からの変更点（12点）");
@@ -221,49 +234,53 @@ s.addNotes("前回の三者ミーティング、10月8日からの変更点を�
 // ---- A-1 BEV share
 const CH = { x: 0.6, y: 2.25, w: 7.2, h: 4.1 }, RB = { x: 8.1, y: 2.4, w: 4.65, h: 3.9, fontSize: 16 };
 s = page(S3, "結果(A-1)　受電上限と電気バスの担当便");
-takeaway(s, `電気バスの担当便は${shareMin}〜${shareMax}%でほぼ一定。ただし便割当が出発点をほぼそのまま引き継いだ結果（下の注）`);
+takeaway(s, iceWins.length ? `安い方：${iceWins.map(lab).join("・")}は燃料バス寄り（電気バス${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%）、ほかは電気バス寄り（${rngTxt(bevWins.map((r) => r.bev_trip_share_pct))}%）`
+  : `どのケースも電気バス寄りの出発点が安く、電気バスの担当便は${shareMin}〜${shareMax}%`);
 s.addChart(pres.charts.LINE, SEASONS.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => val(g, w, "bev_trip_share_pct", (v) => Math.round(v * 10) / 10)) })),
   chart({ ...CH, lineSize: 2.5, lineDataSymbol: "circle", lineDataSymbolSize: 7, chartColors: [BLUE_DARK, BLUE_LIGHT, GREY],
     valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showValAxisTitle: true, valAxisTitle: "電気バスが担当した便 [%]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, `図1　受電上限と電気バスの担当便の割合（1,704便/週、${nVerified}/${nAll}ケース）`, 0.6, 6.45, 7.6);
+caption(s, `図1　受電上限と電気バスの担当便（1,704便/週、2つの出発点のうち総費用の安い方、${nVerified}/${nAll}ケース）。最新版rc33・rc35`, 0.6, 6.45, 7.6, 0.5);
+const pairShares = cases.map((r) => [r.bev_trip_share_pct, r.other_start_bev_trip_share_pct]).flat();
 bullets(s, [
-  "上限90 kWでも、燃料バスへの振り替えは起きなかった",
-  "上限による差より、季節による差（春がやや低い）の方が大きい",
-  "各上限の便割当は、同じ上限の前の版（rc13）の割当から始めた",
-  "検証：実行した割当は出発点と98〜100%同じ（電気／燃料の別）。一定なのは出発点のため（つまずき参照）"], { ...RB, fontSize: 15 });
-s.addNotes(`ここから柱Aの結果です。横軸が受電上限、縦軸が電気バスの担当した便の割合です。受電上限を900 kWから90 kWまで下げても、電気バスの担当便は${shareMin}から${shareMax}%で、ほとんど変わりませんでした。上限による差より季節による差の方が大きく、春がやや低くなっています。今回は、各上限の便割当を、同じ上限の前の版の割当から始めているので、前回のように全上限が同じ出発点を共有してはいません。なぜ担当便が変わらないのかは、考察の2つ目でご説明します。${pending.length ? `なお、${pending.join("と")}は計算し直し中で、図には入っていません。` : ""}`);
+  "各ケースを電気バス寄り・燃料バス寄りの2つの出発点で解き、総費用（燃料は使った分）の安い方を示す",
+  iceWins.length ? `受電上限が低い冬（${iceWins.map(lab).join("・")}）では、燃料バス寄りの方が安い` : "燃料バス寄りの方が安いケースはまだない",
+  `同じケースでも出発点で担当便が大きく変わる（${rngTxt(pairShares)}%）。便割当はまだ最適とは言えない`,
+  ...(pending.length ? [`計算中：${pending.join("・")}`] : [])], { ...RB, fontSize: 15 });
+s.addNotes(`ここから柱Aの結果です。最新の版で、すべてのケースを電気バス寄りと燃料バス寄りの2つの出発点から解き、総費用の安い方を示しています。横軸が受電上限、縦軸が電気バスの担当した便の割合です。${iceWins.length ? `${iceWins.map(lab).join("、")}では燃料バス寄りの方が安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%に下がります。それ以外では電気バス寄りの方が安く、担当便は${rngTxt(bevWins.map((r) => r.bev_trip_share_pct))}%です。` : ""}同じケースでも出発点によって担当便が大きく変わるので、便割当はまだ最適とは言えません。${pending.length ? `なお、${pending.join("、")}は計算中で、図には入っていません。` : ""}`);
 
 // ---- A-2 overage by limit and season
 s = page(S3, "結果(A-2)　受電上限の超過量");
-takeaway(s, "400 kW以上では超過はほぼなし（最大1 kWh）。超過が残るのは90 kWと200 kWの冬");
+const overCases = cases.filter((r) => r.contract_over_limit_kwh > 1);
+takeaway(s, overCases.length ? `安い方の出発点で超過が残るのは${overCases.map(lab).join("・")}。それ以外は超過0` : "安い方の出発点では、どのケースも超過0");
 s.addChart(pres.charts.BAR, SEASONS.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => val(g, w, "contract_over_limit_kwh", (v) => Math.round(v))) })),
   chart({ ...CH, barDir: "col", barGrouping: "clustered", chartColors: [BLUE_DARK, BLUE_LIGHT, GREY], showValue: true, dataLabelPosition: "outEnd",
     dataLabelFormatCode: "#,##0", dataLabelFontSize: 11, valAxisMinVal: 0, showValAxisTitle: true, valAxisTitle: "上限を超えた電力量 [kWh/週]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, "図2　受電上限と季節ごとの超過電力量（1週間）。棒がないケースは計算し直し中", 0.6, 6.45, 7.6);
+caption(s, "図2　受電上限と季節ごとの超過電力量（1週間、安い方の出発点）。棒がないケースは計算中", 0.6, 6.45, 7.6);
+const bevOver = (DATA.pairs || []).filter((r) => r.status === "VERIFIED" && r.start === "bev" && r.contract_over_limit_kwh > 1);
 bullets(s, [
-  w90 ? `冬・90 kW：${fmt(w90.contract_over_limit_kwh)} kWh、最大受電 ${fmt(w90.peak_grid_kw)} kW` : "冬・90 kW：計算中",
-  w200 ? `冬・200 kW：${fmt(w200.contract_over_limit_kwh)} kWh、最大受電 ${fmt(w200.peak_grid_kw)} kW` : "冬・200 kW：計算中",
-  "前日計画（予報）の段階では全ケースで超過0。超過は実行中に生じる",
+  ...overCases.map((r) => `${lab(r)}（${startJa(r.selected_start)}）：${fmt(r.contract_over_limit_kwh)} kWh、最大受電 ${fmt(r.peak_grid_kw)} kW`),
+  `電気バス寄りの出発点では超過が出やすい：${bevOver.map((r) => `${lab(r)} ${fmt(r.contract_over_limit_kwh)} kWh`).join("、") || "なし"}`,
+  "超過は実行中に生じる（90 kW冬・電気バス寄りの前日計画は超過0）",
   `900 kW（充電器10基を同時に使える上限）でも最大受電は${fmt(Math.min(...byLimit(900).map((r) => r.peak_grid_kw)))}〜${fmt(Math.max(...byLimit(900).map((r) => r.peak_grid_kw)))} kW`], RB);
-s.addNotes(`受電上限を超えた電力量です。400 kW以上ではどの季節も超過はありません。200 kWでは春と夏はほぼ0で、超過が残るのは冬だけです。90 kWでは冬が最も多くなりました。前日に立てた計画の段階では、どのケースも超過は0で、超過は実際の天気で立て直しながら実行する中で生じています。また、充電器10基をすべて同時に使える900 kWの上限でも、実際の最大受電は700 kW前後で、上限まで使っていません。`);
+s.addNotes(`受電上限を超えた電力量です。安い方の出発点で見ると、${overCases.length ? `超過が残るのは${overCases.map(lab).join("、")}です。` : "どのケースも超過はありません。"}電気バス寄りの出発点では、${bevOver.map((r) => `${lab(r)}で${fmt(r.contract_over_limit_kwh)}キロワット時`).join("、")}の超過が出ています。90キロワットの冬の電気バス寄りでは、前日に立てた計画の段階では超過は0で、超過は実際の天気で立て直しながら実行する中で生じています。また、充電器10基をすべて同時に使える900キロワットの上限でも、実際の最大受電は上限まで使っていません。`);
 
 // ---- A-3 operating cost
 s = page(S3, "結果(A-3)　受電上限と運用費");
-takeaway(s, "上限を下げて増える費用は、ほぼすべて超過分の追加費用。ただしその多くは燃料バスへの振り替えで避けられるはず");
+takeaway(s, `運用費は900 kWの約${Math.round(opex(900))}万円/週から90 kWの約${Math.round(opex(90))}万円/週へ。低い上限では超過費用か燃料代が増える`);
 s.addChart(pres.charts.BAR, [
   { name: "電気代", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "electricity_cost") / 1e3) / 10) },
   { name: "燃料代", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "fuel_cost") / 1e3) / 10) },
   { name: "超過分の追加費用", labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => Math.round(avg(g, "contract_overage_cost") / 1e3) / 10) }],
   chart({ ...CH, barDir: "col", barGrouping: "stacked", chartColors: [BLUE, GREY, "CFCFCF"], valAxisMinVal: 0,
     showValAxisTitle: true, valAxisTitle: "運用費 [万円/週]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, "図3　受電上限と1週間の運用費の内訳（計算済みの季節の平均、車両使用費は除く）", 0.6, 6.45, 7.6);
+caption(s, "図3　受電上限と1週間の運用費の内訳（安い方の出発点、計算済みの季節の平均、車両使用費は除く。燃料は使った分）", 0.6, 6.45, 7.6, 0.5);
 bullets(s, [
   `運用費：約${Math.round(opex(900))}万円/週（900 kW）→ 約${Math.round(opex(90))}万円/週（90 kW）`,
-  `400・600・900 kW の運用費はほぼ同じ（約${Math.round(Math.min(opex(400), opex(600), opex(900)))}〜${Math.round(Math.max(opex(400), opex(600), opex(900)))}万円/週）`,
-  `燃料使用量：${Math.round(Math.min(...fuelL))}〜${Math.round(Math.max(...fuelL))} L/週（季節で決まり、上限ではほぼ変わらない）`,
+  `400・900 kW の運用費：約${Math.round(opex(400))}・${Math.round(opex(900))}万円/週`,
+  `燃料使用量：${Math.round(Math.min(...fuelL))}〜${Math.round(Math.max(...fuelL))} L/週（燃料バス寄りが安いケースで多い）`,
   "超過分の500円/kWhは仮の値",
-  `ただし超過で走る電気バスは約${fmt(bevOveragePerKm)}円/km、燃料バスは約${Math.round(iceePerKm + 2.62 / KM_PER_L)}円/km。超過費用の多くは燃料バスへの振り替えで避けられるはずで、探索の問題（つまずき参照）`], { ...RB, fontSize: 14 });
-s.addNotes(`費用の内訳です。上限を900 kWから90 kWに下げると、運用費は約${Math.round(opex(900))}万円から約${Math.round(opex(90))}万円に増えますが、増えたのはほぼすべて超過分の追加費用です。400 kW、600 kW、900 kWの運用費はほぼ同じで、今回の設定では400 kWを超える上限はほとんど費用を下げません。超過分の500円は仮の値で、実際の料金ではない点にご注意ください。ただし、超過する電気で走る電気バスは1 kmあたり約730円で、燃料バスの約34円の20倍以上です。本来は燃料バスへ振り替えれば、この超過費用の多くは避けられるはずで、そうなっていないのは便割当の探索の問題だと考えています。`);
+  `超過で走る電気バスは約${fmt(bevOveragePerKm)}円/km、燃料バスは約${Math.round(iceePerKm + 2.62 / KM_PER_L)}円/km。燃料バス寄りの出発点では、この振り替えが起きて超過0`], { ...RB, fontSize: 14 });
+s.addNotes(`費用の内訳です。安い方の出発点で見ると、上限を900 kWから90 kWに下げると、運用費は約${Math.round(opex(900))}万円から約${Math.round(opex(90))}万円に増えます。低い上限では、電気バス寄りなら超過費用、燃料バス寄りなら燃料代が増えます。超過分の500円は仮の値で、実際の料金ではない点にご注意ください。ただし、超過する電気で走る電気バスは1 kmあたり約730円で、燃料バスの約34円の20倍以上です。燃料バス寄りの出発点から解くと、この振り替えが起きて超過は0になりました。`);
 
 // ---- A-4 diesel trips by departure band
 s = page(SA, "結果(A-4)　燃料バスが担当した便の時間帯");
@@ -285,10 +302,10 @@ s = page(S3, "結果(A-5)　全車燃料バスとのCO₂比較");
 takeaway(s, `電気バスと併用すると、CO₂は全車燃料バスより約${pct(Math.min(...co2Cut))}〜${pct(Math.max(...co2Cut))}少ない`);
 s.addChart(pres.charts.BAR, [
   { name: "全車燃料バス（概算）", labels: SEASONS.map((x) => x[1]), values: SEASONS.map(([w]) => Math.round(Number(diesel.find((d) => d.week === w).co2_kg) / 100) / 10) },
-  { name: "電気バスと併用（900 kW）", labels: SEASONS.map((x) => x[1]), values: SEASONS.map(([w]) => Math.round(get(900, w).total_co2_kg / 100) / 10) }],
+  { name: "電気バスと併用（900 kW）", labels: SEASONS.map((x) => x[1]), values: SEASONS.map(([w]) => (get(900, w) ? Math.round(get(900, w).total_co2_kg / 100) / 10 : null)) }],
   chart({ ...CH, barDir: "col", barGrouping: "clustered", showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0", valAxisMinVal: 0,
     showValAxisTitle: true, valAxisTitle: "CO₂ [t/週]" }));
-caption(s, "図5　1週間のCO₂排出量（併用は受電上限900 kWの場合）", 0.6, 6.45, 7.6);
+caption(s, "図5　1週間のCO₂排出量（併用は受電上限900 kW・安い方の出発点。棒がない季節は計算中）", 0.6, 6.45, 7.6);
 bullets(s, [
   "全車燃料バスは、900 kWの計画と同じ走行距離を軽油4.52 km/Lで換算した概算で、最適化の結果ではない",
   "電力の係数0.5 kg/kWhは仮の値",
@@ -296,7 +313,7 @@ bullets(s, [
 s.addNotes(`CO₂の比較です。灰色が全車燃料バスの場合、青が電気バスと併用した場合で、併用によりCO₂は約${pct(Math.min(...co2Cut))}から${pct(Math.max(...co2Cut))}少なくなりました。全車燃料バスの方は、同じ走行距離を燃費4.52 km/Lで軽油に換算した概算です。電力のCO₂係数0.5は仮の値です。`);
 
 // ---- Results table (all cases)
-s = page(S3, `柱Aの結果の一覧（${nAll}ケース、1週間の実行結果）`);
+s = page(SA, `柱Aの結果の一覧（${nAll}ケース、1週間の実行結果、最新版）`);
 const S2label = (r) => r.stage2_solver_status === "optimal" ? "最適" : `時間切れ（${Math.round(r.stage2_mip_gap_ratio * 100)}%）`;
 const failed1 = new Set((DATA.first_attempt_failures || []).map((c) => c.replace("wk", "").replace(/^0+/, "")));
 const rows = [];
@@ -311,12 +328,12 @@ LIMITS.forEach((g) => SEASONS.forEach(([w, n]) => {
   const c = (v) => ({ text: v, options: { align: "right", color: hot ? BLUE_DARK : INK, bold: hot } });
   rows.push([{ text: `${g} kW`, options: { align: "center" } }, { text: n + (retried ? "*" : ""), options: { align: "center" } },
     c(man(r.total_cost)), c(man(r.contract_overage_cost)), c(fmt(r.contract_over_limit_kwh)), c(fmt(r.peak_grid_kw)), c(fmt(r.grid_import_kwh)),
-    c(r.bev_trip_share_pct.toFixed(1)), c(fmt(r.ice_fuel_consumed_l)), { text: S2label(r), options: { align: "center", color: r.stage2_solver_status === "optimal" ? INK : BLUE_DARK } }]);
+    c(r.bev_trip_share_pct.toFixed(1)), c(fmt(r.ice_fuel_consumed_l)), { text: `${startJa(r.selected_start)}（${r.version}）`, options: { align: "center" } }]);
 }));
-s.addTable([[H("上限"), H("季節"), H("総費用 [万円]"), H("うち超過 [万円]"), H("超過 [kWh]"), H("最大受電 [kW]"), H("買電 [kWh]"), H("電気バス担当 [%]"), H("軽油 [L]"), H("充電計画")], ...rows],
+s.addTable([[H("上限"), H("季節"), H("総費用 [万円]"), H("うち超過 [万円]"), H("超過 [kWh]"), H("最大受電 [kW]"), H("買電 [kWh]"), H("電気バス担当 [%]"), H("軽油 [L]"), H("安い方（版）")], ...rows],
   tableOpts({ x: 0.6, y: 1.45, w: 12.1, colW: [0.9, 0.8, 1.35, 1.35, 1.1, 1.25, 1.15, 1.45, 1.0, 1.75], fontSize: 11, rowH: 0.3 }));
-caption(s, "表3　青字は超過のあるケース。総費用は車両使用費（約402〜408万円）を含む。充電計画は前日計画のStage 2の求解状態。*は2回目の計算", 0.6, 6.45, 12.1, 0.5);
-s.addNotes(`${nAll}ケースの一覧です。青字が上限を超過したケースです。総費用の大部分は車両の使用費です。右端は前日計画の充電計画を解いたときの状態で、冬の90 kWだけが制限時間で打ち切った解です。${(DATA.first_attempt_failures || []).length ? "90 kWの夏と400 kWの冬は、1回目の計算が毎時の立て直しの途中で止まったので、同じ条件で計算し直しました。これは考察で説明します。" : ""}`);
+caption(s, "表3　2つの出発点のうち総費用（燃料は使った分）の安い方。青字は超過のあるケース。総費用は車両使用費を含む。rc35はrc33に充電計画の数値設定を1つ加えた版", 0.6, 6.45, 12.1, 0.5);
+s.addNotes(`${nAll}ケースの一覧です。2つの出発点のうち、総費用の安い方を載せています。青字が上限を超過したケースです。総費用の大部分は車両の使用費です。右端は安かった出発点と、計算に使ったコードの版です。`);
 
 // ---- Lab questions
 s = page(S4, "研究室の質問への回答（季節ごとの電力量・充電の分散・特別な週）");
@@ -327,15 +344,15 @@ s.addChart(pres.charts.BAR, [
   { name: "買電", labels: QF2.map((q) => q.season), values: QF2.map((q) => Math.round(q.grid_import)) }],
   chart({ x: 0.6, y: 1.55, w: 6.4, h: 4.6, barDir: "col", barGrouping: "clustered", chartColors: [BLUE, "CFCFCF", GREY], showValue: true, dataLabelPosition: "outEnd",
     dataLabelFormatCode: "#,##0", dataLabelFontSize: 10, valAxisMinVal: 0, showValAxisTitle: true, valAxisTitle: "電力量 [kWh/週]" }));
-caption(s, "図6　季節ごとの太陽光と買電（各季節の計算済みケースの平均）", 0.6, 6.25, 6.4);
-const share = (n) => QF2.find((q) => q.season === n).grid_share_pct.toFixed(1);
+caption(s, "図6　季節ごとの太陽光と買電（各季節の計算済みケース・安い方の出発点の平均）", 0.6, 6.25, 6.4);
+const share = (n) => { const q = QF2.find((x) => x.season === n); return q ? q.grid_share_pct.toFixed(1) : "（計算中）"; };
 s.addTable([
   [H("質問"), H("回答")],
   [B("季節ごとの電力量"), `バスの充電に占める買電の割合は冬${share("冬")}%、春${share("春")}%、夏${share("夏")}%`],
-  [B("充電の分散"), "400・600 kWでは最大受電が上限ちょうどに収まり、分散できている。900 kWでは700 kW前後で上限まで使わない。モデルの中で分散して下がるのは超過分の費用だけ（30円/kWhは包括単価）"],
+  [B("充電の分散"), `超過のないケースでは最大受電が上限以内に収まり、分散できている（400 kW：${rngTxt(byLimit(400).map((r) => r.peak_grid_kw))} kW、900 kW：${rngTxt(byLimit(900).map((r) => r.peak_grid_kw))} kW）。モデルの中で分散して下がるのは超過分の費用だけ（30円/kWhは包括単価）`],
   [B("特別な週（GWなど）"), "時刻表は日付ごとのものを使うので、祝日ダイヤ（181便/日、平日264便）は入る。GWの週そのものはまだ計算していない"]],
   tableOpts({ x: 7.3, y: 1.55, w: 5.4, colW: [1.5, 3.9], fontSize: 12, rowH: [0.45, 1.0, 1.85, 1.3] }));
-s.addNotes(`10月22日の研究室で出た3つの質問にお答えします。季節ごとの電力量は、左の図のとおりで、バスの充電に占める買電の割合は冬${share("冬")}%、春${share("春")}%、夏${share("夏")}%でした。充電の分散は、400 kWと600 kWでは最大受電が上限ちょうどに収まっており、分散できています。電気の単価は包括単価なので、モデルの中で分散して下がるのは超過分の費用だけです。特別な週は、祝日のダイヤは反映されますが、ゴールデンウィークの週そのものはまだ計算していません。`);
+s.addNotes(`10月22日の研究室で出た3つの質問にお答えします。季節ごとの電力量は、左の図のとおりで、バスの充電に占める買電の割合は冬${share("冬")}%、春${share("春")}%、夏${share("夏")}%でした。充電の分散は、超過のないケースでは最大受電が上限以内に収まっており、分散できています。電気の単価は包括単価なので、モデルの中で分散して下がるのは超過分の費用だけです。特別な週は、祝日のダイヤは反映されますが、ゴールデンウィークの週そのものはまだ計算していません。`);
 
 // ---- Discussion 1: forecast
 s = page(SA, "考察(1)　超過の出どころ：前日計画の太陽光予報は平年値");
@@ -368,7 +385,7 @@ caption(s, `図7b　モデルに入れた係数から計算した値（計算結
 s.addNotes(`考察の前に、費用の前提を確認します。左はバスが1 km走るのにかかる費用、右はCO₂です。電気バスは、太陽光や蓄電池の電気で走るときは燃料代がかからず、CO₂も出ません。ところが、電力会社から買った電気で走ると1 kmあたり約${Math.round(bevGridPerKm + bevGridCo2)}円で、燃料バスの約${Math.round(iceTotal)}円より高くなります。CO₂も、電力の係数を0.5とすると、買電で走る電気バスの方が多くなります。つまり、このモデルで電気バスが多く選ばれているのは、営業所の太陽光と蓄電池がバスの充電の8〜9割をまかなっているからだと考えています。これを確かめるため、太陽光と蓄電池を減らした計算を回しています。`);
 
 // ---- Discussion 2: why the share does not move
-s = page(SA, "考察(2)　電気バスの担当便が受電上限で変わらない理由");
+s = page(SA, "（旧版rc20）考察(2)　電気バスの担当便が受電上限で変わらない理由");
 takeaway(s, "当初の考え：前日には超過が見えない。検証の結果：主な理由は便割当が出発点から動かないこと");
 s.addTable([
   [H("1 kmあたりの費用（モデルの係数から）"), H("円/km")],
@@ -387,12 +404,26 @@ bullets(s, [
   "さらに太陽光0 kW・蓄電池なしでも93.5%。費用の理屈では燃料バスが増えるはずで、探索の問題と判断"], { x: 7.5, y: 2.3, w: 5.2, h: 4.5, fontSize: 13 });
 s.addNotes(`考察の2つ目、なぜ電気バスの担当便が受電上限で変わらないのかです。左の表は、モデルに入れた係数から計算した1 kmあたりの費用です。買電で充電した電気バスは約${bevGridPerKm.toFixed(0)}円/km、燃料バスは約${iceePerKm.toFixed(0)}円/kmで、買電どうしなら燃料バスの方が少し安いのですが、その差は約8円/kmで、車両を1台・1日余分に使う2万円に比べるとわずかです。一方、上限を超える電気で走ると約${fmt(bevOveragePerKm)}円/kmになり、燃料バスに回す理由になります。ところが、便の割当を決める前日の計画では、どのケースも超過を0と見込んでいて、超過は実行中にしか現れません。割当は実行中に変えないので、超過は割当に効かないというのが現時点の考えです。これを確かめるため、実際の天気で前日計画を立てた場合に割当が変わるかを計算しています。`);
 
+// ---- 11/9: the slides below (hindsight, rolling, audit, "what the results support") are rc20 analyses kept
+// in the appendix with an "旧版rc20" title. They read rc20 data, not the latest-version data used above.
+{
+const DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "deck_data_rc20.json"), "utf8"));
+const cases = DATA.cases.filter((r) => r.status === "VERIFIED");
+const LIMITS = [90, 200, 400, 600, 900];
+const iceHour = DATA.ice_by_hour, diesel = DATA.diesel, QF2 = DATA.qf2;
+const get = (g, w) => cases.find((r) => r.grid_limit_kw === g && r.week === w);
+const getAny = (g, w) => DATA.cases.find((r) => r.grid_limit_kw === g && r.week === w);
+const byLimit = (g) => cases.filter((r) => r.grid_limit_kw === g);
+const shares = cases.map((r) => r.bev_trip_share_pct);
+const shareMin = Math.min(...shares).toFixed(1), shareMax = Math.max(...shares).toFixed(1);
+const w90 = get(90, WIN), w200 = get(200, WIN);
+const rng = (b) => { const v = iceHour.map((r) => r.bands[b].diesel / r.bands[b].total * 100); return `${Math.min(...v).toFixed(0)}〜${Math.max(...v).toFixed(0)}%`; };
 // ---- Discussion 2 (cont.): day-ahead plan on actual PV (hindsight diagnostic)
 const HS = (DATA.hindsight || []).filter((r) => r.status === "VERIFIED" && get(r.grid_limit_kw, r.week));
 const hsPending = (DATA.hindsight || []).filter((r) => r.status !== "VERIFIED").map((r) => `${r.grid_limit_kw} kW ${SEASONS.find((x) => x[0] === r.week)[1]}`);
 const S2state = (r) => r.stage2_solver_status === "optimal" ? "最適" : `${r.stage2_solver_status === "memory_limit" ? "メモリ上限" : "時間切れ"}（${Math.round(r.stage2_mip_gap_ratio * 100)}%）`;
 const seasonOf = (w) => SEASONS.find((x) => x[0] === w)[1];
-s = page(SA, "考察(2続き)　前日計画の太陽光を実際の値にした診断");
+s = page(SA, "（旧版rc20）考察(2続き)　前日計画の太陽光を実際の値にした診断");
 takeaway(s, "春の超過は予報の外れでほぼ消え、冬は残る。どちらでも電気バスの担当便は変わらない");
 const hsTable = [[H("上限・季節"), H("前日計画の太陽光"), H("総費用 [万円]"), H("超過 [kWh]"), H("最大受電 [kW]"), H("電気バス担当 [%]"), H("前日の充電計画")]];
 HS.forEach((h) => [[get(h.grid_limit_kw, h.week), "予報（平年値）"], [h, "実際の値"]].forEach(([r, lab], j) => {
@@ -413,7 +444,7 @@ caption(s, `表4b　前日計画の太陽光だけを実際の値に替え、ほ
 s.addNotes(`考察の2つ目の確かめです。前日計画の太陽光だけを、予報ではなく実際の値に替えて計算しました。${HS.map((h) => hsLine(h)).join("。")}。春は超過がほとんど消えたので、春の超過は予報の外れから来ていると言えます。冬は予報が当たっても超過が残りました。超過で走るより燃料バスで走る方がはるかに安いので、本来は燃料バスへの振り替えで避けられるはずの分です。また、どちらの季節でも電気バスの担当便は変わりませんでした。予報の外れをなくしても担当便が変わらないことから、便割当の探索が出発点から動けていないことが主な原因だと分かりました。`);
 
 // ---- Discussion 3: rolling
-s = page(SA, "考察(3)　厳しい上限では、毎時の立て直しが時間切れ・失敗しやすい");
+s = page(SA, "（旧版rc20）考察(3)　厳しい上限では、毎時の立て直しが時間切れ・失敗しやすい");
 const RL = DATA.rolling, tl = (g, w) => { const r = RL.find((x) => x.grid_limit_kw === g && x.week === w); return r ? r.time_limit : null; };
 takeaway(s, "90・200 kWでは毎時の立て直しの一部が時間切れ。1回目に2件が途中で止まった");
 s.addChart(pres.charts.BAR, SEASONS.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => tl(g, w)) })),
@@ -428,7 +459,7 @@ bullets(s, [
 s.addNotes("考察の3つ目です。図は、1週間175回の毎時の立て直しのうち、制限時間内に最適と確認できなかった回数です。400 kW以上では0回ですが、90 kWと200 kWの冬では何十回もありました。さらに1回目の計算では、90 kWの夏と400 kWの冬が途中で止まりました。90 kWの夏は解が見つからないまま時間切れ、400 kWの冬は実行不可能で、夜のうちに全車を80%まで充電しきれない状態になったと見ています。今の作りでは実行中に燃料バスへ振り替えられないので、行き詰まると回復できません。これはシミュレーションの設計上の課題で、次のページで扱います。");
 
 // ---- Simulation checks
-s = page(SA, "シミュレーション自体の検討（11月3〜4日の監査）");
+s = page(SA, "（旧版rc18・rc20）シミュレーション自体の検討（11月3〜4日の監査）");
 takeaway(s, "便割当の段階の見込みのずれは修正できた。残る課題は実行中の行き詰まりと探索時間");
 const aud = (name, g, w) => (DATA.audit[name] || []).find((r) => r.grid_limit_kw === g && r.week === w);
 const a18 = aud("rc18", 90, WIN), a20 = aud("rc20", 90, WIN);
@@ -452,13 +483,13 @@ s.addTable([
   [H("課題"), H("内容"), H("対応")],
   [B("便割当の最適性"), "全ケースでメモリ上限に当たって停止。証明できるギャップは約45%", "限界として明記"],
   [B("2段階法"), "便割当 → 充電計画の順に解くので、全体の総費用の最適ではない", "限界として明記"],
-  [B("充電計画"), "冬・90 kWの前日計画は打ち切った解。毎時の立て直しは厳しい上限で時間切れが多い", "考察(3)"],
-  [B("実行中の行き詰まり"), "1回目の計算で2件が停止（計算し直し）", "振り替え・条件の緩和を検討"],
+  [B("充電計画"), "毎時の立て直しは厳しい上限で時間切れが多い（その時点の最良の計画を実行）", "時間切れの回数を明記"],
+  [B("計算が途中で止まる問題"), "3種類の不具合を特定して修正し、直した版で計算し直した", "修正後、立て直しまで進んだケースはすべて175回受理"],
   [B("台ごとの時間の補正"), "遅い台は制限時間を延ばした（係数は実測の近似）", "作業量でそろえる方法を検討"],
-  [B("仮の値"), "超過費用500円/kWh、電力のCO₂係数0.5 kg/kWh、CO₂単価1円/kg", "値を変えた感度の確認"],
+  [B("仮の値・前提"), "超過費用500円/kWh、電力のCO₂係数0.5 kg/kWh、CO₂単価1円/kg。系統から蓄電池へは貯めない", "値を変えた感度の確認"],
   [B("全車燃料バス"), "走行距離からの概算で、最適化の結果ではない", "限界として明記"]],
   tableOpts({ x: 0.6, y: 2.3, w: 12.1, colW: [2.6, 5.6, 3.9], fontSize: 13, rowH: 0.56 }));
-s.addNotes("結果の扱いについてです。本日の結果は、すべて診断用の結果として扱っています。便割当は全ケースでメモリの上限に当たって止まっており、最適性が確認できていません。2段階で解いているので、全体の総費用の最適でもありません。実行中の行き詰まりや、台ごとの時間の補正、仮の値も課題として残っています。中間発表では、これらを限界として明記したうえで結果を示す予定です。");
+s.addNotes("結果の扱いについてです。本日の結果は、すべて診断用の結果として扱っています。便割当は全ケースでメモリの上限に当たって止まっており、最適性が確認できていません。2段階で解いているので、全体の総費用の最適でもありません。計算が途中で止まる不具合は3種類見つけて直し、直した版で計算し直しています。台ごとの時間の補正、仮の値、系統から蓄電池へ貯めないという前提も、結果を読むときの条件として残っています。中間発表では、これらを限界として明記したうえで結果を示す予定です。");
 
 // ---- What the results support (research-level reading; facts from saved results, interpretations marked)
 const rg = (a, d = 0) => `${Math.min(...a).toFixed(d)}〜${Math.max(...a).toFixed(d)}`;
@@ -479,7 +510,7 @@ const FIND = (rows, y0, rowH) => tableOpts({ x: 0.6, y: y0, w: 12.1, colW: [0.45
 const fRow = (n, claim, fact, note) => [{ text: String(n), options: { align: "center", bold: true, color: BLUE_DARK } }, B(claim), fact, { text: note, options: { color: SUB } }];
 const FHEAD = [H("#"), H("言えること"), H("根拠（保存した結果から読んだ値）"), H("解釈・注意（推測を含む）")];
 
-s = page(SA, "結果から言えること（1/2）：受電上限・費用・超過");
+s = page(SA, "（旧版rc20）結果から言えること（1/2）：受電上限・費用・超過");
 s.addTable([FHEAD,
   fRow(1, "電気バスの担当便は上限によらず一定（ただし出発点の影響）",
     `15件で${shareMin}〜${shareMax}%。同じ季節の中の幅は冬${seasonShare(WIN)}、春${seasonShare(spr)}、夏${seasonShare(SEASONS[2][0])}で、季節の差の方が大きい`,
@@ -500,7 +531,7 @@ s.addTable([FHEAD,
 caption(s, "表6　すべてDIAGNOSTIC（研究の結論にはまだ使わない）。根拠は保存した結果、解釈は推測を含む", 0.6, 6.45, 12.1);
 s.addNotes(`ここからは、結果から何が言えるかを、根拠と解釈を分けて整理します。1つ目に、受電上限は電気バスの担当便をほとんど動かしません。同じ季節の中では1ポイント程度しか動かず、季節の差の方が大きいです。総費用のほとんどが車両の使用費で、電気代と燃料代は数パーセントなので、割当は車両の使用費でほぼ決まると考えています。2つ目に、上限がないときのピークは約700 kWで、400 kWまでは超過なしに下げられます。3つ目に、上限を厳しくして増える費用は、ほぼすべて超過の追加費用で、これは仮の単価500円に比例するので、単価の感度を確かめる必要があります。4つ目に、400、600、900 kWの費用の差は、解き直したときのばらつきと同じ程度で、どれが安いかは言えません。上限を緩めた方が高くなるケースもあり、これは便割当の探索の違いによるものです。5つ目に、超過は実行中にだけ生じ、春は予報の外れ、冬は太陽光の不足で説明できます。`);
 
-s = page(SA, "結果から言えること（2/2）：電力量・燃料バス・CO₂・計算");
+s = page(SA, "（旧版rc20）結果から言えること（2/2）：電力量・燃料バス・CO₂・計算");
 s.addTable([FHEAD,
   fRow(6, "超過は電力量ではなく時間帯の問題。捨てた太陽光は買電より多い",
     `捨てた太陽光（冬・春・夏で${qf("冬", "pv_curtailed")}・${qf("春", "pv_curtailed")}・${qf("夏", "pv_curtailed")} kWh/週）が買電（${qf("冬", "grid_import")}・${qf("春", "grid_import")}・${qf("夏", "grid_import")} kWh）より多い。90 kW×168時間＝15,120 kWhも買電より大きい`,
@@ -546,6 +577,8 @@ s = page(SA, "結果からまだ言えないこと・次に確かめること");
 caption(s, "右の矢印の数字は、前の2ページの「言えること」の番号", 0.6, 6.45, 12.1);
 s.addNotes("最後に、今の結果ではまだ言えないことと、次に確かめることです。最適であること、400、600、900 kWのどれが安いか、超過の費用の大きさ、年間や特別な週への一般化、全車燃料バスとの差は、まだ言えません。次に、超過の単価の感度、実際の太陽光での診断の残り、全車燃料バスの最適化、蓄電池の容量の感度と柱B、燃料バスの便の仕業を確かめます。");
 
+}
+
 // ---- Stumbling points found by checking the results (11/4-11/5; numbers from the saved runs, DIAGNOSTIC)
 s = page(S5, "今回のつまずきと対応（11月4〜5日の検証）");
 takeaway(s, "結果の検証で、モデルの前提と探索に問題が見つかった。直して柱Aを計算し直している");
@@ -561,7 +594,7 @@ caption(s, "表8　保存した計算結果とコードの確認による。数�
 s.addNotes("今回の検証で見つかったつまずきをまとめます。1つ目に、燃料バスが1週間の間に一度も給油しない前提になっていました。電気バスは毎晩充電できるので、燃料バスにだけ不利な比べ方になっていて、燃料バスが電気バスの仕事を引き受けられませんでした。車庫で給油する方式を実装して直しました。2つ目に、便割当の計算が出発点の割当からほとんど動いていませんでした。実行した割当は出発点と98から100%同じで、太陽光も蓄電池もない場合でも電気バスが93.5%を担当していました。電気バスの担当便が上限によらず一定だったのは、最適化の結果ではなかったということです。出発点を2つにして、安い方を採る形で計算し直しています。3つ目に、ギャップ45%の下界は車両の使用費だけから作った弱いもので、解の質を示せていません。小さい問題で厳密解と比べる予定です。4つ目に、満タンに給油すると、週末に残る軽油も費用に入るので、燃料は使った分で数えた費用を主に示します。5つ目は計算の基盤の問題で、ディスクや改行コードなどで半日ほど遅れました。");
 
 // ---- Where the overage comes from (rc20 90 kW winter; saved Stage 1 recourse, Stage 2 and executed plans)
-s = page(S5, "超過はどこで生まれるか（90 kW冬の解剖）");
+s = page(SA, "（旧版rc20）超過はどこで生まれるか（90 kW冬の解剖）");
 takeaway(s, "便割当の見積もりは超過0の充電方法を示すが、充電計画がそれを見つけられていない");
 s.addTable([
   [H("90 kW・冬"), H("便割当の見積もり"), H("前日の充電計画"), H("実行（毎時の立て直し）")],
@@ -585,13 +618,14 @@ const RC23 = {
   "200/2025-01-06": { base: [532, 609], hint: [503, 578], hintbf: [542, 450] },
   "90/2025-04-07": { base: [260, 290], hint: [133, 198], hintbf: [308, 280] },
   "90/2025-07-07": { base: [311, 414], hint: [285, 267], hintbf: [258, 237] } };
+const RC20_CASES = JSON.parse(fs.readFileSync(path.join(__dirname, "deck_data_rc20.json"), "utf8")).cases;
 const ovCell = (v) => (v ? `${fmt(v[0])} kWh／${fmt(v[1])} kW` : { text: "計算中", options: { color: GREY } });
-s = page(S5, "対策の試算（rc23）：同じ条件での揺れのほうが大きい");
+s = page(SA, "（旧版rc23）対策の試算：同じ条件での揺れのほうが大きい");
 takeaway(s, "対策の違いによる差は、同じ設定の結果の揺れ（春 133〜308 kWh）に埋もれ、効いたとは言えない");
 s.addTable([
   [H("ケース"), H("rc20（対策前）"), H("rc23 対策なし"), H("rc23 ヒント"), H("rc23 ヒント＋bound_first")],
   ...[[90, WIN, "90 kW・冬"], [200, WIN, "200 kW・冬"], [90, "2025-04-07", "90 kW・春"], [90, "2025-07-07", "90 kW・夏"]].map(([g, w, label]) => {
-    const r = getAny(g, w), c = RC23[`${g}/${w}`];
+    const r = RC20_CASES.find((x) => x.grid_limit_kw === g && x.week === w), c = RC23[`${g}/${w}`];
     return [B(label), r ? `${fmt(r.contract_over_limit_kwh)} kWh／${fmt(r.peak_grid_kw)} kW` : "—", ovCell(c.base), ovCell(c.hint), ovCell(c.hintbf)];
   })],
   tableOpts({ x: 0.6, y: 2.2, w: 12.1, colW: [2.1, 2.5, 2.5, 2.5, 2.5], fontSize: 14, align: "center", rowH: [0.42, 0.48, 0.48, 0.48, 0.48] }));
@@ -606,7 +640,7 @@ s.addNotes("前回の解剖を受けて、対策を試算しました。便割�
 
 // ---- Where in the executed week the overage falls, and whether it is a time-limit effect
 // (rolling_overage_by_step.py on the rc23 archives; executed hour = first 60 min of each step)
-s = page(S5, "超過は実行のどの時間に出るか：時間切れが原因ではない");
+s = page(SA, "（旧版rc23）超過は実行のどの時間に出るか：時間切れが原因ではない");
 takeaway(s, "超過は特定の夜に集中し、多くは「最後まで解けた」時間に出る。制限時間を伸ばしても大部分は残る");
 s.addTable([
   [H("ケース（rc23 ヒント）"), H("1週間の超過"), H("集中する時間"), H("そのうち時間切れの時間の分"), H("時間切れした回数")],
@@ -624,7 +658,7 @@ bullets(s, [
 caption(s, "表8d　毎時の立て直しの各回で実行した1時間の超過を、その回の充電計画の状態（最適／時間切れ）で分けた。DIAGNOSTIC", 0.6, 6.45, 12.1);
 s.addNotes("では、制限時間を伸ばせば超過は減るのかを確かめました。毎時の立て直しの各回で、実際に実行した1時間の超過を、その回の計算が最後まで解けたか、時間切れだったかで分けました。冬の90 kWでは、1週間の超過1,396 kWhのうち93%が、1日目の夜から2日目の朝の1晩に集中していて、時間切れの回の分は19%でした。春は、超過の9割以上が週の最後の夜に集中していて、時間切れの回の分はほぼ0でした。最後まで解けた回の超過は、その時点の電池の残りからは避けられないものです。90 kWでは、夜の23時から朝6時までに上限内で買えるのは630 kWhまでだからです。つまり、原因はその夜より前の計画にあり、前もって充電しておくか、足りない分を燃料バスに回す必要があります。後者は、超過費用が燃料バスの約20倍になるという前回の指摘と同じ方向です。念のため、制限時間を4倍にした計算もしました。結果は超過203 kWhで、120秒のときの133 kWhより減りませんでした。時間切れの回の超過は0で、9割が最後の夜に出ています。つまり制限時間を伸ばしても超過は減らず、原因は計画の構造にあると言えます。");
 
-s = page(SA, "柱Aの計算し直しの設計（rc21、計算中）");
+s = page(SA, "（11/5時点）柱Aの計算し直しの設計（rc21）");
 takeaway(s, "基準＝全車燃料バスの従来運行。そこから電化したときの費用・CO₂・運行を、出発点に左右されない形で比べる");
 s.addTable([
   [H("項目"), H("内容")],
@@ -641,9 +675,14 @@ s.addNotes("計算し直しの設計です。基準は、燃料バスだけの�
 
 // ---- Summary
 s = page(S6, "まとめ");
-[["16〜94%", "電気バスの担当便（90 kW冬）", "出発点で大きく変わる／最適化はまだ途中"],
- ["約74円／kg", "CO₂を減らす費用（90 kW冬）", "燃料バス寄りは41万円安いがCO₂は3.6倍／差はほぼ超過費用"],
- ["9割以上", "超過が特定の夜に集中", "時間切れではなく計画の構造／その夜の前の充電・燃料バスへの振り替え"]].forEach(([big, label, sub], i) => {
+// Latest-version pairs (DATA.pairs, fuel valued by litres burnt as elsewhere in the deck).
+const pairCost = (g, w, st) => { const r = (DATA.pairs || []).find((x) => x.grid_limit_kw === g && x.week === w && x.start === st && x.status === "VERIFIED"); return r; };
+const pb9 = pairCost(900, WIN, "bev"), pi9 = pairCost(900, WIN, "ice"), pb90 = pairCost(90, WIN, "bev"), pi90 = pairCost(90, WIN, "ice");
+const tc = (r) => r.total_cost_fuel_consumed;
+const abate90 = (tc(pb90) - tc(pi90)) / (pi90.total_co2_kg - pb90.total_co2_kg);
+[[`${man(tc(pi9) - tc(pb9))}万円安く`, "電化の効果（900 kW冬）", `電気バス中心は燃料バス中心より／CO₂は${Math.round((1 - pb9.total_co2_kg / pi9.total_co2_kg) * 100)}%少ない`],
+ [`約${Math.round(abate90)}円／kg`, "CO₂を減らす費用（90 kW冬）", `燃料バス寄りが${man(tc(pb90) - tc(pi90))}万円安いが／CO₂は${(pi90.total_co2_kg / pb90.total_co2_kg).toFixed(1)}倍`],
+ ["9割", "超過が火曜未明に集中", "蓄電池が空になる夜／予報を控えめに見ても直らない"]].forEach(([big, label, sub], i) => {
   const x = 0.6 + i * 4.1;
   s.addShape(pres.shapes.RECTANGLE, { x, y: 1.6, w: 3.9, h: 3.0, fill: { color: "EEF5FB" }, line: { color: "EEF5FB" } });
   text(s, label, { x: x + 0.2, y: 1.75, w: 3.5, h: 0.45, fontSize: 15, color: SUB, align: "center" });
@@ -651,10 +690,10 @@ s = page(S6, "まとめ");
   text(s, sub.split("／").map((t, j, a) => ({ text: t, options: { breakLine: j < a.length - 1 } })), { x: x + 0.25, y: 3.25, w: 3.4, h: 1.2, fontSize: 14, align: "center" });
 });
 bullets(s, [
-  `受電上限400 kW以上では超過はほぼ0。電気バス寄りの割当でCO₂は全車燃料バスより約${pct(Math.min(...co2Cut))}〜${pct(Math.max(...co2Cut))}少ない（rc20）`,
-  "次：電気バス中心のまま超過の夜だけ燃料バスに回す割当を探し、超過単価・CO₂単価の感度で結論の向きを確かめる"],
+  iceWins.length ? `受電上限が下がると電気バス中心の優位は縮み、${iceWins.map(lab).join("・")}では燃料バス寄りが安い（最新版、安い方の出発点）` : "どの受電上限でも電気バス寄りが安い（最新版）",
+  "次：系統から蓄電池へ貯めない前提のもとで、超過の夜だけ燃料バスに回す割当を探し、超過単価・CO₂単価の感度で結論の向きを確かめる"],
   { x: 0.6, y: 4.95, w: 12.1, h: 1.8, fontSize: 17, paraSpaceAfter: 8 });
-s.addNotes("まとめです。90 kWの冬では、便割当の出発点によって電気バスの担当便が16%から94%まで変わり、最適化はまだ途中です。燃料バス寄りは約41万円安い一方でCO₂は3.6倍で、CO₂を減らす費用は1キログラムあたり約74円でした。費用の差のほとんどは超過費用です。その超過は特定の夜に集中していて、計算の時間切れではなく、計画の構造が原因です。400 kW以上では超過はほぼなく、電気バス寄りの割当でCO₂は全車燃料バスより大きく減ります。次は、電気バス中心のまま超過の夜だけ燃料バスに回す割当を探し、単価の感度で結論の向きを確かめます。");
+s.addNotes(`まとめです。数値はすべて最新の版の結果です。受電上限900キロワットの冬では、電気バス中心の運用が燃料バス中心より約${man(tc(pi9) - tc(pb9))}万円安く、CO₂も約${Math.round((1 - pb9.total_co2_kg / pi9.total_co2_kg) * 100)}パーセント少なくなりました。一方、90キロワットの冬では燃料バス寄りが約${man(tc(pb90) - tc(pi90))}万円安く、CO₂は約${(pi90.total_co2_kg / pb90.total_co2_kg).toFixed(1)}倍で、電気バス寄りにしてCO₂を減らす費用は1キログラムあたり約${Math.round(abate90)}円です。超過の9割は、蓄電池が空になった火曜の未明に集中していて、予報を控えめに見る対策では直りませんでした。次は、系統から蓄電池へ貯めない今の前提のもとで、超過の夜だけ燃料バスに回す割当を探し、単価の感度で結論の向きを確かめます。`);
 
 
 // ---- Plan
@@ -892,9 +931,26 @@ bullets(s, [
 caption(s, "表8j　rc33（7dc38d95）と rc35（9a0fe044、予報×0.5は計画だけ、実行は実測の発電）。毎時の実行記録から集計。どちらも175回の立て直しを受理、物理検査 VALID。DIAGNOSTIC", 0.6, 6.4, 12.1, 0.5);
 s.addNotes("超過が出る夜の中身です。電気バス寄りの1週間を日ごとに見ると、超過のほとんどは2日目、火曜日の未明0時から5時に出ています。この時間は27台の電気バスが一斉に夜の充電をしますが、そのとき蓄電池はすでに下限まで空でした。月曜日が曇りで、昼のあいだに太陽光を十分に貯められなかったためです。一方、月曜日の買電は511キロワット時で、超過なしで買える量の約2割しか使っていません。ただ、今のシナリオの前提では系統から蓄電池へ充電できないため、この余った枠を夜に回すことができません。対策として、計画のときだけ太陽光の予報を半分と見込んで計算しましたが、便割当が燃料バスへ寄って費用が約12万円増えただけで、超過は1割ほどしか減りませんでした。そのため、この対策は採りません。この前提のもとでは、90キロワットの冬の超過は計画の工夫では避けにくい構造だと考えています。系統から蓄電池へ貯められる場合の比較は、今後の課題とします。");
 
+// ---- 11/9: what was devised (methods and research practice; each item is something the code or runs actually do)
+s = page(S0, "工夫した点");
+takeaway(s, "結論が計算の都合に左右されないよう、比べ方・実行のしかた・計算の確かめ方を工夫した");
+[["比べ方", "2つの出発点で同じ問題を解く", "電気バス寄り・燃料バス寄りの割当から解き、結論が初期解に左右されないかを確かめる。同じ版のコードで比べ、版の違う数値は印を付ける"],
+ ["実行のしかた", "実際の天気で毎時立て直す", "予報で立てた計画を実測の発電で1時間ごとに立て直し（175回／週）、実際に運用した結果だけで費用・CO₂・超過を数える"],
+ ["解き方", "大きな問題を2段に分けて解く", "1,704便×60台の便割当は、一部の車両・日だけを解き直す大近傍探索（LNS）で改善。充電計画は割当を固定して15分刻みで解く"],
+ ["計算の確かめ方", "失敗を隠さず、原因を直す", "近似解での代用や事後の手直しはしない。止まった計算は原因を特定してコードを直し（3種類）、直した版で計算し直す"],
+ ["計算基盤", "研究室の計算機11台で並列に計算", "計算機ごとの速さの差を制限時間で補正。止まった計算を自動で見つけて再開する仕組みを作り、数十ケースを並行して回した"],
+ ["原因の分析", "毎時の実行記録を日・時間で分解", "超過がいつ・なぜ出たかを記録から特定（蓄電池が空になる火曜未明）。思いついた対策（予報を控えめに見る）も計算で確かめて、効かないことを示した"]].forEach(([tag, h, body], i) => {
+  const x = 0.6 + (i % 3) * 4.1, y = 2.2 + Math.floor(i / 3) * 2.2;
+  s.addShape(pres.shapes.RECTANGLE, { x, y, w: 3.9, h: 2.05, fill: { color: i % 2 ? "F7F7F7" : "EEF5FB" }, line: { color: GRID, width: 0.75 } });
+  text(s, [{ text: tag, options: { fontSize: 12, color: SUB, breakLine: true } }, { text: h, options: { fontSize: 15, bold: true, color: BLUE_DARK } }], { x: x + 0.15, y: y + 0.08, w: 3.6, h: 0.7 });
+  text(s, body, { x: x + 0.15, y: y + 0.8, w: 3.6, h: 1.2, fontSize: 12, lineSpacingMultiple: 1.1 });
+});
+caption(s, "どれも保存したコードと計算記録で確かめられる内容。結果はすべて診断用（DIAGNOSTIC）", 0.6, 6.6, 12.1, 0.35);
+s.addNotes("工夫した点をまとめました。1つ目は比べ方です。電気バス寄りと燃料バス寄りの2つの出発点から同じ問題を解き、結論が初期解に左右されないかを確かめています。比べる結果は同じ版のコードでそろえ、違う版の数値には印を付けています。2つ目は実行のしかたです。前日に予報で立てた計画を、実際の発電で1時間ごとに立て直しながら1週間運用し、その結果だけで費用、CO₂、超過を数えています。3つ目は解き方で、大きな問題を便割当と充電計画の2段に分け、便割当は一部の車両と日だけを解き直す大近傍探索で改善しています。4つ目は計算の確かめ方です。近似解での代用や、解いた後の手直しはせず、止まった計算は原因を特定してコードを直し、直した版で計算し直しています。5つ目は計算基盤で、研究室の計算機11台を束ね、速さの差は制限時間で補正し、止まった計算を自動で再開する仕組みを作りました。6つ目は原因の分析で、毎時の記録を日と時間に分解して超過の原因を特定し、思いついた対策も計算で確かめました。");
+
 // Slides are generated in code order (later slides reuse constants defined by earlier ones) and then
 // reordered in the package: main talk first, details in the appendix. ORDER lists generated slide numbers.
-const ORDER = [1, 2, 34, 3, 4, 5, 7, 38, 39, 40, 41, 42, 9, 10, 11, 13, 15, 26, 35, 27, 29, 28, 22, 31, 36, 32, 33, 37, 6, 8, 12, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 30];
+const ORDER = [1, 2, 34, 3, 43, 4, 5, 7, 38, 39, 40, 41, 42, 9, 10, 11, 13, 15, 26, 35, 22, 31, 36, 32, 33, 37, 6, 8, 12, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 27, 29, 28, 30];
 async function reorderSlides(file) {
   const JSZip = require(path.join(process.env.DECK_NODE_MODULES, "jszip"));
   const zip = await JSZip.loadAsync(fs.readFileSync(file));
