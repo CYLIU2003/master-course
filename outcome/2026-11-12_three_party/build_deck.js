@@ -299,7 +299,7 @@ s.addNotes("どの時間帯の便が燃料バスに回っているかを見ま�
 
 // ---- A-5 CO2
 s = page(S3, "結果(A-5)　全車燃料バスとのCO₂比較");
-takeaway(s, `電気バスと併用すると、CO₂は全車燃料バスより約${pct(Math.min(...co2Cut))}〜${pct(Math.max(...co2Cut))}少ない`);
+takeaway(s, `電気バスと併用すると、CO₂は全車燃料バスより約${pct(Math.min(...co2Cut)) === pct(Math.max(...co2Cut)) ? pct(Math.min(...co2Cut)) : `${pct(Math.min(...co2Cut))}〜${pct(Math.max(...co2Cut))}`}少ない`);
 s.addChart(pres.charts.BAR, [
   { name: "全車燃料バス（概算）", labels: SEASONS.map((x) => x[1]), values: SEASONS.map(([w]) => Math.round(Number(diesel.find((d) => d.week === w).co2_kg) / 100) / 10) },
   { name: "電気バスと併用（900 kW）", labels: SEASONS.map((x) => x[1]), values: SEASONS.map(([w]) => (get(900, w) ? Math.round(get(900, w).total_co2_kg / 100) / 10 : null)) }],

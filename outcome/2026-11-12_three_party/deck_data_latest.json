@@ -137,15 +137,48 @@
    "grid_limit_kw": 200,
    "week": "2025-04-07",
    "season": "春",
-   "status": "PENDING",
-   "verified_starts": []
+   "start": "bev",
+   "case": "rc35/a200s10/2025-04-07",
+   "version": "9a0fe044",
+   "status": "VERIFIED",
+   "total_cost": 4202755.671610072,
+   "vehicle_usage_cost": 4040000.0,
+   "electricity_cost": 90187.8262689989,
+   "fuel_cost": 67038.93305309737,
+   "contract_overage_cost": 3451.5000001724766,
+   "contract_over_limit_kwh": 6.903000000344953,
+   "grid_import_kwh": 3006.2608756334175,
+   "peak_grid_kw": 226.9659999999996,
+   "pv_generated_kwh": 27818.6505,
+   "pv_used_total_kwh": 21986.830014709736,
+   "pv_curtailed_kwh": 5831.820485290264,
+   "ice_fuel_consumed_l": 219.1915457964602,
+   "total_co2_kg": 2077.4122878034345,
+   "ice_co2_kg": 574.281849986726,
+   "grid_electricity_co2_kg": 1503.1304378167085,
+   "used_vehicle_day_count": 202,
+   "service_km": 13925.428829,
+   "total_cost_fuel_consumed": 4168595.470426444,
+   "trips": 1704,
+   "bev_trip_share_pct": 92.72300469483568,
+   "bus_charging_kwh": 24726.756693976546,
+   "rolling_steps": 174,
+   "rolling_time_limit_steps": 0,
+   "stage2_solver_status": null,
+   "selected_start": "bev",
+   "other_start_total_cost": 4610948.604977294,
+   "other_start_total_cost_fuel_consumed": 4496298.269523753,
+   "other_start_total_co2_kg": 7833.1900547257,
+   "other_start_bev_trip_share_pct": 15.375586854460094
   },
   {
    "grid_limit_kw": 200,
    "week": "2025-07-07",
    "season": "夏",
    "status": "PENDING",
-   "verified_starts": []
+   "verified_starts": [
+    "bev"
+   ]
   },
   {
    "grid_limit_kw": 400,
@@ -190,7 +223,9 @@
    "week": "2025-04-07",
    "season": "春",
    "status": "PENDING",
-   "verified_starts": []
+   "verified_starts": [
+    "bev"
+   ]
   },
   {
    "grid_limit_kw": 400,
@@ -500,7 +535,31 @@
    "start": "bev",
    "case": "rc35/a200s10/2025-04-07",
    "version": "9a0fe044",
-   "status": "NOT_COLLECTED"
+   "status": "VERIFIED",
+   "total_cost": 4202755.671610072,
+   "vehicle_usage_cost": 4040000.0,
+   "electricity_cost": 90187.8262689989,
+   "fuel_cost": 67038.93305309737,
+   "contract_overage_cost": 3451.5000001724766,
+   "contract_over_limit_kwh": 6.903000000344953,
+   "grid_import_kwh": 3006.2608756334175,
+   "peak_grid_kw": 226.9659999999996,
+   "pv_generated_kwh": 27818.6505,
+   "pv_used_total_kwh": 21986.830014709736,
+   "pv_curtailed_kwh": 5831.820485290264,
+   "ice_fuel_consumed_l": 219.1915457964602,
+   "total_co2_kg": 2077.4122878034345,
+   "ice_co2_kg": 574.281849986726,
+   "grid_electricity_co2_kg": 1503.1304378167085,
+   "used_vehicle_day_count": 202,
+   "service_km": 13925.428829,
+   "total_cost_fuel_consumed": 4168595.470426444,
+   "trips": 1704,
+   "bev_trip_share_pct": 92.72300469483568,
+   "bus_charging_kwh": 24726.756693976546,
+   "rolling_steps": 174,
+   "rolling_time_limit_steps": 0,
+   "stage2_solver_status": null
   },
   {
    "grid_limit_kw": 200,
@@ -509,7 +568,31 @@
    "start": "ice",
    "case": "rc35/b200s10/2025-04-07",
    "version": "9a0fe044",
-   "status": "NOT_COLLECTED"
+   "status": "VERIFIED",
+   "total_cost": 4610948.604977294,
+   "vehicle_usage_cost": 4040000.0,
+   "electricity_cost": -7.275957614183426e-11,
+   "fuel_cost": 563115.4149225682,
+   "contract_overage_cost": 0.0,
+   "contract_over_limit_kwh": 0.0,
+   "grid_import_kwh": 0.0,
+   "peak_grid_kw": 0.0,
+   "pv_generated_kwh": 27818.6505,
+   "pv_used_total_kwh": 7692.397837936292,
+   "pv_curtailed_kwh": 20126.25266206371,
+   "ice_fuel_consumed_l": 2989.7671964601773,
+   "total_co2_kg": 7833.1900547257,
+   "ice_co2_kg": 7833.1900547257,
+   "grid_electricity_co2_kg": 0.0,
+   "used_vehicle_day_count": 202,
+   "service_km": 13925.428829,
+   "total_cost_fuel_consumed": 4496298.269523753,
+   "trips": 1704,
+   "bev_trip_share_pct": 15.375586854460094,
+   "bus_charging_kwh": 5648.813480965009,
+   "rolling_steps": 174,
+   "rolling_time_limit_steps": 0,
+   "stage2_solver_status": null
   },
   {
    "grid_limit_kw": 200,
@@ -518,7 +601,31 @@
    "start": "bev",
    "case": "rc35/a200s10/2025-07-07",
    "version": "9a0fe044",
-   "status": "NOT_COLLECTED"
+   "status": "VERIFIED",
+   "total_cost": 4200525.298897403,
+   "vehicle_usage_cost": 4040000.0,
+   "electricity_cost": 77917.70970391508,
+   "fuel_cost": 33291.804059734546,
+   "contract_overage_cost": 47738.99733598485,
+   "contract_over_limit_kwh": 95.4779946719697,
+   "grid_import_kwh": 2597.2569901306892,
+   "peak_grid_kw": 281.9450718043923,
+   "pv_generated_kwh": 30188.98525,
+   "pv_used_total_kwh": 24892.18475934658,
+   "pv_curtailed_kwh": 5296.800490653419,
+   "ice_fuel_consumed_l": 106.16767278761063,
+   "total_co2_kg": 1576.787797768884,
+   "ice_co2_kg": 278.1593027035394,
+   "grid_electricity_co2_kg": 1298.6284950653446,
+   "used_vehicle_day_count": 202,
+   "service_km": 13925.428829,
+   "total_cost_fuel_consumed": 4183158.64575581,
+   "trips": 1704,
+   "bev_trip_share_pct": 96.47887323943662,
+   "bus_charging_kwh": 26044.268966656924,
+   "rolling_steps": 174,
+   "rolling_time_limit_steps": 9,
+   "stage2_solver_status": null
   },
   {
    "grid_limit_kw": 200,
@@ -602,7 +709,31 @@
    "start": "bev",
    "case": "rc35/a400s10/2025-04-07",
    "version": "9a0fe044",
-   "status": "NOT_COLLECTED"
+   "status": "VERIFIED",
+   "total_cost": 4184229.8389426614,
+   "vehicle_usage_cost": 4040000.0,
+   "electricity_cost": 79143.247499149,
+   "fuel_cost": 63174.748871681426,
+   "contract_overage_cost": 0.6250000573828629,
+   "contract_over_limit_kwh": 0.0012500001147657258,
+   "grid_import_kwh": 2638.1082499717804,
+   "peak_grid_kw": 400.00500000045906,
+   "pv_generated_kwh": 27818.6505,
+   "pv_used_total_kwh": 22171.940821061835,
+   "pv_curtailed_kwh": 5646.709678938165,
+   "ice_fuel_consumed_l": 226.01658274336285,
+   "total_co2_kg": 1911.2175717735017,
+   "ice_co2_kg": 592.1634467876112,
+   "grid_electricity_co2_kg": 1319.0541249858904,
+   "used_vehicle_day_count": 202,
+   "service_km": 13925.428829,
+   "total_cost_fuel_consumed": 4154957.5774824847,
+   "trips": 1704,
+   "bev_trip_share_pct": 92.84037558685446,
+   "bus_charging_kwh": 24541.7349179547,
+   "rolling_steps": 174,
+   "rolling_time_limit_steps": 0,
+   "stage2_solver_status": null
   },
   {
    "grid_limit_kw": 400,
@@ -790,6 +921,24 @@
    }
   },
   {
+   "grid_limit_kw": 200,
+   "week": "2025-04-07",
+   "bands": {
+    "05-06": {
+     "diesel": 35,
+     "total": 186
+    },
+    "07-21": {
+     "diesel": 73,
+     "total": 1410
+    },
+    "22-": {
+     "diesel": 16,
+     "total": 108
+    }
+   }
+  },
+  {
    "grid_limit_kw": 400,
    "week": "2025-01-06",
    "bands": {
@@ -846,6 +995,12 @@
    "time_limit": 0
   },
   {
+   "grid_limit_kw": 200,
+   "week": "2025-04-07",
+   "steps": 174,
+   "time_limit": 0
+  },
+  {
    "grid_limit_kw": 400,
    "week": "2025-01-06",
    "steps": 175,
@@ -868,6 +1023,16 @@
    "grid_import": 1781.865308444989,
    "bus_charging": 17460.749996821396,
    "grid_share_pct": 10.204975781506322
+  },
+  {
+   "season": "春",
+   "n": 1,
+   "pv_generated": 27818.6505,
+   "pv_used": 21986.830014709736,
+   "pv_curtailed": 5831.820485290264,
+   "grid_import": 3006.2608756334175,
+   "bus_charging": 24726.756693976546,
+   "grid_share_pct": 12.157926382499427
   },
   {
    "season": "夏",
