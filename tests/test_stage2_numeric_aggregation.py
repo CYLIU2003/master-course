@@ -44,6 +44,7 @@ def test_exact_boundary_is_solved_without_accepting_real_soc_surplus(
             assert model.Params.MIPFocus == mip_focus
             assert model.Params.NumericFocus == numeric_focus
             assert model.Params.Method == (0 if rolling else 1)
+            assert model.Params.IntegralityFocus == 1
             if expected_feasible:
                 assert model.Status == gp.GRB.OPTIMAL
                 assert model.ConstrVio <= 1.0e-9
@@ -184,3 +185,17 @@ def test_january_native_boundary_solves_but_rejects_real_surplus(tmp_path, initi
 def test_rejects_invalid_mip_focus(value):
     with pytest.raises(ValueError, match="stage2_gurobi_mip_focus"):
         _configure_stage2_numerics(None, OptimizationConfig(stage2_gurobi_mip_focus=value))
+
+
+def test_stage2_declares_integrality_focus_and_rejects_other_values():
+    """2026-11-08: rolling Stage 2 incumbents built from a MIP start carried charge_on
+    1e-6..6e-6 above IntFeasTol (trickle flow); IntegralityFocus=1 is declared up front."""
+    gp = pytest.importorskip("gurobipy")
+    with gp.Env(empty=True) as env:
+        env.setParam("OutputFlag", 0)
+        env.start()
+        with gp.read(str(FIXTURE), env=env) as model:
+            parameters = _configure_stage2_numerics(model, OptimizationConfig())
+            assert parameters["IntegralityFocus"] == 1 and model.Params.IntegralityFocus == 1
+            with pytest.raises(ValueError):
+                _configure_stage2_numerics(model, OptimizationConfig(stage2_gurobi_integrality_focus=2))

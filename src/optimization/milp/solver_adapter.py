@@ -3397,6 +3397,9 @@ def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[s
     mip_focus = config.stage2_gurobi_mip_focus
     if type(mip_focus) is not int or mip_focus not in (0, 1, 2, 3):
         raise ValueError("stage2_gurobi_mip_focus must be an integer in {0, 1, 2, 3}")
+    integrality_focus = config.stage2_gurobi_integrality_focus
+    if type(integrality_focus) is not int or integrality_focus not in (0, 1):
+        raise ValueError("stage2_gurobi_integrality_focus must be an integer in {0, 1}")
     parameters = {
         "FeasibilityTol": _configured_gurobi_feasibility_tol(config, stage=2),
         "IntFeasTol": _configured_gurobi_integrality_tol(config, stage=2),
@@ -3419,6 +3422,10 @@ def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[s
         # Select once from the declared phase, uniformly across every month;
         # this is not a retry after failure and never changes physical tolerances.
         "Method": (0 if config.rolling_horizon_policy == ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT else 1),
+        # The extraction contract needs every charge_on/charger binary within
+        # IntFeasTol; IntegralityFocus makes Gurobi enforce that for incumbents
+        # it builds from a MIP start (trickle flow through big-M power rows).
+        "IntegralityFocus": integrality_focus,
     }
     for name, value in parameters.items():
         model.setParam(name, value)
@@ -23832,7 +23839,7 @@ class GurobiMILPAdapter:
                 "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
                 "stage2_gurobi_presolve": stage2_numerics["Presolve"],
                 "stage2_gurobi_numeric_focus": stage2_numerics["NumericFocus"],
-                "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"],
+                "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"], "stage2_gurobi_integrality_focus": stage2_numerics["IntegralityFocus"],
                 "stage2_gurobi_method": stage2_numerics["Method"],
                 "gurobi_threads": configured_threads,
                 "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
@@ -24210,7 +24217,7 @@ class GurobiMILPAdapter:
             "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
             "stage2_gurobi_presolve": stage2_numerics["Presolve"],
             "stage2_gurobi_numeric_focus": stage2_numerics["NumericFocus"],
-            "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"],
+            "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"], "stage2_gurobi_integrality_focus": stage2_numerics["IntegralityFocus"],
             "stage2_gurobi_method": stage2_numerics["Method"],
             "gurobi_threads": configured_threads,
             "stage2_numeric_diagnostics": stage2_numeric_diagnostics,

@@ -12841,3 +12841,10 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
 - **変更**：リクエスト項目 `planning_pv_forecast_scale`（(0, 1]、既定 1.0）。前日計画の問題データを作った直後（天気処理の後、成果物・ハッシュを作る前）に、計画が読む太陽光予報（`pv_generation_kwh_by_slot`、`available_pv_surplus_kwh_by_slot`、`pv_slots`）に倍率をかける（`src/optimization/common/planning_pv.py`）。この値は `effective_pv_profiles.json` を通じて立て直しにも引き継がれる。実行の発電は `pv_actuals_json` の実測のままで、変えない。倍率はメタデータ `planning_pv_forecast_scale` に記録。1.0 なら従来と同じ問題。
 - **数理的な意味**：計画は「予報の s 倍しか発電しない」前提の費用を最小にする（太陽光の外れへの余裕）。実行の会計（executed_day_accounting）は実測で、比較の基準は変わらない。前日計画の会計の太陽光は計画用の値なので、実行と同じ意味ではない。
 - **確認**：`tests/test_planning_pv_forecast_scale.py`（11件）。関係テスト 363件 通過（`test_run_optimization_uses_canonical_engine_for_ga_mode` と `test_stale_prepared_input_does_not_persist_rejected_scope` は変更前から失敗）。実際の計算での確認は rc34。
+
+## 2026-11-08 Stage 2 に IntegralityFocus=1 を宣言
+
+- **事実**：rc33 h090 春（90 kW・燃料バス寄り、3pru、job bcad39a8）の立て直し 28回目で、`Positive Stage 2 charging power has no selected physical charger`（charge_on = 8.3e-7、charge_kw = 7.5e-5）。Gurobi のログは「User MIP start produced solution 0.0011875」の後に「-1.70985e-10」、`Warning: max integrality violation (3.3334e-06) exceeds tolerance`。開始値はすべての 0/1 変数に値を渡していた（7dc38d95 の後）ので、前の修正だけでは防げない。開始値を Gurobi が手直しする段階で、`charge_kw ≤ P·charge_on` の上限の式を通して小さな値が漏れる（trickle flow）。
+- **変更**：`OptimizationConfig.stage2_gurobi_integrality_focus`（既定 1）を Stage 2 の Gurobi 設定 `IntegralityFocus` に渡し、結果に `stage2_gurobi_integrality_focus` を記録する。解く前に宣言する設定で、実行可能領域・許容誤差・抽出の検査は変えない。失敗後の解き直しや解の書き換えはしない。
+- **確認**：`tests/test_stage2_numeric_aggregation.py` に、実 Gurobi で IntegralityFocus=1 が入ることと、範囲外の値を拒むことのテストを追加。既存の厳密境界テストも IntegralityFocus=1 で通過。rolling・Stage 2 関係 528件 通過。失敗したステップのモデルは保存されていないので、再現は rc35 の実行で確かめる。
+- **影響**：Stage 2 の探索が変わるので新しい版（rc35）。rc33 の受理済みの結果はそのまま有効。

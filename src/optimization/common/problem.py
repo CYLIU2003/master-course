@@ -446,6 +446,11 @@ class OptimizationConfig:
     stage2_gurobi_numeric_focus: int = 0
     # Select before execution; unchanged feasible region and physical tolerances.
     stage2_gurobi_mip_focus: int = 1
+    # Gurobi IntegralityFocus for Stage 2 (2026-11-08): the charge_kw <= P*charge_on
+    # rows let Gurobi's MIP-start processing return charge_on = 1e-6..6e-6 above
+    # IntFeasTol = 1e-9 ("trickle flow"; rc31/rc33 rolling steps, with and without
+    # a complete binary start). Declared before solving; region and tolerances unchanged.
+    stage2_gurobi_integrality_focus: int = 1
     # Opt-in until paired rolling diagnostics establish runtime and quality.
     # A native binary start is only a proposal, never fixed charging or SOC.
     stage2_charging_start_policy: str = "none"
