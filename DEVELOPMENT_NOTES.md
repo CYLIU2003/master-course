@@ -12834,3 +12834,10 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
 - **変更**：前の計算期間に入らない slot は「充電しない（0）」として、0/1 の変数をすべて開始値で埋める（`apply_charging_mip_start` の `slot_limit`）。Gurobi は連続量だけを決めればよい。開始値が成り立たないときは Gurobi が捨てて普通に探す。解を後から直すことはしない。抽出の検査は変えない。
 - **確認**：`tests/test_charging_mip_start.py` の slot_limit テストを、全変数に開始値が入ることの確認に書き換え。関係テスト 407件 通過。Gurobi の時間切れの経路そのものは再現していない（推定は上のログと slot の範囲に基づく）。
 - **影響**：rc31 の結果のうち受理されたものは有効。この変更以降は rc33 として計算する。
+
+## 2026-11-08 柱A 案A：計画用の太陽光予報に倍率（planning_pv_forecast_scale）
+
+- **事実（rc33 90 kW・冬・電気バス寄り g090）**：前日計画の会計は 405.0万円・契約超過0。実行は 479.4万円・超過 1,291 kWh（64.5万円）。予報はほぼ一定の約3,400 kWh/日、実測は 1日目 0.41倍、2日目 0.78倍、3〜6日目 1.1〜1.5倍、7日目 0.49倍（週合計はほぼ一致）。曇りの1日目で蓄電池が足りず、2日目の夜に超過 1,207 kWh。前日計画は超過を見込まないので、Stage 1 は電気バス中心を選ぶ。同じ版の燃料バス寄り（h090）は 439.0万円・超過0。
+- **変更**：リクエスト項目 `planning_pv_forecast_scale`（(0, 1]、既定 1.0）。前日計画の問題データを作った直後（天気処理の後、成果物・ハッシュを作る前）に、計画が読む太陽光予報（`pv_generation_kwh_by_slot`、`available_pv_surplus_kwh_by_slot`、`pv_slots`）に倍率をかける（`src/optimization/common/planning_pv.py`）。この値は `effective_pv_profiles.json` を通じて立て直しにも引き継がれる。実行の発電は `pv_actuals_json` の実測のままで、変えない。倍率はメタデータ `planning_pv_forecast_scale` に記録。1.0 なら従来と同じ問題。
+- **数理的な意味**：計画は「予報の s 倍しか発電しない」前提の費用を最小にする（太陽光の外れへの余裕）。実行の会計（executed_day_accounting）は実測で、比較の基準は変わらない。前日計画の会計の太陽光は計画用の値なので、実行と同じ意味ではない。
+- **確認**：`tests/test_planning_pv_forecast_scale.py`（11件）。関係テスト 363件 通過（`test_run_optimization_uses_canonical_engine_for_ga_mode` と `test_stale_prepared_input_does_not_persist_rejected_scope` は変更前から失敗）。実際の計算での確認は rc34。

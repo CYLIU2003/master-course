@@ -988,6 +988,9 @@ class RunOptimizationBody(BaseModel):
     # Hourly rolling step limit; None keeps the shared stage2 limit. The
     # day-ahead Stage 2 needs a long limit, the rolling steps do not.
     rolling_time_limit_seconds: Optional[int] = Field(default=None, ge=1)
+    # Planning-only PV forecast margin (pillar A, 2026-11-08): the day-ahead and
+    # rolling plans see forecast PV x this scale; executed hours use measured PV.
+    planning_pv_forecast_scale: float = Field(default=1.0, gt=0.0, le=1.0)
     # Serialized assignment of another run with the same trips and vehicles,
     # used only as the Stage 1 MIP start. Embedded so workers need no file.
     stage1_seed_plan: Optional[Dict[str, Any]] = None
@@ -11932,6 +11935,23 @@ def _run_optimization(
                     weather_profile,
                     random_seed=random_seed,
                 )
+            # Planning-only PV forecast margin; applied before any artifact or
+            # hash is derived from the problem, so effective_pv_profiles.json
+            # carries it into the rolling chain. Measured PV is untouched.
+            from src.optimization.common.planning_pv import (
+                PLANNING_PV_FORECAST_SCALE_KEY,
+                apply_planning_pv_forecast_scale,
+                validate_planning_pv_forecast_scale,
+            )
+            planning_pv_forecast_scale = validate_planning_pv_forecast_scale(
+                raw_frontend_request_payload.get("planning_pv_forecast_scale", 1.0)
+            )
+            if planning_pv_forecast_scale != 1.0:
+                problem = apply_planning_pv_forecast_scale(
+                    problem, planning_pv_forecast_scale
+                )
+            else:
+                problem.metadata[PLANNING_PV_FORECAST_SCALE_KEY] = 1.0
             # This is a representation-only Stage-1 experiment control. It
             # must be part of the submitted optimization request (rather than
             # silently discarded by Prepare) and must be recorded in the
