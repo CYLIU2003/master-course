@@ -52,10 +52,11 @@ const list = (a) => a.length <= 1 ? a.join("") : `${a.slice(0, -1).join(", ")} a
 const iceWins = cases.filter((r) => r.selected_start === "ice"), bevWins = cases.filter((r) => r.selected_start === "bev");
 const rngTxt = (a, d = 0) => !a.length ? "—" : Math.min(...a).toFixed(d) === Math.max(...a).toFixed(d) ? Math.min(...a).toFixed(d) : `${Math.min(...a).toFixed(d)}–${Math.max(...a).toFixed(d)}`;
 // 2026-11-09: 90 kW spring has no running job; its diesel-heavy run (rc35 a090s10) FAILED.
-const STOPPED = new Set(["90/2025-04-07"]);
+// 400 kW summer: the electric-heavy run (rc35 a400s10) FAILED; only the diesel-heavy start finished.
+const STOPPED = new Map([["90/2025-04-07", "diesel-heavy"], ["400/2025-07-07", "electric-heavy"]]);
 const notDone = DATA.cases.filter((r) => r.status !== "VERIFIED");
 const pend = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map(lab);
-const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map(lab);
+const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${lab(r)} (${STOPPED.get(`${r.grid_limit_kw}/${r.week}`)})`);
 const pairOf = (g, w, st) => DATA.pairs.find((x) => x.grid_limit_kw === g && x.week === w && x.start === st && x.status === "VERIFIED");
 const pb90 = pairOf(90, "2025-01-06", "bev"), pi90 = pairOf(90, "2025-01-06", "ice");
 const maxTimeouts = Math.max(...DATA.rolling.map((r) => r.time_limit));
@@ -110,7 +111,7 @@ s.addChart(pres.charts.BAR, [{ name: "Day-ahead forecast (normal)", labels: DAYS
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "PV [kWh/day]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
 caption("Fig. 5  PV in the winter week (from 6 Jan 2025): day-ahead forecast vs actual (input data)", LX, y + 3.85, COL, 0.8, 26);
 y += 4.9;
-caption(`Note: All results are DIAGNOSTIC, from the latest versions (rc33, rc35). Each case is solved from two start points (electric-heavy and diesel-heavy); the one with the lower total cost (diesel valued by litres burnt) is shown. The trip assignment stops at the memory limit and the two-stage method is not a global optimum. Up to ${maxTimeouts} of 175 hourly re-plans hit the time limit; slower machines were given longer limits. ${pend.length ? `Still running: ${list(pend)}. ` : ""}${stopped.length ? `${list(stopped)}: the diesel-heavy run failed; not completed. ` : ""}Peak = 15-min average.`,
+caption(`Note: All results are DIAGNOSTIC, from the latest versions (rc33, rc35). Each case is solved from two start points (electric-heavy and diesel-heavy); the one with the lower total cost (diesel valued by litres burnt) is shown. The trip assignment stops at the memory limit and the two-stage method is not a global optimum. Up to ${maxTimeouts} of 175 hourly re-plans hit the time limit; slower machines were given longer limits. ${pend.length ? `Still running: ${list(pend)}. ` : ""}${stopped.length ? `Not completed, one start failed: ${list(stopped)}. ` : ""}Peak = 15-min average.`,
   LX, y, COL, 45.5 - y - 2.5, 22);
 text([{ text: "References", options: { bold: true, breakLine: true } },
   ...["[1] Ministry of the Environment, METI: List of calculation methods and emission factors (2025)", "[2] W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
@@ -151,7 +152,7 @@ const PAIRS = [];
 LIMITS.forEach((g) => SE.forEach(([w, n]) => { const b = pairOf(g, w, "bev"), i = pairOf(g, w, "ice"); if (b && i) PAIRS.push({ label: `${g} ${n.slice(0, 3)}`, b, i }); }));
 const pcats = PAIRS.map((p) => p.label);
 const pairChart = (o) => ({ ...chart(), y, w: half, h: 5.7, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
-  showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 22, legendFontSize: 26, catAxisLabelFontSize: 24, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
+  showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 18, legendFontSize: 26, catAxisLabelFontSize: 20, catAxisLabelFrequency: 1, barGapWidthPct: 40, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
 s.addChart(pres.charts.BAR, [
   { name: "Electric-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_cost_fuel_consumed / 1e4) / 100) },
   { name: "Diesel-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_cost_fuel_consumed / 1e4) / 100) }],

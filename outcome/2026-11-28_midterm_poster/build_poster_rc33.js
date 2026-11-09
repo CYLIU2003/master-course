@@ -61,10 +61,11 @@ const lab = (r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`;
 const iceWins = cases.filter((r) => r.selected_start === "ice"), bevWins = cases.filter((r) => r.selected_start === "bev");
 const rngTxt = (a, d = 0) => !a.length ? "—" : Math.min(...a).toFixed(d) === Math.max(...a).toFixed(d) ? Math.min(...a).toFixed(d) : `${Math.min(...a).toFixed(d)}〜${Math.max(...a).toFixed(d)}`;
 // 2026-11-09: 90 kW spring has no running job; its ICE-heavy run (rc35 a090s10) FAILED, so it is not "計算中".
-const STOPPED = new Set(["90/2025-04-07"]);
+// 400 kW summer: the BEV-heavy run (rc35 a400s10) FAILED; only the ICE-heavy start finished.
+const STOPPED = new Map([["90/2025-04-07", "燃料バス寄り"], ["400/2025-07-07", "電気バス寄り"]]);
 const notDone = DATA.cases.filter((r) => r.status !== "VERIFIED");
 const pend = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`);
-const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`);
+const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}は${STOPPED.get(`${r.grid_limit_kw}/${r.week}`)}`);
 const pairOf = (g, w, st) => DATA.pairs.find((x) => x.grid_limit_kw === g && x.week === w && x.start === st && x.status === "VERIFIED");
 const pb90 = pairOf(90, "2025-01-06", "bev"), pi90 = pairOf(90, "2025-01-06", "ice");
 const tcc = (r) => r.total_cost_fuel_consumed;
@@ -123,7 +124,7 @@ s.addChart(pres.charts.BAR, [{ name: "前日の予報（平年値）", labels: D
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "太陽光 [kWh/日]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
 caption("図5　冬の代表週（2025年1月6日〜）の太陽光：前日の予報と実際（入力データ）", LX, y + 3.85, COL, 0.8, 28);
 y += 4.9;
-caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}/175回が時間切れ。遅い計算機は制限時間を延ばした。${pend.length ? `${pend.join("・")}は計算中。` : ""}${stopped.length ? `${stopped.join("・")}は燃料バス寄りの計算が失敗し未完。` : ""}最大受電は15分平均。`,
+caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}/175回が時間切れ。遅い計算機は制限時間を延ばした。${pend.length ? `${pend.join("・")}は計算中。` : ""}${stopped.length ? `${stopped.join("、")}の計算が失敗し未完。` : ""}最大受電は15分平均。`,
   LX, y, COL, 45.5 - y - 2.5, 24);
 text([{ text: "参考文献（原本は 先行文献／2026-11-08_中間発表の参考文献）", options: { bold: true, breakLine: true } },
   ...["［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）", "［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
@@ -165,7 +166,7 @@ const PAIRS = [];
 LIMITS.forEach((g) => SE.forEach(([w]) => { const b = pairOf(g, w, "bev"), i = pairOf(g, w, "ice"); if (b && i) PAIRS.push({ label: `${g}${SEASON_OF[w]}`, b, i }); }));
 const pcats = PAIRS.map((p) => p.label);
 const pairChart = (o) => ({ ...chart(), y, w: half, h: 5.7, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
-  showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 22, legendFontSize: 26, catAxisLabelFontSize: 24, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
+  showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 18, legendFontSize: 26, catAxisLabelFontSize: 20, catAxisLabelFrequency: 1, barGapWidthPct: 40, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
 s.addChart(pres.charts.BAR, [
   { name: "電気バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_cost_fuel_consumed / 1e4)) },
   { name: "燃料バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_cost_fuel_consumed / 1e4)) }],

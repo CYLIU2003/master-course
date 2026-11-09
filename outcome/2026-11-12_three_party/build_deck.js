@@ -32,7 +32,12 @@ const val = (g, w, k, f = (v) => v) => (get(g, w) ? f(get(g, w)[k]) : null);
 const fmt = (n) => Math.round(n).toLocaleString("ja-JP");
 const man = (n) => (n / 1e4).toFixed(1);
 const nVerified = cases.length, nAll = allCases.length;
-const pending = allCases.filter((r) => r.status !== "VERIFIED").map((r) => `${r.grid_limit_kw} kW ${SEASONS.find((s) => s[0] === r.week)[1]}`);
+// 2026-11-09: one start failed and nothing is running for these; they are "未完", not "計算中".
+const STOPPED = new Map([["90/2025-04-07", "燃料バス寄り"], ["400/2025-07-07", "電気バス寄り"]]);
+const caseLab = (r) => `${r.grid_limit_kw} kW ${SEASONS.find((s) => s[0] === r.week)[1]}`;
+const notDone = allCases.filter((r) => r.status !== "VERIFIED");
+const pending = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map(caseLab);
+const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${caseLab(r)}（${STOPPED.get(`${r.grid_limit_kw}/${r.week}`)}が失敗）`);
 // Unit economics from the model's own coefficients (input facts, not results).
 const KWH_PER_KM = 1.316, CHARGE_EFF = 0.95, KM_PER_L = 4.52, GRID_JPY = 30, DIESEL_JPY = 150, OVERAGE_JPY = 500, VDAY_JPY = 20000;
 // Same formulas as the solver's powertrain_marginal_cost_audit.json (charging loss 0.95 included).
@@ -249,8 +254,9 @@ bullets(s, [
   "各ケースを電気バス寄り・燃料バス寄りの2つの出発点で解き、総費用（燃料は使った分）の安い方を示す",
   iceWins.length ? `受電上限が低い冬（${iceWins.map(lab).join("・")}）では、燃料バス寄りの方が安い` : "燃料バス寄りの方が安いケースはまだない",
   `同じケースでも出発点で担当便が大きく変わる（${rngTxt(pairShares)}%）。便割当はまだ最適とは言えない`,
-  ...(pending.length ? [`計算中：${pending.join("・")}`] : [])], { ...RB, fontSize: 15 });
-s.addNotes(`ここから柱Aの結果です。最新の版で、すべてのケースを電気バス寄りと燃料バス寄りの2つの出発点から解き、総費用の安い方を示しています。横軸が受電上限、縦軸が電気バスの担当した便の割合です。${iceWins.length ? `${iceWins.map(lab).join("、")}では燃料バス寄りの方が安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%に下がります。それ以外では電気バス寄りの方が安く、担当便は${rngTxt(bevWins.map((r) => r.bev_trip_share_pct))}%です。` : ""}同じケースでも出発点によって担当便が大きく変わるので、便割当はまだ最適とは言えません。${pending.length ? `なお、${pending.join("、")}は計算中で、図には入っていません。` : ""}`);
+  ...(pending.length ? [`計算中：${pending.join("・")}`] : []),
+  ...(stopped.length ? [`未完：${stopped.join("・")}`] : [])], { ...RB, fontSize: 15 });
+s.addNotes(`ここから柱Aの結果です。最新の版で、すべてのケースを電気バス寄りと燃料バス寄りの2つの出発点から解き、総費用の安い方を示しています。横軸が受電上限、縦軸が電気バスの担当した便の割合です。${iceWins.length ? `${iceWins.map(lab).join("、")}では燃料バス寄りの方が安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%に下がります。それ以外では電気バス寄りの方が安く、担当便は${rngTxt(bevWins.map((r) => r.bev_trip_share_pct))}%です。` : ""}同じケースでも出発点によって担当便が大きく変わるので、便割当はまだ最適とは言えません。${pending.length ? `なお、${pending.join("、")}は計算中で、図には入っていません。` : ""}${stopped.length ? `${stopped.map((x) => x.replace(/（.*/, "")).join("、")}は、出発点の一方の計算が失敗したため未完です。` : ""}`);
 
 // ---- A-2 overage by limit and season
 s = page(S3, "結果(A-2)　受電上限の超過量");
@@ -259,7 +265,7 @@ takeaway(s, overCases.length ? `安い方の出発点で超過が残るのは${o
 s.addChart(pres.charts.BAR, SEASONS.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => val(g, w, "contract_over_limit_kwh", (v) => Math.round(v))) })),
   chart({ ...CH, barDir: "col", barGrouping: "clustered", chartColors: [BLUE_DARK, BLUE_LIGHT, GREY], showValue: true, dataLabelPosition: "outEnd",
     dataLabelFormatCode: "#,##0", dataLabelFontSize: 11, valAxisMinVal: 0, showValAxisTitle: true, valAxisTitle: "上限を超えた電力量 [kWh/週]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, "図2　受電上限と季節ごとの超過電力量（1週間、安い方の出発点）。棒がないケースは計算中", 0.6, 6.45, 7.6);
+caption(s, "図2　受電上限と季節ごとの超過電力量（1週間、安い方の出発点）。棒がないケースは計算中または未完", 0.6, 6.45, 7.6);
 const bevOver = (DATA.pairs || []).filter((r) => r.status === "VERIFIED" && r.start === "bev" && r.contract_over_limit_kwh > 1);
 bullets(s, [
   ...overCases.map((r) => `${lab(r)}（${startJa(r.selected_start)}）：${fmt(r.contract_over_limit_kwh)} kWh、最大受電 ${fmt(r.peak_grid_kw)} kW`),
