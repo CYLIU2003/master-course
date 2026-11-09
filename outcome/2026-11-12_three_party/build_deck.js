@@ -85,8 +85,8 @@ const flow = (s, items, y, h, lastHighlight = true) => items.forEach(([t, sub], 
   if (i < items.length - 1) s.addShape(pres.shapes.LINE, { x: x + 2.72, y: y + h / 2, w: 0.36, h: 0, line: { color: SUB, width: 1.5, endArrowType: "triangle" } });
 });
 
-const S0 = "前回からの進捗", S1 = "1. 研究背景と目的", S2 = "2. 問題設定と計算条件", S3 = "3. 結果：柱A 受電上限と電気バスの担当便",
-  S4 = "4. 研究室の質問（10月22日）への回答", S5 = "5. 考察と課題", S6 = "6. まとめと今後の予定", SA = "付録";
+const S0 = "前回からの差分", S1 = "研究背景と目的", S2 = "問題設定と計算条件", S3 = "結果：柱A 費用とCO₂",
+  S4 = "研究室の質問（10月22日）への回答", S5 = "超過の原因", S6 = "まとめと今後の予定", SA = "付録";
 
 // Derived values used on several slides.
 const shares = cases.map((r) => r.bev_trip_share_pct);
@@ -115,16 +115,20 @@ s.addNotes("それでは、11月の進捗をご報告します。修士1年の�
 // ---- Contents with the three messages up front
 s = pres.addSlide({ masterName: "PLAIN" });
 s.addText("本日の報告", { placeholder: "title" });
-text(s, [S0, S1, S2, S3, S4, S5, S6].map((t, i) => ({ text: t, options: { breakLine: i < 6 } })), { x: 0.9, y: 1.6, w: 5.6, h: 4.6, fontSize: 19, paraSpaceAfter: 10 });
+const agPair = (g, st) => DATA.pairs.find((x) => x.grid_limit_kw === g && x.week === WIN && x.start === st && x.status === "VERIFIED");
+const AG_B9 = agPair(900, "bev"), AG_I9 = agPair(900, "ice");
+const AGENDA = ["1. 前回（10/8）からの差分", "2. 結果：受電上限ごとの費用とCO₂", "3. 超過の原因", "4. 研究室の質問への回答", "5. まとめ・ご相談・今後の予定", "（条件・詳細は付録）"];
+text(s, AGENDA.map((t, i) => ({ text: t, options: { breakLine: i < AGENDA.length - 1, color: i === AGENDA.length - 1 ? SUB : INK } })), { x: 0.9, y: 1.6, w: 5.6, h: 4.6, fontSize: 19, paraSpaceAfter: 12 });
 s.addShape(pres.shapes.RECTANGLE, { x: 6.9, y: 1.6, w: 5.8, h: 4.75, fill: { color: "EEF5FB" }, line: { color: "EEF5FB" } });
-text(s, "本日お伝えしたいこと", { x: 7.15, y: 1.75, w: 5.3, h: 0.45, fontSize: 17, bold: true, color: BLUE_DARK });
+text(s, "一言でいうと", { x: 7.15, y: 1.72, w: 5.3, h: 0.4, fontSize: 15, bold: true, color: BLUE_DARK });
+text(s, "受電が十分なら電化は「安い＋CO₂が少ない」。受電が少ない冬は「安さかCO₂か」の選択になる", { x: 7.15, y: 2.1, w: 5.3, h: 0.95, fontSize: 16, bold: true });
 bullets(s, [
-  "基準ケース（900 kW・太陽光1,000 kW・冬）：電気バス中心は燃料バス中心より20万円安く、CO₂は58%少ない。電化の効果は太陽光とセット",
-  "受電上限が低い90 kW冬だけは逆転：燃料バス寄りが約40万円安いがCO₂は約3倍（CO₂削減費用 約96円／kg）。200 kWでほぼ同額",
-  "超過の原因は前日計画の太陽光の見込み：予報はほぼ毎日同じ、実際は曇りの日に4割。曇りの翌夜に超過が集中する",
-  "超過は蓄電池が空になる火曜未明に集中。予報を控えめに見る対策は効かず、系統から蓄電池へ貯められない前提による構造。超過とCO₂の単価についてご相談したい"],
-  { x: 7.15, y: 2.3, w: 5.3, h: 3.9, fontSize: 14, paraSpaceAfter: 8 });
-s.addNotes("本日の流れです。最初に、本研究の位置づけと前回からの進捗をご説明します。そのあと柱Aの結果、研究室で出た質問への回答、考察と課題、まとめとご相談、今後の予定の順にお話しします。細かい条件や考察の詳細は付録に回しました。右側に、今日お伝えしたいことをまとめました。まず基準ケースとして、受電上限900キロワット、太陽光1,000キロワットの冬では、電気バス中心の運用が燃料バス中心より約20万円安く、CO₂も約58パーセント少なく、費用とCO₂の両方で電化が有利でした。一方、受電上限が90キロワットの冬では逆転し、燃料バス寄りが約40万円安い一方、CO₂は約3倍になります。200キロワットではほぼ同じ額でした。2つ目は、超過の原因が前日計画の太陽光の見込みにあることです。予報はほぼ毎日同じ量を見込みますが、実際は曇りの日に4割しか発電せず、その翌日の夜に超過が集中しました。3つ目は、その夜には蓄電池が空になっていて、計画のときだけ予報を控えめに見る対策では超過が1割しか減らなかったことです。系統から蓄電池へ貯められない今の前提による構造だと考えています。あわせて、超過とCO₂の単価についてご相談させてください。");
+  `受電に余裕があれば電気バス中心が安くCO₂も少ない（900 kW冬で${man(AG_I9.total_cost_fuel_consumed - AG_B9.total_cost_fuel_consumed)}万円安く、CO₂は${Math.round((1 - AG_B9.total_co2_kg / AG_I9.total_co2_kg) * 100)}%少ない）`,
+  iceWins.length ? `受電が厳しい冬（${iceWins.map(lab).join("・")}）だけは燃料バス中心が安い。ただし90 kW冬でCO₂は約3倍` : "どの上限でも電気バス中心が安い",
+  "CO₂は、両方そろったどのケースでも電気バス中心が少ない",
+  "上限の超過は「曇りの日の翌未明」、蓄電池が空の時間に集中する"],
+  { x: 7.15, y: 3.1, w: 5.3, h: 3.15, fontSize: 14, paraSpaceAfter: 6 });
+s.addNotes("本日の流れです。時間が限られているので、前回10月8日からの差分を中心にお話しします。まず前回からの進捗と工夫した点、次に受電上限ごとの費用とCO₂、超過の原因、研究室の質問への回答、最後にまとめとご相談です。計算条件や細かい考察は付録に回しました。右側が一言でいうと、です。受電が十分なら電化は安くてCO₂も少ない。受電が少ない冬だけは、安さを取るかCO₂を取るかの選択になります。");
 
 // ---- Progress since 10/8 and 10/22
 s = page(S0, "前回の三者ミーティング（10月8日）からの進捗");
@@ -725,9 +729,10 @@ const abate90 = (tc(pb90) - tc(pi90)) / (pi90.total_co2_kg - pb90.total_co2_kg);
   text(s, sub.split("／").map((t, j, a) => ({ text: t, options: { breakLine: j < a.length - 1 } })), { x: x + 0.25, y: 3.25, w: 3.4, h: 1.2, fontSize: 14, align: "center" });
 });
 bullets(s, [
+  "一言でいうと：受電が十分なら電化は「安い＋CO₂が少ない」。受電が少ない冬は「安さかCO₂か」の選択になる",
   iceWins.length ? `受電上限が下がると電気バス中心の優位は縮み、${iceWins.map(lab).join("・")}では燃料バス寄りが安い（最新版、安い方の出発点）` : "どの受電上限でも電気バス寄りが安い（最新版）",
   "次：系統から蓄電池へ貯めない前提のもとで、超過の夜だけ燃料バスに回す割当を探し、超過単価・CO₂単価の感度で結論の向きを確かめる"],
-  { x: 0.6, y: 4.95, w: 12.1, h: 1.8, fontSize: 17, paraSpaceAfter: 8 });
+  { x: 0.6, y: 4.85, w: 12.1, h: 1.95, fontSize: 15, paraSpaceAfter: 6 });
 s.addNotes(`まとめです。数値はすべて最新の版の結果です。受電上限900キロワットの冬では、電気バス中心の運用が燃料バス中心より約${man(tc(pi9) - tc(pb9))}万円安く、CO₂も約${Math.round((1 - pb9.total_co2_kg / pi9.total_co2_kg) * 100)}パーセント少なくなりました。一方、90キロワットの冬では燃料バス寄りが約${man(tc(pb90) - tc(pi90))}万円安く、CO₂は約${(pi90.total_co2_kg / pb90.total_co2_kg).toFixed(1)}倍で、電気バス寄りにしてCO₂を減らす費用は1キログラムあたり約${Math.round(abate90)}円です。超過の9割は、蓄電池が空になった火曜の未明に集中していて、予報を控えめに見る対策では直りませんでした。次は、系統から蓄電池へ貯めない今の前提のもとで、超過の夜だけ燃料バスに回す割当を探し、単価の感度で結論の向きを確かめます。`);
 
 
@@ -986,7 +991,7 @@ s.addNotes("工夫した点をまとめました。1つ目は比べ方です。�
 
 // Slides are generated in code order (later slides reuse constants defined by earlier ones) and then
 // reordered in the package: main talk first, details in the appendix. ORDER lists generated slide numbers.
-const ORDER = [1, 2, 35, 3, 44, 4, 5, 7, 39, 40, 41, 42, 43, 9, 10, 11, 12, 14, 16, 27, 36, 23, 32, 37, 33, 34, 38, 6, 8, 13, 15, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 30, 29, 31];
+const ORDER = [1, 2, 3, 44, 39, 12, 42, 43, 16, 32, 37, 33, 34, 38, 35, 4, 5, 7, 40, 41, 9, 10, 11, 14, 36, 27, 23, 6, 8, 13, 15, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 30, 29, 31];
 async function reorderSlides(file) {
   const JSZip = require(path.join(process.env.DECK_NODE_MODULES, "jszip"));
   const zip = await JSZip.loadAsync(fs.readFileSync(file));
