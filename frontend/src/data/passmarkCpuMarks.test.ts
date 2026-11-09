@@ -16,10 +16,16 @@ it("maps the observed cluster CPU models without conflating model suffixes", () 
     "Intel(R) Xeon(R) Silver 4108 CPU @ 1.80GHz",
     "AMD Ryzen 7 PRO 3700U w/ Radeon Vega Mobile Gfx",
     "Intel(R) Core(TM) i7-7500U CPU @ 2.70GHz",
+    "Intel(R) Core(TM) i7-14700KF",
+    "Intel(R) Core(TM) i9-9980XE CPU @ 3.00GHz",
+    "Intel(R) Xeon(R) W-2102 CPU @ 2.90GHz",
+    "11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",
   ];
   expect(
     models.map((model) => passmarkCpuMark(model)?.score).every(Boolean),
   ).toBe(true);
   expect(passmarkCpuMark("Intel Core i7-12700K")).toBeNull();
+  expect(passmarkCpuMark("12th Gen Intel(R) Core(TM) i7-12700")?.score).toBe(29737);
+  expect(passmarkCpuMark("Intel(R) Core(TM) i7-14700K")).toBeNull();
   expect(passmarkCpuMark("unknown CPU")).toBeNull();
 });

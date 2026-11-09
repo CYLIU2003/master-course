@@ -1,8 +1,8 @@
 /** Public PassMark CPU Mark snapshot for the CPU models in the current cluster.
  * The values are model averages, not measurements of these individual PCs.
- * Source: https://www.cpubenchmark.net/cpu-list/all (2026-09-23).
+ * Source: https://www.cpubenchmark.net/cpu-list/all (2026-09-23); re-read from each model page on 2026-11-09.
  */
-const CAPTURED_ON = "2026-09-23";
+const CAPTURED_ON = "2026-11-09";
 
 type CpuMarkEntry = {
   pattern: RegExp;
@@ -15,13 +15,13 @@ const ENTRIES: CpuMarkEntry[] = [
   {
     pattern: /i7-12700(?![a-z0-9])/i,
     name: "Intel Core i7-12700",
-    score: 29763,
+    score: 29737,
     id: 4669,
   },
   {
     pattern: /i7-11800H(?![a-z0-9])/i,
     name: "Intel Core i7-11800H @ 2.30GHz",
-    score: 19577,
+    score: 19543,
     id: 4358,
   },
   {
@@ -33,7 +33,7 @@ const ENTRIES: CpuMarkEntry[] = [
   {
     pattern: /Ryzen 9 3950X(?![a-z0-9])/i,
     name: "AMD Ryzen 9 3950X",
-    score: 38398,
+    score: 38386,
     id: 3598,
   },
   {
@@ -63,19 +63,19 @@ const ENTRIES: CpuMarkEntry[] = [
   {
     pattern: /i7-8850H(?![a-z0-9])/i,
     name: "Intel Core i7-8850H @ 2.60GHz",
-    score: 10004,
+    score: 10003,
     id: 3247,
   },
   {
     pattern: /Xeon\(R\) W-2123(?![a-z0-9])/i,
     name: "Intel Xeon W-2123 @ 3.60GHz",
-    score: 8465,
+    score: 8460,
     id: 3136,
   },
   {
     pattern: /Xeon\(R\) Silver 4108(?![a-z0-9])/i,
     name: "Intel Xeon Silver 4108 @ 1.80GHz",
-    score: 9225,
+    score: 9230,
     id: 3167,
   },
   {
@@ -89,6 +89,30 @@ const ENTRIES: CpuMarkEntry[] = [
     name: "Intel Core i7-7500U @ 2.70GHz",
     score: 3636,
     id: 2863,
+  },
+  {
+    pattern: /i7-14700KF(?![a-z0-9])/i,
+    name: "Intel Core i7-14700KF",
+    score: 51911,
+    id: 5723,
+  },
+  {
+    pattern: /i9-9980XE(?![a-z0-9])/i,
+    name: "Intel Core i9-9980XE @ 3.00GHz",
+    score: 31496,
+    id: 3373,
+  },
+  {
+    pattern: /Xeon\(R\) W-2102(?![a-z0-9])/i,
+    name: "Intel Xeon W-2102 @ 2.90GHz",
+    score: 5120,
+    id: 3276,
+  },
+  {
+    pattern: /i5-1135G7(?![a-z0-9])/i,
+    name: "Intel Core i5-1135G7 @ 2.40GHz",
+    score: 9282,
+    id: 3830,
   },
 ];
 

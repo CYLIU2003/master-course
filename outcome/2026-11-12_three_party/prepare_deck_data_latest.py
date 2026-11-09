@@ -42,6 +42,9 @@ for limit in (200, 400, 900):
     for week in (S, U):
         CASES[(limit, week, "bev")] = f"rc35/a{limit}s10/{week}"
         CASES[(limit, week, "ice")] = f"rc35/b{limit}s10/{week}"
+# 2026-11-09: the 900 kW summer BEV-heavy attempt queued on the slowest PC was cancelled before it started and
+# resubmitted with identical inputs to pslab-mouse as campaign a900s10f.
+CASES[(900, U, "bev")] = f"rc35/a900s10f/{U}"
 
 
 def run_dir(case):
