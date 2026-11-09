@@ -810,11 +810,12 @@ s.addNotes("ここから先は付録です。ご質問の際に使います。")
 
 // ---- 11/7: the base case of pillar A, contract limit 900 kW and PV 1,000 kW (rc23_eval/k900pair.md, k900.md).
 // Winter pair on one code version (11/8 rc33 7dc38d95: g900 BEV-heavy start, h900 ICE-heavy start, rc23_eval/rc33_all.md;
-// rc29 gave 418.1 / 444.1); spring and summer BEV-heavy from rc21 (bdbc0f4b). DIAGNOSTIC.
+// rc29 gave 418.1 / 444.1); spring BEV-heavy from rc35 a900s10 (9a0fe044, rc23_eval/rc35_900s10.md), summer BEV-heavy
+// from rc21 (bdbc0f4b) until rc35 a900s10 summer finishes. DIAGNOSTIC.
 const K9 = {
   wb: { cost: 4189120, share: 92.6, bev: 28, ice: 14, co2: 2470, grid: 3831, pvUse: 19867, pvCut: 4709, over: 0, peak: 780 },
   wi: { cost: 4387150, share: 37.6, bev: 28, ice: 24, co2: 5949, grid: 448, pvUse: 14258, pvCut: 10318, over: 0, peak: 416 },
-  sb: { cost: 4167552, share: 92.1, bev: 30, ice: 7, co2: 2119, grid: 2987, pvUse: 21756, pvCut: 6063, over: 0, peak: 808 },
+  sb: { cost: 4157225, share: 93.5, bev: 30, ice: 13, co2: 1945, grid: 2860, pvUse: 22127, pvCut: 5692, over: 0, peak: 774 },
   ub: { cost: 4135992, share: 95.7, bev: 31, ice: 5, co2: 1587, grid: 2565, pvUse: 24466, pvCut: 5723, over: 0, peak: 720 } };
 const k9Save = K9.wi.cost - K9.wb.cost, k9Co2 = 1 - K9.wb.co2 / K9.wi.co2;
 s = page(S3, "基準ケース（900 kW・太陽光1,000 kW）：電化で費用もCO₂も下がる");
@@ -834,7 +835,7 @@ bullets(s, [
   "燃料バス中心では太陽光の約4割（10,318 kWh）を捨てている。蓄電池が満杯になり、使い道がない。電気バス中心の値は前の版（rc29）と0.8万円差で再現",
   "受電上限に余裕がある900 kWでは、どの季節も超過0。電化の不利が出るのは上限が低い場合（90 kW・冬）だけ（次の頁）"],
   { x: 0.6, y: 5.3, w: 12.1, h: 1.15, fontSize: 12, paraSpaceAfter: 1 });
-caption(s, "表8f　冬は rc33（7dc38d95）の2つの出発点、春・夏は rc21（bdbc0f4b）の電気バス中心（版が違う）。175／174回の毎時の立て直しをすべて受理、物理検査 VALID。DIAGNOSTIC", 0.6, 6.5, 12.1, 0.35);
+caption(s, "表8f　冬は rc33（7dc38d95）の2つの出発点、春は rc35（9a0fe044）、夏は rc21（bdbc0f4b）の電気バス中心（夏は版が違う）。175／174回の毎時の立て直しをすべて受理、物理検査 VALID。DIAGNOSTIC", 0.6, 6.5, 12.1, 0.35);
 s.addNotes(`柱Aの基準ケースとして、受電上限900キロワット、太陽光1,000キロワットの結果です。冬の2列は同じ版、同じ条件で、違うのは便割当の出発点だけです。電気バス中心の運用は、燃料バス中心に比べて1週間で約${man(k9Save)}万円安く、CO₂も約${Math.round(k9Co2 * 100)}パーセント少なくなりました。費用とCO₂の両方で電化が有利です。燃料バス中心では、太陽光の約4割を捨てていて、蓄電池が満杯になると使い道がないためです。電気バス中心の値は、前の版と0.8万円の差で再現しました。春と夏の電気バス中心も、費用は約414万から417万円、CO₂は1.6から2.1トンで、どの季節も超過は0でした。電化の不利が出るのは、受電上限が低い90キロワットの冬だけで、それは次の頁でご説明します。`);
 
 // ---- PV size at 900 kW winter (k900.md; mixed versions, marked)
