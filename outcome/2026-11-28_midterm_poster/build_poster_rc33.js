@@ -1,6 +1,6 @@
 // Midterm (2026-11-28) A0 portrait poster (841 x 1189 mm), editable PowerPoint, rebuilt from rc20,
 // 2026-11-07: the base case (900 kW, PV 1,000 kW) BEV-heavy vs ICE-heavy table replaces figs 2-3
-// (rc29 d25cc724 winter pair, rc21 spring/summer; ../../output/midterm_20261128/rc23_eval/k900pair.md).
+// (rc29 d25cc724 winter pair, rc35 spring/summer; ../../output/midterm_20261128/rc23_eval/k900pair.md).
 // 2026-11-08: winter pair replaced by rc33 7dc38d95 (g900/h900, rc23_eval/rc33_all.md); 90 kW winter pair and PV 0 from rc33.
 // Data: ../2026-11-12_three_party/deck_data_rc20.json (prepare_deck_data.py, verified cases only, DIAGNOSTIC).
 // Grid limits 90/200/400/600/900 kW (900 = all ten 90 kW chargers at once). 30 JPY/kWh is all-inclusive;
@@ -60,7 +60,11 @@ const SEASON_OF = Object.fromEntries(SE);
 const lab = (r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`;
 const iceWins = cases.filter((r) => r.selected_start === "ice"), bevWins = cases.filter((r) => r.selected_start === "bev");
 const rngTxt = (a, d = 0) => !a.length ? "—" : Math.min(...a).toFixed(d) === Math.max(...a).toFixed(d) ? Math.min(...a).toFixed(d) : `${Math.min(...a).toFixed(d)}〜${Math.max(...a).toFixed(d)}`;
-const pend = DATA.cases.filter((r) => r.status !== "VERIFIED").map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`);
+// 2026-11-09: 90 kW spring has no running job; its ICE-heavy run (rc35 a090s10) FAILED, so it is not "計算中".
+const STOPPED = new Set(["90/2025-04-07"]);
+const notDone = DATA.cases.filter((r) => r.status !== "VERIFIED");
+const pend = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`);
+const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`);
 const pairOf = (g, w, st) => DATA.pairs.find((x) => x.grid_limit_kw === g && x.week === w && x.start === st && x.status === "VERIFIED");
 const pb90 = pairOf(90, "2025-01-06", "bev"), pi90 = pairOf(90, "2025-01-06", "ice");
 const tcc = (r) => r.total_cost_fuel_consumed;
@@ -77,7 +81,7 @@ const K9 = {
   wb: { cost: 4189120, share: 92.6, co2: 2470, pvUse: 19867, pvCut: 4709, over: 0 },
   wi: { cost: 4387150, share: 37.6, co2: 5949, pvUse: 14258, pvCut: 10318, over: 0 },
   sb: { cost: 4157225, share: 93.5, co2: 1945, pvUse: 22127, pvCut: 5692, over: 0 },
-  ub: { cost: 4135992, share: 95.7, co2: 1587, pvUse: 24466, pvCut: 5723, over: 0 } };
+  ub: { cost: 4208597, share: 97.0, co2: 1462, pvUse: 23298, pvCut: 6891, over: 0 } };
 
 // ---- Title block: one blue rule under the title; the top-left 20 x 20 cm is kept free for the number.
 const NUM = 7.87;
@@ -119,7 +123,7 @@ s.addChart(pres.charts.BAR, [{ name: "前日の予報（平年値）", labels: D
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "太陽光 [kWh/日]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
 caption("図5　冬の代表週（2025年1月6日〜）の太陽光：前日の予報と実際（入力データ）", LX, y + 3.85, COL, 0.8, 28);
 y += 4.9;
-caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}/175回が時間切れ。遅い計算機は制限時間を延ばした。${pend.length ? `${pend.join("・")}は計算中。` : ""}最大受電は15分平均。`,
+caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}/175回が時間切れ。遅い計算機は制限時間を延ばした。${pend.length ? `${pend.join("・")}は計算中。` : ""}${stopped.length ? `${stopped.join("・")}は燃料バス寄りの計算が失敗し未完。` : ""}最大受電は15分平均。`,
   LX, y, COL, 45.5 - y - 2.5, 24);
 text([{ text: "参考文献（原本は 先行文献／2026-11-08_中間発表の参考文献）", options: { bold: true, breakLine: true } },
   ...["［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）", "［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
@@ -154,7 +158,7 @@ s.addTable([
   k9Row("上限の超過", (r) => `${fmt(r.over)} kWh`)],
   { x: RX, y, w: COL, colW: [4.0, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4], fontSize: 27, fontFace: "Yu Gothic",
     color: INK, rowH: 0.74, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
-caption(`表1　受電上限900 kW・太陽光1,000 kWの1週間。冬の2列は同じ版で出発点だけが違う（rc33）、春は電気中心（rc35）、夏は電気中心（rc21、版が違う）。冬は電気中心が${man(K9.wi.cost - K9.wb.cost)}万円安くCO₂は${Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100)}%少ない。燃料中心は太陽光の約4割を捨てる。DIAGNOSTIC`, RX, y + 4.75, COL, 1.6, 26);
+caption(`表1　受電上限900 kW・太陽光1,000 kWの1週間。冬の2列は同じ版で出発点だけが違う（rc33）、春・夏は電気中心（rc35）。冬は電気中心が${man(K9.wi.cost - K9.wb.cost)}万円安くCO₂は${Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100)}%少ない。燃料中心は太陽光の約4割を捨てる。DIAGNOSTIC`, RX, y + 4.75, COL, 1.6, 26);
 y += 6.5;
 // 11/9 (user request): cost and CO2 of both start points by grid limit, cases where both are verified.
 const PAIRS = [];

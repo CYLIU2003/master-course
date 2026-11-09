@@ -51,18 +51,22 @@ const lab = (r) => `${r.grid_limit_kw} kW ${SEASON_OF[r.week].toLowerCase()}`;
 const list = (a) => a.length <= 1 ? a.join("") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`;
 const iceWins = cases.filter((r) => r.selected_start === "ice"), bevWins = cases.filter((r) => r.selected_start === "bev");
 const rngTxt = (a, d = 0) => !a.length ? "—" : Math.min(...a).toFixed(d) === Math.max(...a).toFixed(d) ? Math.min(...a).toFixed(d) : `${Math.min(...a).toFixed(d)}–${Math.max(...a).toFixed(d)}`;
-const pend = DATA.cases.filter((r) => r.status !== "VERIFIED").map(lab);
+// 2026-11-09: 90 kW spring has no running job; its diesel-heavy run (rc35 a090s10) FAILED.
+const STOPPED = new Set(["90/2025-04-07"]);
+const notDone = DATA.cases.filter((r) => r.status !== "VERIFIED");
+const pend = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map(lab);
+const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map(lab);
 const pairOf = (g, w, st) => DATA.pairs.find((x) => x.grid_limit_kw === g && x.week === w && x.start === st && x.status === "VERIFIED");
 const pb90 = pairOf(90, "2025-01-06", "bev"), pi90 = pairOf(90, "2025-01-06", "ice");
 const maxTimeouts = Math.max(...DATA.rolling.map((r) => r.time_limit));
 const man = (v) => (v / 1e6).toFixed(2);           // million JPY
 const fmt = (v) => Math.round(v).toLocaleString("en-US");
-// Same numbers as build_poster_rc33.js (winter rc33 pair, spring rc35, summer rc21).
+// Same numbers as build_poster_rc33.js (winter rc33 pair, spring rc35, summer rc35).
 const K9 = {
   wb: { cost: 4189120, share: 92.6, co2: 2470, pvUse: 19867, pvCut: 4709, over: 0 },
   wi: { cost: 4387150, share: 37.6, co2: 5949, pvUse: 14258, pvCut: 10318, over: 0 },
   sb: { cost: 4157225, share: 93.5, co2: 1945, pvUse: 22127, pvCut: 5692, over: 0 },
-  ub: { cost: 4135992, share: 95.7, co2: 1587, pvUse: 24466, pvCut: 5723, over: 0 } };
+  ub: { cost: 4208597, share: 97.0, co2: 1462, pvUse: 23298, pvCut: 6891, over: 0 } };
 const wCut = Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100);
 
 // ---- Title block (the top-left 20 x 20 cm is kept free for the poster number)
@@ -106,7 +110,7 @@ s.addChart(pres.charts.BAR, [{ name: "Day-ahead forecast (normal)", labels: DAYS
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "PV [kWh/day]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
 caption("Fig. 5  PV in the winter week (from 6 Jan 2025): day-ahead forecast vs actual (input data)", LX, y + 3.85, COL, 0.8, 26);
 y += 4.9;
-caption(`Note: All results are DIAGNOSTIC, from the latest versions (rc33, rc35). Each case is solved from two start points (electric-heavy and diesel-heavy); the one with the lower total cost (diesel valued by litres burnt) is shown. The trip assignment stops at the memory limit and the two-stage method is not a global optimum. Up to ${maxTimeouts} of 175 hourly re-plans hit the time limit; slower machines were given longer limits. ${pend.length ? `Still running: ${list(pend)}. ` : ""}Peak = 15-min average.`,
+caption(`Note: All results are DIAGNOSTIC, from the latest versions (rc33, rc35). Each case is solved from two start points (electric-heavy and diesel-heavy); the one with the lower total cost (diesel valued by litres burnt) is shown. The trip assignment stops at the memory limit and the two-stage method is not a global optimum. Up to ${maxTimeouts} of 175 hourly re-plans hit the time limit; slower machines were given longer limits. ${pend.length ? `Still running: ${list(pend)}. ` : ""}${stopped.length ? `${list(stopped)}: the diesel-heavy run failed; not completed. ` : ""}Peak = 15-min average.`,
   LX, y, COL, 45.5 - y - 2.5, 22);
 text([{ text: "References", options: { bold: true, breakLine: true } },
   ...["[1] Ministry of the Environment, METI: List of calculation methods and emission factors (2025)", "[2] W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
@@ -140,7 +144,7 @@ s.addTable([
   k9Row("Excess over limit", (r) => `${fmt(r.over)} kWh`)],
   { x: RX, y, w: COL, colW: [4.0, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4], fontSize: 25, fontFace: FONT,
     color: INK, rowH: 0.74, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
-caption(`Table 1  One week at a 900 kW limit and 1,000 kW of PV. The two winter columns use the same version and differ only in the start point (rc33); spring is electric-heavy (rc35); summer is electric-heavy from an older version (rc21). In winter, electric-heavy is ${man(K9.wi.cost - K9.wb.cost)} M JPY cheaper with ${wCut}% less CO₂; diesel-heavy curtails about 40% of PV. DIAGNOSTIC`, RX, y + 5.0, COL, 1.6, 24);
+caption(`Table 1  One week at a 900 kW limit and 1,000 kW of PV. The two winter columns use the same version and differ only in the start point (rc33); spring and summer are electric-heavy (rc35). In winter, electric-heavy is ${man(K9.wi.cost - K9.wb.cost)} M JPY cheaper with ${wCut}% less CO₂; diesel-heavy curtails about 40% of PV. DIAGNOSTIC`, RX, y + 5.0, COL, 1.6, 24);
 y += 6.7;
 // 11/9 (user request): cost and CO2 of both start points by grid limit, cases where both are verified.
 const PAIRS = [];
