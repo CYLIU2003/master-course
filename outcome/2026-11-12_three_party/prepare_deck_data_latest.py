@@ -45,6 +45,9 @@ for limit in (200, 400, 900):
 # 2026-11-09: the 900 kW summer BEV-heavy attempt queued on the slowest PC was cancelled before it started and
 # resubmitted with identical inputs to pslab-mouse as campaign a900s10f.
 CASES[(900, U, "bev")] = f"rc35/a900s10f/{U}"
+# 2026-11-10: the 400 kW summer BEV-heavy attempt failed (RollingChainExecutionError on laptop-a709una0) and was
+# resubmitted with identical inputs to desktop-1800n4s as campaign a400s10f; the failed attempt stays recorded.
+CASES[(400, U, "bev")] = f"rc35/a400s10f/{U}"
 
 
 def run_dir(case):

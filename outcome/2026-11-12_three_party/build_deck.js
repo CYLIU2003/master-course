@@ -33,7 +33,7 @@ const fmt = (n) => Math.round(n).toLocaleString("ja-JP");
 const man = (n) => (n / 1e4).toFixed(1);
 const nVerified = cases.length, nAll = allCases.length;
 // 2026-11-09: one start failed and nothing is running for these; they are "未完", not "計算中".
-const STOPPED = new Map([["90/2025-04-07", "燃料バス寄り"], ["400/2025-07-07", "電気バス寄り"]]);
+const STOPPED = new Map([["90/2025-04-07", "燃料バス寄り"]]);
 const caseLab = (r) => `${r.grid_limit_kw} kW ${SEASONS.find((s) => s[0] === r.week)[1]}`;
 const notDone = allCases.filter((r) => r.status !== "VERIFIED");
 const pending = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map(caseLab);
