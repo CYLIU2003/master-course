@@ -156,21 +156,26 @@ s.addTable([
     color: INK, rowH: 0.74, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
 caption(`表1　受電上限900 kW・太陽光1,000 kWの1週間。冬の2列は同じ版で出発点だけが違う（rc33）、春は電気中心（rc35）、夏は電気中心（rc21、版が違う）。冬は電気中心が${man(K9.wi.cost - K9.wb.cost)}万円安くCO₂は${Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100)}%少ない。燃料中心は太陽光の約4割を捨てる。DIAGNOSTIC`, RX, y + 4.75, COL, 1.6, 26);
 y += 6.5;
-s.addChart(pres.charts.BAR, SE.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => val(g, w, "contract_over_limit_kwh", (v) => Math.round(v))) })),
-  { ...chart(), x: RX, y, w: half, h: 5.2, barDir: "col", barGrouping: "clustered", chartColors: [BLUE_DARK, "7AB8E8", GREY], valAxisMinVal: 0,
-    legendFontSize: 26, catAxisLabelFontSize: 26, showValAxisTitle: true, valAxisTitle: "上限の超過 [kWh/週]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
+// 11/9 (user request): cost and CO2 of both start points by grid limit, cases where both are verified.
+const PAIRS = [];
+LIMITS.forEach((g) => SE.forEach(([w]) => { const b = pairOf(g, w, "bev"), i = pairOf(g, w, "ice"); if (b && i) PAIRS.push({ label: `${g}${SEASON_OF[w]}`, b, i }); }));
+const pcats = PAIRS.map((p) => p.label);
+const pairChart = (o) => ({ ...chart(), y, w: half, h: 5.7, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
+  showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 22, legendFontSize: 26, catAxisLabelFontSize: 24, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
 s.addChart(pres.charts.BAR, [
-  { name: "電気代", labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => Math.round(avg(g, "electricity_cost") / 1e3) / 10) },
-  { name: "燃料代", labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => Math.round(avg(g, "fuel_cost") / 1e3) / 10) },
-  { name: "超過費用", labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => Math.round(avg(g, "contract_overage_cost") / 1e3) / 10) }],
-  { ...chart(), x: RX + half + 0.6, y, w: half, h: 5.2, barDir: "col", barGrouping: "stacked", chartColors: [BLUE, GREY, "CFCFCF"], valAxisMinVal: 0,
-    legendFontSize: 26, catAxisLabelFontSize: 28, showValAxisTitle: true, valAxisTitle: "運用費 [万円/週]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
-caption("図4　超過電力量（左）と運用費（右、季節の平均・車両費を除く）", RX, y + 5.25, COL, 0.9, 28);
-y += 6.2;
+  { name: "電気バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_cost_fuel_consumed / 1e4)) },
+  { name: "燃料バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_cost_fuel_consumed / 1e4)) }],
+  pairChart({ x: RX, dataLabelFormatCode: "0", valAxisMaxVal: 600, valAxisMajorUnit: 200, showValAxisTitle: true, valAxisTitle: "総費用 [万円/週]" }));
+s.addChart(pres.charts.BAR, [
+  { name: "電気バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_co2_kg / 100) / 10) },
+  { name: "燃料バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_co2_kg / 100) / 10) }],
+  pairChart({ x: RX + half + 0.6, dataLabelFormatCode: "0.0", valAxisMaxVal: 10, valAxisMajorUnit: 2, valAxisTitle: "CO₂ [t/週]" }));
+caption("図4　総費用（左、燃料は使った分）とCO₂（右）。2つの出発点がそろったケース", RX, y + 5.75, COL, 0.9, 28);
+y += 6.7;
 const overCases = cases.filter((r) => r.contract_over_limit_kwh > 1);
-text(`(2) 安い方の出発点で超過が残ったのは${overCases.length ? overCases.map((r) => `${lab(r)}（${Math.round(r.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週）`).join("・") : "なし"}。電気バス寄りの出発点では90 kW冬で${Math.round(pb90.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週の超過が出た。運用費（安い方の平均）は900 kWの約${Math.round(opex(900))}万円/週から90 kWの約${Math.round(opex(90))}万円/週に増えた。（目安）年間最大の受電電力から見た基本料金は30円/kWhに含むため合計に足さない。`,
-  { x: RX, y, w: COL, h: 4.5, fontSize: 32 });
-y += 4.7;
+text(`(2) 安い方の出発点で超過が残ったのは${overCases.length ? overCases.map((r) => `${lab(r)}（${Math.round(r.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週）`).join("・") : "なし"}。電気バス寄りの出発点では90 kW冬で${Math.round(pb90.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週の超過が出た。図4のとおり、CO₂は${PAIRS.length}ケースすべてで電気バス寄りが少なく（燃料バス寄りの${(Math.min(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)}〜${(Math.max(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)}分の1）、費用も${PAIRS.filter((p) => p.b.total_cost_fuel_consumed < p.i.total_cost_fuel_consumed).length}ケースで電気バス寄りが安い。（目安）年間最大の受電電力から見た基本料金は30円/kWhに含むため合計に足さない。`,
+  { x: RX, y, w: COL, h: 4.0, fontSize: 32 });
+y += 4.2;
 
 y = section("5．考察とまとめ", RX, y, COL);
 text([

@@ -282,6 +282,41 @@ bullets(s, [
   `超過で走る電気バスは約${fmt(bevOveragePerKm)}円/km、燃料バスは約${Math.round(iceePerKm + 2.62 / KM_PER_L)}円/km。燃料バス寄りの出発点では、この振り替えが起きて超過0`], { ...RB, fontSize: 14 });
 s.addNotes(`費用の内訳です。安い方の出発点で見ると、上限を900 kWから90 kWに下げると、運用費は約${Math.round(opex(900))}万円から約${Math.round(opex(90))}万円に増えます。低い上限では、電気バス寄りなら超過費用、燃料バス寄りなら燃料代が増えます。超過分の500円は仮の値で、実際の料金ではない点にご注意ください。ただし、超過する電気で走る電気バスは1 kmあたり約730円で、燃料バスの約34円の20倍以上です。燃料バス寄りの出発点から解くと、この振り替えが起きて超過は0になりました。`);
 
+// ---- A-3b cost and CO2 of both start points by grid limit (user request 11/9: show cheapness and CO2 side by side)
+const PAIRS = [];
+LIMITS.forEach((g) => SEASONS.forEach(([w]) => {
+  const pick = (st) => (DATA.pairs || []).find((x) => x.grid_limit_kw === g && x.week === w && x.start === st && x.status === "VERIFIED");
+  const b = pick("bev"), i = pick("ice");
+  if (b && i) PAIRS.push({ label: lab(b), b, i });
+}));
+if (PAIRS.length) {
+  s = page(S3, "結果(A-3b)　受電上限ごとの費用とCO₂（2つの出発点）");
+  const bevCheap = PAIRS.filter((p) => p.b.total_cost_fuel_consumed < p.i.total_cost_fuel_consumed);
+  const iceCheap = PAIRS.filter((p) => p.b.total_cost_fuel_consumed >= p.i.total_cost_fuel_consumed);
+  const co2Ratio = PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg);
+  takeaway(s, `CO₂は${PAIRS.length}ケースすべてで電気バス寄りが少なく、費用も${bevCheap.length}ケースで電気バス寄りが安い`);
+  const cats = PAIRS.map((p) => p.label);
+  s.addChart(pres.charts.BAR, [
+    { name: "電気バス寄り", labels: cats, values: PAIRS.map((p) => Math.round(p.b.total_cost_fuel_consumed / 1e4)) },
+    { name: "燃料バス寄り", labels: cats, values: PAIRS.map((p) => Math.round(p.i.total_cost_fuel_consumed / 1e4)) }],
+    chart({ x: 0.6, y: 2.2, w: 8.3, h: 2.25, barDir: "col", barGrouping: "clustered", chartColors: [BLUE, GREY], showValue: true, dataLabelPosition: "outEnd",
+      dataLabelFormatCode: "0", dataLabelFontSize: 11, valAxisMinVal: 0, valAxisMaxVal: 600, valAxisMajorUnit: 200, catAxisLabelFontSize: 12,
+      showValAxisTitle: true, valAxisTitle: "総費用 [万円/週]" }));
+  s.addChart(pres.charts.BAR, [
+    { name: "電気バス寄り", labels: cats, values: PAIRS.map((p) => Math.round(p.b.total_co2_kg / 100) / 10) },
+    { name: "燃料バス寄り", labels: cats, values: PAIRS.map((p) => Math.round(p.i.total_co2_kg / 100) / 10) }],
+    chart({ x: 0.6, y: 4.45, w: 8.3, h: 2.05, barDir: "col", barGrouping: "clustered", chartColors: [BLUE, GREY], showValue: true, dataLabelPosition: "outEnd",
+      dataLabelFormatCode: "0.0", dataLabelFontSize: 11, valAxisMinVal: 0, valAxisMaxVal: 10, valAxisMajorUnit: 5, catAxisLabelFontSize: 12, showLegend: false,
+      showValAxisTitle: true, valAxisTitle: "CO₂ [t/週]" }));
+  caption(s, "図3b　両方の出発点の計算が終わったケースの総費用（上、燃料は使った分、車両使用費を含む）とCO₂（下）。最新版rc33・rc35、DIAGNOSTIC", 0.6, 6.5, 8.3, 0.45);
+  bullets(s, [
+    `安さ：電気バス寄りが安いのは${bevCheap.map((p) => p.label).join("・") || "なし"}`,
+    `燃料バス寄りが安いのは${iceCheap.map((p) => `${p.label}（${man(p.b.total_cost_fuel_consumed - p.i.total_cost_fuel_consumed)}万円安い）`).join("・") || "なし"}`,
+    `環境：電気バス寄りのCO₂は${rngTxt(PAIRS.map((p) => p.b.total_co2_kg / 1000), 1)} t/週、燃料バス寄りは${rngTxt(PAIRS.map((p) => p.i.total_co2_kg / 1000), 1)} t/週（電気バス寄りは${Math.min(...co2Ratio).toFixed(1)}〜${Math.max(...co2Ratio).toFixed(1)}分の1）`,
+    "低い上限の冬は、安さを取ると燃料バス寄り、CO₂を取ると電気バス寄りになる"], { x: 9.2, y: 2.35, w: 3.55, h: 4.3, fontSize: 14 });
+  s.addNotes(`受電上限ごとに、電気バス寄りと燃料バス寄りの2つの出発点の費用とCO₂を並べました。上が1週間の総費用、下がCO₂です。CO₂はどのケースでも電気バス寄りが少なく、燃料バス寄りの${Math.min(...co2Ratio).toFixed(1)}から${Math.max(...co2Ratio).toFixed(1)}分の1です。費用は、${bevCheap.map((p) => p.label).join("、")}で電気バス寄りが安く、${iceCheap.map((p) => p.label).join("、") || "なし"}では燃料バス寄りが安くなりました。受電上限が低い冬では、安さと環境へのやさしさが逆を向きます。`);
+}
+
 // ---- A-4 diesel trips by departure band
 s = page(SA, "結果(A-4)　燃料バスが担当した便の時間帯");
 const BANDS = [["05-06", "早朝（5〜6時台）"], ["07-21", "日中（7〜21時台）"], ["22-", "深夜（22時以降）"]];
@@ -951,7 +986,7 @@ s.addNotes("工夫した点をまとめました。1つ目は比べ方です。�
 
 // Slides are generated in code order (later slides reuse constants defined by earlier ones) and then
 // reordered in the package: main talk first, details in the appendix. ORDER lists generated slide numbers.
-const ORDER = [1, 2, 34, 3, 43, 4, 5, 7, 38, 39, 40, 41, 42, 9, 10, 11, 13, 15, 26, 35, 22, 31, 36, 32, 33, 37, 6, 8, 12, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 27, 29, 28, 30];
+const ORDER = [1, 2, 35, 3, 44, 4, 5, 7, 39, 40, 41, 42, 43, 9, 10, 11, 12, 14, 16, 27, 36, 23, 32, 37, 33, 34, 38, 6, 8, 13, 15, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 30, 29, 31];
 async function reorderSlides(file) {
   const JSZip = require(path.join(process.env.DECK_NODE_MODULES, "jszip"));
   const zip = await JSZip.loadAsync(fs.readFileSync(file));

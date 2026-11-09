@@ -142,27 +142,32 @@ s.addTable([
     color: INK, rowH: 0.74, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
 caption(`Table 1  One week at a 900 kW limit and 1,000 kW of PV. The two winter columns use the same version and differ only in the start point (rc33); spring is electric-heavy (rc35); summer is electric-heavy from an older version (rc21). In winter, electric-heavy is ${man(K9.wi.cost - K9.wb.cost)} M JPY cheaper with ${wCut}% less CO₂; diesel-heavy curtails about 40% of PV. DIAGNOSTIC`, RX, y + 5.0, COL, 1.6, 24);
 y += 6.7;
-s.addChart(pres.charts.BAR, SE.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => val(g, w, "contract_over_limit_kwh", (v) => Math.round(v))) })),
-  { ...chart(), x: RX, y, w: half, h: 5.2, barDir: "col", barGrouping: "clustered", chartColors: [BLUE_DARK, "7AB8E8", GREY], valAxisMinVal: 0,
-    legendFontSize: 26, catAxisLabelFontSize: 26, showValAxisTitle: true, valAxisTitle: "Excess [kWh/week]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
+// 11/9 (user request): cost and CO2 of both start points by grid limit, cases where both are verified.
+const PAIRS = [];
+LIMITS.forEach((g) => SE.forEach(([w, n]) => { const b = pairOf(g, w, "bev"), i = pairOf(g, w, "ice"); if (b && i) PAIRS.push({ label: `${g} ${n.slice(0, 3)}`, b, i }); }));
+const pcats = PAIRS.map((p) => p.label);
+const pairChart = (o) => ({ ...chart(), y, w: half, h: 5.7, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
+  showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 22, legendFontSize: 26, catAxisLabelFontSize: 24, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
 s.addChart(pres.charts.BAR, [
-  { name: "Electricity", labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => Math.round(avg(g, "electricity_cost") / 1e4) / 100) },
-  { name: "Diesel", labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => Math.round(avg(g, "fuel_cost") / 1e4) / 100) },
-  { name: "Excess", labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => Math.round(avg(g, "contract_overage_cost") / 1e4) / 100) }],
-  { ...chart(), x: RX + half + 0.6, y, w: half, h: 5.2, barDir: "col", barGrouping: "stacked", chartColors: [BLUE, GREY, "CFCFCF"], valAxisMinVal: 0,
-    legendFontSize: 26, catAxisLabelFontSize: 28, showValAxisTitle: true, valAxisTitle: "Operating cost [M JPY/week]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
-caption("Fig. 4  Excess energy (left) and operating cost (right, seasonal mean, excl. vehicles)", RX, y + 5.25, COL, 0.9, 26);
-y += 6.2;
+  { name: "Electric-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_cost_fuel_consumed / 1e4) / 100) },
+  { name: "Diesel-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_cost_fuel_consumed / 1e4) / 100) }],
+  pairChart({ x: RX, dataLabelFormatCode: "0.00", valAxisMaxVal: 6, valAxisMajorUnit: 2, valAxisTitle: "Total cost [M JPY/week]" }));
+s.addChart(pres.charts.BAR, [
+  { name: "Electric-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_co2_kg / 100) / 10) },
+  { name: "Diesel-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_co2_kg / 100) / 10) }],
+  pairChart({ x: RX + half + 0.6, dataLabelFormatCode: "0.0", valAxisMaxVal: 10, valAxisMajorUnit: 2, valAxisTitle: "CO₂ [t/week]" }));
+caption("Fig. 4  Total cost (left, diesel by litres burnt) and CO₂ (right); cases with both start points", RX, y + 5.75, COL, 0.9, 26);
+y += 6.7;
 const overCases = cases.filter((r) => r.contract_over_limit_kwh > 1);
-text(`(2) With the cheaper start point, excess remained in ${overCases.length ? list(overCases.map((r) => `${lab(r)} (${fmt(r.contract_over_limit_kwh)} kWh/week)`)) : "no case"}. From the electric-heavy start, 90 kW winter exceeded the limit by ${fmt(pb90.contract_over_limit_kwh)} kWh/week. Operating cost (cheaper start, mean) rose from about ${(opex(900) / 100).toFixed(2)} M JPY/week at 900 kW to ${(opex(90) / 100).toFixed(2)} M JPY/week at 90 kW. The basic charge implied by the annual peak is included in 30 JPY/kWh and not added.`,
-  { x: RX, y, w: COL, h: 3.9, fontSize: 29 });
-y += 4.0;
+text(`(2) With the cheaper start point, excess remained in ${overCases.length ? list(overCases.map((r) => `${lab(r)} (${fmt(r.contract_over_limit_kwh)} kWh/week)`)) : "no case"}. From the electric-heavy start, 90 kW winter exceeded the limit by ${fmt(pb90.contract_over_limit_kwh)} kWh/week. In Fig. 4, the electric-heavy start emitted less CO₂ in all ${PAIRS.length} cases (1/${(Math.min(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)} to 1/${(Math.max(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)} of diesel-heavy) and was cheaper in ${PAIRS.filter((p) => p.b.total_cost_fuel_consumed < p.i.total_cost_fuel_consumed).length} of them. The basic charge implied by the annual peak is included in 30 JPY/kWh and not added.`,
+  { x: RX, y, w: COL, h: 3.5, fontSize: 29 });
+y += 3.6;
 
 y = section("5. Discussion and conclusions", RX, y, COL);
 text([
   { text: "At 90 kW in winter from the electric-heavy start, the day-ahead plan had no excess. 90% of the executed excess came in the early hours after a cloudy Monday (PV 41% of forecast, Fig. 5), when the battery was empty. Because the battery is not charged from the grid, Monday's unused grid headroom could not be shifted to the night. Halving the forecast in the plan cut the excess by only 10%.", options: { breakLine: true } },
   { text: "With enough grid headroom, electrification lowers both cost and CO₂ (Table 1). It loses at low limits in winter (at 90 kW the diesel-heavy start was about 0.4 M JPY cheaper, with about 3 times the CO₂) and without PV. Next: compare with grid-to-battery charging, and multi-day planning." }],
-  { x: RX, y, w: COL, h: 45.5 - y, paraSpaceAfter: 6, fontSize: 25 });
+  { x: RX, y, w: COL, h: 45.5 - y, paraSpaceAfter: 6, fontSize: 24 });
 
 (async () => {
   const out = path.join(__dirname, process.env.POSTER_OUT || "midterm_poster_A0_rc33_en.pptx");
