@@ -12891,3 +12891,4 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
     - 最小でない IIS もそれだけで infeasible のはずなので、保存した部分系からは infeasible を再現できない。全体のモデルでの数値の問題か、IIS の書き出しの問題かは、まだ分からない。
     - 原因はまだ特定していない。全体のモデルの再現は未実施。
   - 同じ版・同じ parent・seed・overrides の2回目 a900v を pilot 経路で pslab-mouse に出した（`operation.rc36_a900v_2025-07-07.json`）。prepared/instance の差は scenario_id とそれに由来する値だけ。1回目の失敗は資料の表とポスターの注に出す（`first_attempt_failures`）。
+  - a400u（400 kW 夏・電気バス寄り、matlab-desktop）は完走した：413.3万円（燃料は使った分）、電気バス担当94.5%、CO₂ 1,549 kg、毎時174回すべて受理（時間切れ3）、物理検査 VALID、超過0。燃料バス寄り rc35 b400s10（444.8万円）より安いが、版が違う（rc36 と rc35）ので資料では版を明記した。rc35 での1回目（a400s10）は毎時44回目で停止しており、ポスターの注と資料の表3の注に書いた。
