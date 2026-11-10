@@ -28,7 +28,7 @@ HERE = Path(__file__).parent
 W, S, U = "2025-01-06", "2025-04-07", "2025-07-07"
 SEASON = {W: "冬", S: "春", U: "夏"}
 LIMITS = (90, 200, 400, 900)
-VERSION = {"rc33": "7dc38d95", "rc35": "9a0fe044"}
+VERSION = {"rc33": "7dc38d95", "rc35": "9a0fe044", "rc36": "375dd6f2"}
 BANDS = (("05-06", 0, 7), ("07-21", 7, 22), ("22-", 22, 48))
 # (limit, week, start) -> case directory relative to OPS. rc33 h090 spring stopped on the Stage 2
 # trickle-flow defect fixed in 9a0fe044; its rerun is rc35 a090s10 (ICE-heavy seed, scale 1.0).
@@ -42,12 +42,14 @@ for limit in (200, 400, 900):
     for week in (S, U):
         CASES[(limit, week, "bev")] = f"rc35/a{limit}s10/{week}"
         CASES[(limit, week, "ice")] = f"rc35/b{limit}s10/{week}"
-# 2026-11-09: the 900 kW summer BEV-heavy attempt queued on the slowest PC was cancelled before it started and
-# resubmitted with identical inputs to pslab-mouse as campaign a900s10f.
-CASES[(900, U, "bev")] = f"rc35/a900s10f/{U}"
-# 2026-11-10: the 400 kW summer BEV-heavy attempt failed (RollingChainExecutionError on laptop-a709una0) and was
-# resubmitted with identical inputs to desktop-1800n4s as campaign a400s10f; the failed attempt stays recorded.
-CASES[(400, U, "bev")] = f"rc35/a400s10f/{U}"
+# 2026-11-10: the rc35 'f' resubmissions (a090s10f, a400s10f, a900s10f) were launched with weekly_operator run,
+# which carried no Stage 1 seed and default time limits, so they are not the same cases and are not used.
+# These four cases run on rc36 (375dd6f2: Stage 2 charge-power band gap closed) through the pilot batch path
+# with the same parent, seed and overrides as the rc33/rc35 cases they replace.
+CASES[(90, S, "ice")] = f"rc36/i090s/{S}"
+CASES[(90, S, "bev")] = f"rc36/g090s/{S}"
+CASES[(400, U, "bev")] = f"rc36/a400u/{U}"
+CASES[(900, U, "bev")] = f"rc36/a900u/{U}"
 
 
 def run_dir(case):

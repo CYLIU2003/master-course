@@ -53,7 +53,7 @@ const iceWins = cases.filter((r) => r.selected_start === "ice"), bevWins = cases
 const rngTxt = (a, d = 0) => !a.length ? "—" : Math.min(...a).toFixed(d) === Math.max(...a).toFixed(d) ? Math.min(...a).toFixed(d) : `${Math.min(...a).toFixed(d)}–${Math.max(...a).toFixed(d)}`;
 // 2026-11-09: 90 kW spring has no running job; its diesel-heavy run (rc35 a090s10) FAILED.
 // 400 kW summer: the first electric-heavy run (rc35 a400s10) FAILED; its resubmission a400s10f completed (2026-11-10).
-const STOPPED = new Map([["90/2025-04-07", "diesel-heavy"]]);
+const STOPPED = new Map([]);
 const notDone = DATA.cases.filter((r) => r.status !== "VERIFIED");
 const pend = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map(lab);
 const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${lab(r)} (${STOPPED.get(`${r.grid_limit_kw}/${r.week}`)})`);
@@ -67,7 +67,9 @@ const K9 = {
   wb: { cost: 4189120, share: 92.6, co2: 2470, pvUse: 19867, pvCut: 4709, over: 0 },
   wi: { cost: 4387150, share: 37.6, co2: 5949, pvUse: 14258, pvCut: 10318, over: 0 },
   sb: { cost: 4157225, share: 93.5, co2: 1945, pvUse: 22127, pvCut: 5692, over: 0 },
-  ub: { cost: 4208597, share: 97.0, co2: 1462, pvUse: 23298, pvCut: 6891, over: 0 } };
+  // 2026-11-10: summer BEV-heavy is rerunning as rc36 a900u. The earlier rc35 a900s10f numbers were removed:
+  // that launch carried no seed and default time limits, so it was not the same case as the other columns.
+  ub: null };
 const wCut = Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100);
 
 // ---- Title block (the top-left 20 x 20 cm is kept free for the poster number)
@@ -134,7 +136,7 @@ text(`(1) Taking the cheaper of the two start points, ${iceWins.length ? `the di
 y += 3.3;
 const half = (COL - 0.6) / 2;
 const K9COLS = [["wb", "Winter, electric-heavy"], ["wi", "Winter, diesel-heavy"], ["sb", "Spring, electric-heavy"], ["ub", "Summer, electric-heavy"]];
-const k9Row = (label, f) => [{ text: label, options: { bold: true } }, ...K9COLS.map(([k]) => ({ text: f(K9[k]), options: { align: "center" } }))];
+const k9Row = (label, f) => [{ text: label, options: { bold: true } }, ...K9COLS.map(([k]) => ({ text: (K9[k] ? f(K9[k]) : "running"), options: { align: "center" } }))];
 s.addTable([
   [{ text: "Base case", options: { bold: true, fill: { color: "F2F2F2" } } },
    ...K9COLS.map(([, n]) => ({ text: n, options: { bold: true, fill: { color: "F2F2F2" }, align: "center" } }))],
@@ -145,7 +147,7 @@ s.addTable([
   k9Row("Excess over limit", (r) => `${fmt(r.over)} kWh`)],
   { x: RX, y, w: COL, colW: [4.0, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4], fontSize: 25, fontFace: FONT,
     color: INK, rowH: 0.74, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
-caption(`Table 1  One week at a 900 kW limit and 1,000 kW of PV. The two winter columns use the same version and differ only in the start point (rc33); spring and summer are electric-heavy (rc35). In winter, electric-heavy is ${man(K9.wi.cost - K9.wb.cost)} M JPY cheaper with ${wCut}% less CO₂; diesel-heavy curtails about 40% of PV. DIAGNOSTIC`, RX, y + 5.0, COL, 1.6, 24);
+caption(`Table 1  One week at a 900 kW limit and 1,000 kW of PV. The two winter columns use the same version and differ only in the start point (rc33); spring is electric-heavy (rc35); summer is being rerun on the new version (rc36). In winter, electric-heavy is ${man(K9.wi.cost - K9.wb.cost)} M JPY cheaper with ${wCut}% less CO₂; diesel-heavy curtails about 40% of PV. DIAGNOSTIC`, RX, y + 5.0, COL, 1.6, 24);
 y += 6.7;
 // 11/9 (user request): cost and CO2 of both start points by grid limit, cases where both are verified.
 const PAIRS = [];

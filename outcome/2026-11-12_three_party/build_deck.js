@@ -33,7 +33,7 @@ const fmt = (n) => Math.round(n).toLocaleString("ja-JP");
 const man = (n) => (n / 1e4).toFixed(1);
 const nVerified = cases.length, nAll = allCases.length;
 // 2026-11-09: one start failed and nothing is running for these; they are "未完", not "計算中".
-const STOPPED = new Map([["90/2025-04-07", "燃料バス寄り"]]);
+const STOPPED = new Map([]);
 const caseLab = (r) => `${r.grid_limit_kw} kW ${SEASONS.find((s) => s[0] === r.week)[1]}`;
 const notDone = allCases.filter((r) => r.status !== "VERIFIED");
 const pending = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map(caseLab);
@@ -862,11 +862,13 @@ const K9 = {
   wb: { cost: 4189120, share: 92.6, bev: 28, ice: 14, co2: 2470, grid: 3831, pvUse: 19867, pvCut: 4709, over: 0, peak: 780 },
   wi: { cost: 4387150, share: 37.6, bev: 28, ice: 24, co2: 5949, grid: 448, pvUse: 14258, pvCut: 10318, over: 0, peak: 416 },
   sb: { cost: 4157225, share: 93.5, bev: 30, ice: 13, co2: 1945, grid: 2860, pvUse: 22127, pvCut: 5692, over: 0, peak: 774 },
-  ub: { cost: 4208597, share: 97.0, bev: 29, ice: 3, co2: 1462, grid: 2492, pvUse: 23298, pvCut: 6891, over: 0, peak: 689 } };
+  // 2026-11-10: summer BEV-heavy is rerunning as rc36 a900u. The earlier rc35 a900s10f numbers were removed:
+  // that launch carried no seed and default time limits, so it was not the same case as the other columns.
+  ub: null };
 const k9Save = K9.wi.cost - K9.wb.cost, k9Co2 = 1 - K9.wb.co2 / K9.wi.co2;
 s = page(S3, "基準ケース（900 kW・太陽光1,000 kW）：電化で費用もCO₂も下がる");
 takeaway(s, `冬の1週間：電気バス中心の運用は、燃料バス中心より${man(k9Save)}万円安く、CO₂は${Math.round(k9Co2 * 100)}%少ない`);
-const k9Row = (label, f) => [B(label), ...["wb", "wi", "sb", "ub"].map((k) => f(K9[k]))];
+const k9Row = (label, f) => [B(label), ...["wb", "wi", "sb", "ub"].map((k) => (K9[k] ? f(K9[k]) : "計算中"))];
 s.addTable([
   [H("1週間の実行結果"), H("冬・電気バス中心"), H("冬・燃料バス中心"), H("春・電気バス中心"), H("夏・電気バス中心")],
   k9Row("総費用（燃料は使った分）", (r) => `${man(r.cost)}万円`),
@@ -879,10 +881,10 @@ s.addTable([
 bullets(s, [
   `冬の2つは同じ版・同じ条件で、違うのは便割当の出発点だけ。電気バス中心は燃料代が少なく（使った分 3.2万円 対 32.8万円）、太陽光を約1.4倍使う`,
   "燃料バス中心では太陽光の約4割（10,318 kWh）を捨てている。蓄電池が満杯になり、使い道がない。電気バス中心の値は前の版（rc29）と0.8万円差で再現",
-  "受電上限に余裕がある900 kWでは、どの季節も超過0。電化の不利が出るのは上限が低い場合（90 kW・冬）だけ（次の頁）"],
+  "受電上限に余裕がある900 kWでは、冬・春とも超過0（夏は計算中）。電化の不利が出るのは上限が低い場合（90 kW・冬）だけ（次の頁）"],
   { x: 0.6, y: 5.3, w: 12.1, h: 1.15, fontSize: 12, paraSpaceAfter: 1 });
-caption(s, "表8f　冬は rc33（7dc38d95）の2つの出発点、春・夏は rc35（9a0fe044）の電気バス中心。175／174回の毎時の立て直しをすべて受理、物理検査 VALID。DIAGNOSTIC", 0.6, 6.5, 12.1, 0.35);
-s.addNotes(`柱Aの基準ケースとして、受電上限900キロワット、太陽光1,000キロワットの結果です。冬の2列は同じ版、同じ条件で、違うのは便割当の出発点だけです。電気バス中心の運用は、燃料バス中心に比べて1週間で約${man(k9Save)}万円安く、CO₂も約${Math.round(k9Co2 * 100)}パーセント少なくなりました。費用とCO₂の両方で電化が有利です。燃料バス中心では、太陽光の約4割を捨てていて、蓄電池が満杯になると使い道がないためです。電気バス中心の値は、前の版と0.8万円の差で再現しました。春と夏の電気バス中心も、費用は約416万から421万円、CO₂は1.5から1.9トンで、どの季節も超過は0でした。電化の不利が出るのは、受電上限が低い90キロワットの冬だけで、それは次の頁でご説明します。`);
+caption(s, "表8f　冬は rc33（7dc38d95）の2つの出発点、春は rc35（9a0fe044）の電気バス中心、夏は新しい版（rc36）で計算中。175／174回の毎時の立て直しをすべて受理、物理検査 VALID。DIAGNOSTIC", 0.6, 6.5, 12.1, 0.35);
+s.addNotes(`柱Aの基準ケースとして、受電上限900キロワット、太陽光1,000キロワットの結果です。冬の2列は同じ版、同じ条件で、違うのは便割当の出発点だけです。電気バス中心の運用は、燃料バス中心に比べて1週間で約${man(k9Save)}万円安く、CO₂も約${Math.round(k9Co2 * 100)}パーセント少なくなりました。費用とCO₂の両方で電化が有利です。燃料バス中心では、太陽光の約4割を捨てていて、蓄電池が満杯になると使い道がないためです。電気バス中心の値は、前の版と0.8万円の差で再現しました。春の電気バス中心も、費用は約416万円、CO₂は1.9トンで、超過は0でした。夏は計算し直しています。電化の不利が出るのは、受電上限が低い90キロワットの冬だけで、それは次の頁でご説明します。`);
 
 // ---- PV size at 900 kW winter (k900.md; mixed versions, marked)
 const PVT = [
