@@ -12891,5 +12891,6 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
     - 最小でない IIS もそれだけで infeasible のはずなので、保存した部分系からは infeasible を再現できない。全体のモデルでの数値の問題か、IIS の書き出しの問題かは、まだ分からない。
     - 原因はまだ特定していない。全体のモデルの再現は未実施。
   - 同じ版・同じ parent・seed・overrides の2回目 a900v を pilot 経路で pslab-mouse に出した（`operation.rc36_a900v_2025-07-07.json`）。prepared/instance の差は scenario_id とそれに由来する値だけ。1回目の失敗は資料の表とポスターの注に出す（`first_attempt_failures`）。
+  - **a900v も FAILED（2026-11-10 夜）**：毎時97回目（5日目1:00）の Stage 2 が infeasible（実行時間132秒、IIS 86,735本で最小でない）。96回目までは97回すべて optimal。同じ release・parent・seed・overrides なのに止まる回が違う（a900u は76回目）。入力そのものの実行不能ではなく、数値の問題の可能性が高い（推測）。Stage 2 は FeasibilityTol 1e-9・IntegralityFocus 1・Presolve 0 で、蓄電池の規則を `addGenConstrMin` で入れている。3回目の出し直しはしない。資料とポスターは「未完」に変えた。原因の調査（止まった回のモデル全体の保存と再現）は未実施。
   - a400u（400 kW 夏・電気バス寄り、matlab-desktop）は完走した：413.3万円（燃料は使った分）、電気バス担当94.5%、CO₂ 1,549 kg、毎時174回すべて受理（時間切れ3）、物理検査 VALID、超過0。燃料バス寄り rc35 b400s10（444.8万円）より安いが、版が違う（rc36 と rc35）ので資料では版を明記した。rc35 での1回目（a400s10）は毎時44回目で停止しており、ポスターの注と資料の表3の注に書いた。
 - **資料の添削とモデルの見直し（2026-11-10）**：進捗資料・ポスターの添削内容、モデル（Stage 2・蓄電池の規則・毎時の実行・会計）の見直し結果、未決事項と続きの手順を `docs/notes/HANDOFF_20261110_MIDTERM_MATERIALS_AND_MODEL_REVIEW.md` にまとめた。コードは変えていない。主な指摘：蓄電池は `pv_self_consumption` の規則で動き最適化していない（資料の説明を修正）、蓄電池・車両の残量の増減を費用に入れていない、車両使用費が総費用の約98%で電気・燃料で同額。

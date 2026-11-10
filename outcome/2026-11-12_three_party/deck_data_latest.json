@@ -1997,9 +1997,7 @@
    "status": "PENDING:RUNNING"
   }
  ],
- "first_attempt_failures": [
-  "900/2025-07-07"
- ],
+ "first_attempt_failures": [],
  "rc20_only": [
   "diesel",
   "audit",

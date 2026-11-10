@@ -64,7 +64,7 @@ const iceWins = cases.filter((r) => r.selected_start === "ice"), bevWins = cases
 const rngTxt = (a, d = 0) => !a.length ? "—" : Math.min(...a).toFixed(d) === Math.max(...a).toFixed(d) ? Math.min(...a).toFixed(d) : `${Math.min(...a).toFixed(d)}〜${Math.max(...a).toFixed(d)}`;
 // 2026-11-09: 90 kW spring has no running job; its ICE-heavy run (rc35 a090s10) FAILED, so it is not "計算中".
 // 400 kW summer: the BEV-heavy run (rc35 a400s10) FAILED; only the ICE-heavy start finished.
-const STOPPED = new Map([]);
+const STOPPED = new Map([["900/2025-07-07", "電気バス寄り（2回とも毎時の立て直しで停止）"]]);
 const notDone = DATA.cases.filter((r) => r.status !== "VERIFIED");
 const pend = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`);
 const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}は${STOPPED.get(`${r.grid_limit_kw}/${r.week}`)}`);
@@ -161,7 +161,7 @@ text(`(1) 2つの出発点のうち安い方で見ると、${iceWins.length ? `�
 y += 2.45;
 const half = (COL - 0.6) / 2;
 const K9COLS = [["wb", "冬・電気中心"], ["wi", "冬・燃料中心"], ["sb", "春・電気中心"], ["ub", "夏・電気中心"]];
-const k9Row = (label, f) => [{ text: label, options: { bold: true } }, ...K9COLS.map(([k]) => ({ text: (K9[k] ? f(K9[k]) : "計算中"), options: { align: "center" } }))];
+const k9Row = (label, f) => [{ text: label, options: { bold: true } }, ...K9COLS.map(([k]) => ({ text: (K9[k] ? f(K9[k]) : "未完"), options: { align: "center" } }))];
 s.addTable([
   [{ text: "基準ケース", options: { bold: true, fill: { color: "F2F2F2" } } },
    ...K9COLS.map(([, n]) => ({ text: n, options: { bold: true, fill: { color: "F2F2F2" }, align: "center" } }))],
@@ -172,7 +172,7 @@ s.addTable([
   k9Row("上限の超過", (r) => `${fmt(r.over)} kWh`)],
   { x: RX, y, w: COL, colW: [4.0, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4], fontSize: 27, fontFace: "Yu Gothic",
     color: INK, rowH: 0.74, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
-caption(`表1　受電上限900 kW・太陽光1,000 kWの1週間。冬の2列は同じ版で出発点だけが違う（rc33）、春は電気中心（rc35）、夏は新しい版（rc36）で計算中。冬は電気中心が${man(K9.wi.cost - K9.wb.cost)}万円安くCO₂は${Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100)}%少ない。燃料中心は太陽光の約4割を捨てる。DIAGNOSTIC`, RX, y + 4.75, COL, 1.6, 26);
+caption(`表1　受電上限900 kW・太陽光1,000 kWの1週間。冬の2列は同じ版で出発点だけが違う（rc33）、春は電気中心（rc35）、夏は未完（rc36、注）。冬は電気中心が${man(K9.wi.cost - K9.wb.cost)}万円安くCO₂は${Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100)}%少ない。燃料中心は太陽光の約4割を捨てる。DIAGNOSTIC`, RX, y + 4.75, COL, 1.6, 26);
 y += 6.5;
 // 11/9 (user request): cost and CO2 of both start points by grid limit, cases where both are verified.
 const PAIRS = [];
