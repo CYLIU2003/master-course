@@ -258,6 +258,10 @@ def test_trip_input_fingerprint_includes_type_specific_energy_model() -> None:
         (85.0, 60.0),
         (90.0, 30.0),
         (95.0, 30.0),
+        # Former dead zone just below each threshold (width 1e-4 kWh): no band
+        # could be selected, so charging was impossible. It now takes the slower band.
+        (79.99995, 60.0),
+        (89.99995, 30.0),
     ),
 )
 def test_piecewise_charge_taper_limits_power_by_start_soc(
@@ -267,6 +271,9 @@ def test_piecewise_charge_taper_limits_power_by_start_soc(
     gp = pytest.importorskip("gurobipy")
     model = gp.Model()
     model.Params.OutputFlag = 0
+    # Production Stage 2 tolerances, so the 1e-4 kWh band gap cannot be absorbed.
+    model.Params.FeasibilityTol = 1.0e-9
+    model.Params.IntFeasTol = 1.0e-9
     on = model.addVar(vtype=gp.GRB.BINARY)
     charge = model.addVar(lb=0.0, ub=90.0)
     soc = model.addVar(lb=soc_kwh, ub=soc_kwh)

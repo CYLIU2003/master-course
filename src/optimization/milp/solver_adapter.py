@@ -32403,6 +32403,13 @@ class GurobiMILPAdapter:
             )
             soc = soc_var[key]
             cap = max(float(capacity_kwh), 1.0)
+            # The strict upper bounds keep a SOC exactly at 80 % / 90 % out of the
+            # faster band. The lower bounds of the slower bands start at the same
+            # point (threshold - epsilon), so the bands overlap only at that point
+            # and every SOC can select a band. Without the shared epsilon, a SOC in
+            # (threshold - epsilon, threshold) matched no band and could not charge
+            # at all (a090s10f rolling step 167: 282.5999525 kWh, target 282.6).
+            # SOC in that interval takes the slower band, so power is never overstated.
             band_epsilon_kwh = 1.0e-4
             model.addConstr(
                 soc
@@ -32415,7 +32422,7 @@ class GurobiMILPAdapter:
                 ),
             )
             model.addConstr(
-                soc >= 0.80 * cap - cap * (1 - middle_band),
+                soc >= 0.80 * cap - band_epsilon_kwh - cap * (1 - middle_band),
                 name=(
                     f"{name_prefix}_soc_middle_lower__{vehicle_id}__"
                     f"slot_{slot_idx}"
@@ -32432,7 +32439,7 @@ class GurobiMILPAdapter:
                 ),
             )
             model.addConstr(
-                soc >= 0.90 * cap - cap * (1 - high_band),
+                soc >= 0.90 * cap - band_epsilon_kwh - cap * (1 - high_band),
                 name=(
                     f"{name_prefix}_soc_high_lower__{vehicle_id}__"
                     f"slot_{slot_idx}"
