@@ -181,14 +181,13 @@ const pcats = PAIRS.map((p) => p.label);
 const pairChart = (o) => ({ ...chart(), y, w: half, h: 6.3, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
   showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 14, legendFontSize: 26, catAxisLabelFontSize: 20, catAxisLabelFrequency: 1, barGapWidthPct: 15, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
 s.addChart(pres.charts.BAR, [
-  { name: "電気バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_cost_fuel_consumed / 1e4)) },
-  { name: "燃料バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_cost_fuel_consumed / 1e4)) }],
-  pairChart({ x: RX, dataLabelFormatCode: "0", valAxisMaxVal: 600, valAxisMajorUnit: 200, showValAxisTitle: true, valAxisTitle: "総費用 [万円/週]" }));
+  { name: "電気バス寄り − 燃料バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round((p.b.total_cost_fuel_consumed - p.i.total_cost_fuel_consumed) / 1e3) / 10) }],
+  pairChart({ x: RX, chartColors: [BLUE_DARK], dataLabelFormatCode: "+0.0;-0.0", valAxisMinVal: -60, valAxisMaxVal: 60, valAxisMajorUnit: 30, catAxisLabelPos: "low", showLegend: true, valAxisTitle: "費用の差 [万円/週]" }));
 s.addChart(pres.charts.BAR, [
   { name: "電気バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_co2_kg / 100) / 10) },
   { name: "燃料バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_co2_kg / 100) / 10) }],
   pairChart({ x: RX + half + 0.6, dataLabelFormatCode: "0.0", valAxisMaxVal: 10, valAxisMajorUnit: 2, valAxisTitle: "CO₂ [t/週]" }));
-caption("図4　総費用（左、燃料は使った分）とCO₂（右）。2つの出発点がそろったケース", RX, y + 6.35, COL, 0.9, 28);
+caption("図4　2つの出発点の費用の差（左。負は電気バス寄りが安い）とCO₂（右）", RX, y + 6.35, COL, 0.9, 28);
 y += 7.25;
 const overCases = cases.filter((r) => r.contract_over_limit_kwh > 1);
 text(`(2) 安い方の出発点で超過が残ったのは${overCases.length ? overCases.map((r) => `${lab(r)}（${Math.round(r.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週）`).join("・") : "なし"}。電気バス寄りの出発点では90 kW冬で${Math.round(pb90.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週の超過が出た。図4のとおり、CO₂は${PAIRS.length}ケースすべてで電気バス寄りが少なく（燃料バス寄りの${(Math.min(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)}〜${(Math.max(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)}分の1）、費用も${PAIRS.filter((p) => p.b.total_cost_fuel_consumed < p.i.total_cost_fuel_consumed).length}ケースで電気バス寄りが安い。`,
@@ -198,7 +197,7 @@ y += 3.45;
 y = section("5．考察とまとめ", RX, y, COL);
 text([
   { text: "90 kW冬・電気バス寄りでは、前日の計画の超過は0。実行の超過の9割は、曇りの月曜（発電は予報の41%、図5）の翌未明、蓄電池が空の時間に出た。系統から蓄電池へ貯めない前提のため、月曜に余った受電枠を夜に回せない。計画だけ予報を半分と見込んでも、超過は1割しか減らなかった。", options: { breakLine: true } },
-  { text: "上限に余裕があれば電化は費用もCO₂も下げる（表1）。不利なのは上限が低い冬（90 kWで燃料バス寄りが約40万円安く、CO₂は約3倍）と太陽光がない場合。今後：系統から蓄電池へ貯める場合との比較、日をまたぐ計画。" }],
+  { text: `上限に余裕があれば電化は費用もCO₂も下げる（表1）。不利なのは上限が低い冬（90 kWで燃料バス寄りが約40万円安く、CO₂は約3倍。CO₂を1 kg減らす費用は約${Math.round((pb90.total_cost_fuel_consumed - pi90.total_cost_fuel_consumed) / (pi90.total_co2_kg - pb90.total_co2_kg))}円）と太陽光がない場合。今後：系統から蓄電池へ貯める場合との比較、日をまたぐ計画。` }],
   { x: RX, y, w: COL, h: 45.5 - y, paraSpaceAfter: 6, fontSize: 26 });
 
 (async () => {

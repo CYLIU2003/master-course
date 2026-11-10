@@ -167,14 +167,13 @@ const pcats = PAIRS.map((p) => p.label);
 const pairChart = (o) => ({ ...chart(), y, w: half, h: 6.3, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
   showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 14, legendFontSize: 26, catAxisLabelFontSize: 20, catAxisLabelFrequency: 1, barGapWidthPct: 15, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
 s.addChart(pres.charts.BAR, [
-  { name: "Electric-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_cost_fuel_consumed / 1e4) / 100) },
-  { name: "Diesel-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_cost_fuel_consumed / 1e4) / 100) }],
-  pairChart({ x: RX, dataLabelFormatCode: "0.00", valAxisMaxVal: 6, valAxisMajorUnit: 2, valAxisTitle: "Total cost [M JPY/week]" }));
+  { name: "Electric-heavy − diesel-heavy", labels: pcats, values: PAIRS.map((p) => Math.round((p.b.total_cost_fuel_consumed - p.i.total_cost_fuel_consumed) / 1e4) / 100) }],
+  pairChart({ x: RX, chartColors: [BLUE_DARK], dataLabelFormatCode: "+0.00;-0.00", valAxisMinVal: -0.6, valAxisMaxVal: 0.6, valAxisMajorUnit: 0.3, catAxisLabelPos: "low", showLegend: true, valAxisTitle: "Cost difference [M JPY/week]" }));
 s.addChart(pres.charts.BAR, [
   { name: "Electric-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_co2_kg / 100) / 10) },
   { name: "Diesel-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_co2_kg / 100) / 10) }],
   pairChart({ x: RX + half + 0.6, dataLabelFormatCode: "0.0", valAxisMaxVal: 10, valAxisMajorUnit: 2, valAxisTitle: "CO₂ [t/week]" }));
-caption("Fig. 4  Total cost (left, diesel by litres burnt) and CO₂ (right); cases with both start points", RX, y + 6.35, COL, 0.9, 26);
+caption("Fig. 4  Cost difference (left; negative = electric-heavy is cheaper) and CO₂ (right)", RX, y + 6.35, COL, 0.9, 26);
 y += 7.25;
 const overCases = cases.filter((r) => r.contract_over_limit_kwh > 1);
 text(`(2) With the cheaper start point, excess remained in ${overCases.length ? list(overCases.map((r) => `${lab(r)} (${fmt(r.contract_over_limit_kwh)} kWh/week)`)) : "no case"}. From the electric-heavy start, 90 kW winter exceeded the limit by ${fmt(pb90.contract_over_limit_kwh)} kWh/week. In Fig. 4, the electric-heavy start emitted less CO₂ in all ${PAIRS.length} cases (1/${(Math.min(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)} to 1/${(Math.max(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)} of diesel-heavy) and was cheaper in ${PAIRS.filter((p) => p.b.total_cost_fuel_consumed < p.i.total_cost_fuel_consumed).length} of them.`,
@@ -184,7 +183,7 @@ y += 3.25;
 y = section("5. Discussion and conclusions", RX, y, COL);
 text([
   { text: "At 90 kW in winter from the electric-heavy start, the day-ahead plan had no excess. 90% of the executed excess came in the early hours after a cloudy Monday (PV 41% of forecast, Fig. 5), when the battery was empty. Because the battery is not charged from the grid, Monday's unused grid headroom could not be shifted to the night. Halving the forecast in the plan cut the excess by only 10%.", options: { breakLine: true } },
-  { text: "With enough grid headroom, electrification lowers both cost and CO₂ (Table 1). It loses at low limits in winter (at 90 kW the diesel-heavy start was about 0.4 M JPY cheaper, with about 3 times the CO₂) and without PV. Next: compare with grid-to-battery charging, and multi-day planning." }],
+  { text: `With enough grid headroom, electrification lowers both cost and CO₂ (Table 1). It loses at low limits in winter (at 90 kW the diesel-heavy start was about 0.4 M JPY cheaper, with about 3 times the CO₂: about ${Math.round((pb90.total_cost_fuel_consumed - pi90.total_cost_fuel_consumed) / (pi90.total_co2_kg - pb90.total_co2_kg))} JPY per kg of CO₂ avoided) and without PV. Next: compare with grid-to-battery charging, and multi-day planning.` }],
   { x: RX, y, w: COL, h: 45.5 - y, paraSpaceAfter: 6, fontSize: 24 });
 
 (async () => {
