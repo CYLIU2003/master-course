@@ -1,0 +1,465 @@
+{
+ "bev": {
+  "case": "rc33/g900",
+  "run": "run_20261108_0209",
+  "hours": [
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 218.4,
+    "bess_to_bus": 1409.9,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 357.7,
+    "bess_to_bus": 1999.7,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 447.9,
+    "bess_to_bus": 3378.6,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 478.2,
+    "bess_to_bus": 3702.8,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 974.6,
+    "bess_to_bus": 3433.7,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 1291.0,
+    "bess_to_bus": 2464.0,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 63.1,
+    "bess_to_bus": 189.2,
+    "pv_to_bess": 0.3,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 12.1,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 2.3,
+    "pv_to_bess": 638.7,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 14.1,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 1864.9,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 135.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 2718.1,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 94.4,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 3382.4,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 111.2,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 4209.8,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 168.3,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 46.1,
+    "pv_to_bess": 3596.2,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 123.2,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 255.4,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 220.2,
+    "pv_to_bess": 1225.1,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 2026.1,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 264.3,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 178.5,
+    "pv_to_bess": 745.7,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 1616.8,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 150.2,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 130.5,
+    "pv_to_bess": 238.6,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 826.4,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 20.4,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 34.8,
+    "pv_to_bess": 22.2,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 116.6,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 3.0,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 3.1,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 37.8,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 142.8,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 345.6,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 812.0,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   }
+  ],
+  "totals": {
+   "pv_to_bus": 1225.4,
+   "grid_to_bus": 3830.9,
+   "bess_to_bus": 18534.6,
+   "pv_to_bess": 18642.0,
+   "grid_to_bess": 0.0,
+   "pv_curtail": 4709.1,
+   "contract_over_limit": 0.0
+  }
+ },
+ "ice": {
+  "case": "rc33/h900",
+  "run": "run_20261108_0333",
+  "hours": [
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 490.8,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 1310.0,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 629.5,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 1873.7,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 3411.1,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 218.9,
+    "bess_to_bus": 2587.2,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 147.9,
+    "pv_to_bess": 0.3,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 21.8,
+    "grid_to_bus": 35.6,
+    "bess_to_bus": 0.2,
+    "pv_to_bess": 629.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 64.8,
+    "grid_to_bus": 193.3,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 1814.2,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 89.4,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 35.9,
+    "pv_to_bess": 2763.7,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 49.7,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 2612.6,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 814.6,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 22.5,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 2540.4,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 1758.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 15.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 1439.4,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 2433.3,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 146.6,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 991.5,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 2368.6,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 60.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 781.9,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 1784.8,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 16.7,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 198.5,
+    "pv_to_bess": 163.8,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 1034.6,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 30.7,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 14.0,
+    "pv_to_bess": 4.2,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 124.4,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 22.5,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 0.0,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 30.0,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 52.5,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 68.3,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 45.0,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   },
+   {
+    "pv_to_bus": 0.0,
+    "grid_to_bus": 0.0,
+    "bess_to_bus": 188.3,
+    "pv_to_bess": 0.0,
+    "grid_to_bess": 0.0,
+    "pv_curtail": 0.0,
+    "contract_over_limit": 0.0
+   }
+  ],
+  "totals": {
+   "pv_to_bus": 517.2,
+   "grid_to_bus": 447.8,
+   "bess_to_bus": 11105.4,
+   "pv_to_bess": 13741.0,
+   "grid_to_bess": 0.0,
+   "pv_curtail": 10318.3,
+   "contract_over_limit": 0.0
+  }
+ },
+ "note": "kWh per hour of day, summed over 2025-01-06..12; first 60 min of each rolling step; DIAGNOSTIC"
+}

@@ -10,6 +10,8 @@ const path = require("path");
 const fs = require("fs");
 const pptxgen = require(path.join(process.env.DECK_NODE_MODULES, "pptxgenjs"));
 const { applyTheme } = require(path.join(process.env.PPTX_SKILL, "scripts", "apply_theme.js"));
+// 2026-11-10 (user request: images, graphs and tables): Figs. 2, 3 and 6 come from poster_figs.js.
+const { systemDiagram, flowDiagram, hourlyFlow } = require("./poster_figs.js");
 
 // 11/9: latest version (rc33/rc35) via ../2026-11-12_three_party/prepare_deck_data_latest.py; cheaper of the two
 // start points per limit x season; diesel valued by the litres burnt (post-hoc, as in the deck).
@@ -100,33 +102,38 @@ text(`概要　路線バスの電動化では、営業所での充電が重な�
 let y = 12.5;
 y = section("1．背景と目的", LX, y, COL);
 text([
-  { text: "路線バスで電気バスの導入が進んでいるが、車両価格や充電時間の制約から、当面は燃料（軽油）バスとの併用が続く。電気バスは夜に営業所でまとめて充電するため、受電電力が大きくなる。", options: { breakLine: true } },
-  { text: "本研究の目的は、受電上限を変えたとき、(1) 電気バスに任せられる便の割合と、費用・燃料・CO₂がどう変わるか、(2) 上限の超過がどこで生じるかを明らかにすることである。" }],
-  { x: LX, y, w: COL, h: 4.3, paraSpaceAfter: 10, fontSize: 36 });
-y += 4.6;
+  { text: "路線バスの電動化が進むが、車両価格や充電時間の制約から、当面は燃料（軽油）バスとの併用が続く。電気バスは夜に営業所でまとめて充電するため、受電電力が大きくなる。", options: { breakLine: true } },
+  { text: "目的：受電上限を変えたとき、(1) 電気バスに任せられる便の割合と費用・CO₂がどう変わるか、(2) 上限の超過がどこで生じるかを調べる。" }],
+  { x: LX, y, w: COL, h: 3.6, paraSpaceAfter: 6, fontSize: 32 });
+y += 3.75;
 y = section("2．対象と条件", LX, y, COL);
-const rows = [["対象", "東急バス 渋21〜23系統（弦巻営業所）、時刻表はODPT［3］"], ["運行", "1週間 1,704便（平日264・土203・日祝181便/日）"], ["車両", "保有 電気バス35台・燃料バス25台（固定）"],
-  ["設備", "太陽光1,000 kW・蓄電池6,000 kWh・充電器90 kW×10"], ["受電上限", "90・200・400・900 kW（超過は500円/kWh・仮）"], ["期間", "冬・春・夏の代表週（2025年）"],
+y += systemDiagram(s, pres, LX, y, COL, { pv: "太陽光\n1,000 kW", battery: "蓄電池 6,000 kWh\n（系統からは貯めない）", grid: "系統（受電上限）\n90〜900 kW",
+  charger: "充電器\n90 kW×10", ebus: "電気バス 35台", dbus: "燃料バス 25台", share: "1,704便/週を分担" }, "Yu Gothic");
+caption("図2　営業所の設備と電力の流れ（15分ごとに計画）", LX, y, COL, 0.7, 28);
+y += 0.85;
+const rows = [["対象", "東急バス 渋21〜23系統（弦巻営業所）、時刻表はODPT［3］"], ["運行", "1週間 1,704便（平日264・土203・日祝181便/日）"],
+  ["受電上限", "90・200・400・900 kW（超過は500円/kWh・仮）"], ["期間", "冬・春・夏の代表週（2025年）"],
   ["毎朝の電池", "目標90%・下限80%"], ["単価", "電気30円/kWh（基本料金込み）・軽油150円/L"], ["CO₂", "軽油2.62 kg/L［1］、電力0.5 kg/kWh（仮）"]];
 s.addTable(rows.map(([k, v]) => [{ text: k, options: { bold: true } }, { text: v }]),
-  { x: LX, y, w: COL, colW: [3.4, COL - 3.4], fontSize: 32, fontFace: "Yu Gothic", color: INK, rowH: 0.70, valign: "middle",
+  { x: LX, y, w: COL, colW: [3.4, COL - 3.4], fontSize: 30, fontFace: "Yu Gothic", color: INK, rowH: 0.6, valign: "middle",
     border: { type: "solid", pt: 1, color: GRID } });
-y += rows.length * 0.70 + 1.0;
+y += rows.length * 0.6 + 0.5;
 y = section("3．手法", LX, y, COL);
-text([
-  { text: "便割当（Stage 1）：1,704便を60台に割り当てる混合整数計画問題。一部の便だけを解き直す大近傍探索（LNS）［5］で90分改善した（Gurobi［4］）。毎朝の電池の不足分の重みを充電計画と共通にした。", options: { breakLine: true } },
-  { text: "充電計画（Stage 2）：割当を固定し、15分ごとの充電・太陽光・蓄電池・買電を最適化する。前日の計画では、太陽光を過去の実績から作った平年値で予報する（斜面日射はpvlib［2］）。", options: { breakLine: true } },
-  { text: "実行：実際の天気で1時間ごとに充電を立て直しながら1週間を運用し（175回、1回120秒）、その結果で費用を集計した。" }],
-  { x: LX, y, w: COL, h: 6.0, paraSpaceAfter: 14, fontSize: 34 });
-y += 6.4;
+flowDiagram(s, pres, LX, y, COL, [
+  ["① 便割当", ["1,704便を60台に割当", "混合整数計画＋大近傍探索［5］"]],
+  ["② 前日の計画", ["割当を固定し、15分ごとの充電・蓄電池・買電を計画", "太陽光は平年値で予報［2］"]],
+  ["③ 毎時の立て直し", ["実際の天気で1時間ごとに再計画", "175回×120秒"]],
+  ["④ 集計", ["実行結果で費用・CO₂を集計", "安い方の出発点を採用"]]], "Yu Gothic", 3.6, 23);
+caption("図3　計算の流れ（①がStage 1、②③がStage 2。ソルバーはGurobi［4］）", LX, y + 3.65, COL, 0.7, 26);
+y += 4.45;
 const FC = [3391, 3401, 3412, 3423, 3436, 3448, 3462], AC = [1399, 2640, 3836, 4871, 5059, 5079, 1693];
 const DAYS = ["月", "火", "水", "木", "金", "土", "日"];
 s.addChart(pres.charts.BAR, [{ name: "前日の予報（平年値）", labels: DAYS, values: FC }, { name: "実際", labels: DAYS, values: AC }],
-  { ...chart(), x: LX, y, w: COL, h: 3.8, barDir: "col", barGrouping: "clustered", chartColors: ["CFCFCF", BLUE], valAxisMinVal: 0,
-    legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "太陽光 [kWh/日]", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
-caption("図5　冬の代表週（2025年1月6日〜）の太陽光：前日の予報と実際（入力データ）", LX, y + 3.85, COL, 0.8, 28);
-y += 4.9;
-caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}/175回が時間切れ。遅い計算機は制限時間を延ばした。${pend.length ? `${pend.join("・")}は計算中。` : ""}${stopped.length ? `${stopped.join("、")}の計算が失敗し未完。` : ""}最大受電は15分平均。`,
+  { ...chart(), x: LX, y, w: COL, h: 3.6, barDir: "col", barGrouping: "clustered", chartColors: ["CFCFCF", BLUE], valAxisMinVal: 0,
+    legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "kWh/日", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
+caption("図5　冬の代表週（2025年1月6日〜）の太陽光：前日の予報と実際（入力データ）", LX, y + 3.65, COL, 0.7, 26);
+y += 4.45;
+caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}/175回が時間切れ。遅い計算機は制限時間を延ばした。基本料金は30円/kWhに含むため足さない。${pend.length ? `${pend.join("・")}は計算中。` : ""}${stopped.length ? `${stopped.join("、")}の計算が失敗し未完。` : ""}最大受電は15分平均。`,
   LX, y, COL, 45.5 - y - 2.5, 24);
 text([{ text: "参考文献（原本は 先行文献／2026-11-08_中間発表の参考文献）", options: { bold: true, breakLine: true } },
   ...["［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）", "［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
@@ -138,16 +145,20 @@ text([{ text: "参考文献（原本は 先行文献／2026-11-08_中間発表�
 // ---- Right column
 y = 12.5;
 y = section("4．結果", RX, y, COL);
-s.addChart(pres.charts.LINE, SE.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => val(g, w, "bev_trip_share_pct", (v) => Math.round(v * 10) / 10)) })),
-  { ...chart(), x: RX, y, w: COL, h: 5.4, lineSize: 5, lineDataSymbol: "circle", lineDataSymbolSize: 14, chartColors: [BLUE_DARK, "7AB8E8", GREY],
-    valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showCatAxisTitle: true, catAxisTitle: "受電上限", catAxisTitleFontSize: 30, catAxisTitleColor: SUB,
-    showValAxisTitle: true, valAxisTitle: "電気バス担当便 [%]", valAxisTitleFontSize: 30, valAxisTitleColor: SUB });
-caption("図1　受電上限と電気バスの担当便（1,704便/週、安い方の出発点）", RX, y + 5.45, COL);
-y += 6.4;
+const halfR = (COL - 0.5) / 2;
+s.addChart(pres.charts.LINE, SE.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => val(g, w, "bev_trip_share_pct", (v) => Math.round(v * 10) / 10)) })),
+  { ...chart(), x: RX, y, w: halfR, h: 5.6, lineSize: 5, lineDataSymbol: "circle", lineDataSymbolSize: 14, chartColors: [BLUE_DARK, "7AB8E8", GREY],
+    catAxisLabelFontSize: 26, valAxisLabelFontSize: 24, legendFontSize: 26,
+    valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showCatAxisTitle: true, catAxisTitle: "受電上限 [kW]", catAxisTitleFontSize: 24, catAxisTitleColor: SUB,
+    showValAxisTitle: true, valAxisTitle: "電気バス担当便 [%]", valAxisTitleFontSize: 24, valAxisTitleColor: SUB });
+const HF = hourlyFlow(s, pres, chart(), RX + halfR + 0.5, y, halfR, 5.6, ["太陽光→蓄電池", "太陽光→バス", "蓄電池→バス", "買電→バス", "捨てた太陽光"], ["時刻", "電力量 [MWh/週]"]);
+caption("図1　受電上限と電気バスの担当便（1,704便/週、安い方の出発点）", RX, y + 5.65, halfR, 1.3, 24);
+caption("図6　時刻別の電力の流れ（900 kW冬・電気バス寄り、1週間の合計）。昼の太陽光を蓄電池に貯め、夜にバスへ充電", RX + halfR + 0.5, y + 5.65, halfR, 1.3, 24);
+y += 7.1;
 const rng = (b) => { const v = iceHour.map((r) => r.bands[b].diesel / r.bands[b].total * 100); return `${Math.min(...v).toFixed(0)}〜${Math.max(...v).toFixed(0)}%`; };
 text(`(1) 2つの出発点のうち安い方で見ると、${iceWins.length ? `受電上限の低い${iceWins.map(lab).join("・")}では燃料バス寄りが安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%だった。` : ""}それ以外は電気バス寄りが安く、担当便は${rngTxt(bevWins.map((r) => r.bev_trip_share_pct), 1)}%だった。同じケースでも出発点で担当便は大きく変わった。`,
-  { x: RX, y, w: COL, h: 3.0, fontSize: 33 });
-y += 3.3;
+  { x: RX, y, w: COL, h: 2.3, fontSize: 29 });
+y += 2.45;
 const half = (COL - 0.6) / 2;
 const K9COLS = [["wb", "冬・電気中心"], ["wi", "冬・燃料中心"], ["sb", "春・電気中心"], ["ub", "夏・電気中心"]];
 const k9Row = (label, f) => [{ text: label, options: { bold: true } }, ...K9COLS.map(([k]) => ({ text: (K9[k] ? f(K9[k]) : "計算中"), options: { align: "center" } }))];
@@ -167,8 +178,8 @@ y += 6.5;
 const PAIRS = [];
 LIMITS.forEach((g) => SE.forEach(([w]) => { const b = pairOf(g, w, "bev"), i = pairOf(g, w, "ice"); if (b && i) PAIRS.push({ label: `${g}${SEASON_OF[w]}`, b, i }); }));
 const pcats = PAIRS.map((p) => p.label);
-const pairChart = (o) => ({ ...chart(), y, w: half, h: 5.7, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
-  showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 18, legendFontSize: 26, catAxisLabelFontSize: 20, catAxisLabelFrequency: 1, barGapWidthPct: 40, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
+const pairChart = (o) => ({ ...chart(), y, w: half, h: 6.3, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
+  showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 14, legendFontSize: 26, catAxisLabelFontSize: 20, catAxisLabelFrequency: 1, barGapWidthPct: 15, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
 s.addChart(pres.charts.BAR, [
   { name: "電気バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_cost_fuel_consumed / 1e4)) },
   { name: "燃料バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_cost_fuel_consumed / 1e4)) }],
@@ -177,12 +188,12 @@ s.addChart(pres.charts.BAR, [
   { name: "電気バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_co2_kg / 100) / 10) },
   { name: "燃料バス寄り", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_co2_kg / 100) / 10) }],
   pairChart({ x: RX + half + 0.6, dataLabelFormatCode: "0.0", valAxisMaxVal: 10, valAxisMajorUnit: 2, valAxisTitle: "CO₂ [t/週]" }));
-caption("図4　総費用（左、燃料は使った分）とCO₂（右）。2つの出発点がそろったケース", RX, y + 5.75, COL, 0.9, 28);
-y += 6.7;
+caption("図4　総費用（左、燃料は使った分）とCO₂（右）。2つの出発点がそろったケース", RX, y + 6.35, COL, 0.9, 28);
+y += 7.25;
 const overCases = cases.filter((r) => r.contract_over_limit_kwh > 1);
-text(`(2) 安い方の出発点で超過が残ったのは${overCases.length ? overCases.map((r) => `${lab(r)}（${Math.round(r.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週）`).join("・") : "なし"}。電気バス寄りの出発点では90 kW冬で${Math.round(pb90.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週の超過が出た。図4のとおり、CO₂は${PAIRS.length}ケースすべてで電気バス寄りが少なく（燃料バス寄りの${(Math.min(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)}〜${(Math.max(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)}分の1）、費用も${PAIRS.filter((p) => p.b.total_cost_fuel_consumed < p.i.total_cost_fuel_consumed).length}ケースで電気バス寄りが安い。（目安）年間最大の受電電力から見た基本料金は30円/kWhに含むため合計に足さない。`,
-  { x: RX, y, w: COL, h: 4.0, fontSize: 32 });
-y += 4.2;
+text(`(2) 安い方の出発点で超過が残ったのは${overCases.length ? overCases.map((r) => `${lab(r)}（${Math.round(r.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週）`).join("・") : "なし"}。電気バス寄りの出発点では90 kW冬で${Math.round(pb90.contract_over_limit_kwh).toLocaleString("ja-JP")} kWh/週の超過が出た。図4のとおり、CO₂は${PAIRS.length}ケースすべてで電気バス寄りが少なく（燃料バス寄りの${(Math.min(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)}〜${(Math.max(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)}分の1）、費用も${PAIRS.filter((p) => p.b.total_cost_fuel_consumed < p.i.total_cost_fuel_consumed).length}ケースで電気バス寄りが安い。`,
+  { x: RX, y, w: COL, h: 3.3, fontSize: 30 });
+y += 3.45;
 
 y = section("5．考察とまとめ", RX, y, COL);
 text([
