@@ -109,7 +109,7 @@ y = section("3. Method", LX, y, COL);
 flowDiagram(s, pres, LX, y, COL, [
   ["1 Assign trips", ["1,704 trips to 60 buses", "MIP + large neighbourhood search [5]"]],
   ["2 Day-ahead plan", ["Assignment fixed; charging, battery and grid in 15-min steps", "PV forecast = climatological normal [2]"]],
-  ["3 Hourly re-plan", ["Re-plan every hour on actual weather", "175 times × 120 s"]],
+  ["3 Hourly re-plan", ["Re-plan every hour on actual weather", "174–175 times/week × 120 s"]],
   ["4 Account", ["Cost and CO₂ from the executed week", "Cheaper start point kept"]]], FONT, 3.6, 21);
 caption("Fig. 3  Calculation flow (1 = Stage 1; 2–3 = Stage 2; solver Gurobi [4])", LX, y + 3.65, COL, 0.7, 26);
 y += 4.45;
@@ -120,7 +120,7 @@ s.addChart(pres.charts.BAR, [{ name: "Day-ahead forecast (normal)", labels: DAYS
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "kWh/day", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
 caption("Fig. 5  PV in the winter week (from 6 Jan 2025): day-ahead forecast vs actual (input data)", LX, y + 3.65, COL, 0.7, 26);
 y += 4.45;
-caption(`Note: All results are DIAGNOSTIC, from the latest versions (rc33, rc35). Each case is solved from two start points (electric-heavy and diesel-heavy); the one with the lower total cost (diesel valued by litres burnt) is shown. The trip assignment stops at the memory limit and the two-stage method is not a global optimum. Up to ${maxTimeouts} of 175 hourly re-plans hit the time limit; slower machines were given longer limits. The basic charge is included in 30 JPY/kWh and not added. ${pend.length ? `Still running: ${list(pend)}. ` : ""}${(DATA.first_attempt_failures || []).length ? `The electric-heavy run of ${list(DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW ${SEASON_OF[k.split("/")[1]].toLowerCase()}`))} stopped in the hourly re-plan on its first attempt and is being rerun on the same version. ` : ""}${stopped.length ? `Not completed, one start failed: ${list(stopped)}. ` : ""}Peak = 15-min average.`,
+caption(`Note: All results are DIAGNOSTIC, from the latest versions (rc33, rc35, rc36; both 90 kW spring starts on rc36). Each case is solved from two start points (electric-heavy and diesel-heavy); the one with the lower total cost (diesel valued by litres burnt) is shown. The trip assignment stops at the memory limit and the two-stage method is not a global optimum. Up to ${maxTimeouts} of the 174–175 hourly re-plans per week hit the time limit; slower machines were given longer limits. The basic charge is included in 30 JPY/kWh and not added. ${pend.length ? `Still running: ${list(pend)}. ` : ""}${(DATA.first_attempt_failures || []).length ? `The electric-heavy run of ${list(DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW ${SEASON_OF[k.split("/")[1]].toLowerCase()}`))} stopped in the hourly re-plan on its first attempt and is being rerun on the same version. ` : ""}${stopped.length ? `Not completed, one start failed: ${list(stopped)}. ` : ""}Peak = 15-min average.`,
   LX, y, COL, 45.5 - y - 2.5, 22);
 text([{ text: "References", options: { bold: true, breakLine: true } },
   ...["[1] Ministry of the Environment, METI: List of calculation methods and emission factors (2025)", "[2] W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",

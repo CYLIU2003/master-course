@@ -248,7 +248,7 @@ takeaway(s, iceWins.length ? `安い方：${iceWins.map(lab).join("・")}は燃�
 s.addChart(pres.charts.LINE, SEASONS.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => val(g, w, "bev_trip_share_pct", (v) => Math.round(v * 10) / 10)) })),
   chart({ ...CH, lineSize: 2.5, lineDataSymbol: "circle", lineDataSymbolSize: 7, chartColors: [BLUE_DARK, BLUE_LIGHT, GREY],
     valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showValAxisTitle: true, valAxisTitle: "電気バスが担当した便 [%]", showCatAxisTitle: true, catAxisTitle: "受電上限" }));
-caption(s, `図1　受電上限と電気バスの担当便（1,704便/週、2つの出発点のうち総費用の安い方、${nVerified}/${nAll}ケース）。最新版rc33・rc35`, 0.6, 6.45, 7.6, 0.5);
+caption(s, `図1　受電上限と電気バスの担当便（1,704便/週、2つの出発点のうち総費用の安い方、${nVerified}/${nAll}ケース）。最新版rc33・rc35・rc36`, 0.6, 6.45, 7.6, 0.5);
 const pairShares = cases.map((r) => [r.bev_trip_share_pct, r.other_start_bev_trip_share_pct]).flat();
 bullets(s, [
   "各ケースを電気バス寄り・燃料バス寄りの2つの出発点で解き、総費用（燃料は使った分）の安い方を示す",
@@ -318,7 +318,7 @@ if (PAIRS.length) {
     chart({ x: 0.6, y: 4.45, w: 8.3, h: 2.05, barDir: "col", barGrouping: "clustered", chartColors: [BLUE, GREY], showValue: true, dataLabelPosition: "outEnd",
       dataLabelFormatCode: "0.0", dataLabelFontSize: 11, valAxisMinVal: 0, valAxisMaxVal: 10, valAxisMajorUnit: 5, catAxisLabelFontSize: 12, showLegend: false,
       showValAxisTitle: true, valAxisTitle: "CO₂ [t/週]" }));
-  caption(s, "図3b　両方の出発点の計算が終わったケースの総費用（上、燃料は使った分、車両使用費を含む）とCO₂（下）。最新版rc33・rc35、DIAGNOSTIC", 0.6, 6.5, 8.3, 0.45);
+  caption(s, "図3b　両方の出発点の計算が終わったケースの総費用（上、燃料は使った分、車両使用費を含む）とCO₂（下）。最新版rc33・rc35・rc36、DIAGNOSTIC", 0.6, 6.5, 8.3, 0.45);
   bullets(s, [
     `安さ：電気バス寄りが安いのは${bevCheap.map((p) => p.label).join("・") || "なし"}`,
     `燃料バス寄りが安いのは${iceCheap.map((p) => `${p.label}（${man(p.b.total_cost_fuel_consumed - p.i.total_cost_fuel_consumed)}万円安い）`).join("・") || "なし"}`,

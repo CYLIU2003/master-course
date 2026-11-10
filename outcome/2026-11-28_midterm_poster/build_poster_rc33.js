@@ -122,7 +122,7 @@ y = section("3．手法", LX, y, COL);
 flowDiagram(s, pres, LX, y, COL, [
   ["① 便割当", ["1,704便を60台に割当", "混合整数計画＋大近傍探索［5］"]],
   ["② 前日の計画", ["割当を固定し、15分ごとの充電・蓄電池・買電を計画", "太陽光は平年値で予報［2］"]],
-  ["③ 毎時の立て直し", ["実際の天気で1時間ごとに再計画", "175回×120秒"]],
+  ["③ 毎時の立て直し", ["実際の天気で1時間ごとに再計画", "週174〜175回×120秒"]],
   ["④ 集計", ["実行結果で費用・CO₂を集計", "安い方の出発点を採用"]]], "Yu Gothic", 3.6, 23);
 caption("図3　計算の流れ（①がStage 1、②③がStage 2。ソルバーはGurobi［4］）", LX, y + 3.65, COL, 0.7, 26);
 y += 4.45;
@@ -133,7 +133,7 @@ s.addChart(pres.charts.BAR, [{ name: "前日の予報（平年値）", labels: D
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "kWh/日", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
 caption("図5　冬の代表週（2025年1月6日〜）の太陽光：前日の予報と実際（入力データ）", LX, y + 3.65, COL, 0.7, 26);
 y += 4.45;
-caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}/175回が時間切れ。遅い計算機は制限時間を延ばした。基本料金は30円/kWhに含むため足さない。${pend.length ? `${pend.join("・")}は計算中。` : ""}${(DATA.first_attempt_failures || []).length ? `${DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW${SEASON_OF[k.split("/")[1]]}`).join("・")}の電気バス寄りは1回目が毎時の立て直しで停止し、同じ版で計算し直し中。` : ""}${stopped.length ? `${stopped.join("、")}の計算が失敗し未完。` : ""}最大受電は15分平均。`,
+caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35・rc36。90 kW春の2つの出発点はrc36）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}回（1週間174〜175回のうち）が時間切れ。遅い計算機は制限時間を延ばした。基本料金は30円/kWhに含むため足さない。${pend.length ? `${pend.join("・")}は計算中。` : ""}${(DATA.first_attempt_failures || []).length ? `${DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW${SEASON_OF[k.split("/")[1]]}`).join("・")}の電気バス寄りは1回目が毎時の立て直しで停止し、同じ版で計算し直し中。` : ""}${stopped.length ? `${stopped.join("、")}の計算が失敗し未完。` : ""}最大受電は15分平均。`,
   LX, y, COL, 45.5 - y - 2.5, 24);
 text([{ text: "参考文献（原本は 先行文献／2026-11-08_中間発表の参考文献）", options: { bold: true, breakLine: true } },
   ...["［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）", "［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
