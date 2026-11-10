@@ -55,7 +55,7 @@ const iceWins = cases.filter((r) => r.selected_start === "ice"), bevWins = cases
 const rngTxt = (a, d = 0) => !a.length ? "—" : Math.min(...a).toFixed(d) === Math.max(...a).toFixed(d) ? Math.min(...a).toFixed(d) : `${Math.min(...a).toFixed(d)}–${Math.max(...a).toFixed(d)}`;
 // 2026-11-09: 90 kW spring has no running job; its diesel-heavy run (rc35 a090s10) FAILED.
 // 400 kW summer: the first electric-heavy run (rc35 a400s10) FAILED; its resubmission a400s10f completed (2026-11-10).
-const STOPPED = new Map([["900/2025-07-07", "electric-heavy start stopped in the hourly re-plan in both attempts"]]);
+const STOPPED = new Map([["900/2025-07-07", "electric-heavy start stopped in the hourly re-plan, 4 attempts"]]);
 const notDone = DATA.cases.filter((r) => r.status !== "VERIFIED");
 const pend = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map(lab);
 const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${lab(r)} (${STOPPED.get(`${r.grid_limit_kw}/${r.week}`)})`);

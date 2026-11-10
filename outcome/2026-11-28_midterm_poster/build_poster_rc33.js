@@ -64,7 +64,7 @@ const iceWins = cases.filter((r) => r.selected_start === "ice"), bevWins = cases
 const rngTxt = (a, d = 0) => !a.length ? "—" : Math.min(...a).toFixed(d) === Math.max(...a).toFixed(d) ? Math.min(...a).toFixed(d) : `${Math.min(...a).toFixed(d)}〜${Math.max(...a).toFixed(d)}`;
 // 2026-11-09: 90 kW spring has no running job; its ICE-heavy run (rc35 a090s10) FAILED, so it is not "計算中".
 // 400 kW summer: the BEV-heavy run (rc35 a400s10) FAILED; only the ICE-heavy start finished.
-const STOPPED = new Map([["900/2025-07-07", "電気バス寄り（2回とも毎時の立て直しで停止）"]]);
+const STOPPED = new Map([["900/2025-07-07", "電気バス寄り（4回とも毎時の立て直しで停止）"]]);
 const notDone = DATA.cases.filter((r) => r.status !== "VERIFIED");
 const pend = notDone.filter((r) => !STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}`);
 const stopped = notDone.filter((r) => STOPPED.has(`${r.grid_limit_kw}/${r.week}`)).map((r) => `${r.grid_limit_kw} kW${SEASON_OF[r.week]}は${STOPPED.get(`${r.grid_limit_kw}/${r.week}`)}`);

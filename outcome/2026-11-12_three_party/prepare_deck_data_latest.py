@@ -52,6 +52,7 @@ CASES[(400, U, "bev")] = f"rc36/a400u/{U}"
 # 2026-11-10: rc36 a900u FAILED at hourly step 76 (Stage 2 infeasible at the root; the saved non-minimal IIS
 # solves feasibly when read back, cause not identified). Second attempt a900v: same release, parent, seed, overrides.
 CASES[(900, U, "bev")] = f"rc36/a900v/{U}"
+# 2026-11-11: a900x (pslab-mouse, step 97) and a900w (matlab-desktop, step 146) also FAILED; four attempts, none completed.
 # 2026-11-10 night: a900v also FAILED (Stage 2 infeasible at hourly step 97; a900u stopped at step 76).
 # No job is running for this case; the deck and posters list it as not completed (STOPPED in the build scripts).
 FIRST_ATTEMPT_FAILURES = []
