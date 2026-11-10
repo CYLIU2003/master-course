@@ -108,7 +108,7 @@ y += rows.length * 0.6 + 0.5;
 y = section("3. Method", LX, y, COL);
 flowDiagram(s, pres, LX, y, COL, [
   ["1 Assign trips", ["1,704 trips to 60 buses", "MIP + large neighbourhood search [5]"]],
-  ["2 Day-ahead plan", ["Assignment fixed; charging, battery and grid in 15-min steps", "PV forecast = climatological normal [2]"]],
+  ["2 Day-ahead plan", ["Assignment fixed; bus charging in 15-min steps", "Battery follows a rule; PV forecast = normal [2]"]],
   ["3 Hourly re-plan", ["Re-plan every hour on actual weather", "174–175 times/week × 120 s"]],
   ["4 Account", ["Cost and CO₂ from the executed week", "Cheaper start point kept"]]], FONT, 3.6, 21);
 caption("Fig. 3  Calculation flow (1 = Stage 1; 2–3 = Stage 2; solver Gurobi [4])", LX, y + 3.65, COL, 0.7, 26);
