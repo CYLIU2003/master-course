@@ -1,0 +1,24 @@
+{
+ "settings": "C:/master-course/output/midterm_20261128/controller-settings.rc36.json",
+ "campaign": "C:/master-course/output/midterm_20261128/rc36/a900v",
+ "git_sha": "375dd6f2931dfed7f5d805995bac348235d00748",
+ "parent": "596e428d-c1da-440e-a954-5aef4c779cbd",
+ "weeks": [
+  "2025-07-07"
+ ],
+ "workers": [
+  "pslab-mouse"
+ ],
+ "planning_days": 7,
+ "morning_tolerance_percent": 10.0,
+ "morning_shortfall_penalty_yen_per_kwh": 50.0,
+ "seed": "C:/master-course/output/midterm_20261128/rc20_seed_800_2025-07-07.json",
+ "overrides": {
+  "stage1_time_limit_seconds": 10800,
+  "rolling_time_limit_seconds": 120,
+  "stage2_charging_start_policy": "none",
+  "stage1_gurobi_search_profile": "lns_dual_vehicle_day",
+  "planning_pv_forecast_scale": 1.0
+ },
+ "purpose": "rc36 (375dd6f2). DIAGNOSTIC. Second attempt of operation.rc36_a900u_2025-07-07.json (identical parent, seed and overrides; only campaign name and worker differ). The first attempt FAILED at hourly step 76 (Stage 2 infeasible at the root); its saved non-minimal IIS solves feasibly when read back, so the cause is not identified. The first-attempt failure is disclosed."
+}

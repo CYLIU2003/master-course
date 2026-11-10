@@ -49,7 +49,10 @@ for limit in (200, 400, 900):
 CASES[(90, S, "ice")] = f"rc36/i090s/{S}"
 CASES[(90, S, "bev")] = f"rc36/g090s/{S}"
 CASES[(400, U, "bev")] = f"rc36/a400u/{U}"
-CASES[(900, U, "bev")] = f"rc36/a900u/{U}"
+# 2026-11-10: rc36 a900u FAILED at hourly step 76 (Stage 2 infeasible at the root; the saved non-minimal IIS
+# solves feasibly when read back, cause not identified). Second attempt a900v: same release, parent, seed, overrides.
+CASES[(900, U, "bev")] = f"rc36/a900v/{U}"
+FIRST_ATTEMPT_FAILURES = ["900/2025-07-07"]  # disclosed in the deck table and poster note
 
 
 def run_dir(case):
@@ -127,7 +130,7 @@ def main():
                     "bus_charging": mean("bus_charging_kwh"), "grid_share_pct": 100 * mean("grid_import_kwh") / mean("bus_charging_kwh")})
     old = json.loads((HERE / "deck_data_rc20.json").read_text(encoding="utf-8"))
     out = {"versions": VERSION, "limits": list(LIMITS), "cases": cases, "pairs": pairs, "ice_by_hour": ice, "rolling": rolling,
-           "qf2": qf2, "diesel": old["diesel"], "audit": old["audit"], "hindsight": old["hindsight"], "first_attempt_failures": [],
+           "qf2": qf2, "diesel": old["diesel"], "audit": old["audit"], "hindsight": old["hindsight"], "first_attempt_failures": FIRST_ATTEMPT_FAILURES,
            "rc20_only": ["diesel", "audit", "hindsight"]}
     (HERE / "deck_data_latest.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print("pairs", sum(r["status"] == "VERIFIED" for r in pairs), "/", len(pairs), "cases",

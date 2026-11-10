@@ -1065,7 +1065,7 @@
    "week": "2025-07-07",
    "season": "夏",
    "start": "bev",
-   "case": "rc36/a900u/2025-07-07",
+   "case": "rc36/a900v/2025-07-07",
    "version": "375dd6f2",
    "status": "NOT_COLLECTED"
   },
@@ -1843,7 +1843,9 @@
    "status": "PENDING:RUNNING"
   }
  ],
- "first_attempt_failures": [],
+ "first_attempt_failures": [
+  "900/2025-07-07"
+ ],
  "rc20_only": [
   "diesel",
   "audit",

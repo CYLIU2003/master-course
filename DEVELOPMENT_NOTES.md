@@ -12883,3 +12883,11 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
   - 資料・ポスターに入れていた a400s10f（400 kW 夏・電気バス寄り）と a900s10f（900 kW 夏・電気バス寄り）の値は外し、「計算中」に戻した。
   - a090s10f で見つけた帯の隙間はモデルの欠陥としてそのまま有効（同じ式は pilot 経路でも使う）。rc36 i090 は前日の Stage 2 が 600 秒で解なし（time_limit）で止まったが、これは既定の短い制限時間によるもので、使わない。g090p は取り消した。
   - pilot 経路で rc36 として出し直した：i090s（90 kW 春・燃料バス寄り、pslab-mouse）、g090s（90 kW 春・電気バス寄り、desktop-1800n4s）、a400u（400 kW 夏・電気バス寄り、matlab-desktop）、a900u（900 kW 夏・電気バス寄り、desktop-6ae0mir）。request は rc35 の pilot のケースと、準備済み入力の ID と出発点の種以外は同じ（制限時間 10,800／3,600／120秒、探索 lns_dual_vehicle_day、倍率 1.0）。種はそれぞれ元のケースと一致することを確かめた。
+- **rc36 の最初の結果（2026-11-10）**：
+  - i090s（90 kW 春・燃料バス寄り）は完走した：毎時174回すべて受理、時間切れ0、物理検査 VALID、超過0。春の週は毎時174回。
+  - a900u（900 kW 夏・電気バス寄り）は毎時76回目（4日目4:00）の Stage 2 が根ノードで infeasible になり、FAILED。
+    - 前の時刻の終わりに、80%の帯の境（0.8×容量−1e-4 = 251.1999 kWh）ちょうどのバスが1台いた。ただし、モデルには修正後の式が入っていた（high_lower の右辺 −31.4001）。
+    - 保存された IIS は最小でない（IIS 計算が120秒で止まり、86,098本）。pslab-mouse で読み戻して解くと、元の設定（IntegralityFocus=1・Presolve=0 など）でも FeasibilityTol 1e-9 でも feasible になった。
+    - 最小でない IIS もそれだけで infeasible のはずなので、保存した部分系からは infeasible を再現できない。全体のモデルでの数値の問題か、IIS の書き出しの問題かは、まだ分からない。
+    - 原因はまだ特定していない。全体のモデルの再現は未実施。
+  - 同じ版・同じ parent・seed・overrides の2回目 a900v を pilot 経路で pslab-mouse に出した（`operation.rc36_a900v_2025-07-07.json`）。prepared/instance の差は scenario_id とそれに由来する値だけ。1回目の失敗は資料の表とポスターの注に出す（`first_attempt_failures`）。
