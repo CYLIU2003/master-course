@@ -12929,5 +12929,9 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
     - 余裕が小さい点：matlab-desktop で最初の解が出るまで最大100秒かかった（制限120秒）。遅い台では制限時間の補正に頼ることになる。前の回の計画を出発点にできた回は、すぐ解がある。
     - 確認：`tests/test_rolling_execution_class.py` の試験を「立て直しは Cuts 0・NumericFocus 0・許容誤差 1e-9、前日の計画は Cuts -1」に替えた。Stage 2・立て直し・再生の関係 470件通過、10件はもとから条件付きでスキップ。
     - rc38 の `e900p`・`e900r` は走らせたままにする（97回目を越えるかの確認になる）。止まれば rc39 で出し直す。
+  - **版と投入（rc39、0e95d3b2、2026-11-11 19時台）**：`release-midterm-0e95d3b2`（固定クローン、clean、データ5か所は rc38 の版とハッシュ一致）。`package_rc39`、`release.py stage` で12台 VERIFIED（`stage-checks-v59`、`workers.deployed.v59.json`。desktop-gsfgtj2 が復帰して入った。cyliu-thinkbook は届かず構成の外）。計算管理は `controller-settings.rc39.json`。切り替え時、rc38 の2件は実行中のまま引き継がれた。
+    - 投入：`f900m`（matlab-desktop、19:33）、`f900g`（desktop-gsfgtj2、19:33）、`f900p`（pslab-mouse、19:52）。request は rc36 `a900v` と準備済み入力の ID 以外は同じ。
+    - 先に決めた規則（operation の purpose に記載）：結果として使うのは、f900m → f900g → f900p → rc38 e900r の順で、最初に全部の検査を通って完了したもの。残りは繰り返しとして載せる。失敗した回はすべて残す。
+  - **rc38 `e900p` は FAILED（19:3x、pslab-mouse）**：毎時53回目で `infeasible`。rc36 の同じ台（97回目）より早い回で、NumericFocus 2 でも誤判定が別の回に出た。保存された全体のモデルを pslab-mouse で読み直すと、rc38 の設定（focus 2）と rc36 の設定（focus 0）は `INFEASIBLE`、rc39 の設定（focus 0・Cuts 0）は52秒で最適（別の種で99秒、最大の制約違反 4e-10）。これで保存した3つのモデル（97・146・53回目）すべてが rc39 の設定で解けた。rc38 `e900r`（desktop-1800n4s）は計算中。
   - a400u（400 kW 夏・電気バス寄り、matlab-desktop）は完走した：413.3万円（燃料は使った分）、電気バス担当94.5%、CO₂ 1,549 kg、毎時174回すべて受理（時間切れ3）、物理検査 VALID、超過0。燃料バス寄り rc35 b400s10（444.8万円）より安いが、版が違う（rc36 と rc35）ので資料では版を明記した。rc35 での1回目（a400s10）は毎時44回目で停止しており、ポスターの注と資料の表3の注に書いた。
 - **資料の添削とモデルの見直し（2026-11-10）**：進捗資料・ポスターの添削内容、モデル（Stage 2・蓄電池の規則・毎時の実行・会計）の見直し結果、未決事項と続きの手順を `docs/notes/HANDOFF_20261110_MIDTERM_MATERIALS_AND_MODEL_REVIEW.md` にまとめた。コードは変えていない。主な指摘：蓄電池は `pv_self_consumption` の規則で動き最適化していない（資料の説明を修正）、蓄電池・車両の残量の増減を費用に入れていない、車両使用費が総費用の約98%で電気・燃料で同額。
