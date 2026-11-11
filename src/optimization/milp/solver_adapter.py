@@ -3422,6 +3422,14 @@ def _configure_stage2_numerics(model: Any, config: OptimizationConfig) -> dict[s
         # Select once from the declared phase, uniformly across every month;
         # this is not a retry after failure and never changes physical tolerances.
         "Method": (0 if config.rolling_horizon_policy == ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT else 1),
+        # 2026-11-11: two unchanged rolling MPS files of 900 kW summer (steps 97 and 146) were
+        # reported infeasible at the root after cutting planes, although both have solutions
+        # within the same 1e-9 tolerances (feasRelax needs zero violation). NumericFocus 2
+        # repaired only one of them; with cuts off both solve inside the 120 s limit. Root cuts
+        # are therefore switched off for every rolling step, selected before solving from the
+        # declared phase. Day-ahead Stage 2 keeps Gurobi's automatic setting. No tolerance,
+        # bound or constraint changes; only the bound proof gets slower.
+        "Cuts": (0 if config.rolling_horizon_policy == ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT else -1),
         # The extraction contract needs every charge_on/charger binary within
         # IntFeasTol; IntegralityFocus makes Gurobi enforce that for incumbents
         # it builds from a MIP start (trickle flow through big-M power rows).
@@ -23840,7 +23848,7 @@ class GurobiMILPAdapter:
                 "stage2_gurobi_presolve": stage2_numerics["Presolve"],
                 "stage2_gurobi_numeric_focus": stage2_numerics["NumericFocus"],
                 "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"], "stage2_gurobi_integrality_focus": stage2_numerics["IntegralityFocus"],
-                "stage2_gurobi_method": stage2_numerics["Method"],
+                "stage2_gurobi_method": stage2_numerics["Method"], "stage2_gurobi_cuts": stage2_numerics["Cuts"],
                 "gurobi_threads": configured_threads,
                 "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
                 "stage2_native_log_path": stage2_native_log_path,
@@ -24218,7 +24226,7 @@ class GurobiMILPAdapter:
             "stage2_gurobi_presolve": stage2_numerics["Presolve"],
             "stage2_gurobi_numeric_focus": stage2_numerics["NumericFocus"],
             "stage2_gurobi_mip_focus": stage2_numerics["MIPFocus"], "stage2_gurobi_integrality_focus": stage2_numerics["IntegralityFocus"],
-            "stage2_gurobi_method": stage2_numerics["Method"],
+            "stage2_gurobi_method": stage2_numerics["Method"], "stage2_gurobi_cuts": stage2_numerics["Cuts"],
             "gurobi_threads": configured_threads,
             "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
             "stage2_native_log_path": stage2_native_log_path,

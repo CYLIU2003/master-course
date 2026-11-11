@@ -79,17 +79,22 @@ def test_search_changes_only_native_focus_and_leaves_day_ahead_default():
     assert OptimizationConfig().stage2_gurobi_mip_focus == 1
 
 
-def test_rolling_steps_select_numeric_focus_2_and_day_ahead_keeps_default():
-    """Rolling Stage 2 uses NumericFocus 2 for every step (rc36 900 kW summer false infeasibility)."""
+def test_rolling_steps_switch_root_cuts_off_and_day_ahead_keeps_automatic():
+    """Rolling Stage 2 solves without cutting planes (rc36 900 kW summer false infeasibility)."""
     from src.optimization.common.problem import OptimizationConfig
     from src.optimization.milp.solver_adapter import _configure_stage2_numerics
+    from src.optimization.rolling.reoptimizer import ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT
+    from dataclasses import replace
 
     config = rolling_solver_config(RollingChainRequest("s", "p", "2025-02-03", "result.json", "out"))
-    assert config.stage2_gurobi_numeric_focus == 2
+    rolling = replace(config, rolling_horizon_policy=ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT)
     parameters = {}
     model = SimpleNamespace(setParam=lambda name, value: parameters.update({name: value}))
-    _configure_stage2_numerics(model, config)
-    assert parameters["NumericFocus"] == 2
-    # Tolerances are unchanged, and the day-ahead default stays at focus 0.
+    _configure_stage2_numerics(model, rolling)
+    assert parameters["Cuts"] == 0
+    # Tolerances and the numeric focus are unchanged.
     assert parameters["FeasibilityTol"] == 1.0e-9 and parameters["IntFeasTol"] == 1.0e-9
-    assert OptimizationConfig().stage2_gurobi_numeric_focus == 0
+    assert parameters["NumericFocus"] == 0
+    day_ahead = {}
+    _configure_stage2_numerics(SimpleNamespace(setParam=lambda name, value: day_ahead.update({name: value})), OptimizationConfig())
+    assert day_ahead["Cuts"] == -1

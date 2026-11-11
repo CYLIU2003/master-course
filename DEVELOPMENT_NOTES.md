@@ -12919,5 +12919,15 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
     - 残る確認：matlab-desktop の `d900m`（146回目で止まる見込み）のモデルでも NumericFocus 2 で解けるか。
     - 版と投入（rc38、0c2bf3c2）：`release-midterm-0c2bf3c2`（固定クローン、clean、データ5か所は rc37 の版とハッシュ一致）。`package_rc38`、`release.py stage` で11台 VERIFIED（`stage-checks-v57`、`workers.deployed.v57.json`。laptop-a709una0 は復帰して入った。desktop-gsfgtj2 は SSH が時間切れ、cyliu-thinkbook は届かず、どちらも構成の外）。計算管理は `controller-settings.rc38.json`。切り替え時に rc37 `d900m`（matlab-desktop）は実行中のまま引き継がれた。
     - 投入（16:11）：`operation.rc38_e900p_2025-07-07.json`（pslab-mouse）と `operation.rc38_e900r_2025-07-07.json`（desktop-1800n4s）。request は rc36 `a900v` と準備済み入力の ID 以外は同じ。先に決めた規則：両方終われば `e900p` を結果とし `e900r` は繰り返しとして載せる。片方だけ終わればそれを使う。失敗した回はすべて残す。
+  - **2件目のモデルで NumericFocus 2 が効かないと判明（2026-11-11 18時台）**：rc37 `d900m`（matlab-desktop）は146回目で止まり、全体のモデル（45.6 MB）が保存された。matlab-desktop で読み直した結果：
+    - 本番と同じ設定、NumericFocus 1、NumericFocus 2（Seed 42・1）：すべて `INFEASIBLE`。
+    - 同じ許容誤差のまま、カットなし（73秒）、NumericFocus 3（105秒）、Presolve あり（15秒）：最適解（最大の制約違反 1e-11〜1e-10、整数違反 0）。`feasRelaxS` の違反の合計は 0。線形緩和も解ける。
+    - したがって2件目も実行可能で、1件目と同じ「根のカットによる誤った実行不能」。NumericFocus 2 は1件目にしか効かず、rc38 の修正は不十分。
+    - カットなしを120秒の制限で測った（matlab-desktop）：97回目のモデルは解が73〜100秒で出て時間切れ（証明なし）、146回目のモデルは37〜99秒で最適。NumericFocus 2・3 を重ねると遅くなる。
+  - **修正（rc39）**：`_configure_stage2_numerics` で、毎時の立て直し（`ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT`）のときだけ `Cuts=0` にする。前日の計画の Stage 2 は自動（-1）のまま。rc38 の `stage2_gurobi_numeric_focus=2` は取り消し、0 に戻した。全部の回に最初から使う設定で、失敗した回のやり直しではない。結果の metadata に `stage2_gurobi_cuts` を記録する。
+    - 数式・制約・許容誤差・費用・受理条件：変更なし。実行可能領域は同じ。変わるのは探索で、下界の証明が遅くなる。そのため時間切れ（その時点の最良の解を実行）の回が増えうる。時間切れの回数は従来どおり結果に出る。rc39 の結果は rc39 の結果として扱う。
+    - 余裕が小さい点：matlab-desktop で最初の解が出るまで最大100秒かかった（制限120秒）。遅い台では制限時間の補正に頼ることになる。前の回の計画を出発点にできた回は、すぐ解がある。
+    - 確認：`tests/test_rolling_execution_class.py` の試験を「立て直しは Cuts 0・NumericFocus 0・許容誤差 1e-9、前日の計画は Cuts -1」に替えた。Stage 2・立て直し・再生の関係 470件通過、10件はもとから条件付きでスキップ。
+    - rc38 の `e900p`・`e900r` は走らせたままにする（97回目を越えるかの確認になる）。止まれば rc39 で出し直す。
   - a400u（400 kW 夏・電気バス寄り、matlab-desktop）は完走した：413.3万円（燃料は使った分）、電気バス担当94.5%、CO₂ 1,549 kg、毎時174回すべて受理（時間切れ3）、物理検査 VALID、超過0。燃料バス寄り rc35 b400s10（444.8万円）より安いが、版が違う（rc36 と rc35）ので資料では版を明記した。rc35 での1回目（a400s10）は毎時44回目で停止しており、ポスターの注と資料の表3の注に書いた。
 - **資料の添削とモデルの見直し（2026-11-10）**：進捗資料・ポスターの添削内容、モデル（Stage 2・蓄電池の規則・毎時の実行・会計）の見直し結果、未決事項と続きの手順を `docs/notes/HANDOFF_20261110_MIDTERM_MATERIALS_AND_MODEL_REVIEW.md` にまとめた。コードは変えていない。主な指摘：蓄電池は `pv_self_consumption` の規則で動き最適化していない（資料の説明を修正）、蓄電池・車両の残量の増減を費用に入れていない、車両使用費が総費用の約98%で電気・燃料で同額。
