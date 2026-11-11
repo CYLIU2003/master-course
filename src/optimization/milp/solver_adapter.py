@@ -25010,6 +25010,14 @@ class GurobiMILPAdapter:
             for prefix in diagnostic_prefixes
         }
         if stage2.Status == GRB.INFEASIBLE:
+            # Diagnostic only (2026-11-11): keep the complete model and its parameters.
+            # The IIS below stops at the time limit and stays non-minimal (rc36 900 kW
+            # summer: about 88 % of the rows), and that subsystem solved when read back,
+            # so the .ilp alone cannot reproduce the reported infeasibility. Written
+            # before computeIIS; it does not change the model, the solve or the result.
+            # The file is overwritten by a later infeasible Stage 2 in the same run.
+            stage2.write(str(output_dir / "stage2_infeasible_full.mps"))
+            stage2.write(str(output_dir / "stage2_infeasible_full.prm"))
             stage2.computeIIS()
             stage2.write(str(output_dir / "stage2_infeasible.ilp"))
             iis_constraint_names = [

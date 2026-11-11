@@ -304,6 +304,9 @@ def test_proven_stage2_infeasibility_returns_a_no_good_cut_to_stage1(
     assert "BEV" in assigned_vehicle_types
     assert "ICE" in assigned_vehicle_types
     assert (tmp_path / "diagnostics" / "stage2_infeasible.ilp").is_file()
+    # The complete model is kept next to the IIS so an infeasible step can be reproduced.
+    assert (tmp_path / "diagnostics" / "stage2_infeasible_full.mps").stat().st_size > 0
+    assert (tmp_path / "diagnostics" / "stage2_infeasible_full.prm").is_file()
     assert (
         tmp_path
         / "diagnostics"
