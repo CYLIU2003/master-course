@@ -77,3 +77,19 @@ def test_search_changes_only_native_focus_and_leaves_day_ahead_default():
     returned = _configure_stage2_numerics(model, candidate)
     assert returned == parameters and parameters["MIPFocus"] == 3
     assert OptimizationConfig().stage2_gurobi_mip_focus == 1
+
+
+def test_rolling_steps_select_numeric_focus_2_and_day_ahead_keeps_default():
+    """Rolling Stage 2 uses NumericFocus 2 for every step (rc36 900 kW summer false infeasibility)."""
+    from src.optimization.common.problem import OptimizationConfig
+    from src.optimization.milp.solver_adapter import _configure_stage2_numerics
+
+    config = rolling_solver_config(RollingChainRequest("s", "p", "2025-02-03", "result.json", "out"))
+    assert config.stage2_gurobi_numeric_focus == 2
+    parameters = {}
+    model = SimpleNamespace(setParam=lambda name, value: parameters.update({name: value}))
+    _configure_stage2_numerics(model, config)
+    assert parameters["NumericFocus"] == 2
+    # Tolerances are unchanged, and the day-ahead default stays at focus 0.
+    assert parameters["FeasibilityTol"] == 1.0e-9 and parameters["IntFeasTol"] == 1.0e-9
+    assert OptimizationConfig().stage2_gurobi_numeric_focus == 0

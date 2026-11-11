@@ -1333,6 +1333,13 @@ def rolling_solver_config(request: RollingChainRequest) -> OptimizationConfig:
         stage2_time_limit_sec=int(request.time_limit_sec),
         stage2_charging_start_policy=request.stage2_charging_start_policy,
         stage2_gurobi_mip_focus=search_modes[request.charging_search],
+        # 2026-11-11: the unchanged rolling MPS of 900 kW summer (step 97, 98,682 rows) was
+        # reported infeasible at the root after cuts with focus 0, with two seeds, although it
+        # has solutions within the same 1e-9 tolerances (max violation 5e-10). Focus 2 solved it
+        # to optimality in 20 s (focus 1: 12 s; focus 3: no proof inside 120 s). Selected here
+        # for every rolling step before solving; not a retry after failure, and no tolerance,
+        # bound or constraint changes.
+        stage2_gurobi_numeric_focus=2,
         mip_gap=float(request.mip_gap),
         random_seed=int(request.random_seed),
         gurobi_threads=(None if request.gurobi_threads is None else int(request.gurobi_threads)),
