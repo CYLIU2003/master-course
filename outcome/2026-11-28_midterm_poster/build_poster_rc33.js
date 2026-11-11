@@ -135,7 +135,7 @@ caption("図5　冬の代表週（2025年1月6日〜）の太陽光：前日の�
 y += 4.45;
 caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35・rc36。90 kW春の2つの出発点と400 kW夏の電気バス寄りはrc36。後者はrc35では毎時の立て直しで停止した）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}回（1週間174〜175回のうち）が時間切れ。遅い計算機は制限時間を延ばした。基本料金は30円/kWhに含むため足さない。${pend.length ? `${pend.join("・")}は計算中。` : ""}${(DATA.first_attempt_failures || []).length ? `${DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW${SEASON_OF[k.split("/")[1]]}`).join("・")}の電気バス寄りは1回目が毎時の立て直しで停止し、同じ版で計算し直し中。` : ""}${stopped.length ? `${stopped.join("、")}の計算が失敗し未完。` : ""}最大受電は15分平均。`,
   LX, y, COL, 45.5 - y - 2.5, 24);
-text([{ text: "参考文献（原本は 先行文献／2026-11-08_中間発表の参考文献）", options: { bold: true, breakLine: true } },
+text([{ text: "参考文献", options: { bold: true, breakLine: true } },
   ...["［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）", "［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
     "［3］公共交通オープンデータセンター：東急バス 時刻表データ（ODPT）", "［4］Gurobi Optimization, LLC: Gurobi Optimizer Reference Manual, Version 13.0",
     "［5］P. Shaw: Using constraint programming and local search methods to solve vehicle routing problems, CP-98, LNCS 1520, 1998"]
