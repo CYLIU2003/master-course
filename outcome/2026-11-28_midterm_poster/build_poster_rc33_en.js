@@ -77,16 +77,16 @@ const wCut = Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100);
 // ---- Title block (the top-left 20 x 20 cm is kept free for the poster number)
 const NUM = 7.87;
 text("Trip Assignment and Charging Optimization for Battery-Electric Buses Operated Alongside Diesel Buses toward Green Transformation (GX)",
-  { x: M + NUM, y: M + 0.2, w: W - NUM, h: 3.6, fontSize: 64, bold: true, valign: "middle" });
-text("(Author name, laboratory and supervisor), Tokyo City University", { x: M + NUM, y: M + 3.95, w: W - NUM, h: 1.0, fontSize: 42, color: SUB });
-s.addShape(pres.shapes.LINE, { x: M, y: M + 5.6, w: W, h: 0, line: { color: BLUE, width: 8 } });
+  { x: M + NUM, y: M, w: W - NUM, h: 2.9, fontSize: 52, bold: true, valign: "middle" });
+text("(Author name, laboratory and supervisor), Tokyo City University", { x: M + NUM, y: M + 2.95, w: W - NUM, h: 0.8, fontSize: 36, color: SUB });
+s.addShape(pres.shapes.LINE, { x: M, y: 9.4, w: W, h: 0, line: { color: BLUE, width: 8 } });
 
 // ---- Abstract
 text(`Abstract  When battery-electric buses charge at the depot at the same time, the grid demand rises. For a depot that operates electric and diesel buses, we optimize the trip assignment and the charging plan, and evaluate trip shares, cost and CO₂ under different grid limits in representative winter, spring and summer weeks. With a 900 kW limit and 1,000 kW of PV in winter, electric-heavy operation was ${man(K9.wi.cost - K9.wb.cost)} million JPY per week cheaper than diesel-heavy operation and emitted ${wCut}% less CO₂. Lower limits shrink this advantage: ${iceWins.length ? `in ${list(iceWins.map(lab))}, diesel-heavy operation was cheaper (at 90 kW in winter it emitted about ${(pi90.total_co2_kg / pb90.total_co2_kg).toFixed(1)} times the CO₂).` : "electric-heavy operation was cheaper at every limit."}`,
-  { x: M, y: 8.0, w: W, h: 3.9, fontSize: 38 });
+  { x: M + NUM, y: M + 3.85, w: W - NUM, h: 3.7, fontSize: 30 });
 
 // ---- Left column
-let y = 12.5;
+let y = 9.8;
 y = section("1. Background and objective", LX, y, COL);
 text([
   { text: "Electric buses are entering Japanese route-bus networks, but vehicle price and charging time mean they will run alongside diesel buses for some time. They charge together at the depot at night, which raises the grid demand.", options: { breakLine: true } },
@@ -94,11 +94,12 @@ text([
   { x: LX, y, w: COL, h: 3.6, paraSpaceAfter: 6, fontSize: 30 });
 y += 3.75;
 y = section("2. Case study", LX, y, COL);
-y += systemDiagram(s, pres, LX, y, COL, { pv: "PV\n1,000 kW", battery: "Battery 6,000 kWh\n(not charged from grid)", grid: "Grid (limit)\n90–900 kW",
-  charger: "Chargers\n90 kW × 10", ebus: "35 electric buses", dbus: "25 diesel buses", share: "share 1,704 trips/week" }, FONT, 24);
-caption("Fig. 2  Depot equipment and power flows (planned in 15-min steps)", LX, y, COL, 0.7, 26);
-y += 0.85;
-const rows = [["Routes", "Tokyu Bus Shibu 21–23 (Tsurumaki depot); ODPT timetable [3]"], ["Service", "1,704 trips/week (264 weekday, 203 Sat, 181 Sun/holiday per day)"],
+const MAPW = COL * 0.88, MAPH = MAPW * 0.5221;
+s.addImage({ path: path.join(__dirname, "route_map_en_poster.png"), x: LX + (COL - MAPW) / 2, y, w: MAPW, h: MAPH, altText: "Route map of Shibu 21, 22 and 23 and the Tsurumaki depot" });
+y += MAPH + 0.1;
+caption("Fig. 2  Routes and the Tsurumaki depot (stop positions from ODPT [3], joined by straight lines; background © OpenStreetMap contributors)", LX, y, COL, 1.2, 26);
+y += 1.3;
+const rows = [["Routes", "Tokyu Bus Shibu 21–23 (Tsurumaki depot); ODPT timetable [3]"], ["Service", "1,704 trips/week (264 weekday, 203 Sat, 181 Sun/holiday)"],
   ["Grid limit", "90, 200, 400, 900 kW (excess 500 JPY/kWh, provisional)"], ["Period", "Representative winter, spring, summer weeks (2025)"],
   ["Morning SOC", "Target 90%, minimum 80%"], ["Prices", "Electricity 30 JPY/kWh (incl. basic charge); diesel 150 JPY/L"], ["CO₂", "Diesel 2.62 kg/L [1]; grid 0.5 kg/kWh (provisional)"]];
 s.addTable(rows.map(([k, v]) => [{ text: k, options: { bold: true } }, { text: v }]),
@@ -116,10 +117,10 @@ y += 4.45;
 const FC = [3391, 3401, 3412, 3423, 3436, 3448, 3462], AC = [1399, 2640, 3836, 4871, 5059, 5079, 1693];
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 s.addChart(pres.charts.BAR, [{ name: "Day-ahead forecast (normal)", labels: DAYS, values: FC }, { name: "Actual", labels: DAYS, values: AC }],
-  { ...chart(), x: LX, y, w: COL, h: 3.6, barDir: "col", barGrouping: "clustered", chartColors: ["CFCFCF", BLUE], valAxisMinVal: 0,
+  { ...chart(), x: LX, y, w: COL, h: 3.4, barDir: "col", barGrouping: "clustered", chartColors: ["CFCFCF", BLUE], valAxisMinVal: 0, valAxisMaxVal: 6000, valAxisMajorUnit: 2000,
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "kWh/day", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
-caption("Fig. 5  PV in the winter week (from 6 Jan 2025): day-ahead forecast vs actual (input data)", LX, y + 3.65, COL, 0.7, 26);
-y += 4.45;
+caption("Fig. 5  PV in the winter week (from 6 Jan 2025): day-ahead forecast vs actual (input data)", LX, y + 3.45, COL, 0.7, 26);
+y += 4.25;
 caption(`Note: All results are DIAGNOSTIC, from the latest versions (rc33, rc35, rc36; both 90 kW spring starts and the 400 kW summer electric-heavy start on rc36, the latter having stopped in the hourly re-plan on rc35). Each case is solved from two start points (electric-heavy and diesel-heavy); the one with the lower total cost (diesel valued by litres burnt) is shown. The trip assignment stops at the memory limit and the two-stage method is not a global optimum. Up to ${maxTimeouts} of the 174–175 hourly re-plans per week hit the time limit; slower machines were given longer limits. The basic charge is included in 30 JPY/kWh and not added. ${pend.length ? `Still running: ${list(pend)}. ` : ""}${(DATA.first_attempt_failures || []).length ? `The electric-heavy run of ${list(DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW ${SEASON_OF[k.split("/")[1]].toLowerCase()}`))} stopped in the hourly re-plan on its first attempt and is being rerun on the same version. ` : ""}${stopped.length ? `Not completed, one start failed: ${list(stopped)}. ` : ""}Peak = 15-min average.`,
   LX, y, COL, 45.5 - y - 2.5, 22);
 text([{ text: "References", options: { bold: true, breakLine: true } },
@@ -130,18 +131,18 @@ text([{ text: "References", options: { bold: true, breakLine: true } },
   { x: LX, y: 45.5 - 2.4, w: COL, h: 2.4, fontSize: 19, color: SUB });
 
 // ---- Right column
-y = 12.5;
+y = 9.8;
 y = section("4. Results", RX, y, COL);
 const halfR = (COL - 0.5) / 2;
 s.addChart(pres.charts.LINE, SE.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g}`), values: LIMITS.map((g) => val(g, w, "bev_trip_share_pct", (v) => Math.round(v * 10) / 10)) })),
-  { ...chart(), x: RX, y, w: halfR, h: 5.6, lineSize: 5, lineDataSymbol: "circle", lineDataSymbolSize: 14, chartColors: [BLUE_DARK, "7AB8E8", GREY],
+  { ...chart(), x: RX, y, w: halfR, h: 7.1, lineSize: 5, lineDataSymbol: "circle", lineDataSymbolSize: 14, chartColors: [BLUE_DARK, "7AB8E8", GREY],
     catAxisLabelFontSize: 26, valAxisLabelFontSize: 24, legendFontSize: 26,
     valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showCatAxisTitle: true, catAxisTitle: "Grid limit [kW]", catAxisTitleFontSize: 24, catAxisTitleColor: SUB,
     showValAxisTitle: true, valAxisTitle: "Electric-bus trips [%]", valAxisTitleFontSize: 24, valAxisTitleColor: SUB });
-hourlyFlow(s, pres, chart(), RX + halfR + 0.5, y, halfR, 5.6, ["PV→battery", "PV→bus", "Battery→bus", "Grid→bus", "PV curtailed"], ["Hour of day", "Energy [MWh/week]"]);
-caption("Fig. 1  Grid limit vs electric-bus trip share (1,704 trips/week, cheaper start point)", RX, y + 5.65, halfR, 1.3, 22);
-caption("Fig. 6  Power flows by hour of day (900 kW winter, electric-heavy, week total). Daytime PV is stored in the battery and charges the buses at night", RX + halfR + 0.5, y + 5.65, halfR, 1.3, 22);
-y += 7.1;
+hourlyFlow(s, pres, chart(), RX + halfR + 0.5, y, halfR, 7.1, ["PV→battery", "PV→bus", "Battery→bus", "Grid→bus", "PV curtailed"], ["Hour of day", "Energy [MWh/week]"]);
+caption("Fig. 1  Grid limit vs electric-bus trip share (1,704 trips/week, cheaper start point)", RX, y + 7.15, halfR, 1.3, 22);
+caption("Fig. 6  Power flows by hour of day (900 kW winter, electric-heavy, week total). Daytime PV is stored in the battery and charges the buses at night", RX + halfR + 0.5, y + 7.15, halfR, 1.3, 22);
+y += 8.6;
 text(`(1) Taking the cheaper of the two start points, ${iceWins.length ? `the diesel-heavy start was cheaper at the low limits (${list(iceWins.map(lab))}), with electric buses serving ${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}% of trips. ` : ""}Elsewhere the electric-heavy start was cheaper, with ${rngTxt(bevWins.map((r) => r.bev_trip_share_pct), 1)}% of trips. The same case gave very different trip shares from the two start points.`,
   { x: RX, y, w: COL, h: 2.5, fontSize: 27 });
 y += 2.6;
@@ -164,7 +165,7 @@ y += 6.7;
 const PAIRS = [];
 LIMITS.forEach((g) => SE.forEach(([w, n]) => { const b = pairOf(g, w, "bev"), i = pairOf(g, w, "ice"); if (b && i) PAIRS.push({ label: `${g} ${n.slice(0, 3)}`, b, i }); }));
 const pcats = PAIRS.map((p) => p.label);
-const pairChart = (o) => ({ ...chart(), y, w: half, h: 6.3, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
+const pairChart = (o) => ({ ...chart(), y, w: half, h: 7.5, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin", barGapWidthPct: 60,
   showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 14, legendFontSize: 26, catAxisLabelFontSize: 20, catAxisLabelFrequency: 1, barGapWidthPct: 15, valAxisLabelFontSize: 22, valAxisTitleFontSize: 26, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
 s.addChart(pres.charts.BAR, [
   { name: "Electric-heavy − diesel-heavy", labels: pcats, values: PAIRS.map((p) => Math.round((p.b.total_cost_fuel_consumed - p.i.total_cost_fuel_consumed) / 1e4) / 100) }],
@@ -173,8 +174,8 @@ s.addChart(pres.charts.BAR, [
   { name: "Electric-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_co2_kg / 100) / 10) },
   { name: "Diesel-heavy", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_co2_kg / 100) / 10) }],
   pairChart({ x: RX + half + 0.6, dataLabelFormatCode: "0.0", valAxisMaxVal: 10, valAxisMajorUnit: 2, valAxisTitle: "CO₂ [t/week]" }));
-caption("Fig. 4  Cost difference (left; negative = electric-heavy is cheaper) and CO₂ (right)", RX, y + 6.35, COL, 0.9, 26);
-y += 7.25;
+caption("Fig. 4  Cost difference (left; negative = electric-heavy is cheaper) and CO₂ (right)", RX, y + 7.55, COL, 0.9, 26);
+y += 8.45;
 const overCases = cases.filter((r) => r.contract_over_limit_kwh > 1);
 text(`(2) With the cheaper start point, excess remained in ${overCases.length ? list(overCases.map((r) => `${lab(r)} (${fmt(r.contract_over_limit_kwh)} kWh/week)`)) : "no case"}. From the electric-heavy start, 90 kW winter exceeded the limit by ${fmt(pb90.contract_over_limit_kwh)} kWh/week. In Fig. 4, the electric-heavy start emitted less CO₂ in all ${PAIRS.length} cases (1/${(Math.min(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)} to 1/${(Math.max(...PAIRS.map((p) => p.i.total_co2_kg / p.b.total_co2_kg))).toFixed(1)} of diesel-heavy) and was cheaper in ${PAIRS.filter((p) => p.b.total_cost_fuel_consumed < p.i.total_cost_fuel_consumed).length} of them.`,
   { x: RX, y, w: COL, h: 3.1, fontSize: 28 });

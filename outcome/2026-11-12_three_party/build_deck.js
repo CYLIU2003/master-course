@@ -1001,7 +1001,7 @@ s.addNotes("工夫したところを6つ挙げます。まず、スタート地�
 
 // ---- 11/11: where the case study is (route map from the ODPT stop positions; make_route_map.py)
 s = page(S1, "対象：東急バス 渋21〜23系統と弦巻営業所");
-s.addImage({ path: path.join(__dirname, "..", "2026-11-28_midterm_poster", "route_map_ja.png"), x: 0.6, y: 1.5, w: 8.3, h: 8.3 * 1380 / 2700,
+s.addImage({ path: path.join(__dirname, "..", "2026-11-28_midterm_poster", "route_map_ja.png"), x: 0.6, y: 1.5, w: 8.3, h: 8.3 * 0.5221,
   altText: "渋21・渋22・渋23の路線図。渋谷駅から三軒茶屋・上町を通り、用賀駅と祖師ヶ谷大蔵駅へ向かう。弦巻営業所は上町の南にある" });
 bullets(s, [
   "渋谷駅から世田谷方面へ向かう3系統。東西に約9 km",
@@ -1010,7 +1010,7 @@ bullets(s, [
   "営業所に充電器10基（90 kW）、太陽光1,000 kW、蓄電池6,000 kWh",
   "3系統は渋谷駅〜上町の区間を共有する"],
   { x: 9.15, y: 1.6, w: 3.6, h: 4.6, fontSize: 14 });
-caption(s, "図　停留所の位置は公共交通オープンデータ［3］。停留所の間は直線で結んでおり、実際の道路の形ではない。線は見やすさのために少しずらして描いた", 0.6, 5.95, 8.3, 0.6);
+caption(s, "図　停留所の位置は公共交通オープンデータ［3］。停留所の間は直線で結んでおり、実際の道路の形ではない。背景の地図は © OpenStreetMap contributors", 0.6, 6.0, 8.3, 0.6);
 s.addNotes("対象の路線です。東急バスの渋21、渋22、渋23の3系統で、渋谷駅から三軒茶屋、上町を通って、用賀駅と祖師ヶ谷大蔵駅へ向かいます。東西におよそ9キロメートルの範囲です。車両はすべて、上町の南にある弦巻営業所から出て、戻って充電や給油をします。営業所には充電器が10基と、太陽光、蓄電池があります。1週間の便数は1,704便です。");
 
 // Slides are generated in code order (later slides reuse constants defined by earlier ones) and then
