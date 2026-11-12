@@ -86,7 +86,9 @@ const K9 = {
   sb: { cost: 4157225, share: 93.5, co2: 1945, pvUse: 22127, pvCut: 5692, over: 0 },
   // 2026-11-10: summer BEV-heavy is rerunning as rc36 a900u. The earlier rc35 a900s10f numbers were removed:
   // that launch carried no seed and default time limits, so it was not the same case as the other columns.
-  ub: null };
+  // 2026-11-12: rc39 f900g (0e95d3b2, desktop-gsfgtj2; rc23-style evaluation by evaluate_multiface.py). 174/174 hourly
+  // re-plans accepted, 0 time limits, physical validation VALID. Repeat f900p: 412.9, 95.6%, 1,476 kg.
+  ub: { cost: 4129322, share: 96.1, bev: 32, ice: 7, co2: 1478, grid: 2329, pvUse: 24994, pvCut: 5195, over: 0, peak: 790 } };
 
 // ---- Title block: one blue rule under the title; the top-left 20 x 20 cm is kept free for the number.
 const NUM = 7.87;
@@ -134,7 +136,7 @@ s.addChart(pres.charts.BAR, [{ name: "前日の予報（平年値）", labels: D
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "kWh/日", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
 caption("図5　冬の代表週（2025年1月6日〜）の太陽光：前日の予報と実際（入力データ）", LX, y + 3.45, COL, 0.7, 26);
 y += 4.25;
-caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35・rc36。90 kW春の2つの出発点と400 kW夏の電気バス寄りはrc36。後者はrc35では毎時の立て直しで停止した）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}回（1週間174〜175回のうち）が時間切れ。遅い計算機は制限時間を延ばした。基本料金は30円/kWhに含むため足さない。${pend.length ? `${pend.join("・")}は計算中。` : ""}${(DATA.first_attempt_failures || []).length ? `${DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW${SEASON_OF[k.split("/")[1]]}`).join("・")}の電気バス寄りは1回目が毎時の立て直しで停止し、同じ版で計算し直し中。` : ""}${stopped.length ? `${stopped.join("、")}の計算が失敗し未完。` : ""}最大受電は15分平均。`,
+caption(`注：結果はすべて診断用（DIAGNOSTIC）。最新版（rc33・rc35・rc36・rc39。90 kW春の2つの出発点と400 kW夏の電気バス寄りはrc36。後者はrc35では毎時の立て直しで停止した。900 kW夏の電気バス寄りはrc39。rc36・rc38では毎時の立て直しで計6回停止し、rc39でも3回中1回は前日の計画で停止した）。各ケースを電気バス寄り・燃料バス寄りの2つの出発点から解き、総費用（燃料は使った分）の安い方を示す。便割当はメモリ上限で停止し、2段階法のため全体の最適ではない。毎時の立て直しは最大${maxTimeouts}回（1週間174〜175回のうち）が時間切れ。遅い計算機は制限時間を延ばした。基本料金は30円/kWhに含むため足さない。${pend.length ? `${pend.join("・")}は計算中。` : ""}${(DATA.first_attempt_failures || []).length ? `${DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW${SEASON_OF[k.split("/")[1]]}`).join("・")}の電気バス寄りは1回目が毎時の立て直しで停止し、同じ版で計算し直し中。` : ""}${stopped.length ? `${stopped.join("、")}の計算が失敗し未完。` : ""}最大受電は15分平均。`,
   LX, y, COL, 45.5 - y - 2.5, 24);
 text([{ text: "参考文献", options: { bold: true, breakLine: true } },
   ...["［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）", "［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
@@ -173,7 +175,7 @@ s.addTable([
   k9Row("上限の超過", (r) => `${fmt(r.over)} kWh`)],
   { x: RX, y, w: COL, colW: [4.0, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4], fontSize: 27, fontFace: "Yu Gothic",
     color: INK, rowH: 0.74, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
-caption(`表1　受電上限900 kW・太陽光1,000 kWの1週間。冬の2列は同じ版で出発点だけが違う（rc33）、春は電気中心（rc35）、夏は未完（rc36、注）。冬は電気中心が${man(K9.wi.cost - K9.wb.cost)}万円安くCO₂は${Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100)}%少ない。燃料中心は太陽光の約4割を捨てる。DIAGNOSTIC`, RX, y + 4.75, COL, 1.6, 26);
+caption(`表1　受電上限900 kW・太陽光1,000 kWの1週間。冬の2列は同じ版で出発点だけが違う（rc33）、春は電気中心（rc35）、夏は電気中心（rc39、注）。冬は電気中心が${man(K9.wi.cost - K9.wb.cost)}万円安くCO₂は${Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100)}%少ない。燃料中心は太陽光の約4割を捨てる。DIAGNOSTIC`, RX, y + 4.75, COL, 1.6, 26);
 y += 6.5;
 // 11/9 (user request): cost and CO2 of both start points by grid limit, cases where both are verified.
 const PAIRS = [];

@@ -71,7 +71,9 @@ const K9 = {
   sb: { cost: 4157225, share: 93.5, co2: 1945, pvUse: 22127, pvCut: 5692, over: 0 },
   // 2026-11-10: summer BEV-heavy is rerunning as rc36 a900u. The earlier rc35 a900s10f numbers were removed:
   // that launch carried no seed and default time limits, so it was not the same case as the other columns.
-  ub: null };
+  // 2026-11-12: rc39 f900g (0e95d3b2, desktop-gsfgtj2; rc23-style evaluation by evaluate_multiface.py). 174/174 hourly
+  // re-plans accepted, 0 time limits, physical validation VALID. Repeat f900p: 412.9, 95.6%, 1,476 kg.
+  ub: { cost: 4129322, share: 96.1, bev: 32, ice: 7, co2: 1478, grid: 2329, pvUse: 24994, pvCut: 5195, over: 0, peak: 790 } };
 const wCut = Math.round((1 - K9.wb.co2 / K9.wi.co2) * 100);
 
 // ---- Title block (the top-left 20 x 20 cm is kept free for the poster number)
@@ -121,7 +123,7 @@ s.addChart(pres.charts.BAR, [{ name: "Day-ahead forecast (normal)", labels: DAYS
     legendFontSize: 28, showValAxisTitle: true, valAxisTitle: "kWh/day", valAxisTitleFontSize: 26, valAxisTitleColor: SUB });
 caption("Fig. 5  PV in the winter week (from 6 Jan 2025): day-ahead forecast vs actual (input data)", LX, y + 3.45, COL, 0.7, 26);
 y += 4.25;
-caption(`Note: All results are DIAGNOSTIC, from the latest versions (rc33, rc35, rc36; both 90 kW spring starts and the 400 kW summer electric-heavy start on rc36, the latter having stopped in the hourly re-plan on rc35). Each case is solved from two start points (electric-heavy and diesel-heavy); the one with the lower total cost (diesel valued by litres burnt) is shown. The trip assignment stops at the memory limit and the two-stage method is not a global optimum. Up to ${maxTimeouts} of the 174–175 hourly re-plans per week hit the time limit; slower machines were given longer limits. The basic charge is included in 30 JPY/kWh and not added. ${pend.length ? `Still running: ${list(pend)}. ` : ""}${(DATA.first_attempt_failures || []).length ? `The electric-heavy run of ${list(DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW ${SEASON_OF[k.split("/")[1]].toLowerCase()}`))} stopped in the hourly re-plan on its first attempt and is being rerun on the same version. ` : ""}${stopped.length ? `Not completed, one start failed: ${list(stopped)}. ` : ""}Peak = 15-min average.`,
+caption(`Note: All results are DIAGNOSTIC, from the latest versions (rc33, rc35, rc36, rc39; both 90 kW spring starts and the 400 kW summer electric-heavy start on rc36, the latter having stopped in the hourly re-plan on rc35; the 900 kW summer electric-heavy start on rc39, after six runs on rc36 and rc38 stopped in the hourly re-plan and one of three rc39 runs stopped in the day-ahead plan). Each case is solved from two start points (electric-heavy and diesel-heavy); the one with the lower total cost (diesel valued by litres burnt) is shown. The trip assignment stops at the memory limit and the two-stage method is not a global optimum. Up to ${maxTimeouts} of the 174–175 hourly re-plans per week hit the time limit; slower machines were given longer limits. The basic charge is included in 30 JPY/kWh and not added. ${pend.length ? `Still running: ${list(pend)}. ` : ""}${(DATA.first_attempt_failures || []).length ? `The electric-heavy run of ${list(DATA.first_attempt_failures.map((k) => `${k.split("/")[0]} kW ${SEASON_OF[k.split("/")[1]].toLowerCase()}`))} stopped in the hourly re-plan on its first attempt and is being rerun on the same version. ` : ""}${stopped.length ? `Not completed, one start failed: ${list(stopped)}. ` : ""}Peak = 15-min average.`,
   LX, y, COL, 45.5 - y - 2.5, 22);
 text([{ text: "References", options: { bold: true, breakLine: true } },
   ...["[1] Ministry of the Environment, METI: List of calculation methods and emission factors (2025)", "[2] W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018",
@@ -159,7 +161,7 @@ s.addTable([
   k9Row("Excess over limit", (r) => `${fmt(r.over)} kWh`)],
   { x: RX, y, w: COL, colW: [4.0, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4, (COL - 4.0) / 4], fontSize: 25, fontFace: FONT,
     color: INK, rowH: 0.74, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
-caption(`Table 1  One week at a 900 kW limit and 1,000 kW of PV. The two winter columns use the same version and differ only in the start point (rc33); spring is electric-heavy (rc35); summer did not complete (rc36, see Note). In winter, electric-heavy is ${man(K9.wi.cost - K9.wb.cost)} M JPY cheaper with ${wCut}% less CO₂; diesel-heavy curtails about 40% of PV. DIAGNOSTIC`, RX, y + 5.0, COL, 1.6, 24);
+caption(`Table 1  One week at a 900 kW limit and 1,000 kW of PV. The two winter columns use the same version and differ only in the start point (rc33); spring is electric-heavy (rc35); summer is electric-heavy (rc39, see Note). In winter, electric-heavy is ${man(K9.wi.cost - K9.wb.cost)} M JPY cheaper with ${wCut}% less CO₂; diesel-heavy curtails about 40% of PV. DIAGNOSTIC`, RX, y + 5.0, COL, 1.6, 24);
 y += 6.7;
 // 11/9 (user request): cost and CO2 of both start points by grid limit, cases where both are verified.
 const PAIRS = [];

@@ -28,7 +28,7 @@ HERE = Path(__file__).parent
 W, S, U = "2025-01-06", "2025-04-07", "2025-07-07"
 SEASON = {W: "冬", S: "春", U: "夏"}
 LIMITS = (90, 200, 400, 900)
-VERSION = {"rc33": "7dc38d95", "rc35": "9a0fe044", "rc36": "375dd6f2"}
+VERSION = {"rc33": "7dc38d95", "rc35": "9a0fe044", "rc36": "375dd6f2", "rc39": "0e95d3b2"}
 BANDS = (("05-06", 0, 7), ("07-21", 7, 22), ("22-", 22, 48))
 # (limit, week, start) -> case directory relative to OPS. rc33 h090 spring stopped on the Stage 2
 # trickle-flow defect fixed in 9a0fe044; its rerun is rc35 a090s10 (ICE-heavy seed, scale 1.0).
@@ -55,6 +55,11 @@ CASES[(900, U, "bev")] = f"rc36/a900v/{U}"
 # 2026-11-11: a900x (pslab-mouse, step 97) and a900w (matlab-desktop, step 146) also FAILED; four attempts, none completed.
 # 2026-11-10 night: a900v also FAILED (Stage 2 infeasible at hourly step 97; a900u stopped at step 76).
 # No job is running for this case; the deck and posters list it as not completed (STOPPED in the build scripts).
+# 2026-11-12: cause found (false INFEASIBLE after root cuts in the hourly Stage 2). rc38 (NumericFocus 2) failed twice
+# at step 53. rc39 (0e95d3b2: Cuts=0 for the hourly Stage 2 only) : f900m FAILED in the day-ahead Stage 2 (no incumbent
+# in 3600 s), f900g and f900p completed with all checks. Predeclared order f900m -> f900g -> f900p, so f900g is the result
+# and f900p is a repeat. The 4 rc36, 2 rc38 and 1 rc39 failures stay disclosed in the deck and posters.
+CASES[(900, U, "bev")] = f"rc39/f900g/{U}"
 FIRST_ATTEMPT_FAILURES = []
 
 
