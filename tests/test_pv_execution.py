@@ -199,3 +199,33 @@ def test_forecast_source_rows_are_combined_without_losing_physical_charge_energy
     assert len(executed.plan.charging_slots) == 1
     assert executed.plan.charging_slots[0].charge_kw == 10
     assert CostEvaluator().evaluate(problem,executed.plan).grid_import_kwh == 0
+
+
+def _noise_plan(problem, extra_kwh, noise_kwh):
+    metadata = {}
+    if noise_kwh is not None:
+        metadata['stage2_charge_integrality_noise'] = [
+            {'vehicle_id': 'bev-1', 'slot_index': 0, 'charge_kw': noise_kwh, 'charge_on': 3e-6,
+             'energy_kwh': noise_kwh}]
+    plan = AssignmentPlan(charging_slots=(ChargingSlot('bev-1', 0, 'charger', charge_kw=10,
+                                                       charging_depot_id='DEPOT'),),
+                          grid_to_bus_kwh_by_depot_slot={'DEPOT': {0: 10 + extra_kwh}},
+                          metadata=metadata)
+    return OptimizationEngineResult(OptimizationMode.MILP, 'optimal', 0, plan, True)
+
+
+def test_recorded_stage2_numeric_zero_charge_may_separate_flows_from_vehicle_demand():
+    # 2026-11-15 rc40 eti400 2025-01-06 step 100: a 2.5e-5 kWh residue was dropped
+    # from the vehicle commands but still sat in the depot flows.
+    problem = _two_day_problem()
+    args = dict(actual_pv_by_depot_slot={'DEPOT': {0: 0}}, actual_bess_soc_kwh={'DEPOT': 50},
+                start_slot=0, stop_slot=1)
+    _, executed, audit = execute_pv_prefix(problem, _noise_plan(problem, 2.5e-5, 2.5e-5), **args)
+    assert executed.plan.grid_to_bus_kwh_by_depot_slot['DEPOT'][0] == pytest.approx(10, abs=1e-12)
+    assert audit['rows'][0]['planned_bus_flow_minus_vehicle_demand_kwh'] == pytest.approx(2.5e-5)
+    with pytest.raises(ValueError, match='disagree'):
+        execute_pv_prefix(problem, _noise_plan(problem, 2.5e-5, None), **args)
+    with pytest.raises(ValueError, match='disagree'):
+        execute_pv_prefix(problem, _noise_plan(problem, 1e-3, 2.5e-5), **args)
+    with pytest.raises(ValueError, match='disagree'):
+        execute_pv_prefix(problem, _noise_plan(problem, -2.5e-5, 2.5e-5), **args)

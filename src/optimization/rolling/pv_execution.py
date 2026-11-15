@@ -192,6 +192,18 @@ def execute_pv_prefix(
             raise ValueError("PV execution requires depot charging without vehicle-to-grid")
         key = (depot, charge.slot_index)
         demand[key] = demand.get(key, 0.0) + charge.charge_kw * step_minutes / 60
+    # Stage 2 drops charging residues in its recorded numerical-zero band from
+    # the vehicle commands (solver_adapter._is_stage2_charge_integrality_noise),
+    # while the depot source flows still carry that energy. Only that recorded
+    # energy may separate the two; the executed flows follow the vehicle demand.
+    noise_by_slot: dict[int, float] = {}
+    for source in (plan.metadata or {}, getattr(result, "solver_metadata", None) or {}):
+        rows_noise = source.get("stage2_charge_integrality_noise")
+        if rows_noise:
+            for item in rows_noise:
+                slot_noise = int(item["slot_index"])
+                noise_by_slot[slot_noise] = noise_by_slot.get(slot_noise, 0.0) + float(item["energy_kwh"])
+            break
     rows = []
     bess_starts = {owner: dict(values) for owner, values in
                    dict(plan.metadata.get('bess_soc_start_kwh_by_depot_slot') or {}).items()}
@@ -211,7 +223,8 @@ def execute_pv_prefix(
                 return float(maps[name].get(depot, {}).get(slot, 0.0))
             bus_energy = demand.get((depot, slot), 0.0)
             planned_bus = sum(planned(name) for name in ("grid_to_bus", "pv_to_bus", "bess_to_bus"))
-            if abs(bus_energy - planned_bus) > TOLERANCE_KWH:
+            excess = planned_bus - bus_energy
+            if excess < -TOLERANCE_KWH or excess > noise_by_slot.get(slot, 0.0) + TOLERANCE_KWH:
                 raise ValueError("Issued depot source flows disagree with vehicle charge demand")
             actual = actual_pv_by_depot_slot[depot][slot]
             executed = execute_energy_slot(
@@ -226,7 +239,8 @@ def execute_pv_prefix(
             for name in FLOW_FIELDS:
                 maps[name].setdefault(depot, {})[slot] = getattr(executed, f"{name}_kwh")
             rows.append({"depot_id": depot, "slot_index": slot, "forecast_pv_kwh": profile[slot],
-                         "actual_pv_kwh": actual, "initial_bess_soc_kwh": soc, **asdict(executed)})
+                         "actual_pv_kwh": actual, "initial_bess_soc_kwh": soc,
+                         "planned_bus_flow_minus_vehicle_demand_kwh": excess, **asdict(executed)})
             bess_starts.setdefault(depot, {})[slot] = soc
             soc = executed.bess_soc_kwh
             profile[slot] = float(actual)
