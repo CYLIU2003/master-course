@@ -3364,6 +3364,43 @@ def _configured_gurobi_feasibility_tol(
     return tolerance
 
 
+# Numerical-zero band for Stage 2 vehicle charging (see _is_stage2_charge_integrality_noise).
+# 1e-3 kW over a 10-min slot is 1.7e-4 kWh, far below any physical charging event.
+STAGE2_NUMERIC_ZERO_CHARGE_KW = 1.0e-3
+STAGE2_NUMERIC_ZERO_BINARY = 1.0e-4
+
+
+def _is_stage2_charge_integrality_noise(
+    *,
+    charge_kw: float,
+    charge_on: float,
+    assignment_values,
+    max_charger_kw: float,
+    feasibility_tol: float,
+    integrality_tol: float,
+) -> bool:
+    """True when positive Stage 2 power is a numerical residue, not a charging decision.
+
+    Stage 2 links c <= P_max * charge_on (P_max <= largest charger power). Gurobi
+    incumbents were observed (rc39 et/ct, 2026-11-15) with charge_on ~1.7e-6 and
+    c = P_max * charge_on ~1e-4 kW while every charger binary was 0, i.e. a
+    binary that is zero up to an unscaled integrality residue. Such a value is
+    classified as zero when the binary and all charger binaries are below
+    STAGE2_NUMERIC_ZERO_BINARY and the power is below the larger of
+    STAGE2_NUMERIC_ZERO_CHARGE_KW and the tolerance-implied bound. Anything
+    larger still raises. Every classified slot is disclosed in metadata.
+    """
+    binary_limit = max(STAGE2_NUMERIC_ZERO_BINARY, float(integrality_tol or 0.0))
+    if float(charge_on or 0.0) > binary_limit:
+        return False
+    if any(float(value or 0.0) > binary_limit for value in assignment_values):
+        return False
+    tolerance_bound = max(float(max_charger_kw or 0.0), 0.0) * max(float(integrality_tol or 0.0), 0.0) + max(
+        float(feasibility_tol or 0.0), 0.0
+    )
+    return float(charge_kw) <= max(STAGE2_NUMERIC_ZERO_CHARGE_KW, tolerance_bound)
+
+
 def _configured_gurobi_integrality_tol(
     config: OptimizationConfig,
     *,
@@ -24092,6 +24129,11 @@ class GurobiMILPAdapter:
                     float(initial_kwh) - float(terminal_kwh),
                     0.0,
                 )
+        stage2_charge_integrality_noise: list[dict] = []
+        stage2_max_charger_kw = max(
+            (float(charger.power_kw or 0.0) for charger in problem.chargers),
+            default=0.0,
+        )
         for (vehicle_id, slot_idx), var in c_var.items():
             charge_kw = max(_var_val(var), 0.0)
             if charge_kw <= 1.0e-6:
@@ -24119,6 +24161,28 @@ class GurobiMILPAdapter:
                     if candidate_vehicle_id == vehicle_id
                     and candidate_slot_idx == slot_idx
                 }
+                charge_on_value = _var_val(charge_on_var.get((vehicle_id, slot_idx)))
+                if _is_stage2_charge_integrality_noise(
+                    charge_kw=charge_kw,
+                    charge_on=charge_on_value,
+                    assignment_values=assignment_values.values(),
+                    max_charger_kw=stage2_max_charger_kw,
+                    feasibility_tol=stage2_feasibility_tol,
+                    integrality_tol=stage2_integrality_tol,
+                ):
+                    # c <= P_max * charge_on is satisfied only through IntFeasTol:
+                    # the binary is 0 within the solver's integrality tolerance, so
+                    # no charging event exists. Not emitted; disclosed in metadata.
+                    stage2_charge_integrality_noise.append(
+                        {
+                            "vehicle_id": str(vehicle_id),
+                            "slot_index": int(slot_idx),
+                            "charge_kw": float(charge_kw),
+                            "charge_on": float(charge_on_value),
+                            "energy_kwh": float(charge_kw) * float(timestep_h),
+                        }
+                    )
+                    continue
                 physical_power_values = {
                     charger_id: _var_val(power)
                     for (
@@ -24222,6 +24286,14 @@ class GurobiMILPAdapter:
             ),
             "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
             "stage2_gurobi_integrality_tol": stage2_integrality_tol,
+            "stage2_charge_integrality_noise_count": len(stage2_charge_integrality_noise),
+            "stage2_charge_integrality_noise_energy_kwh": sum(
+                row["energy_kwh"] for row in stage2_charge_integrality_noise
+            ),
+            "stage2_charge_integrality_noise_max_kw": max(
+                (row["charge_kw"] for row in stage2_charge_integrality_noise), default=0.0
+            ),
+            "stage2_charge_integrality_noise": stage2_charge_integrality_noise,
             "stage2_gurobi_aggregate": stage2_numerics["Aggregate"],
             "stage2_gurobi_presolve": stage2_numerics["Presolve"],
             "stage2_gurobi_numeric_focus": stage2_numerics["NumericFocus"],
