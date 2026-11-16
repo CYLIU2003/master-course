@@ -586,3 +586,30 @@ def test_rolling_window_reference_cannot_lower_next_morning_requirement():
         OptimizationConfig(time_limit_sec=20, mip_gap=0, gurobi_threads=1),0,lookahead_hours=24)
     assert result.feasible, result.infeasibility_reasons
     assert result.plan.vehicle_soc_kwh_by_vehicle_slot["bev-1"][24] == pytest.approx(80,abs=1e-6)
+
+
+def test_recorded_stage2_numeric_zero_charge_may_leave_soc_short_by_at_most_its_energy():
+    # rc41 etb200 2025-01-06 step 89: a dropped 2.5e-5 kWh residue left the
+    # terminal SOC 2.4e-5 kWh below its target.  Only the recorded amount is tolerated.
+    problem = daily_problem()
+    problem = replace(problem, vehicles=tuple(replace(v, maximum_soc_kwh=80.0) for v in problem.vehicles),
+                      metadata={**problem.metadata, "bev_terminal_soc_policy": "fixed_target",
+                                "final_soc_target_percent": 80})
+    plan = _fixed_plan(problem)
+    dropped_kwh = 2.5e-5
+    short = replace(plan, charging_slots=(
+        ChargingSlot("bev-1", 23, "chg-1", 37 / .95, charging_depot_id="DEPOT"),
+        ChargingSlot("bev-1", 47, "chg-1", 37 / .95 - dropped_kwh, charging_depot_id="DEPOT"),
+    ))
+    assert not FeasibilityChecker()._evaluate_soc(problem, replace(short, charging_slots=(
+        short.charging_slots[0], replace(short.charging_slots[1], charge_kw=37 / .95))))
+    assert any("[SOC_TARGET]" in error for error in FeasibilityChecker()._evaluate_soc(problem, short))
+
+    def noise(energy_kwh, vehicle_id="bev-1", slot=47):
+        return replace(short, metadata={**dict(short.metadata or {}), "stage2_charge_integrality_noise": [
+            {"vehicle_id": vehicle_id, "slot_index": slot, "charge_kw": energy_kwh,
+             "charge_on": 1e-6, "energy_kwh": energy_kwh}]})
+
+    assert not FeasibilityChecker()._evaluate_soc(problem, noise(dropped_kwh))
+    assert any("[SOC_TARGET]" in error for error in FeasibilityChecker()._evaluate_soc(problem, noise(dropped_kwh / 2)))
+    assert any("[SOC_TARGET]" in error for error in FeasibilityChecker()._evaluate_soc(problem, noise(dropped_kwh, "bev-2")))

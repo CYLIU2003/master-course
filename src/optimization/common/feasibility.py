@@ -733,6 +733,17 @@ class FeasibilityChecker:
         for charge in plan.charging_slots:
             key = (str(charge.vehicle_id), int(charge.slot_index))
             charges[key] = charges.get(key, 0.0) + float(charge.charge_kw)
+        # Stage 2 charging residues inside the numerical-zero band are not
+        # emitted as charging (solver_adapter._is_stage2_charge_integrality_noise)
+        # but stay in the solver's SOC trajectory.  Lower-side SOC checks may
+        # therefore fall short by at most the recorded, cumulative dropped
+        # energy of that vehicle (times the charging efficiency).  Nothing
+        # beyond the recorded amount is tolerated; upper-side checks unchanged.
+        dropped_soc_kwh: Dict[str, Dict[int, float]] = {}
+        for row in (plan.metadata or {}).get("stage2_charge_integrality_noise") or ():
+            by_slot = dropped_soc_kwh.setdefault(str(row["vehicle_id"]), {})
+            slot_noise = int(row["slot_index"])
+            by_slot[slot_noise] = by_slot.get(slot_noise, 0.0) + max(float(row["energy_kwh"]), 0.0) * 0.95
         start_min = self._horizon_start_min(problem)
         trips = problem.trip_by_id()
         for vehicle in problem.vehicles:
@@ -740,6 +751,8 @@ class FeasibilityChecker:
             events = timelines.get(vid, ())
             if not events:
                 continue
+            vehicle_dropped = dropped_soc_kwh.get(vid, {})
+            dropped_so_far = 0.0
             allowed = complete_home_slots(problem, vehicle, events)
             if is_electric_vehicle(problem, vehicle):
                 capacity = vehicle_capacity_kwh(problem, vehicle)
@@ -766,21 +779,27 @@ class FeasibilityChecker:
                         required = required_departure_soc_kwh(problem, vehicle, trip, cap_kwh=capacity,
                                                              final_soc_floor_kwh=minimum)
                         required += loads.energy_before_departure.get((vid, trip.trip_id), 0.0)
-                        if soc < required - 1e-6:
-                            errors.append(f"[SOC] vehicle={vid} trip={trip.trip_id} departure={soc} required={required}")
+                        if soc < required - 1e-6 - dropped_so_far:
+                            errors.append(f"[SOC] vehicle={vid} trip={trip.trip_id} departure={soc} required={required}"
+                                          f" dropped_numeric_zero_allowance_kwh={dropped_so_far}")
                     kw = charges.get((vid, slot), 0.0)
                     if kw > 1e-9 and slot not in allowed:
                         errors.append(f"[SOC] vehicle={vid} charges outside a complete depot-residence slot {slot}")
                     soc += kw * step / 60.0 * 0.95 - loads.energy_kwh.get((vid, slot), 0.0)
-                    if not minimum - 1e-6 <= soc <= maximum + 1e-6:
-                        errors.append(f"[SOC] vehicle={vid} slot={slot} SOC={soc} bounds={minimum}..{maximum}")
-                    if daily_target is not None and slot in daily_target_slots and soc < daily_target - 1e-6:
+                    dropped_so_far += vehicle_dropped.get(slot, 0.0)
+                    if not minimum - 1e-6 - dropped_so_far <= soc <= maximum + 1e-6:
+                        errors.append(f"[SOC] vehicle={vid} slot={slot} SOC={soc} bounds={minimum}..{maximum}"
+                                      f" dropped_numeric_zero_allowance_kwh={dropped_so_far}")
+                    if (daily_target is not None and slot in daily_target_slots
+                            and soc < daily_target - 1e-6 - dropped_so_far):
                         errors.append(
                             f"[SOC_TARGET] vehicle={vid} service_day={daily_target_slots[slot]} "
                             f"slot={slot} SOC={soc} target={daily_target}"
+                            f" dropped_numeric_zero_allowance_kwh={dropped_so_far}"
                         )
-                if target is not None and soc < target - 1e-6:
-                    errors.append(f"[SOC_TARGET] vehicle={vid} terminal={soc} target={target}")
+                if target is not None and soc < target - 1e-6 - dropped_so_far:
+                    errors.append(f"[SOC_TARGET] vehicle={vid} terminal={soc} target={target}"
+                                  f" dropped_numeric_zero_allowance_kwh={dropped_so_far}")
             else:
                 fuel = float(vehicle.initial_fuel_l or 0.0)
                 reserve = float(vehicle.fuel_reserve_l or 0.0)
