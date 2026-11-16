@@ -1,6 +1,8 @@
-// Consultation deck for Prof. Nishiyama, 2026-11 (latest pillar-A results, road map to 2028, candidates for pillar C).
-// Built from ../2026-10-21_nishiyama_consult/build_consult_deck.js (same plain style and helpers). Data: the verified
-// cases used by the midterm poster (DIAGNOSTIC, 30 JPY/kWh series); totals exclude the CO2 cost.
+// Consultation deck for Prof. Nishiyama, 2026-11 (purpose first, latest pillar-A results, link to his research,
+// pillar-C directions, questions, thanks; technical details in the appendix).
+// Revised 2026-11-16 after a Gemini review: polite wording, consultation purpose up front, pillar-C candidates
+// re-ordered by their link to his published work (mobility, universal design, electric full-flat bus, co-creation).
+// Data: the verified cases used by the midterm poster (DIAGNOSTIC, earlier versions, 30 JPY/kWh series); totals exclude the CO2 cost.
 const path = require("path");
 const fs = require("fs");
 const pptxgen = require(path.join(process.env.DECK_NODE_MODULES, "pptxgenjs"));
@@ -58,22 +60,42 @@ const maxTimeouts = Math.max(...DATA.pairs.filter((r) => r.status === "VERIFIED"
 const p9b = pairOf(900, "2025-01-06", "bev"), p9i = pairOf(900, "2025-01-06", "ice");
 const p90b = pairOf(90, "2025-01-06", "bev"), p90i = pairOf(90, "2025-01-06", "ice");
 const tc = (r) => r.total_cost_reported;
+const co2Ratio = (p90i.total_co2_kg / p90b.total_co2_kg).toFixed(1);
+const PROVISIONAL = "数値は条件をそろえる前の暫定値で、研究の結論には使っていません（現在、全ケースを同じ条件で計算し直しています）";
 
 // ---- 1. Title
 let s = pres.addSlide();
 s.background = { color: "FFFFFF" };
-text(s, "GXに向けた燃料バスと併用する\n電気バスの便割当・充電計画の最適化", { x: 0.9, y: 1.7, w: 11.5, h: 1.9, fontSize: 32, bold: true, valign: "bottom" });
-text(s, "最新の結果と、3本目の柱についてのご相談", { x: 0.9, y: 3.7, w: 11.5, h: 0.5, fontSize: 20, color: SUB });
+text(s, "西山 敏樹 先生　ご相談資料", { x: 0.9, y: 1.2, w: 11.5, h: 0.5, fontSize: 18, color: SUB });
+text(s, "GXに向けた燃料バスと併用する\n電気バスの便割当・充電計画の最適化", { x: 0.9, y: 1.8, w: 11.5, h: 1.8, fontSize: 32, bold: true, valign: "bottom" });
+text(s, "研究の進捗のご報告と、3本目の柱についてのご相談", { x: 0.9, y: 3.7, w: 11.5, h: 0.5, fontSize: 20, color: SUB });
 s.addShape(pres.shapes.LINE, { x: 0.9, y: 4.35, w: 11.5, h: 0, line: { color: BLUE, width: 3 } });
 text(s, "2026年11月\n東京都市大学 大学院 修士1年　劉 承洋", { x: 0.9, y: 4.6, w: 11.5, h: 1.0, fontSize: 17, color: SUB });
 
-// ---- 2. Background: from the 2050 declaration down to route buses
+// ---- 2. Purpose of today's consultation
+s = page("本日のご相談の内容");
+box(s, 0.6, 1.6, 12.1, 1.5, "DCEBF7");
+text(s, [{ text: "本日お伺いしたいこと", options: { bold: true, color: BLUE_DARK, breakLine: true } },
+  { text: "これまで電力と費用の面から研究を進めてまいりました。3本目の柱（柱C）では、利用者や地域にとっての価値という視点を取り入れたいと考えております。その方向性について、ご助言を賜れますと幸いです。", options: { fontSize: 16 } }],
+  { x: 0.85, y: 1.72, w: 11.6, h: 1.3, fontSize: 17 });
+heading(s, "本日の流れ", 3.45);
+const AGENDA = [["1", "研究の概要と最新の結果", "約5分（スライド3〜6）"], ["2", "先生のご研究から学ばせていただきたいこと", "スライド7"], ["3", "3本目の柱の方向性（案）", "スライド8"], ["4", "ご助言を賜りたい点", "スライド9"]];
+AGENDA.forEach(([n, t, d], i) => {
+  const y = 3.95 + i * 0.68;
+  s.addShape(pres.shapes.OVAL, { x: 0.7, y: y + 0.04, w: 0.42, h: 0.42, fill: { color: BLUE }, line: { color: BLUE } });
+  text(s, n, { x: 0.7, y: y + 0.04, w: 0.42, h: 0.42, fontSize: 15, bold: true, color: "FFFFFF", align: "center", valign: "middle" });
+  text(s, t, { x: 1.35, y, w: 7.4, h: 0.5, fontSize: 17, valign: "middle" });
+  text(s, d, { x: 8.9, y, w: 3.8, h: 0.5, fontSize: 14, color: SUB, valign: "middle", align: "right" });
+});
+caption(s, "計算条件などの詳しい内容は、末尾の補足スライドにまとめております", 0.6, 6.6, 12.1);
+
+// ---- 3. Background: from the 2050 declaration down to route buses
 s = page("研究背景　2050年カーボンニュートラルから路線バスへ");
 const STORY = [
   ["2050年カーボンニュートラル", "日本は2020年10月、2050年に温室効果ガスの排出を実質ゼロにすると宣言した"],
   ["交通分野", "運輸部門は日本のCO₂排出量の19.3%を占め、その約86%を自動車が出している（2024年度、国土交通省）"],
   ["路線バス", "電気バスの導入が進んでいるが、一度にすべては置き換えられず、当面は燃料（軽油）バスと併用する"],
-  ["営業所の課題", "電気バスは夜、営業所でまとめて充電する。多くの車両を同時に充電すると受電電力が大きくなり、設備の増強や電気料金の上昇につながる"]];
+  ["営業所の課題", "電気バスは夜、営業所でまとめて充電する。多くの車両を同時に充電すると、営業所が受け取る電力（受電電力）が大きくなり、設備の増強や電気料金の上昇につながる"]];
 STORY.forEach(([h, b], i) => {
   const y = 1.6 + i * 1.22;
   box(s, 0.6, y, 12.1, 1.0, i === 3 ? "DCEBF7" : BLUE_PALE);
@@ -83,44 +105,19 @@ STORY.forEach(([h, b], i) => {
 });
 caption(s, "受電設備や電気料金の負担を抑え、今の時刻表どおりの運行を保ったまま、電動化でCO₂を減らすことを目指す", 0.6, 6.5, 12.1);
 
-// ---- 3. Objective
-s = page("研究目的と最適化の中身");
-text(s, "燃料バスと電気バスを併用する営業所を対象に、便の割当と充電計画を数理最適化で決め、受電電力の上限が電気バスの担当便・費用・CO₂に与える影響を明らかにする。",
-  { x: 0.6, y: 1.65, w: 12.1, h: 1.1, fontSize: 18 });
-heading(s, "最適化で決めるもの", 2.95);
-bullets(s, ["各便を担当する車両（電気バス・燃料バス）", "各電気バスの充電の時刻と量（15分刻み）"], { x: 0.6, y: 3.4, w: 12.1, h: 0.9, fontSize: 17, paraSpaceAfter: 4 });
-heading(s, "条件と目的", 4.45);
-text(s, "時刻表の全便を運行し、電池残量・充電器10基・受電上限の制約のもとで、1週間の費用（車両使用費・電気代・燃料代・受電上限の超過分の費用）とCO₂の費用の和を最小にする。CO₂の費用は計画を立てるときの重みとしてだけ使い、費用の集計には含めない。",
-  { x: 0.6, y: 4.9, w: 12.1, h: 1.4, fontSize: 16 });
-
-// ---- 4. Conditions
-s = page("対象と計算条件");
+// ---- 4. Objective and target
+s = page("研究目的と対象");
+text(s, "燃料バスと電気バスを併用する営業所を対象に、どの便をどのバスが担当するか（便割当）と、電気バスをいつ充電するか（充電計画）を数理最適化で決め、営業所の受電電力の上限によって、電気バスが担当できる便・費用・CO₂がどう変わるかを調べる。",
+  { x: 0.6, y: 1.6, w: 12.1, h: 1.3, fontSize: 17 });
 s.addTable([
-  [B("対象"), "東急バス 渋21〜23系統（弦巻営業所）、1週間 1,704便"],
-  [B("車両・設備"), "電気バス35台・燃料バス25台、充電器 90 kW × 10基、太陽光 1,000 kW、蓄電池 6,000 kWh（設備は設置を仮定）"],
-  [B("対象期間"), "2025年の冬（1/6〜）・春（4/7〜）・夏（7/7〜）の各1週間、実際の日射"],
-  [B("受電上限"), "90／200／400／900 kWの4段階（× 3季節 ＝ 12ケース）。超過した電力量には500円/kWhの費用（仮）"],
-  [B("単価"), "電気 17.43円/kWh＋基本料金（比較として30円/kWh込みでも計算）、軽油 150円/L、車両使用費 2万円/台・日"],
-  [B("計算の打ち切り"), "最適性ギャップ5%（全ケース共通）、便割当3時間、毎時の立て直し300秒/回"]],
-  tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.2, 9.9], fontSize: 15, rowH: 0.7 }));
-caption(s, "表1　計算条件。今回示す数値は旧版（30円/kWh込み）の結果で、この表の条件で全ケースを計算し直している", 0.6, 6.0, 12.1);
+  [B("対象"), "東急バス 渋21〜23系統（弦巻営業所）、1週間 1,704便。時刻表の便はすべて運行する"],
+  [B("車両・設備"), "電気バス35台・燃料バス25台、充電器10基、太陽光発電・蓄電池（設備は設置を仮定）"],
+  [B("比べる条件"), "受電上限 90／200／400／900 kW（契約で受け取れる電力の目安）× 冬・春・夏の各1週間 ＝ 12ケース"],
+  [B("見るもの"), "電気バスが担当した便の割合、1週間の総費用、CO₂排出量"]],
+  tableOpts({ x: 0.6, y: 3.1, w: 12.1, colW: [2.2, 9.9], fontSize: 15, rowH: 0.68 }));
+caption(s, "受電上限を超えた電力量には費用（仮の値）を課しています。詳しい条件と計算方法は補足スライドA1・A2をご覧ください", 0.6, 6.0, 12.1);
 
-// ---- 5. Method
-s = page("計算方法");
-const FLOW = [["① 便割当", "1,704便を60台に割り当てる"], ["② 前日の計画", "割当を固定し、15分ごとの充電を決める"], ["③ 毎時の立て直し", "実際の日射で1時間ごとに計画し直す"], ["④ 集計", "実行した結果で費用・CO₂を数える"]];
-FLOW.forEach(([h, b], i) => {
-  const x = 0.6 + i * 3.1;
-  box(s, x, 1.7, 2.75, 1.6);
-  text(s, h, { x: x + 0.15, y: 1.8, w: 2.45, h: 0.45, fontSize: 16, bold: true, color: BLUE_DARK, align: "center" });
-  text(s, b, { x: x + 0.15, y: 2.3, w: 2.45, h: 0.9, fontSize: 14, align: "center" });
-  if (i < FLOW.length - 1) arrow(s, x + 2.78, 2.5, 0.28);
-});
-heading(s, "限られた計算時間で効率よく最適化する工夫", 3.65);
-text(s, "便割当は問題が大きく、制限時間内に最適解かどうかを確かめられない。探索は最初の割当に近い解にとどまりやすいため、性質の異なる「電気バス優先」と「燃料バス優先」の2通りの割当から始め、総費用の安い方を採用する。",
-  { x: 0.6, y: 4.1, w: 12.1, h: 1.4, fontSize: 16 });
-caption(s, "求解にはGurobiを用いた。蓄電池は規則で充放電し、最適化していない", 0.6, 6.4, 12.1);
-
-// ---- 6. Results: share and cost table
+// ---- 5. Results: share and cost table
 s = page("結果　受電上限が400 kW以上なら電気バスが9割超を担当");
 s.addChart(pres.charts.BAR, SEASONS.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => (get(g, w) ? Math.round(get(g, w).bev_trip_share_pct * 10) / 10 : null)) })),
   chart({ x: 0.6, y: 1.45, w: 6.0, h: 3.9, barDir: "col", barGrouping: "clustered", chartColors: [BLUE_DARK, BLUE_LIGHT, GREY],
@@ -129,15 +126,131 @@ const cell = (g, w) => { const r = get(g, w); const ice = r && r.selected_start 
   return { text: r ? `${man(tc(r))}${ice ? "＊" : ""}` : "—", options: { align: "center", bold: ice, color: ice ? BLUE_DARK : INK } }; };
 s.addTable([[H("受電上限"), ...SEASONS.map(([, n]) => H(n))], ...LIMITS.map((g) => [{ text: `${g} kW`, options: { bold: true, align: "center" } }, ...SEASONS.map(([w]) => cell(g, w))])],
   tableOpts({ x: 7.0, y: 1.7, w: 5.7, colW: [1.8, 1.3, 1.3, 1.3], fontSize: 16, rowH: 0.62 }));
-caption(s, "図1　電気バスが担当した便の割合（全1,704便）", 0.6, 5.4, 6.0, 0.35);
-caption(s, "表2　1週間の総費用［万円］（車両使用費・電気代・燃料代・超過費用。CO₂の費用は含めない）。＊は燃料バスを多く使う解", 7.0, 4.95, 5.7, 0.7);
+caption(s, "図1　電気バスが担当した便の割合（全1,704便）", 0.6, 5.3, 6.0, 0.35);
+caption(s, "表1　1週間の総費用［万円］（車両・電気・燃料・上限超過の費用）。＊は燃料バスを多く使う解", 7.0, 4.95, 5.7, 0.7);
 bullets(s, [
   `受電上限が400 kW以上なら、電気バスが便の${rngTxt(bevWins.map((r) => r.bev_trip_share_pct), 1)}%を担当し、総費用も小さかった`,
-  `上限の低い${iceWins.map(lab).join("・")}では燃料バスを多く使う解の方が安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%にとどまった`],
-  { x: 0.6, y: 5.85, w: 12.1, h: 0.9, fontSize: 15, paraSpaceAfter: 4 });
+  `上限の低い${iceWins.map(lab).join("・")}（＊）では燃料バスを多く使う解が安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%。90 kW冬では、電気バスを多く使う解に比べCO₂が約${co2Ratio}倍（補足A3）`],
+  { x: 0.6, y: 5.65, w: 12.1, h: 0.95, fontSize: 14, paraSpaceAfter: 2 });
+caption(s, PROVISIONAL, 0.6, 6.68, 12.1, 0.3);
 
-// ---- 7. Results: two solutions compared
-s = page("結果　電気バスを多く使うとCO₂は半分以下に。費用は受電上限しだい");
+// ---- 6. Bridge to pillar C, and the road map
+s = page("結果から見えてきたことと、今後の予定");
+box(s, 0.6, 1.55, 12.1, 1.75, BLUE_PALE);
+text(s, [
+  { text: "受電上限が低い営業所では、電気バスに任せられる便が限られ、費用とCO₂のどちらを重く見るかで望ましい運用が変わります。", options: { breakLine: true } },
+  { text: "そのとき「限られた電気バスを、どの便に、どのように使うのが、利用者や地域にとって望ましいか」は、電力と費用の計算だけでは決められないと考えるようになりました。", options: { bold: true, color: BLUE_DARK } }],
+  { x: 0.85, y: 1.7, w: 11.6, h: 1.5, fontSize: 16, paraSpaceAfter: 6 });
+s.addTable([
+  [H("柱"), H("内容"), H("状況")],
+  [B("A"), "受電上限と、電気バスが担当できる便・費用・CO₂の関係", "11/28の修士1年中間発表で報告。再計算中"],
+  [B("B"), "1日ずつ計画する場合と、数日まとめて計画する場合の比較", "中間発表後に計算"],
+  [B("C"), "利用者・地域の視点（本日ご相談したい点）", "検討中"]],
+  tableOpts({ x: 0.6, y: 3.5, w: 12.1, colW: [0.8, 7.6, 3.7], fontSize: 14, rowH: 0.45 }));
+const ROAD = [["2027年3月", "電気学会全国大会", "柱A"], ["2027年度", "学会発表（数回）", "柱B・蓄電池の最適化"], ["2027年11月", "修士2年中間発表", "柱Bの成果"], ["2028年2月", "修士最終発表", "設備の決め方の指針・柱C"]];
+ROAD.forEach(([when, where, what], i) => {
+  const x = 0.6 + i * 3.1;
+  box(s, x, 5.55, 2.8, 1.05, i === 3 ? "DCEBF7" : BLUE_PALE);
+  text(s, [{ text: `${when}　${where}`, options: { bold: true, color: BLUE_DARK, breakLine: true } }, { text: what, options: { fontSize: 12, color: SUB } }],
+    { x: x + 0.1, y: 5.62, w: 2.6, h: 0.9, fontSize: 13, align: "center", valign: "middle" });
+  if (i < ROAD.length - 1) arrow(s, x + 2.82, 6.07, 0.26);
+});
+
+// ---- 7. What I hope to learn from Prof. Nishiyama's work
+s = page("先生のご研究から学ばせていただきたいこと");
+text(s, "先生のご研究について、公開されている論文・講義紹介を拝見した範囲で整理いたしました。誤りがございましたら、ご指摘いただけますと幸いです。",
+  { x: 0.6, y: 1.5, w: 12.1, h: 0.6, fontSize: 14, color: SUB });
+const WORKS = [
+  ["乗り物の開発と普及", "ユニバーサルデザインと環境に配慮した段差のない電動フルフラットバスの試作と、その普及の研究。バス事業者への実態調査と利用者へのアンケートから、普及の形を整理 [1]"],
+  ["地域との共創", "地域の方々と対話しながら、新しい移動のサービスを一緒につくる取り組み [2]"],
+  ["乗り物・営業所を地域に活かす", "使われなくなった乗り物や営業所の空きスペースを、地域の居場所や移動販売に活かし、住民の困りごとと事業者の経営を一緒に考える取り組み [2]"]];
+WORKS.forEach(([h, b], i) => {
+  const x = 0.6 + i * 4.1;
+  box(s, x, 2.25, 3.9, 2.35);
+  text(s, h, { x: x + 0.2, y: 2.35, w: 3.5, h: 0.45, fontSize: 16, bold: true, color: BLUE_DARK });
+  text(s, b, { x: x + 0.2, y: 2.85, w: 3.5, h: 1.7, fontSize: 14 });
+});
+box(s, 0.6, 4.8, 12.1, 1.35, "DCEBF7");
+text(s, [{ text: "本研究との接点", options: { bold: true, color: BLUE_DARK, breakLine: true } },
+  { text: "本研究は電気バスの使い方を電力と費用の面から計算してまいりましたが、利用者や地域にとっての価値を評価する視点がまだ十分ではありません。この点について、ご指導を賜りたく存じます。", options: { fontSize: 15 } }],
+  { x: 0.85, y: 4.9, w: 11.6, h: 1.2, fontSize: 16 });
+caption(s, "[1] T. Nishiyama, Int. J. Critical Infrastructures, Vol. 11, No. 2, pp. 136–147, 2015（電動フルフラットバスの試作と普及戦略）\n[2] 夢ナビ講義「走るスーパー・動く居場所　乗り物が変える地域の未来」（東京都市大学 都市生活学部）",
+  0.6, 6.3, 12.1, 0.6);
+
+// ---- 8. Directions for pillar C
+s = page("3本目の柱の方向性（案）");
+const DIRS = [
+  ["① 運行していない電気バスと営業所を地域に活かす",
+    "日中など運行していない時間の電気バスや、営業所の空きスペース・太陽光の電気を、地域の居場所や移動販売に使うとき、運行と両立できる台数・時間帯・電力量はどれくらいか（災害時の電源としての活用は、その応用として検討）",
+    "運行しない時間に「地域で使う」状態と電力を加え、次の運行に必要な電池の残量を守る条件を入れる"],
+  ["② ユニバーサルデザインの視点で車両を割り当てる",
+    `受電上限が低いと、電気バスが担当できる便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%に限られる。乗り降りしやすい電気バス（例：フルフラット車）を一部に導入すると仮定し、限られた電気バスを高齢の方や車いす利用の多い便などに優先すると、費用・CO₂はどう変わるか`,
+    "便ごとに「優先したい度合い」を与え、その便を電気バスが担当する割合を条件や評価に加える"],
+  ["③ 現場や利用者の声から計画の条件を決める",
+    "事業者へのヒアリングや利用者調査で、受け入れられる運用（車両の入れ替えの回数、運転士の休憩と充電の両立など）を先に調べ、それを計画の条件にする",
+    "調べた条件を入れた計画と入れない計画を比べ、費用や電気バスの担当便の差を示す"]];
+DIRS.forEach(([h, q, m], i) => {
+  const y = 1.5 + i * 1.62;
+  box(s, 0.6, y, 12.1, 1.5);
+  text(s, h, { x: 0.8, y: y + 0.1, w: 11.7, h: 0.4, fontSize: 16, bold: true, color: BLUE_DARK });
+  text(s, [{ text: "問い：", options: { bold: true } }, { text: q, options: { breakLine: true } }, { text: "計算への入れ方：", options: { bold: true, color: SUB } }, { text: m, options: { color: SUB } }],
+    { x: 0.8, y: y + 0.52, w: 11.7, h: 0.95, fontSize: 13, paraSpaceAfter: 2 });
+});
+caption(s, "参考：ダイヤや車両の大きさの見直しは、時刻表を固定するという今の前提を外すため、将来の課題と考えております。②では、燃料バスとの違い（段差・静かさ・揺れなど）をどう定めるかもご相談したい点です",
+  0.6, 6.4, 12.1, 0.55);
+
+// ---- 9. Questions
+s = page("ご助言を賜りたい点");
+box(s, 0.6, 1.55, 3.6, 3.3, BLUE_PALE);
+text(s, [{ text: "柱Cの方向性（案）", options: { bold: true, color: BLUE_DARK, breakLine: true } },
+  { text: "① 運行していない電気バスと営業所を地域に活かす", options: { breakLine: true } },
+  { text: "② ユニバーサルデザインの視点で車両を割り当てる", options: { breakLine: true } },
+  { text: "③ 現場や利用者の声から計画の条件を決める" }],
+  { x: 0.8, y: 1.7, w: 3.25, h: 3.0, fontSize: 14, paraSpaceAfter: 12 });
+text(s, [
+  { text: "1. 左の3つの方向性のうち、利用者や地域にとって取り組む意義が大きいと思われるものはどれでしょうか。また、私が見落としている視点がございましたら、ご教示いただけますと幸いです。", options: { breakLine: true } },
+  { text: "2. 利用者の移動のしやすさや、事業者・地域の受け止めを研究に取り入れる際、数値の指標と、アンケートや対話などの調査を、どのように組み合わせるのがよいでしょうか。", options: { breakLine: true } },
+  { text: "3. 修士の残りの期間で取り組める調査として、どの程度の範囲が現実的でしょうか。先生のこれまでの調査のご知見から、活かせる点がございましたらご教示いただけますと幸いです。" }],
+  { x: 4.5, y: 1.6, w: 8.2, h: 4.3, fontSize: 16, paraSpaceAfter: 14 });
+caption(s, "お時間が許せば：交通やまちづくりの分野の方々にも意義を認めていただける研究にするには、どのような点が求められるでしょうか", 4.5, 6.2, 8.2, 0.6);
+
+// ---- 10. Thanks
+s = pres.addSlide();
+s.background = { color: "FFFFFF" };
+text(s, "本日はお時間をいただき、ありがとうございました", { x: 0.9, y: 2.3, w: 11.5, h: 0.9, fontSize: 30, bold: true, align: "center" });
+s.addShape(pres.shapes.LINE, { x: 3.4, y: 3.4, w: 6.5, h: 0, line: { color: BLUE, width: 3 } });
+text(s, "いただいたご助言は、柱Cの計画にまとめ、改めてご報告いたします。\n今後ともご指導のほど、よろしくお願い申し上げます。", { x: 0.9, y: 3.7, w: 11.5, h: 1.2, fontSize: 18, color: SUB, align: "center" });
+
+// ---- A1. Conditions (appendix)
+s = page("補足A1　計算条件");
+s.addTable([
+  [B("対象"), "東急バス 渋21〜23系統（弦巻営業所）、1週間 1,704便"],
+  [B("車両・設備"), "電気バス35台・燃料バス25台、充電器 90 kW × 10基、太陽光 1,000 kW、蓄電池 6,000 kWh（設備は設置を仮定）"],
+  [B("対象期間"), "2025年の冬（1/6〜）・春（4/7〜）・夏（7/7〜）の各1週間、実際の日射"],
+  [B("受電上限"), "90／200／400／900 kWの4段階（× 3季節 ＝ 12ケース）。超過した電力量には500円/kWhの費用（仮の値）"],
+  [B("単価"), "電気 17.43円/kWh＋基本料金（比較として30円/kWh込みでも計算）、軽油 150円/L、車両使用費 2万円/台・日"],
+  [B("CO₂"), "計画を立てるときにはCO₂の排出も抑えるよう考慮しているが、総費用（実際にかかるお金）には含めず、CO₂は kg で別に示す"],
+  [B("計算の打ち切り"), "最適性ギャップ5%（全ケース共通）、便割当3時間、毎時の立て直し300秒/回"]],
+  tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.2, 9.9], fontSize: 14, rowH: 0.65 }));
+caption(s, "今回お示しした数値は旧版の計算（30円/kWh込み）の結果で、この表の条件で全ケースを計算し直しています", 0.6, 6.3, 12.1);
+
+// ---- A2. Method (appendix)
+s = page("補足A2　計算方法");
+const FLOW = [["① 便割当", "1,704便を60台に割り当てる"], ["② 前日の計画", "割当を固定し、15分ごとの充電を決める"], ["③ 毎時の立て直し", "実際の日射で1時間ごとに計画し直す"], ["④ 集計", "実行した結果で費用・CO₂を数える"]];
+FLOW.forEach(([h, b], i) => {
+  const x = 0.6 + i * 3.1;
+  box(s, x, 1.7, 2.75, 1.6);
+  text(s, h, { x: x + 0.15, y: 1.8, w: 2.45, h: 0.45, fontSize: 16, bold: true, color: BLUE_DARK, align: "center" });
+  text(s, b, { x: x + 0.15, y: 2.3, w: 2.45, h: 0.9, fontSize: 14, align: "center" });
+  if (i < FLOW.length - 1) arrow(s, x + 2.78, 2.5, 0.28);
+});
+heading(s, "限られた計算時間で良い解を得る工夫", 3.65);
+text(s, "便割当は問題が大きく、制限時間内に最適解かどうかを確かめられない。探索は最初に与えた割当に近い解にとどまりやすいため、性質の異なる「電気バス優先」と「燃料バス優先」の2通りの割当から始め、総費用の安い方を採用する。",
+  { x: 0.6, y: 4.1, w: 12.1, h: 1.4, fontSize: 16 });
+caption(s, "求解にはGurobiを用いた。蓄電池は決めた規則で充放電し、最適化していない", 0.6, 6.4, 12.1);
+
+// ---- A3. Two solutions compared, and caveats (appendix)
+s = page("補足A3　2通りの解の比較と、結果の扱い");
 const COLS = [["900 kW冬", p9b, "電気バス優先"], ["900 kW冬", p9i, "燃料バス優先"], ["90 kW冬", p90b, "電気バス優先"], ["90 kW冬", p90i, "燃料バス優先"]];
 const adopted = [tc(p9b) <= tc(p9i), tc(p9i) < tc(p9b), tc(p90b) <= tc(p90i), tc(p90i) < tc(p90b)];
 const c3 = (t, i) => ({ text: t, options: { align: "center", bold: adopted[i], color: adopted[i] ? BLUE_DARK : INK } });
@@ -145,74 +258,24 @@ const row3 = (label, f) => [B(label), ...COLS.map(([, r], i) => c3(f(r), i))];
 s.addTable([[H("受電上限・季節"), ...COLS.map(([n]) => H(n))], [B("初期割当"), ...COLS.map(([, , n], i) => c3(n, i))],
   row3("総費用", (r) => `${man(tc(r))}万円`), row3("電気バス担当便", (r) => `${r.bev_trip_share_pct.toFixed(1)}%`),
   row3("CO₂", (r) => `${fmt(r.total_co2_kg)} kg`), row3("上限の超過", (r) => `${fmt(r.contract_over_limit_kwh)} kWh`)],
-  tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.5, 2.4, 2.4, 2.4, 2.4], fontSize: 15, rowH: 0.55 }));
-caption(s, "表3　2通りの初期割当から最適化して得た解（1週間）。青字が採用した方", 0.6, 4.95, 12.1);
+  tableOpts({ x: 0.6, y: 1.5, w: 12.1, colW: [2.5, 2.4, 2.4, 2.4, 2.4], fontSize: 14, rowH: 0.45 }));
+caption(s, "表A3　2通りの初期割当から得た解（1週間）。青字が採用した方", 0.6, 4.25, 12.1, 0.35);
 bullets(s, [
-  `900 kW冬では、電気バスを多く使う解が${man(tc(p9i) - tc(p9b))}万円安く、CO₂は${Math.round((1 - p9b.total_co2_kg / p9i.total_co2_kg) * 100)}%少ない`,
-  `90 kW冬では燃料バスを多く使う解が約${Math.round((tc(p90b) - tc(p90i)) / 1e4)}万円安いが、CO₂は約${(p90i.total_co2_kg / p90b.total_co2_kg).toFixed(1)}倍になる`],
-  { x: 0.6, y: 5.4, w: 12.1, h: 1.0, fontSize: 15, paraSpaceAfter: 4 });
-
-// ---- 8. Discussion and caveats
-s = page("考察と、結果の扱い");
-bullets(s, [
-  "受電上限に余裕があれば、電動化は費用もCO₂も下げる。上限が低いと、費用とCO₂のどちらを重く見るかで望ましい運用が変わる",
-  `上限の超過は、曇りの日の翌未明、蓄電池が空の時間に集中した（90 kW冬・電気バスを多く使う解で${fmt(p90b.contract_over_limit_kwh)} kWh/週）。前日の計画は太陽光を平年値で予測するため、曇りの日の不足を見込めない`,
-  `数値はすべて診断用で、研究の結論にはまだ使わない。便割当は最適と確認できておらず、毎時の立て直しは最大${maxTimeouts}回（1週間174〜175回中）が時間切れ。表1の条件で全ケースを計算し直している`,
+  `900 kW冬では、電気バスを多く使う解が${man(tc(p9i) - tc(p9b))}万円安く、CO₂は${Math.round((1 - p9b.total_co2_kg / p9i.total_co2_kg) * 100)}%少ない。90 kW冬では燃料バスを多く使う解が約${Math.round((tc(p90b) - tc(p90i)) / 1e4)}万円安いが、CO₂は約${co2Ratio}倍`,
+  `上限の超過は、曇りの日の翌未明、蓄電池が空の時間に集中した（90 kW冬・電気バスを多く使う解で${fmt(p90b.contract_over_limit_kwh)} kWh/週）`,
+  `数値は暫定値（診断用）で、研究の結論には使っていない。便割当は最適と確認できておらず、2段階で解くため全体の最適でもない。毎時の立て直しは最大${maxTimeouts}回（1週間174〜175回中）が時間切れ`,
   "超過の費用（500円/kWh）と電力のCO₂排出係数（0.5 kg/kWh）は仮の値で、今後感度を調べる"],
-  { x: 0.6, y: 1.65, w: 12.1, h: 5.2, fontSize: 16, paraSpaceAfter: 12 });
+  { x: 0.6, y: 4.65, w: 12.1, h: 2.3, fontSize: 13, paraSpaceAfter: 4 });
 
-// ---- 9. Structure and road map
-s = page("研究の構成と今後の予定");
+// ---- A4. Glossary (appendix): power and optimization terms only
+s = page("補足A4　用語（電力・最適化）");
 s.addTable([
-  [H("柱"), H("内容"), H("状況")],
-  [B("A"), "受電上限と、電気バスが担当できる便・費用・CO₂の関係", "11/28の中間発表で報告。条件をそろえて再計算中"],
-  [B("B"), "1日ごとに計画する場合と、日をまたいで計画する場合の比較（翌朝の電池不足、燃料バスへの振替、夜の買電）", "設計済み。中間発表後に計算"],
-  [B("C"), "未定（本日ご相談したい点）", "―"]],
-  tableOpts({ x: 0.6, y: 1.5, w: 12.1, colW: [0.8, 7.3, 4.0], fontSize: 14, rowH: 0.7 }));
-const ROAD = [["2027年3月", "電気学会全国大会", "柱Aの内容"], ["2027年度", "学会発表（数回）", "柱B、蓄電池の最適化、単価の感度"],
-  ["2027年11月", "中間発表", "日ごとの計画と比べた効果"], ["2028年2月", "修士最終発表", "受電上限・設備の決め方の指針、柱C"]];
-ROAD.forEach(([when, where, what], i) => {
-  const x = 0.6 + i * 3.1;
-  box(s, x, 4.65, 2.8, 1.55, i === 3 ? "DCEBF7" : BLUE_PALE);
-  text(s, [{ text: when, options: { bold: true, color: BLUE_DARK, breakLine: true } }, { text: where, options: { bold: true, breakLine: true } }, { text: what, options: { fontSize: 12, color: SUB } }],
-    { x: x + 0.1, y: 4.72, w: 2.6, h: 1.4, fontSize: 14, align: "center" });
-  if (i < ROAD.length - 1) arrow(s, x + 2.82, 5.42, 0.26);
-});
-caption(s, "図2　修士最終発表までの予定（予定する成果であり、まだ結果ではない）", 0.6, 6.3, 12.1);
-
-// ---- 10. Candidates for pillar C
-s = page("3本目の柱の候補　運行と利用者の視点を取り入れたい");
-const CANDS = [
-  ["運転士の勤務と充電", "充電の待機や車両の入れ替えが、運転士の拘束時間・休憩（2024年の労働時間規制の見直し）と両立するか。運転士不足の中で、電動化が勤務に与える負担"],
-  ["利用者とユニバーサルデザイン", "混雑する便、高齢者・車いす利用の多い便に低床の電気バスを優先したときの、費用・充電への影響"],
-  ["災害時の移動電源", "災害時に電気バスを避難所などへの給電に回したとき、翌日の運行と両立できる台数・電力量"],
-  ["ダイヤ・路線の見直しと電動化", "減便や路線の再編をしたとき、電気バスで担える便・受電電力・費用・CO₂がどう変わるか"],
-  ["事業者・利用者の受け止め", "最適化が示す運用（便ごとの車両の入れ替え、充電のための待機）を、事業者・利用者がどう評価するか（ヒアリング・アンケート）"],
-  ["CO₂の見える化", "電気バスが担当する便を利用者に示すと、利用や評価が変わるか"]];
-s.addTable([[H("候補"), H("問い")], ...CANDS.map(([t, d]) => [B(t), d])],
-  tableOpts({ x: 0.6, y: 1.5, w: 12.1, colW: [3.2, 8.9], fontSize: 13, rowH: 0.64 }));
-caption(s, "表4　3本目の柱の候補（10月の候補を見直し、運転士と利用者の視点を加えた）", 0.6, 6.55, 12.1);
-
-// ---- 11. Questions
-s = page("ご意見をいただきたい点");
-text(s, [
-  { text: "1. 公共交通・ユニバーサルデザインのご専門から見て、上の候補のうち意義がある、面白いと思われるものはどれか。ほかに入れるべき視点はあるか", options: { breakLine: true } },
-  { text: "2. 利用者へのサービスの質や運転士の負担を、どのような指標・データで評価するのがよいか", options: { breakLine: true } },
-  { text: "3. 事業者へのヒアリングや利用者調査で、計算結果を補う方法はあるか", options: { breakLine: true } },
-  { text: "4. 2027年度の学会発表で、電気学会のほかに交通・都市計画の分野の学会にも出すべきか。出すならどこがよいか" }],
-  { x: 0.6, y: 1.7, w: 12.1, h: 4.5, fontSize: 18, paraSpaceAfter: 16 });
-
-// ---- 12. Glossary
-s = page("補足　用語");
-s.addTable([
-  [B("便"), "バスが始発から終点まで1回運行すること"],
-  [B("営業所"), "バスの車庫。電気バスはここで充電する"],
-  [B("受電電力・受電上限"), "営業所が電力会社から受け取る電力（kW）と、その目安。超過した電力量には費用を課す"],
+  [B("受電電力・受電上限"), "営業所が電力会社から受け取る電力（kW）と、その目安。本研究では、上限を超えた電力量に費用を課している"],
   [B("kW と kWh"), "kWはある時点の電力の大きさ、kWhは使用した電力量（kW × 時間）"],
   [B("基本料金"), "契約した電力の大きさに応じて毎月かかる電気料金。使った電力量に応じた料金とは別"],
-  [B("数理最適化"), "制約と費用を数式で表し、費用が最小となる計画を計算機で求める方法"],
+  [B("数理最適化"), "条件と費用を数式で表し、費用が最小となる計画を計算機で求める方法"],
   [B("初期割当"), "最適化を始めるときに与える仮の便割当。ここから少しずつ良い割当を探す"]],
-  tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.6, 9.5], fontSize: 15, rowH: 0.62 }));
+  tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.8, 9.3], fontSize: 15, rowH: 0.75 }));
 
 (async () => {
   const out = path.join(__dirname, process.env.DECK_OUT || "西山先生へのご相談_最新結果と3本目の柱.pptx");
