@@ -140,7 +140,7 @@ module.exports = function layout(c) {
   const PAIRS = [];
   LIMITS.forEach((g) => SE.forEach(([w]) => { const b = pairOf(g, w, "bev"), i = pairOf(g, w, "ice"); if (b && i) PAIRS.push({ label: `${g}${SEASON_OF[w]}`, b, i }); }));
   const pcats = PAIRS.map((p) => p.label), half = (COL - 0.6) / 2;
-  const pairChart = (o) => ({ ...chart(), y, w: half, h: 5.9, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin",
+  const pairChart = (o) => ({ ...chart(), y, w: half, h: 5.4, barDir: "bar", barGrouping: "clustered", chartColors: [BLUE, GREY], valAxisMinVal: 0, catAxisOrientation: "maxMin",
     showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 18, legendFontSize: 22, catAxisLabelFontSize: 20, catAxisLabelFrequency: 1, barGapWidthPct: 15,
     valAxisLabelFontSize: 20, valAxisTitleFontSize: 22, valAxisTitleColor: SUB, showValAxisTitle: true, ...o });
   s.addChart(pres.charts.BAR, [{ name: "電気バス優先 − 燃料バス優先", labels: pcats, values: PAIRS.map((p) => Math.round((tc(p.b) - tc(p.i)) / 1e3) / 10) }],
@@ -149,7 +149,7 @@ module.exports = function layout(c) {
     { name: "電気バス優先", labels: pcats, values: PAIRS.map((p) => Math.round(p.b.total_co2_kg / 100) / 10) },
     { name: "燃料バス優先", labels: pcats, values: PAIRS.map((p) => Math.round(p.i.total_co2_kg / 100) / 10) }],
     pairChart({ x: RX + half + 0.6, dataLabelFormatCode: "0.0", valAxisMaxVal: 10, valAxisMajorUnit: 2, valAxisTitle: "CO₂ [t/週]" }));
-  y += 5.95;
+  y += 5.45;
   const bevCheap = PAIRS.filter((p) => tc(p.b) < tc(p.i)).length, co2Low = PAIRS.filter((p) => p.b.total_co2_kg < p.i.total_co2_kg).length;
   caption(`図5　2通りの初期割当から最適化して得た解の比較：総費用の差（左。負は電気バス優先から得た解が安い）とCO₂（右）。CO₂は${PAIRS.length}ケース中${co2Low}ケースで電気バス優先が少なく、費用は${bevCheap}ケースで電気バス優先が安い`, RX, y, COL, 1.2, 24);
   y += 1.4;
@@ -161,19 +161,24 @@ module.exports = function layout(c) {
     { x: RX, y, w: COL, h: 3.0, fontSize: 26, paraSpaceAfter: 4 });
   y += 3.1;
   text([{ text: "今後の展望　", options: { bold: true, color: BLUE_DARK } },
-    { text: "曇りの日の不足や未明の蓄電池切れに備えるため、日をまたいで計画する方式と比べ、蓄電池の充放電も最適化に含める。あわせて超過単価・CO₂係数の感度を調べ、受電上限と設備の決め方の指針につなげる。" }],
-    { x: RX, y, w: COL, h: 2.3, fontSize: 26 });
-  y += 2.4;
-  // road to the final presentation
-  const steps = [["12月", "全ケース再計算の確定\n日をまたぐ計画の実装"], ["1月", "蓄電池の最適化・単価の感度"], ["2月", "修士論文・学内最終発表"]];
-  const sw = (COL - 0.6) / 3;
-  steps.forEach(([when, what], i) => {
-    const x = RX + i * (sw + 0.3);
-    s.addShape(pres.shapes.RECTANGLE, { x, y, w: sw, h: 1.3, fill: { color: i === 2 ? "DCEBF7" : "F4F7FA" }, line: { color: BLUE, width: 1.5 } });
-    text([{ text: when, options: { bold: true, color: BLUE_DARK, breakLine: true } }, { text: what }], { x: x + 0.15, y: y + 0.08, w: sw - 0.3, h: 1.15, fontSize: 21, align: "center" });
+    { text: "本発表の内容を再計算した結果で2027年3月の電気学会全国大会に発表する。その後、曇りの日の不足や未明の蓄電池切れに備える計画の方式と蓄電池の最適化を進め、受電上限と設備の決め方の指針につなげる。" }],
+    { x: RX, y, w: COL, h: 1.75, fontSize: 25 });
+  y += 1.85;
+  // 2026-11-16 (user): road to the M2 midterm (2027-11) and the master's final (2028-02), via the IEEJ national
+  // convention (2027-03) and several conferences in FY2027. Contents of each step are the plan, not results.
+  const steps = [["2027年3月", "電気学会全国大会", "本発表の内容（受電上限と電気バスの担当便・費用・CO₂）"],
+    ["2027年度", "学会発表（数回）", "日をまたぐ計画、蓄電池の充放電の最適化、単価・CO₂係数の感度"],
+    ["2027年11月", "中間発表", "日ごとの計画と比べた効果（翌朝の電池不足、燃料バスへの振替、夜の買電）"],
+    ["2028年2月", "修士最終発表", "受電上限・蓄電池・充電器の決め方の指針（季節を通した評価）"]];
+  const sw = (COL - 0.6) / 4, bh = 2.55;
+  steps.forEach(([when, where, what], i) => {
+    const x = RX + i * (sw + 0.2);
+    s.addShape(pres.shapes.RECTANGLE, { x, y, w: sw, h: bh, fill: { color: i === 3 ? "DCEBF7" : "F4F7FA" }, line: { color: BLUE, width: 1.5 } });
+    text([{ text: when, options: { bold: true, color: BLUE_DARK, breakLine: true } }, { text: where, options: { bold: true, breakLine: true } },
+      { text: what, options: { fontSize: 17, color: SUB } }], { x: x + 0.12, y: y + 0.08, w: sw - 0.24, h: bh - 0.12, fontSize: 20, align: "center" });
   });
-  caption("図6　学内最終発表までの予定", RX, y + 1.35, COL, 0.5, 22);
-  y += 1.9;
+  caption("図6　修士最終発表までの予定と、それぞれで出す成果", RX, y + bh + 0.05, COL, 0.5, 22);
+  y += bh + 0.6;
   caption(`注：結果はすべて診断用（DIAGNOSTIC）で、研究の結論にはまだ使わない。便割当は制限時間内に最適と確認できておらず、便割当と充電計画を2段階で解くため全体の最適でもない。蓄電池は規則で充放電し、最適化していない。毎時の立て直しは、示した解のうち最大${maxTimeouts}回が時間切れ（1週間174〜175回中）。図表の数値は旧版（${versions}、30円/kWh（基本料金込み））の結果で、表1の2通りの電気料金で全ケースを再計算中。`,
     RX, y, COL, 45.5 - y, 20);
 };
