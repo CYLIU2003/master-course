@@ -74,7 +74,8 @@ const tcc = (r) => r.total_cost_fuel_consumed;
 const shares = cases.map((r) => r.bev_trip_share_pct);
 const shareRange = `${Math.min(...shares).toFixed(1)}〜${Math.max(...shares).toFixed(1)}%`;
 const co2Cut = SE.filter(([w]) => get(900, w)).map(([w]) => 1 - get(900, w).total_co2_kg / Number(diesel.find((d) => d.week === w).co2_kg));
-const maxTimeouts = Math.max(...DATA.rolling.map((r) => r.time_limit));
+// 2026-11-16 (review): count over every shown run (both initial assignments), not only the adopted one.
+const maxTimeouts = Math.max(...DATA.pairs.filter((r) => r.status === "VERIFIED").map((r) => r.rolling_time_limit_steps));
 const bevGridPerKm = 1.316 * 30, icePerKm = 150 / 4.52, bevOverPerKm = 1.316 * 530;
 const cutRange = `${Math.round(Math.min(...co2Cut) * 100)}〜${Math.round(Math.max(...co2Cut) * 100)}%`;
 const w90 = get(90, "2025-01-06");
