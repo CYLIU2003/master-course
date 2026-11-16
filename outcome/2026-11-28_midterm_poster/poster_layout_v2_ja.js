@@ -19,17 +19,25 @@ module.exports = function layout(c) {
   // ---------------- left column
   let y = 9.2;
   y = section("1．背景と目的", LX, y, COL);
-  s.addShape(pres.shapes.RECTANGLE, { x: LX, y, w: COL, h: 3.35, fill: { color: "EEF5FB" }, line: { color: "EEF5FB" } });
-  text([{ text: "目指すこと", options: { bold: true, color: BLUE_DARK, fontSize: 30, breakLine: true } },
-    { text: "路線バスの電動化でCO₂を減らす（GX）。そのとき、受電設備と電気料金の負担を抑えながら、今の時刻表どおりに運行を続ける。", options: { bold: true, breakLine: true } },
-    { text: "電気バスは一度に置き換えられず、当面は燃料バスと併用する。営業所で多くの電気バスを同時に充電すると、受電電力が大きくなる。", options: { fontSize: 26, color: SUB } }],
-    { x: LX + 0.35, y: y + 0.2, w: COL - 0.7, h: 3.0, fontSize: 31 });
-  y += 3.6;
+  // 2026-11-16 (user): the background opens with the 2050 carbon-neutral declaration and narrows to transport and buses.
+  // Figures: MLIT "運輸部門における二酸化炭素排出量" (FY2024: 187.19 Mt, 19.3 % of 971.48 Mt; cars about 86 % of transport).
+  s.addShape(pres.shapes.RECTANGLE, { x: LX, y, w: COL, h: 4.3, fill: { color: "EEF5FB" }, line: { color: "EEF5FB" } });
+  const story = [
+    ["2050年カーボンニュートラル", "日本は2020年10月、2050年に温室効果ガスの排出を実質ゼロにすると宣言した［7］"],
+    ["交通分野", "運輸部門は日本のCO₂排出量の19.3%を占め、その約86%が自動車である（2024年度）［8］"],
+    ["路線バス", "電気バスへの置き換えが進むが、一度には替えられず、当面は燃料バスと併用する。営業所で同時に充電すると受電電力が大きくなる"]];
+  text(story.flatMap(([h, b], i) => [
+      { text: (i ? "▶ " : "") + h + "　", options: { bold: true, color: BLUE_DARK } },
+      { text: b, options: { breakLine: true } }]).concat([
+      { text: "目指すこと　", options: { bold: true, color: BLUE_DARK } },
+      { text: "受電設備と電気料金の負担を抑え、今の時刻表どおりに運行しながら、路線バスの電動化でCO₂を減らす（GX）", options: { bold: true } }]),
+    { x: LX + 0.35, y: y + 0.2, w: COL - 0.7, h: 3.95, fontSize: 25, paraSpaceAfter: 3 });
+  y += 4.55;
   text([{ text: "本研究の取り組み", options: { bold: true, color: BLUE_DARK, breakLine: true } },
     ...["燃料バスと併用する営業所で、便割当と充電計画を最適化する", "受電上限を変えて、電気バスに任せられる便・費用・CO₂を比べる", "受電上限の超過が、いつ・なぜ生じるかを調べる"]
       .map((t, i, a) => ({ text: t, options: { bullet: true, breakLine: i < a.length - 1 } }))],
-    { x: LX, y, w: COL, h: 2.5, fontSize: 30, paraSpaceAfter: 4 });
-  y += 2.65;
+    { x: LX, y, w: COL, h: 2.25, fontSize: 28, paraSpaceAfter: 4 });
+  y += 2.4;
 
   y = section("2．手法", LX, y, COL);
   text([{ text: "最適化するもの　", options: { bold: true, color: BLUE_DARK } },
@@ -59,14 +67,14 @@ module.exports = function layout(c) {
   const tbl = (rowsIn, x, yy, w, k = 3.9, fs = 27, rh = 0.56) => // rh: number or per-row array
    s.addTable(rowsIn.map(([a, b]) => [{ text: a, options: { bold: true, fill: { color: "F4F7FA" } } }, { text: b }]),
     { x, y: yy, w, colW: [k, w - k], fontSize: fs, fontFace: "Yu Gothic", color: INK, rowH: rh, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
-  const prh = params.map(([k]) => (k === "電気料金" || k === "計算の打ち切り" ? 0.95 : 0.53));
+  const prh = params.map(([k]) => (k === "電気料金" || k === "計算の打ち切り" ? 0.9 : 0.5));
   tbl(params, LX, y, COL, 3.9, 27, prh);
-  y += prh.reduce((a, b) => a + b, 0) + 0.1;
+  y += prh.reduce((a, b) => a + b, 0) + 0.35; // PowerPoint grows two-line rows beyond rowH
   caption("表1　計算に用いた値（仮の値は今後、感度を調べる）。ギャップ＝解と理論上の下限の差", LX, y, COL, 0.6, 23);
   y += 0.7;
 
   y = section("3．ケーススタディ", LX, y, COL);
-  const MAPW = COL * 0.48, MAPH = MAPW * 0.5221;
+  const MAPW = COL * 0.40, MAPH = MAPW * 0.5221;
   s.addImage({ path: path.join(__dirname, "route_map_ja_poster.png"), x: LX + (COL - MAPW) / 2, y, w: MAPW, h: MAPH, altText: "渋21・渋22・渋23の路線図と弦巻営業所の位置" });
   y += MAPH + 0.08;
   caption("図2　対象路線と弦巻営業所（停留所の位置は公共交通オープンデータ（ODPT）［3］、停留所の間は直線。背景は © OpenStreetMap contributors）", LX, y, COL, 1.0, 22);
@@ -74,12 +82,12 @@ module.exports = function layout(c) {
   const study = [["対象", "東急バス 渋21〜23系統（弦巻営業所）、1週間1,704便"], ["車両・設備", "電気バス35台・燃料バス25台、充電器90 kW×10、太陽光1,000 kW、蓄電池6,000 kWh"],
     ["比べるケース", "受電上限 90・200・400・900 kW × 冬・春・夏の代表週（2025年1/6・4/7・7/7からの1週間、実際の日射）＝12ケース"]];
   tbl(study, LX, y, COL, 3.3, 25, 0.8);
-  y += study.length * 0.8 + 0.5;
+  y += study.length * 0.8 + 0.4;
   caption("表2　ケーススタディの条件", LX, y, COL, 0.5, 24);
   if (y + 0.5 > 45.5 - 1.6) throw new Error(`left column overflows: ${y}`);
   text([{ text: "参考文献　", options: { bold: true } },
-    { text: "［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）　［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018　［3］公共交通オープンデータセンター：東急バス 時刻表データ（ODPT）　［4］Gurobi Optimization, LLC: Gurobi Optimizer Reference Manual, Version 13.0　［5］P. Shaw: Using constraint programming and local search methods to solve vehicle routing problems, CP-98, LNCS 1520, 1998　［6］東京電力エナジーパートナー：高圧の電気料金（ベーシックプラン、2026年4月1日実施）" }],
-    { x: LX, y: 45.5 - 1.6, w: COL, h: 1.6, fontSize: 17, color: SUB });
+    { text: "［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）　［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018　［3］公共交通オープンデータセンター：東急バス 時刻表データ（ODPT）　［4］Gurobi Optimization, LLC: Gurobi Optimizer Reference Manual, Version 13.0　［5］P. Shaw: Using constraint programming and local search methods to solve vehicle routing problems, CP-98, LNCS 1520, 1998　［6］東京電力エナジーパートナー：高圧の電気料金（ベーシックプラン、2026年4月1日実施）　［7］首相官邸：第203回国会における菅内閣総理大臣所信表明演説（2020年10月26日）　［8］国土交通省：運輸部門における二酸化炭素排出量" }],
+    { x: LX, y: 45.5 - 1.6, w: COL, h: 1.6, fontSize: 16, color: SUB });
 
   // ---------------- right column
   y = 9.2;
