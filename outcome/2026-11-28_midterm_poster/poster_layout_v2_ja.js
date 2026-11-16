@@ -11,7 +11,7 @@ module.exports = function layout(c) {
   text("東京都市大学　劉 承洋（研究室名・指導教員をここに記入）", { x: M + NUM, y: M + 2.55, w: W - NUM, h: 0.8, fontSize: 36, color: SUB });
   s.addShape(pres.shapes.LINE, { x: M, y: 8.8, w: W, h: 0, line: { color: BLUE, width: 8 } });
   const p9b = pairOf(900, "2025-01-06", "bev"), p9i = pairOf(900, "2025-01-06", "ice");
-  const tc = (r) => r.total_cost_fuel_consumed;
+  const tc = (r) => r.total_cost_reported; // CO2 cost excluded from every reported total (2026-11-16)
   const wCut = Math.round((1 - p9b.total_co2_kg / p9i.total_co2_kg) * 100);
   text(`概要　路線バスの電動化では、営業所での充電が重なると受電電力が大きくなる。燃料バスと電気バスを併用する営業所を対象に、便の割当と充電計画を最適化し、受電上限を変えたときの電気バスの担当便・費用・CO₂を冬・春・夏の代表週で評価した。受電上限900 kW・太陽光1,000 kWの冬では、電気バスを多く使う解は燃料バスを多く使う解より1週間で${man(tc(p9i) - tc(p9b))}万円安く、CO₂は${wCut}%少なかった。上限を下げるとこの差は縮み、${iceWins.map(lab).join("・")}では燃料バスを多く使う解の方が安かった。`,
     { x: M + NUM, y: M + 3.45, w: W - NUM, h: 3.5, fontSize: 32 });
@@ -53,7 +53,7 @@ module.exports = function layout(c) {
   y += 4.0;
   // 2026-11-16: tariff of the et series (energy charge in the model, basic charge added to the result) and the
   // uniform settings of rc41/rc42 (gap 5 %, re-plan 300 s). The 30 JPY/kWh all-inclusive series (ct) is a comparison.
-  const params = [["電気料金", "17.43円/kWh［6］。基本料金（週4.5万〜44.7万円）は結果に加算。比較：30円/kWh（基本料金込み）"],["軽油", "150円/L、CO₂ 2.62 kg/L［1］"], ["電力のCO₂", "0.5 kg/kWh（仮）、CO₂の費用 1円/kg"],
+  const params = [["電気料金", "17.43円/kWh［6］。基本料金（週4.5万〜44.7万円）は結果に加算。比較：30円/kWh（基本料金込み）"],["軽油", "150円/L、CO₂ 2.62 kg/L［1］"], ["電力のCO₂", "0.5 kg/kWh（仮）。CO₂の費用1円/kg（集計しない）"],
     ["車両使用費", "2万円/台・日"], ["受電上限の超過", "500円/kWh（仮）"], ["朝の電池残量", "電気バス：目標90%・下限80%"],
     ["時間の刻み", "15分（立て直しの実行は1時間ごと）"], ["計算の打ち切り", "ギャップ5%（全ケース共通）、便割当3時間、立て直し300秒/回（時間切れ時のみ600秒）"]];
   const tbl = (rowsIn, x, yy, w, k = 3.9, fs = 27, rh = 0.56) => // rh: number or per-row array
@@ -90,21 +90,19 @@ module.exports = function layout(c) {
       catAxisLabelFontSize: 26, valAxisLabelFontSize: 24, legendFontSize: 26, valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20,
       showCatAxisTitle: true, catAxisTitle: "受電上限 [kW]", catAxisTitleFontSize: 24, catAxisTitleColor: SUB,
       showValAxisTitle: true, valAxisTitle: "電気バス担当便 [%]", valAxisTitleFontSize: 24, valAxisTitleColor: SUB });
-  const order = []; LIMITS.forEach((g) => SE.forEach(([w]) => { const r = cases.find((x) => x.grid_limit_kw === g && x.week === w); if (r) order.push(r); }));
-  const ccats = order.map((r) => `${r.grid_limit_kw}${SEASON_OF[r.week]}`);
-  const m1 = (v) => Math.round(v / 1e3) / 10;
-  s.addChart(pres.charts.BAR, [
-    { name: "電気代", labels: ccats, values: order.map((r) => m1(r.electricity_cost)) },
-    { name: "燃料代", labels: ccats, values: order.map((r) => m1(r.fuel_cost)) },
-    { name: "上限超過の費用", labels: ccats, values: order.map((r) => m1(r.contract_overage_cost)) }],
-    { ...chart(), x: RX + halfR + 0.5, y, w: halfR, h: 6.0, barDir: "col", barGrouping: "stacked", barGapWidthPct: 40, chartColors: [BLUE, GREY, "E8A33D"],
-      catAxisLabelFontSize: 22, valAxisLabelFontSize: 24, legendFontSize: 22, valAxisMinVal: 0,
-      showValAxisTitle: true, valAxisTitle: "運用費 [万円/週]", valAxisTitleFontSize: 24, valAxisTitleColor: SUB });
-  const totals = order.map((r) => r.total_cost / 1e4);
+  // 2026-11-16 (user): Fig. 4 is a table, grid limit (rows) x season (columns), total cost per case without the CO2 cost.
+  const T4 = halfR, k4 = 2.0, cw4 = (T4 - k4) / SE.length, rh4 = 0.95;
+  const hd4 = (t) => ({ text: t, options: { bold: true, align: "center", fill: { color: "F2F2F2" } } });
+  const c4 = (g, w) => { const r = cases.find((x) => x.grid_limit_kw === g && x.week === w);
+    return { text: r ? `${man(tc(r))}${r.selected_start === "ice" ? "＊" : ""}` : "—", options: { align: "center", color: r && r.selected_start === "ice" ? BLUE_DARK : INK, bold: !!(r && r.selected_start === "ice") } }; };
+  s.addTable([[hd4("受電上限"), ...SE.map(([, n]) => hd4(n))],
+    ...LIMITS.map((g) => [{ text: `${g} kW`, options: { bold: true, align: "center" } }, ...SE.map(([w]) => c4(g, w))])],
+    { x: RX + halfR + 0.5, y: y + 0.4, w: T4, colW: [k4, ...SE.map(() => cw4)], fontSize: 28, fontFace: "Yu Gothic", color: INK,
+      rowH: rh4, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
   caption("図3　受電上限と電気バスの担当便（1,704便/週）。各ケースで2通りの初期割当のうち総費用の安い方の解", RX, y + 6.05, halfR, 1.6, 24);
-  caption(`図4　各ケースの解の運用費（電気代＋燃料代＋超過費用）。総費用は車両使用費とCO₂の費用を加えた${Math.min(...totals).toFixed(0)}〜${Math.max(...totals).toFixed(0)}万円/週`, RX + halfR + 0.5, y + 6.05, halfR, 1.6, 24);
+  caption("図4　各ケースの総費用［万円/週］（車両使用費＋電気代＋燃料代＋超過費用。CO₂の費用は集計に含めない）。＊は燃料バス優先の初期割当から得た解", RX + halfR + 0.5, y + 0.4 + rh4 * (LIMITS.length + 1) + 0.15, halfR, 1.9, 24);
   y += 7.85;
-  text(`受電上限が400 kW以上なら、電気バスが便の${rngTxt(bevWins.map((r) => r.bev_trip_share_pct), 1)}%を担当し、運用費も小さい。上限の低い${iceWins.map(lab).join("・")}では燃料バスを多く使う方が安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%に下がった。`,
+  text(`受電上限が400 kW以上なら、電気バスが便の${rngTxt(bevWins.map((r) => r.bev_trip_share_pct), 1)}%を担当し、総費用も小さい。上限の低い${iceWins.map(lab).join("・")}では燃料バスを多く使う方が安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%に下がった。`,
     { x: RX, y, w: COL, h: 1.9, fontSize: 28 });
   y += 2.05;
   text([{ text: "限られた計算時間で効率よく最適化する工夫　", options: { bold: true, color: BLUE_DARK } },

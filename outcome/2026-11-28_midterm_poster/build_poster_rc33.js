@@ -19,6 +19,11 @@ const DATA = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "2026-11-12_t
 DATA.cases.forEach((r) => { if (r.status === "VERIFIED") {
   r.total_cost_accounting = r.total_cost; r.total_cost = r.total_cost_fuel_consumed; r.fuel_cost = r.ice_fuel_consumed_l * 150; } });
 const cases = DATA.cases.filter((r) => r.status === "VERIFIED");
+// 2026-11-16 (user): the CO2 cost (1 JPY/kg, table 1) stays in the objective but is not reported in any cost total.
+// total_cost_fuel_consumed includes it (checked: difference = total_co2_kg x 1 JPY); no adopted/rejected pair flips.
+const CO2_YEN_PER_KG = 1;
+[...DATA.cases, ...DATA.pairs].forEach((r) => {
+  if (r.total_cost_fuel_consumed != null) r.total_cost_reported = r.total_cost_fuel_consumed - r.total_co2_kg * CO2_YEN_PER_KG; });
 const iceHour = DATA.ice_by_hour;
 const diesel = DATA.diesel;
 const LIMITS = DATA.limits;
