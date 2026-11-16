@@ -8,6 +8,9 @@
 // build_poster.js (rc8/rc9) and build_poster_rc18.js.
 const path = require("path");
 const fs = require("fs");
+// 2026-11-16: POSTER_LANG=en builds the English poster from poster_layout_v2_en.js with the same data.
+const LANG = process.env.POSTER_LANG === "en" ? "en" : "ja";
+const FONT = LANG === "en" ? "Arial" : "Yu Gothic";
 const pptxgen = require(path.join(process.env.DECK_NODE_MODULES, "pptxgenjs"));
 const { applyTheme } = require(path.join(process.env.PPTX_SKILL, "scripts", "apply_theme.js"));
 // 2026-11-10 (user request: images, graphs and tables): Figs. 2, 3 and 6 come from poster_figs.js.
@@ -38,7 +41,7 @@ const peakYear = (g) => Math.max(...cases.filter((r) => r.grid_limit_kw === g).m
 const basicYear = (g) => Math.max(g, peakYear(g)) * BASIC_YEN_PER_KW * 0.85 * 12;
 
 const BLUE = "0485D7", BLUE_DARK = "0268B0", GREY = "9A9A9A", INK = "222222", SUB = "555555", GRID = "DDDDDD";
-const THEME = { name: "TCU white", headFontFace: "Yu Gothic", bodyFontFace: "Yu Gothic",
+const THEME = { name: "TCU white", headFontFace: FONT, bodyFontFace: FONT,
   colors: { dk1: INK, lt1: "FFFFFF", dk2: BLUE_DARK, lt2: "F4F7FA", accent1: BLUE, accent2: GREY,
             accent3: "5B9BD5", accent4: "A5A5A5", accent5: "264478", accent6: "636363", hlink: BLUE, folHlink: BLUE_DARK } };
 
@@ -46,11 +49,11 @@ const pres = new pptxgen();
 pres.defineLayout({ name: "A0_PORTRAIT", width: 33.11, height: 46.81 });
 pres.layout = "A0_PORTRAIT";
 pres.theme = { headFontFace: THEME.headFontFace, bodyFontFace: THEME.bodyFontFace };
-pres.title = "中間発表ポスター 2026-11-28";
+pres.title = LANG === "en" ? "Midterm poster 2026-11-28" : "中間発表ポスター 2026-11-28";
 const M = 1.6, W = 33.11 - 2 * M, GAP = 0.9, COL = (W - GAP) / 2, LX = M, RX = M + COL + GAP;
 const s = pres.addSlide();
 s.background = { color: "FFFFFF" };
-const text = (t, o) => { if (!(o.h > 0) || o.y + o.h > 46.81 - 1.2) throw new Error(`text box off the page: y=${o.y} h=${o.h}`); return s.addText(t, { isTextBox: true, margin: 0, valign: "top", color: INK, fontSize: 42, fontFace: "Yu Gothic", lineSpacingMultiple: 1.15, ...o }); };
+const text = (t, o) => { if (!(o.h > 0) || o.y + o.h > 46.81 - 1.2) throw new Error(`text box off the page: y=${o.y} h=${o.h}`); return s.addText(t, { isTextBox: true, margin: 0, valign: "top", color: INK, fontSize: 42, fontFace: FONT, lineSpacingMultiple: 1.15, ...o }); };
 const section = (label, x, y, w) => {
   s.addShape(pres.shapes.RECTANGLE, { x, y, w, h: 1.25, fill: { color: BLUE }, line: { color: BLUE } });
   text(label, { x: x + 0.35, y, w: w - 0.5, h: 1.25, valign: "middle", fontSize: 50, bold: true, color: "FFFFFF" });
@@ -101,7 +104,7 @@ const K9 = {
 const eqSize = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "2026-11-12_three_party", "eq", "sizes.json"), "utf8"));
 const VER = { "7dc38d95": "rc33", "9a0fe044": "rc35", "375dd6f2": "rc36", "0e95d3b2": "rc39" };
 const versions = [...new Set(DATA.pairs.filter((r) => r.status === "VERIFIED").map((r) => VER[r.version] || r.version))].sort().join("・");
-require("./poster_layout_v2_ja.js")({ s, pres, path, text, section, chart, caption, flowDiagram, M, W, COL, LX, RX, BLUE, BLUE_DARK, GREY, INK, SUB, GRID,
+require(`./poster_layout_v2_${LANG}.js`)({ FONT, LANG, s, pres, path, text, section, chart, caption, flowDiagram, M, W, COL, LX, RX, BLUE, BLUE_DARK, GREY, INK, SUB, GRID,
   cases, LIMITS, SE, SEASON_OF, lab, val, pairOf, iceWins, bevWins, rngTxt, man, fmt, pb90, pi90, eqSize, maxTimeouts, versions });
 
 (async () => {
