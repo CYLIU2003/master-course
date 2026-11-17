@@ -105,17 +105,48 @@ STORY.forEach(([h, b], i) => {
 });
 caption(s, "受電設備や電気料金の負担を抑え、今の時刻表どおりの運行を保ったまま、電動化でCO₂を減らすことを目指す", 0.6, 6.5, 12.1);
 
-// ---- 4. Objective and target
+// ---- 4. Objective and target (route map = poster Fig. 2, added 2026-11-17 at the user's request)
 s = page("研究目的と対象");
 text(s, "燃料バスと電気バスを併用する営業所を対象に、どの便をどのバスが担当するか（便割当）と、電気バスをいつ充電するか（充電計画）を数理最適化で決め、営業所の受電電力の上限によって、電気バスが担当できる便・費用・CO₂がどう変わるかを調べる。",
-  { x: 0.6, y: 1.6, w: 12.1, h: 1.3, fontSize: 17 });
+  { x: 0.6, y: 1.55, w: 12.1, h: 1.1, fontSize: 16 });
 s.addTable([
   [B("対象"), "東急バス 渋21〜23系統（弦巻営業所）、1週間 1,704便。時刻表の便はすべて運行する"],
   [B("車両・設備"), "電気バス35台・燃料バス25台、充電器10基、太陽光発電・蓄電池（設備は設置を仮定）"],
   [B("比べる条件"), "受電上限 90／200／400／900 kW（契約で受け取れる電力の目安）× 冬・春・夏の各1週間 ＝ 12ケース"],
   [B("見るもの"), "電気バスが担当した便の割合、1週間の総費用、CO₂排出量"]],
-  tableOpts({ x: 0.6, y: 3.1, w: 12.1, colW: [2.2, 9.9], fontSize: 15, rowH: 0.68 }));
-caption(s, "受電上限を超えた電力量には費用（仮の値）を課しています。詳しい条件と計算方法は補足スライドA1・A2をご覧ください", 0.6, 6.0, 12.1);
+  tableOpts({ x: 0.6, y: 2.8, w: 6.9, colW: [1.5, 5.4], fontSize: 13, rowH: 0.78 }));
+const MAPW = 5.0, MAPH = MAPW * 1409 / 2700;
+s.addImage({ path: path.join(__dirname, "..", "2026-11-28_midterm_poster", "route_map_ja_poster.png"), x: 7.7, y: 2.8, w: MAPW, h: MAPH,
+  altText: "渋21・渋22・渋23の路線図と弦巻営業所の位置" });
+caption(s, "対象路線と弦巻営業所（停留所の位置は公共交通オープンデータ（ODPT）、停留所の間は直線。背景は © OpenStreetMap contributors）", 7.7, 2.8 + MAPH + 0.08, MAPW, 0.6);
+caption(s, "受電上限を超えた電力量には費用（仮の値）を課しています。詳しい条件は補足スライドA1をご覧ください", 0.6, 6.45, 12.1);
+
+// ---- 4b. Method (poster Fig. 1 and the objective, added 2026-11-17 at the user's request)
+s = page("手法　便割当と充電計画を、1週間の総費用が最小になるよう決める");
+text(s, [{ text: "最適化するもの　", options: { bold: true, color: BLUE_DARK } },
+  { text: "(a) 各便を電気バス・燃料バスのどの車両が担当するか、(b) 各電気バスをいつ・何kWで充電するか。時刻表の便はすべて運行する。" }],
+  { x: 0.6, y: 1.5, w: 12.1, h: 0.65, fontSize: 15 });
+text(s, [{ text: "目的関数　", options: { bold: true, color: BLUE_DARK } }, { text: "1週間の総費用を最小にする" }], { x: 0.6, y: 2.15, w: 12.1, h: 0.4, fontSize: 15 });
+const EQW = 7.6, EQH = EQW * 0.763 / 7.273;
+s.addImage({ path: path.join(__dirname, "..", "2026-11-12_three_party", "eq", "objective.png"), x: 0.9, y: 2.55, w: EQW, h: EQH,
+  altText: "目的関数：車両使用費、電気代と上限超過の費用、燃料代、CO2の費用の和を最小化" });
+caption(s, "左から車両使用費（u：車両kを日dに使うか）、電気代と超過費用（g：時刻tの買電量、s：超過量）、燃料代（f：便jの軽油）、CO₂の費用（Q：排出量）。c・p・πは単価。CO₂の費用は計算の中だけで用い、示す総費用には含めない。主な制約：便の接続（到着＋折返し＋回送 ≦ 次の発車）、電池残量、充電器10基、受電上限（超過分は費用）",
+  0.6, 2.55 + EQH + 0.05, 12.1, 0.7);
+const STEPS = [
+  ["① 便割当", ["1,704便を60台に割り当てる", "整数計画と、割当を部分的に組み直す探索"]],
+  ["② 前日の計画", ["割当を固定し、15分ごとの充電を決める", "太陽光は平年値で予測"]],
+  ["③ 毎時の立て直し", ["実際の日射で1時間ごとに計画し直す", "最終日の翌朝まで174〜175回"]],
+  ["④ 集計", ["実行した結果で費用とCO₂を数える", "2通りの初期割当の安い方を採用"]]];
+const FY = 4.3, FH = 1.95, FGAP = 0.3, FBW = (12.1 - FGAP * 3) / 4;
+STEPS.forEach(([hd, body], i) => {
+  const bx = 0.6 + i * (FBW + FGAP);
+  s.addShape(pres.shapes.RECTANGLE, { x: bx, y: FY, w: FBW, h: FH, fill: { color: "F4F7FA" }, line: { color: BLUE, width: 1.25 } });
+  s.addShape(pres.shapes.RECTANGLE, { x: bx, y: FY, w: FBW, h: 0.5, fill: { color: i === 3 ? BLUE_DARK : BLUE }, line: { color: BLUE, width: 1.25 } });
+  text(s, hd, { x: bx + 0.05, y: FY, w: FBW - 0.1, h: 0.5, fontSize: 15, bold: true, color: "FFFFFF", align: "center", valign: "middle" });
+  bullets(s, body, { x: bx + 0.12, y: FY + 0.6, w: FBW - 0.22, h: FH - 0.7, fontSize: 13, paraSpaceAfter: 4, lineSpacingMultiple: 1.1 });
+  if (i < 3) s.addShape(pres.shapes.ISOSCELES_TRIANGLE, { x: bx + FBW + 0.06, y: FY + FH / 2 - 0.12, w: 0.18, h: 0.24, rotate: 90, fill: { color: BLUE }, line: { color: BLUE } });
+});
+caption(s, "計算の流れ（ソルバーはGurobi）。蓄電池は決めた規則で充放電し、最適化していない。2通りの初期割当の理由と比較は補足A2", 0.6, FY + FH + 0.1, 12.1);
 
 // ---- 5. Results: share and cost table
 s = page("結果　受電上限が400 kW以上なら電気バスが9割超を担当");
@@ -130,7 +161,7 @@ caption(s, "図1　電気バスが担当した便の割合（全1,704便）", 0.
 caption(s, "表1　1週間の総費用［万円］（車両・電気・燃料・上限超過の費用）。＊は燃料バスを多く使う解", 7.0, 4.95, 5.7, 0.7);
 bullets(s, [
   `受電上限が400 kW以上なら、電気バスが便の${rngTxt(bevWins.map((r) => r.bev_trip_share_pct), 1)}%を担当し、総費用も小さかった`,
-  `上限の低い${iceWins.map(lab).join("・")}（＊）では燃料バスを多く使う解が安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%。90 kW冬では、電気バスを多く使う解に比べCO₂が約${co2Ratio}倍（補足A3）`],
+  `上限の低い${iceWins.map(lab).join("・")}（＊）では燃料バスを多く使う解が安く、電気バスの担当便は${rngTxt(iceWins.map((r) => r.bev_trip_share_pct))}%。90 kW冬では、電気バスを多く使う解に比べCO₂が約${co2Ratio}倍（補足A2）`],
   { x: 0.6, y: 5.65, w: 12.1, h: 0.95, fontSize: 14, paraSpaceAfter: 2 });
 caption(s, PROVISIONAL, 0.6, 6.68, 12.1, 0.3);
 
@@ -234,23 +265,9 @@ s.addTable([
   tableOpts({ x: 0.6, y: 1.55, w: 12.1, colW: [2.2, 9.9], fontSize: 14, rowH: 0.65 }));
 caption(s, "今回お示しした数値は旧版の計算（30円/kWh込み）の結果で、この表の条件で全ケースを計算し直しています", 0.6, 6.3, 12.1);
 
-// ---- A2. Method (appendix)
-s = page("補足A2　計算方法");
-const FLOW = [["① 便割当", "1,704便を60台に割り当てる"], ["② 前日の計画", "割当を固定し、15分ごとの充電を決める"], ["③ 毎時の立て直し", "実際の日射で1時間ごとに計画し直す"], ["④ 集計", "実行した結果で費用・CO₂を数える"]];
-FLOW.forEach(([h, b], i) => {
-  const x = 0.6 + i * 3.1;
-  box(s, x, 1.7, 2.75, 1.6);
-  text(s, h, { x: x + 0.15, y: 1.8, w: 2.45, h: 0.45, fontSize: 16, bold: true, color: BLUE_DARK, align: "center" });
-  text(s, b, { x: x + 0.15, y: 2.3, w: 2.45, h: 0.9, fontSize: 14, align: "center" });
-  if (i < FLOW.length - 1) arrow(s, x + 2.78, 2.5, 0.28);
-});
-heading(s, "限られた計算時間で良い解を得る工夫", 3.65);
-text(s, "便割当は問題が大きく、制限時間内に最適解かどうかを確かめられない。探索は最初に与えた割当に近い解にとどまりやすいため、性質の異なる「電気バス優先」と「燃料バス優先」の2通りの割当から始め、総費用の安い方を採用する。",
-  { x: 0.6, y: 4.1, w: 12.1, h: 1.4, fontSize: 16 });
-caption(s, "求解にはGurobiを用いた。蓄電池は決めた規則で充放電し、最適化していない", 0.6, 6.4, 12.1);
-
-// ---- A3. Two solutions compared, and caveats (appendix)
-s = page("補足A3　2通りの解の比較と、結果の扱い");
+// ---- A2. Why two initial assignments, the two solutions compared, and caveats (appendix)
+s = page("補足A2　2通りの初期割当と、結果の扱い");
+text(s, "便割当は問題が大きく、制限時間内に最適と確かめられない。探索は最初の割当に近い解にとどまりやすいため、性質の異なる「電気バス優先」と「燃料バス優先」の2通りの初期割当から始め、総費用の安い方を採用した。", { x: 0.6, y: 1.5, w: 12.1, h: 0.65, fontSize: 13 });
 const COLS = [["900 kW冬", p9b, "電気バス優先"], ["900 kW冬", p9i, "燃料バス優先"], ["90 kW冬", p90b, "電気バス優先"], ["90 kW冬", p90i, "燃料バス優先"]];
 const adopted = [tc(p9b) <= tc(p9i), tc(p9i) < tc(p9b), tc(p90b) <= tc(p90i), tc(p90i) < tc(p90b)];
 const c3 = (t, i) => ({ text: t, options: { align: "center", bold: adopted[i], color: adopted[i] ? BLUE_DARK : INK } });
@@ -258,17 +275,17 @@ const row3 = (label, f) => [B(label), ...COLS.map(([, r], i) => c3(f(r), i))];
 s.addTable([[H("受電上限・季節"), ...COLS.map(([n]) => H(n))], [B("初期割当"), ...COLS.map(([, , n], i) => c3(n, i))],
   row3("総費用", (r) => `${man(tc(r))}万円`), row3("電気バス担当便", (r) => `${r.bev_trip_share_pct.toFixed(1)}%`),
   row3("CO₂", (r) => `${fmt(r.total_co2_kg)} kg`), row3("上限の超過", (r) => `${fmt(r.contract_over_limit_kwh)} kWh`)],
-  tableOpts({ x: 0.6, y: 1.5, w: 12.1, colW: [2.5, 2.4, 2.4, 2.4, 2.4], fontSize: 14, rowH: 0.45 }));
-caption(s, "表A3　2通りの初期割当から得た解（1週間）。青字が採用した方", 0.6, 4.25, 12.1, 0.35);
+  tableOpts({ x: 0.6, y: 2.2, w: 12.1, colW: [2.5, 2.4, 2.4, 2.4, 2.4], fontSize: 13, rowH: 0.4 }));
+caption(s, "表A2　2通りの初期割当から得た解（1週間）。青字が採用した方", 0.6, 4.65, 12.1, 0.35);
 bullets(s, [
   `900 kW冬では、電気バスを多く使う解が${man(tc(p9i) - tc(p9b))}万円安く、CO₂は${Math.round((1 - p9b.total_co2_kg / p9i.total_co2_kg) * 100)}%少ない。90 kW冬では燃料バスを多く使う解が約${Math.round((tc(p90b) - tc(p90i)) / 1e4)}万円安いが、CO₂は約${co2Ratio}倍`,
   `上限の超過は、曇りの日の翌未明、蓄電池が空の時間に集中した（90 kW冬・電気バスを多く使う解で${fmt(p90b.contract_over_limit_kwh)} kWh/週）`,
   `数値は暫定値（診断用）で、研究の結論には使っていない。便割当は最適と確認できておらず、2段階で解くため全体の最適でもない。毎時の立て直しは最大${maxTimeouts}回（1週間174〜175回中）が時間切れ`,
   "超過の費用（500円/kWh）と電力のCO₂排出係数（0.5 kg/kWh）は仮の値で、今後感度を調べる"],
-  { x: 0.6, y: 4.65, w: 12.1, h: 2.3, fontSize: 13, paraSpaceAfter: 4 });
+  { x: 0.6, y: 5.0, w: 12.1, h: 1.95, fontSize: 12, paraSpaceAfter: 3 });
 
-// ---- A4. Glossary (appendix): power and optimization terms only
-s = page("補足A4　用語（電力・最適化）");
+// ---- A3. Glossary (appendix): power and optimization terms only
+s = page("補足A3　用語（電力・最適化）");
 s.addTable([
   [B("受電電力・受電上限"), "営業所が電力会社から受け取る電力（kW）と、その目安。本研究では、上限を超えた電力量に費用を課している"],
   [B("kW と kWh"), "kWはある時点の電力の大きさ、kWhは使用した電力量（kW × 時間）"],
