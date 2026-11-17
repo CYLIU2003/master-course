@@ -104,7 +104,7 @@ def read_case(limit, week, start, case):
     return row, bands
 
 
-def main():
+def main(out_path=None, annotate=None):
     pairs, bands = [], {}
     for (limit, week, start), case in sorted(CASES.items()):
         row, b = read_case(limit, week, start, case)
@@ -140,7 +140,9 @@ def main():
     out = {"versions": VERSION, "limits": list(LIMITS), "cases": cases, "pairs": pairs, "ice_by_hour": ice, "rolling": rolling,
            "qf2": qf2, "diesel": old["diesel"], "audit": old["audit"], "hindsight": old["hindsight"], "first_attempt_failures": FIRST_ATTEMPT_FAILURES,
            "rc20_only": ["diesel", "audit", "hindsight"]}
-    (HERE / "deck_data_latest.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    if annotate:
+        annotate(out)
+    (out_path or HERE / "deck_data_latest.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print("pairs", sum(r["status"] == "VERIFIED" for r in pairs), "/", len(pairs), "cases",
           sum(r["status"] == "VERIFIED" for r in cases), "/", len(cases))
     for r in pairs:
