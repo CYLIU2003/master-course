@@ -2,6 +2,8 @@
 // pillar-C directions, questions, thanks; technical details in the appendix).
 // Revised 2026-11-16 after a Gemini review: polite wording, consultation purpose up front, pillar-C candidates
 // re-ordered by their link to his published work (mobility, universal design, electric full-flat bus, co-creation).
+// Revised 2026-11-17 after a second Gemini review (naturalness): label bands, check marks and repeated formulaic honorifics removed;
+// slide 2 shows the three pillars and schedule; the result slide carries the bridge to pillar C; no separate thanks slide (main deck = 9 slides).
 // Data: the verified cases used by the midterm poster (DIAGNOSTIC, earlier versions, 30 JPY/kWh series); totals exclude the CO2 cost.
 const path = require("path");
 const fs = require("fs");
@@ -72,82 +74,79 @@ text(s, "研究の進捗のご報告と、3本目の柱についてのご相談"
 s.addShape(pres.shapes.LINE, { x: 0.9, y: 4.35, w: 11.5, h: 0, line: { color: BLUE, width: 3 } });
 text(s, "2026年11月\n東京都市大学 大学院 修士1年　劉 承洋", { x: 0.9, y: 4.6, w: 11.5, h: 1.0, fontSize: 17, color: SUB });
 
-// ---- 2. Purpose of today's consultation
-s = page("本日のご相談の内容");
-box(s, 0.6, 1.6, 12.1, 1.5, "DCEBF7");
-text(s, [{ text: "本日お伺いしたいこと", options: { bold: true, color: BLUE_DARK, breakLine: true } },
-  { text: "これまで電力と費用の面から研究を進めてまいりました。3本目の柱（柱C）では、利用者や地域にとっての価値という視点を取り入れたいと考えております。その方向性について、ご助言を賜れますと幸いです。", options: { fontSize: 16 } }],
-  { x: 0.85, y: 1.72, w: 11.6, h: 1.3, fontSize: 17 });
-heading(s, "本日の流れ", 3.45);
-const AGENDA = [["1", "研究の概要と最新の結果", "約5分（スライド3〜7）"], ["2", "先生のご研究から学ばせていただきたいこと", "スライド8"], ["3", "3本目の柱の方向性（案）", "スライド9"], ["4", "ご助言を賜りたい点", "スライド10"]];
-AGENDA.forEach(([n, t, d], i) => {
-  const y = 3.95 + i * 0.68;
-  s.addShape(pres.shapes.OVAL, { x: 0.7, y: y + 0.04, w: 0.42, h: 0.42, fill: { color: BLUE }, line: { color: BLUE } });
-  text(s, n, { x: 0.7, y: y + 0.04, w: 0.42, h: 0.42, fontSize: 15, bold: true, color: "FFFFFF", align: "center", valign: "middle" });
-  text(s, t, { x: 1.35, y, w: 7.4, h: 0.5, fontSize: 17, valign: "middle" });
-  text(s, d, { x: 8.9, y, w: 3.8, h: 0.5, fontSize: 14, color: SUB, valign: "middle", align: "right" });
-});
-caption(s, "計算条件などの詳しい内容は、末尾の補足スライドにまとめております", 0.6, 6.6, 12.1);
-
-// ---- 3. Background (2026-11-17: picture-first for a mobility / universal-design audience; few technical words)
+// ---- helpers for the picture-first main slides
 const ICON = (n) => { const p = path.join(__dirname, "icons", `${n}.png`); return fs.existsSync(p) ? p : path.join(__dirname, "..", "2026-11-28_midterm_poster", "icons", `${n}.png`); };
 const icon = (s, n, x, y, w, alt) => s.addImage({ path: ICON(n), x, y, w, h: w, altText: alt || n });
 const card = (s, x, y, w, h, fill = BLUE_PALE) => s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.08, fill: { color: fill }, line: { color: GRID, width: 0.75 } });
 const down = (s, x, y) => s.addShape(pres.shapes.ISOSCELES_TRIANGLE, { x, y, w: 0.34, h: 0.2, rotate: 180, fill: { color: GREY }, line: { color: GREY } });
 const right = (s, x, y) => s.addShape(pres.shapes.ISOSCELES_TRIANGLE, { x, y, w: 0.3, h: 0.22, rotate: 90, fill: { color: BLUE }, line: { color: BLUE } });
 
-s = page("研究の背景　路線バスの電動化と、営業所での充電");
+// ---- 2. Today's purpose and the whole research (2026-11-17: agenda list replaced by the three pillars and their schedule)
+s = page("今日のご相談と、研究の全体");
+box(s, 0.6, 1.55, 12.1, 1.1, "DCEBF7");
+text(s, "これまで電力と費用の面から研究を進めてきました。3本目の柱（柱C）では、利用者や地域にとっての価値も考えたいと思っています。その方向性について、ご相談させてください。",
+  { x: 0.85, y: 1.6, w: 11.6, h: 1.0, fontSize: 16, valign: "middle" });
+heading(s, "研究の3本の柱と予定", 2.95);
+const hiC = { fill: { color: "DCEBF7" } };
+s.addTable([
+  [H("柱"), H("内容"), H("予定")],
+  [{ text: "A", options: { bold: true, align: "center" } }, "受け取れる電力の上限と、電気バスの担当便・費用・CO₂", "11/28 中間発表（再計算中）\n2027年3月 電気学会全国大会"],
+  [{ text: "B", options: { bold: true, align: "center" } }, "1日ずつと数日まとめての計画の比較、蓄電池の使い方", "2027年度 学会発表\n2027年11月 修士2年中間発表"],
+  [{ text: "C", options: { bold: true, align: "center", ...hiC } }, { text: "利用者・地域にとっての価値（今日ご相談したい点）", options: { bold: true, color: BLUE_DARK, ...hiC } }, { text: "2028年2月 修士最終発表\n（設備の決め方の指針とあわせて）", options: hiC }]],
+  tableOpts({ x: 0.6, y: 3.35, w: 12.1, colW: [0.9, 6.6, 4.6], fontSize: 14, rowH: [0.5, 0.72, 0.72, 0.72] }));
+caption(s, "今日は、結果を5分ほどでご報告したあと、柱Cについてご相談させてください。計算条件などの詳細は、末尾の補足にまとめています。", 0.6, 6.45, 12.1);
+
+// ---- 3. Background (picture-first; plain sentences, no label bands)
+s = page("研究の背景");
 card(s, 0.6, 1.5, 3.9, 0.45, "DCEBF7");
-text(s, "2050年カーボンニュートラル宣言（2020年10月）", { x: 0.65, y: 1.5, w: 3.8, h: 0.45, fontSize: 11, bold: true, color: BLUE_DARK, valign: "middle", align: "center" });
+text(s, "2050年カーボンニュートラル（2020年10月宣言）", { x: 0.65, y: 1.5, w: 3.8, h: 0.45, fontSize: 11, bold: true, color: BLUE_DARK, valign: "middle", align: "center" });
 s.addChart(pres.charts.DOUGHNUT, [{ name: "CO₂排出量", labels: ["運輸部門", "その他"], values: [19.3, 80.7] }],
   { x: 0.75, y: 2.05, w: 3.6, h: 3.3, holeSize: 62, chartColors: [BLUE, "DDDDDD"], showLegend: false, showValue: false, showPercent: false, showTitle: false, dataBorder: { pt: 1, color: "FFFFFF" } });
 text(s, "19.3%", { x: 0.75, y: 3.3, w: 3.6, h: 0.55, fontSize: 30, bold: true, color: BLUE_DARK, align: "center", valign: "middle" });
 text(s, "運輸部門", { x: 0.75, y: 3.85, w: 3.6, h: 0.35, fontSize: 13, color: SUB, align: "center" });
-text(s, [{ text: "日本のCO₂排出量のうち運輸部門が19.3%", options: { breakLine: true } }, { text: "その約86%は自動車", options: { bold: true } }],
-  { x: 0.6, y: 5.4, w: 3.9, h: 0.6, fontSize: 13, align: "center" });
+text(s, "日本のCO₂排出量に占める運輸部門の割合\nそのうち約86%が自動車", { x: 0.6, y: 5.4, w: 3.9, h: 0.6, fontSize: 13, align: "center" });
 caption(s, "2024年度、国土交通省", 0.6, 6.0, 3.9, 0.3);
 const BG = [
-  [["ebus", "dbus"], "電気バスは少しずつ導入", "一度には替えられず、当面は燃料バスと一緒に走る"],
-  [["moon", "charger", "ebus"], "夜、営業所でまとめて充電", "多くの電気バスを同じ時間に充電する"],
-  [["grid"], "営業所が受け取る電力が大きくなる", "受電設備の増強や、電気料金の負担につながる"]];
-BG.forEach(([ics, h, b], i) => {
+  [["ebus", "dbus"], "電気バスは一度には入れ替えられないので、\nしばらくは燃料バスと一緒に走ります"],
+  [["moon", "charger", "ebus"], "電気バスは夜、営業所でまとめて充電します"],
+  [["grid"], "そのぶん営業所が受け取る電力が大きくなり、\n設備の増強や電気料金の負担になります"]];
+BG.forEach(([ics, t], i) => {
   const y = 1.5 + i * 1.45;
   card(s, 4.9, y, 7.8, 1.15);
   ics.forEach((n, k) => icon(s, n, 5.05 + k * 0.85, y + 0.17, 0.8));
-  text(s, [{ text: h, options: { bold: true, color: BLUE_DARK, fontSize: 18, breakLine: true } }, { text: b, options: { fontSize: 14, color: INK } }],
-    { x: 7.75, y: y + 0.12, w: 4.85, h: 0.95, valign: "middle" });
+  text(s, t, { x: 7.75, y: y + 0.1, w: 4.8, h: 0.95, fontSize: 16, valign: "middle" });
   if (i < BG.length - 1) down(s, 8.6, y + 1.2);
 });
-card(s, 4.9, 5.95, 7.8, 0.75, "DCEBF7");
-text(s, [{ text: "目指すこと　", options: { bold: true, color: BLUE_DARK } }, { text: "今の時刻表どおりに走らせたまま、受け取る電力を抑えて、電動化でCO₂を減らす" }],
-  { x: 5.1, y: 5.95, w: 7.5, h: 0.75, fontSize: 15, valign: "middle" });
+text(s, "そこで、今の時刻表どおりに走らせながら受け取る電力を抑え、\n電気バスでCO₂を減らす計画を考えています。",
+  { x: 4.9, y: 5.95, w: 7.8, h: 0.75, fontSize: 15, bold: true, color: BLUE_DARK, valign: "middle" });
 
 // ---- 4. Target (route map = poster Fig. 2)
-s = page("対象　東急バス 渋21〜23系統と弦巻営業所");
+s = page("東急バスの渋21〜23系統と弦巻営業所を対象にしました");
 const MAPW = 6.4, MAPH = MAPW * 1409 / 2700;
 s.addImage({ path: path.join(__dirname, "..", "2026-11-28_midterm_poster", "route_map_ja_poster.png"), x: 0.6, y: 1.5, w: MAPW, h: MAPH,
   altText: "渋21・渋22・渋23の路線図と弦巻営業所の位置" });
 text(s, "停留所の位置は公共交通オープンデータ（ODPT）、停留所の間は直線。背景は © OpenStreetMap contributors", { x: 0.6, y: 1.5 + MAPH + 0.05, w: MAPW, h: 0.4, fontSize: 10, color: SUB });
-const TILES = [["ebus", "電気バス", "35台"], ["dbus", "燃料バス", "25台"], ["calendar", "1週間の便", "1,704便"], ["charger", "充電器", "10基"], ["pv", "太陽光パネル", "設置を想定"], ["battery", "蓄電池", "設置を想定"]];
+const TILES = [["ebus", "電気バス", "35台"], ["dbus", "燃料バス", "25台"], ["calendar", "1週間の便", "1,704便"], ["charger", "充電器", "10基"]];
 TILES.forEach(([n, l, v], i) => {
   const x = 7.3 + (i % 2) * 2.75, y = 1.5 + Math.floor(i / 2) * 0.98;
   card(s, x, y, 2.6, 0.86);
   icon(s, n, x + 0.1, y + 0.1, 0.66);
   text(s, [{ text: l, options: { fontSize: 11, color: SUB, breakLine: true } }, { text: v, options: { fontSize: 17, bold: true, color: INK } }], { x: x + 0.85, y: y + 0.06, w: 1.7, h: 0.76, valign: "middle", lineSpacingMultiple: 1.0 });
 });
-text(s, "比べる条件", { x: 7.3, y: 4.5, w: 5.4, h: 0.35, fontSize: 14, bold: true, color: BLUE_DARK });
+card(s, 7.3, 3.46, 5.35, 0.86);
+icon(s, "pv", 7.4, 3.56, 0.66); icon(s, "battery", 8.1, 3.56, 0.66);
+text(s, "太陽光パネルと蓄電池は、\n営業所に設置すると想定しています", { x: 8.9, y: 3.46, w: 3.65, h: 0.86, fontSize: 12.5, valign: "middle" });
+text(s, "比べた条件", { x: 7.3, y: 4.5, w: 5.4, h: 0.35, fontSize: 14, bold: true, color: BLUE_DARK });
 [[7.3, 2.1, "営業所が受け取れる\n電力の上限（4段階）\n90・200・400・900 kW"], [9.7, 1.7, "季節\n冬・春・夏\n各1週間"], [11.7, 1.0, "12\n通り"]].forEach(([x, w, t], i) => {
   card(s, x, 4.9, w, 1.05, i === 2 ? "DCEBF7" : "FFFFFF");
   text(s, t, { x: x + 0.05, y: 4.9, w: w - 0.1, h: 1.05, fontSize: i === 2 ? 15 : 11.5, bold: i === 2, color: i === 2 ? BLUE_DARK : INK, align: "center", valign: "middle", lineSpacingMultiple: 1.05 });
 });
 text(s, "×", { x: 9.4, y: 4.9, w: 0.3, h: 1.05, fontSize: 18, color: SUB, align: "center", valign: "middle" });
 text(s, "＝", { x: 11.4, y: 4.9, w: 0.3, h: 1.05, fontSize: 18, color: SUB, align: "center", valign: "middle" });
-card(s, 0.6, 6.05, 12.1, 0.7, "DCEBF7");
-text(s, [{ text: "知りたいこと　", options: { bold: true, color: BLUE_DARK } }, { text: "受け取れる電力の上限によって、電気バスが担当できる便・費用・CO₂がどう変わるか" }],
-  { x: 0.8, y: 6.05, w: 11.8, h: 0.7, fontSize: 15, valign: "middle" });
+text(s, "この12通りで、電気バスが担当できる便・費用・CO₂がどう変わるかを比べました。", { x: 0.6, y: 6.2, w: 12.1, h: 0.5, fontSize: 15, bold: true, color: BLUE_DARK, valign: "middle" });
 
-// ---- 5. What is decided (plain-language picture; the formula and the poster's Fig. 1 are in appendix A2)
-s = page("計算で決めること　どのバスがどの便を走り、いつ充電するか");
+// ---- 5. What is decided (plain-language picture; the formula and the flow are in appendix A2)
+s = page("どのバスがどの便を走り、いつ充電するかを計算で決めます");
 text(s, "イメージ図（1日の計画の例。実際の計算結果ではありません）", { x: 0.6, y: 1.45, w: 7.9, h: 0.3, fontSize: 11, color: SUB });
 const XA = 2.15, XB = 8.35, hx = (h) => XA + (h - 5) / 24 * (XB - XA);
 const LANES = [
@@ -155,125 +154,86 @@ const LANES = [
   ["ebus", "電気バス②", [[7, 10.2, "T"], [10.6, 13.5, "C"], [17, 21, "T"], [22.5, 28.5, "C"]]],
   ["dbus", "燃料バス", [[6.4, 12, "T2"], [13, 20.5, "T2"]]]];
 LANES.forEach(([n, lab, bars], i) => {
-  const y = 1.9 + i * 0.72;
-  icon(s, n, 0.6, y, 0.48);
-  text(s, lab, { x: 1.1, y, w: 1.05, h: 0.48, fontSize: 11.5, valign: "middle" });
-  s.addShape(pres.shapes.LINE, { x: XA, y: y + 0.24, w: XB - XA, h: 0, line: { color: GRID, width: 0.75 } });
+  const y = 2.0 + i * 0.95;
+  icon(s, n, 0.6, y, 0.55);
+  text(s, lab, { x: 1.15, y, w: 1.0, h: 0.55, fontSize: 11.5, valign: "middle" });
+  s.addShape(pres.shapes.LINE, { x: XA, y: y + 0.27, w: XB - XA, h: 0, line: { color: GRID, width: 0.75 } });
   bars.forEach(([a, b, k]) => {
     const fill = k === "C" ? "F2A900" : k === "T2" ? GREY : BLUE;
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: hx(a), y: y + 0.04, w: hx(b) - hx(a), h: 0.4, rectRadius: 0.06, fill: { color: fill }, line: { color: fill } });
-    text(s, k === "C" ? "充電" : "便", { x: hx(a), y: y + 0.04, w: hx(b) - hx(a), h: 0.4, fontSize: 10.5, bold: true, color: "FFFFFF", align: "center", valign: "middle" });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: hx(a), y: y + 0.02, w: hx(b) - hx(a), h: 0.5, rectRadius: 0.06, fill: { color: fill }, line: { color: fill } });
+    text(s, k === "C" ? "充電" : "便", { x: hx(a), y: y + 0.02, w: hx(b) - hx(a), h: 0.5, fontSize: 11, bold: true, color: "FFFFFF", align: "center", valign: "middle" });
   });
 });
-s.addShape(pres.shapes.LINE, { x: XA, y: 4.08, w: XB - XA, h: 0, line: { color: SUB, width: 1 } });
-[[6, "6時"], [12, "12時"], [18, "18時"], [24, "0時"], [28, "4時"]].forEach(([h, l]) => text(s, l, { x: hx(h) - 0.4, y: 4.12, w: 0.8, h: 0.3, fontSize: 10.5, color: SUB, align: "center" }));
+s.addShape(pres.shapes.LINE, { x: XA, y: 4.75, w: XB - XA, h: 0, line: { color: SUB, width: 1 } });
+[[6, "6時"], [12, "12時"], [18, "18時"], [24, "0時"], [28, "4時"]].forEach(([h, l]) => text(s, l, { x: hx(h) - 0.4, y: 4.8, w: 0.8, h: 0.3, fontSize: 10.5, color: SUB, align: "center" }));
 [[BLUE, "電気バスが走る便"], [GREY, "燃料バスが走る便"], ["F2A900", "充電"]].forEach(([c, l], i) => {
-  s.addShape(pres.shapes.RECTANGLE, { x: 2.2 + i * 2.1, y: 4.55, w: 0.25, h: 0.2, fill: { color: c }, line: { color: c } });
-  text(s, l, { x: 2.5 + i * 2.1, y: 4.5, w: 1.8, h: 0.3, fontSize: 11 });
+  s.addShape(pres.shapes.RECTANGLE, { x: 2.2 + i * 2.1, y: 5.25, w: 0.25, h: 0.2, fill: { color: c }, line: { color: c } });
+  text(s, l, { x: 2.5 + i * 2.1, y: 5.2, w: 1.8, h: 0.3, fontSize: 11 });
 });
 card(s, 8.8, 1.5, 3.9, 2.6);
-text(s, [{ text: "守ること", options: { bold: true, color: BLUE_DARK, breakLine: true } },
-  ...["時刻表の便はすべて走らせる", "途中で電池が足りなくならない", "充電器は10基まで", "受け取る電力の上限を守る（超えた分は費用）"].map((t, i, a) => ({ text: "✓ " + t, options: { breakLine: i < a.length - 1 } }))],
-  { x: 9.0, y: 1.6, w: 3.6, h: 2.45, fontSize: 13.5, paraSpaceAfter: 5 });
-card(s, 8.8, 4.25, 3.9, 0.95, "DCEBF7");
-text(s, [{ text: "選び方", options: { bold: true, color: BLUE_DARK, breakLine: true } }, { text: "1週間の費用（車両・電気代・燃料代）がいちばん安い組み合わせを計算機で探す" }],
-  { x: 9.0, y: 4.25, w: 3.6, h: 0.95, fontSize: 12.5, valign: "middle" });
-const STEP3 = [["1週間の担当と充電を決める", "calendar"], ["実際の天気に合わせて、1時間ごとに充電を見直す", "sun"], ["実際にかかった費用とCO₂を数える", "plan"]];
-STEP3.forEach(([t, n], i) => {
-  const x = 0.6 + i * 4.15;
-  card(s, x, 5.4, 3.8, 1.0, "FFFFFF");
-  icon(s, n, x + 0.12, 5.55, 0.7);
-  text(s, `${"①②③"[i]} ${t}`, { x: x + 0.95, y: 5.4, w: 2.8, h: 1.0, fontSize: 13, valign: "middle" });
-  if (i < 2) right(s, x + 3.85, 5.79);
-});
-caption(s, "計算の式と詳しい流れ（ポスターの図1）は補足A2", 0.6, 6.55, 12.1, 0.3);
+text(s, [{ text: "計算の条件", options: { bold: true, color: BLUE_DARK, breakLine: true } },
+  ...["時刻表の便はすべて走らせる", "途中で電池切れにならない", "充電器は10基まで", "受け取る電力の上限を守る（超えた分は費用として数える）"].map((t, i, a) => ({ text: t, options: { bullet: { indent: 14 }, breakLine: i < a.length - 1 } }))],
+  { x: 9.0, y: 1.6, w: 3.6, h: 2.45, fontSize: 13, paraSpaceAfter: 4 });
+card(s, 8.8, 4.25, 3.9, 1.25, "DCEBF7");
+text(s, [{ text: "選ぶ基準", options: { bold: true, color: BLUE_DARK, breakLine: true } }, { text: "条件の中で、1週間の費用\n（車両・電気・燃料）が\nいちばん安い組み合わせを選ぶ" }],
+  { x: 9.0, y: 4.3, w: 3.6, h: 1.15, fontSize: 12.5, valign: "middle" });
+text(s, "実際には、まず1週間分を決めてから、実際の天気に合わせて1時間ごとに充電を見直し、\nかかった費用とCO₂を数えています（式と流れは補足A2）。",
+  { x: 0.6, y: 5.75, w: 12.1, h: 0.8, fontSize: 14, valign: "middle" });
 
-// ---- 6. Results: one chart and two plain-language findings (cost table in appendix A4)
+// ---- 6. Results and what they suggest (bridge to pillar C; the cost table is in appendix A4)
 const shareLo = iceWins.map((r) => r.bev_trip_share_pct), shareHi = bevWins.map((r) => r.bev_trip_share_pct);
 if (Math.min(...shareHi) < 90) throw new Error("the '9割以上' wording no longer holds");
 const wari = `${Math.floor(Math.min(...shareLo) / 10)}〜${Math.ceil(Math.max(...shareLo) / 10)}割`;
-s = page("結果　受け取れる電力の上限に余裕があれば、電気バスが9割以上を担当");
+s = page("電力の上限に余裕があれば、電気バスが9割以上の便を担当");
 s.addChart(pres.charts.BAR, SEASONS.map(([w, n]) => ({ name: n, labels: LIMITS.map((g) => `${g} kW`), values: LIMITS.map((g) => (get(g, w) ? Math.round(get(g, w).bev_trip_share_pct * 10) / 10 : null)) })),
-  chart({ x: 0.6, y: 1.45, w: 6.6, h: 4.55, barDir: "col", barGrouping: "clustered", chartColors: [BLUE_DARK, BLUE_LIGHT, GREY], catAxisLabelFontSize: 14, valAxisLabelFontSize: 13, legendFontSize: 14,
-    valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showValAxisTitle: true, valAxisTitle: "電気バスが担当した便の割合 [%]", showCatAxisTitle: true, catAxisTitle: "営業所が受け取れる電力の上限", valAxisTitleFontSize: 13, catAxisTitleFontSize: 13 }));
-caption(s, "1週間 1,704便のうち、電気バスが担当した便の割合", 0.6, 6.0, 6.6, 0.3);
-card(s, 7.5, 1.6, 5.2, 2.0);
-icon(s, "ebus", 7.65, 1.8, 1.0);
-text(s, [{ text: "上限に余裕がある（400 kW以上）", options: { bold: true, color: BLUE_DARK, fontSize: 16, breakLine: true } },
-  { text: "電気バスが9割以上の便を担当し、費用もいちばん安い", options: { fontSize: 15 } }], { x: 8.8, y: 1.7, w: 3.8, h: 1.8, valign: "middle" });
-card(s, 7.5, 3.8, 5.2, 2.2);
-icon(s, "dbus", 7.65, 4.0, 1.0);
-text(s, [{ text: "上限が低い場合", options: { bold: true, color: BLUE_DARK, fontSize: 16, breakLine: true } }, { text: `（${iceWins.map(lab).join("・")}）`, options: { color: SUB, fontSize: 12, breakLine: true } },
-  { text: `燃料バスを多く使う方が安くなり、電気バスは${wari}の便のみ。ただし90 kWの冬では、CO₂が約${co2Ratio}倍に`, options: { fontSize: 14 } }], { x: 8.8, y: 3.9, w: 3.8, h: 2.0, valign: "middle" });
-caption(s, PROVISIONAL + "。各ケースの費用は補足A4", 0.6, 6.45, 12.1, 0.5);
+  chart({ x: 0.6, y: 1.4, w: 6.6, h: 3.95, barDir: "col", barGrouping: "clustered", chartColors: [BLUE_DARK, BLUE_LIGHT, GREY], catAxisLabelFontSize: 13, valAxisLabelFontSize: 12, legendFontSize: 13,
+    valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 20, showValAxisTitle: true, valAxisTitle: "電気バスが担当した便の割合 [%]", showCatAxisTitle: true, catAxisTitle: "営業所が受け取れる電力の上限", valAxisTitleFontSize: 12, catAxisTitleFontSize: 12 }));
+caption(s, "1週間 1,704便のうち、電気バスが担当した便の割合", 0.6, 5.35, 6.6, 0.3);
+card(s, 7.5, 1.5, 5.2, 1.75);
+icon(s, "ebus", 7.65, 1.85, 1.0);
+text(s, [{ text: "400 kW以上", options: { bold: true, color: BLUE_DARK, fontSize: 16, breakLine: true } },
+  { text: "電気バスが9割以上の便を担当し、費用もいちばん安くなりました", options: { fontSize: 14 } }], { x: 8.8, y: 1.55, w: 3.8, h: 1.65, valign: "middle" });
+card(s, 7.5, 3.4, 5.2, 1.95);
+icon(s, "dbus", 7.65, 3.85, 1.0);
+text(s, [{ text: "上限が低いとき", options: { bold: true, color: BLUE_DARK, fontSize: 16, breakLine: true } }, { text: `（${iceWins.map(lab).join("・")}）`, options: { color: SUB, fontSize: 12, breakLine: true } },
+  { text: `燃料バスを多く使う方が安くなり、電気バスは${wari}の便だけでした。ただし90 kWの冬では、CO₂が約${co2Ratio}倍になります`, options: { fontSize: 13.5 } }], { x: 8.8, y: 3.45, w: 3.8, h: 1.85, valign: "middle" });
+box(s, 0.6, 5.75, 12.1, 0.8, "DCEBF7");
+text(s, "電力の上限が低いと、電気バスに任せられる便は限られます。そのとき、限られた電気バスをどの便に使うのが利用者や地域にとって望ましいかは、電力と費用の計算だけでは決められないと感じ、3本目の柱としてご相談したいと考えました。",
+  { x: 0.8, y: 5.75, w: 11.7, h: 0.8, fontSize: 13.5, valign: "middle" });
+caption(s, "数値は条件をそろえる前の暫定値で、研究の結論には使っていません（全ケースを計算し直し中。各ケースの費用は補足A4）", 0.6, 6.62, 12.1, 0.3);
 
-// ---- 7. Bridge to pillar C, and the road map
-s = page("結果から見えてきたことと、今後の予定");
-card(s, 0.6, 1.5, 3.4, 1.45);
-icon(s, "ebus", 0.75, 1.62, 0.6);
-text(s, "受け取れる電力が少ないと、電気バスに任せられる便が限られる", { x: 1.45, y: 1.55, w: 2.45, h: 1.35, fontSize: 13, valign: "middle" });
-right(s, 4.05, 2.11);
-card(s, 4.45, 1.5, 4.9, 1.45, "DCEBF7");
-text(s, "限られた電気バスを、どの便に、どう使うのが、利用者や地域にとって望ましいか？", { x: 4.6, y: 1.5, w: 4.6, h: 1.45, fontSize: 16, bold: true, color: BLUE_DARK, valign: "middle", align: "center" });
-right(s, 9.4, 2.11);
-card(s, 9.8, 1.5, 2.9, 1.45);
-text(s, "電力と費用の計算だけでは決められない\n→ 3本目の柱でご相談", { x: 9.9, y: 1.5, w: 2.7, h: 1.45, fontSize: 13, valign: "middle", align: "center" });
-const PILLARS = [["柱A", "受け取れる電力の上限と、電気バスの担当便・費用・CO₂", "11/28 中間発表で報告（再計算中）"],
-  ["柱B", "1日ずつ計画する場合と、数日まとめて計画する場合の比較", "中間発表のあとに計算"],
-  ["柱C", "利用者・地域にとっての価値", "本日ご相談したい点"]];
-PILLARS.forEach(([p, t, st], i) => {
-  const x = 0.6 + i * 4.1;
-  card(s, x, 3.2, 3.9, 1.45, i === 2 ? "DCEBF7" : BLUE_PALE);
-  text(s, [{ text: p + "　", options: { bold: true, color: BLUE_DARK, fontSize: 16 } }, { text: t, options: { fontSize: 13, breakLine: true } }, { text: st, options: { fontSize: 12, color: i === 2 ? BLUE_DARK : SUB, bold: i === 2 } }],
-    { x: x + 0.15, y: 3.25, w: 3.6, h: 1.35, valign: "middle", paraSpaceAfter: 4 });
-});
-heading(s, "今後の予定", 4.85);
-const ROAD = [["2027年3月", "電気学会全国大会", "柱A"], ["2027年度", "学会発表（数回）", "柱B・蓄電池の使い方"], ["2027年11月", "修士2年中間発表", "柱Bの成果"], ["2028年2月", "修士最終発表", "設備の決め方の指針・柱C"]];
-ROAD.forEach(([when, where, what], i) => {
-  const x = 0.6 + i * 3.1;
-  card(s, x, 5.35, 2.8, 1.05, i === 3 ? "DCEBF7" : BLUE_PALE);
-  text(s, [{ text: `${when}　${where}`, options: { bold: true, color: BLUE_DARK, breakLine: true } }, { text: what, options: { fontSize: 12, color: SUB } }],
-    { x: x + 0.1, y: 5.42, w: 2.6, h: 0.9, fontSize: 13, align: "center", valign: "middle" });
-  if (i < ROAD.length - 1) right(s, x + 2.82, 5.76);
-});
-
-// ---- 8. What I hope to learn from Prof. Nishiyama's work
-s = page("先生のご研究から学ばせていただきたいこと");
-text(s, "先生のご研究について、公開されている論文・講義紹介を拝見した範囲で整理いたしました。誤りがございましたら、ご指摘いただけますと幸いです。",
-  { x: 0.6, y: 1.5, w: 12.1, h: 0.6, fontSize: 14, color: SUB });
+// ---- 7. What I hope to learn from Prof. Nishiyama's work
+s = page("先生のご研究から学びたいこと");
+text(s, "公開されている論文と講義紹介を拝見して、まとめました。読み違いがありましたら、ご指摘ください。",
+  { x: 0.6, y: 1.5, w: 12.1, h: 0.45, fontSize: 14, color: SUB });
 const WORKS = [
-  ["ebus", "乗り物の開発と普及", "段差のない電動フルフラットバスの試作と、その普及の研究。バス事業者への調査と利用者へのアンケートから、普及の形を整理 [1]"],
-  ["people", "地域との共創", "地域の方々と対話しながら、新しい移動のサービスを一緒につくる取り組み [2]"],
-  ["shop", "乗り物・営業所を地域に活かす", "使われなくなった乗り物や営業所の空きスペースを、地域の居場所や移動販売に活かす取り組み [2]"]];
+  ["ebus", "乗り物の開発と普及", "段差のない電動フルフラットバスを試作し、バス事業者への調査と利用者へのアンケートから普及の形を整理された研究 [1]"],
+  ["people", "地域との共創", "地域の方々と対話しながら、新しい移動のサービスを一緒につくる実践 [2]"],
+  ["shop", "乗り物や営業所を\n地域に活かす", "使われなくなった乗り物や営業所の空きスペースを、地域の居場所や移動販売に活かすお考え [2]"]];
 WORKS.forEach(([n, h, b], i) => {
   const x = 0.6 + i * 4.1;
-  card(s, x, 2.2, 3.9, 2.45);
-  icon(s, n, x + 0.2, 2.35, 0.75);
-  text(s, h, { x: x + 1.1, y: 2.35, w: 2.7, h: 0.75, fontSize: 14.5, bold: true, color: BLUE_DARK, valign: "middle" });
-  text(s, b, { x: x + 0.2, y: 3.2, w: 3.5, h: 1.4, fontSize: 13.5 });
+  card(s, x, 2.1, 3.9, 2.55);
+  icon(s, n, x + 0.2, 2.25, 0.75);
+  text(s, h, { x: x + 1.1, y: 2.25, w: 2.7, h: 0.75, fontSize: 14.5, bold: true, color: BLUE_DARK, valign: "middle" });
+  text(s, b, { x: x + 0.2, y: 3.1, w: 3.5, h: 1.5, fontSize: 14 });
 });
-card(s, 0.6, 4.85, 12.1, 1.3, "DCEBF7");
-text(s, [{ text: "本研究との接点", options: { bold: true, color: BLUE_DARK, breakLine: true } },
-  { text: "本研究は電気バスの使い方を電力と費用の面から計算してまいりましたが、利用者や地域にとっての価値を評価する視点がまだ十分ではありません。この点について、ご指導を賜りたく存じます。", options: { fontSize: 15 } }],
-  { x: 0.85, y: 4.95, w: 11.6, h: 1.15, fontSize: 16 });
+text(s, "私の研究は電力と費用の計算が中心で、利用者や地域にとっての価値をどう評価するかがまだ弱いと感じています。\nこの点について、ご指導いただきたいと考えています。",
+  { x: 0.6, y: 4.95, w: 12.1, h: 1.0, fontSize: 16, bold: true, color: BLUE_DARK, valign: "middle" });
 caption(s, "[1] T. Nishiyama, Int. J. Critical Infrastructures, Vol. 11, No. 2, pp. 136–147, 2015（電動フルフラットバスの試作と普及戦略）\n[2] 夢ナビ講義「走るスーパー・動く居場所　乗り物が変える地域の未来」（東京都市大学 都市生活学部）",
-  0.6, 6.3, 12.1, 0.6);
+  0.6, 6.25, 12.1, 0.6);
 
-// ---- 9. Directions for pillar C, one picture each
-s = page("3本目の柱の方向性（案）");
+// ---- 8. Pillar-C ideas, one picture and one short paragraph each
+s = page("3本目の柱（柱C）の案");
 const DIRS = [
-  ["① 運行のない時間の電気バスと営業所を、地域に活かす",
-    "運行していない時間の電気バスや、営業所の空きスペース・太陽光の電気を、地域の居場所や移動販売に使うとき、運行と両立できるのは何台・何時間・どれだけの電力までか（災害時の電源は、その応用）",
-    "次の運行に必要な電池を残したまま、地域で使える範囲"],
-  ["② ユニバーサルデザインの視点で、バスを割り当てる",
-    `受け取れる電力が少ないと、電気バスが走れる便は${rngTxt(shareLo)}%に限られる。乗り降りしやすい電気バス（例：フルフラット車）を一部に入れると仮定し、高齢の方や車いすの方が多い便を優先すると、費用やCO₂はどう変わるか`,
-    "優先したい便を電気バスが担当する割合と、費用・CO₂の変化"],
-  ["③ 現場や利用者の声から、計画の条件を決める",
-    "事業者へのヒアリングや利用者調査で、受け入れられる運用（車両の入れ替えの回数、運転士の休憩と充電の両立など）を先に調べ、計画の条件にする",
-    "条件を入れた計画と入れない計画の、費用や電気バスの担当便の差"]];
-DIRS.forEach(([h, q, m], i) => {
+  ["① 運行のない時間の電気バスと\n営業所を、地域に活かす",
+    "運行していない時間の電気バスや、営業所の空きスペース・太陽光の電気を、地域の居場所や移動販売に使う案です。次の運行に必要な電池を残したまま、何台・何時間・どれだけの電力まで使えるかを計算で確かめます。災害時の電源としての活用は、その応用と考えています。"],
+  ["② ユニバーサルデザインの\n視点で、バスを割り当てる",
+    `電気バスが走れる便は、電力の上限が低いと\n${rngTxt(shareLo)}%に限られます。乗り降りしやすい電気バス（例：フルフラット車）を一部に入れると仮定し、高齢の方や車いすの方が多い便を優先したとき、費用やCO₂がどう変わるかを調べます。燃料バスとの違い（段差・静かさ・揺れなど）の置き方もご相談したい点です。`],
+  ["③ 現場や利用者の声から、\n計画の条件を決める",
+    "事業者へのヒアリングや利用者調査で、受け入れられる運用（車両を入れ替える回数、運転士の休憩と充電の両立など）を先に調べます。それを条件に入れた計画と入れない計画で、費用や電気バスの担当便を比べます。"]];
+DIRS.forEach(([h, q], i) => {
   const x = 0.6 + i * 4.1, w = 3.9;
-  card(s, x, 1.5, w, 4.75, "FFFFFF");
+  card(s, x, 1.5, w, 4.8, "FFFFFF");
   s.addShape(pres.shapes.RECTANGLE, { x, y: 1.5, w, h: 0.75, fill: { color: BLUE }, line: { color: BLUE } });
   text(s, h, { x: x + 0.12, y: 1.5, w: w - 0.24, h: 0.75, fontSize: 13.5, bold: true, color: "FFFFFF", valign: "middle" });
   const py = 2.4; // picture area 2.4-3.85
@@ -295,35 +255,25 @@ DIRS.forEach(([h, q, m], i) => {
       const cx = x + 0.15 + k * 1.3; icon(s, n, cx + 0.25, py + 0.05, 0.65); text(s, l, { x: cx - 0.05, y: py + 0.75, w: 1.25, h: 0.5, fontSize: 10, align: "center", color: SUB });
       if (k < 2) right(s, cx + 1.1, py + 0.27); });
   }
-  text(s, [{ text: "問い　", options: { bold: true, color: BLUE_DARK } }, { text: q }], { x: x + 0.15, y: 3.95, w: w - 0.3, h: 1.6, fontSize: 11.5, lineSpacingMultiple: 1.12 });
-  s.addShape(pres.shapes.LINE, { x: x + 0.15, y: 5.55, w: w - 0.3, h: 0, line: { color: GRID, width: 0.75 } });
-  text(s, [{ text: "計算でみること　", options: { bold: true, color: SUB } }, { text: m, options: { color: SUB } }], { x: x + 0.15, y: 5.6, w: w - 0.3, h: 0.6, fontSize: 11, valign: "middle" });
+  text(s, q, { x: x + 0.15, y: 3.95, w: w - 0.3, h: 2.3, fontSize: 12, lineSpacingMultiple: 1.12 });
 });
-caption(s, "参考：ダイヤや車両の大きさの見直しは、時刻表を固定するという今の前提を外すため、将来の課題と考えております。②では、燃料バスとの違い（段差・静かさ・揺れなど）をどう定めるかもご相談したい点です",
-  0.6, 6.35, 12.1, 0.55);
+caption(s, "ダイヤや車両の大きさの見直しは、時刻表を固定するという今の前提を外すため、今後の課題としています。", 0.6, 6.4, 12.1, 0.4);
 
-// ---- 10. Questions
-s = page("ご助言を賜りたい点");
+// ---- 9. Questions (the deck ends here; thanks are said in person while this slide stays on screen)
+s = page("伺いたいこと");
 const QS = [
-  ["people", "3つの方向性のうち、利用者や地域にとって取り組む意義が大きいと思われるものはどれでしょうか。また、私が見落としている視点がございましたら、ご教示いただけますと幸いです。"],
-  ["clipboard", "利用者の移動のしやすさや、事業者・地域の受け止めを研究に取り入れる際、数値の指標と、アンケートや対話などの調査を、どのように組み合わせるのがよいでしょうか。"],
-  ["calendar", "修士の残りの期間で取り組める調査として、どの程度の範囲が現実的でしょうか。先生のこれまでの調査のご知見から、活かせる点がございましたらご教示いただけますと幸いです。"]];
+  ["people", "3つの案のうち、利用者や地域にとって意義が大きいのはどれでしょうか。見落としている視点があれば、あわせて教えていただきたいです。"],
+  ["clipboard", "移動のしやすさや、事業者・地域の受け止めを研究に入れるとき、数値の指標と、アンケートや対話などの調査を、どう組み合わせるのがよいでしょうか。"],
+  ["calendar", "修士の残りの期間で、どのくらいの範囲の調査なら現実的でしょうか。先生のこれまでの調査から、参考になる点を伺えればと思います。"]];
 QS.forEach(([n, q], i) => {
   const y = 1.55 + i * 1.5;
   card(s, 0.6, y, 12.1, 1.3);
   s.addShape(pres.shapes.OVAL, { x: 0.8, y: y + 0.4, w: 0.5, h: 0.5, fill: { color: BLUE }, line: { color: BLUE } });
   text(s, String(i + 1), { x: 0.8, y: y + 0.4, w: 0.5, h: 0.5, fontSize: 17, bold: true, color: "FFFFFF", align: "center", valign: "middle" });
   icon(s, n, 1.5, y + 0.3, 0.7);
-  text(s, q, { x: 2.4, y: y + 0.08, w: 10.1, h: 1.14, fontSize: 16, valign: "middle" });
+  text(s, q, { x: 2.4, y: y + 0.08, w: 10.1, h: 1.14, fontSize: 17, valign: "middle" });
 });
-caption(s, "お時間が許せば：交通やまちづくりの分野の方々にも意義を認めていただける研究にするには、どのような点が求められるでしょうか", 0.6, 6.15, 12.1, 0.6);
-
-// ---- 11. Thanks
-s = pres.addSlide();
-s.background = { color: "FFFFFF" };
-text(s, "本日はお時間をいただき、ありがとうございました", { x: 0.9, y: 2.3, w: 11.5, h: 0.9, fontSize: 30, bold: true, align: "center" });
-s.addShape(pres.shapes.LINE, { x: 3.4, y: 3.4, w: 6.5, h: 0, line: { color: BLUE, width: 3 } });
-text(s, "いただいたご助言は、柱Cの計画にまとめ、改めてご報告いたします。\n今後ともご指導のほど、よろしくお願い申し上げます。", { x: 0.9, y: 3.7, w: 11.5, h: 1.2, fontSize: 18, color: SUB, align: "center" });
+caption(s, "時間があれば：交通やまちづくりの分野でも意義を認めてもらえる研究にするには、何が必要でしょうか", 0.6, 6.15, 12.1, 0.6);
 
 // ---- A1. Conditions (appendix)
 s = page("補足A1　計算条件");
