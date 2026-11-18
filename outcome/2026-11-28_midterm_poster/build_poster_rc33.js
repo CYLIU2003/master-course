@@ -104,7 +104,8 @@ const K9 = {
 const eqSize = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "2026-11-12_three_party", "eq", "sizes.json"), "utf8"));
 const VER = { "7dc38d95": "rc33", "9a0fe044": "rc35", "375dd6f2": "rc36", "0e95d3b2": "rc39" };
 const versions = [...new Set(DATA.pairs.filter((r) => r.status === "VERIFIED").map((r) => VER[r.version] || r.version))].sort().join("・");
-require(`./poster_layout_v2_${LANG}.js`)({ FONT, LANG, s, pres, path, text, section, chart, caption, flowDiagram, M, W, COL, LX, RX, BLUE, BLUE_DARK, GREY, INK, SUB, GRID,
+// 2026-11-18: POSTER_LAYOUT=v4 selects the layout after the advisor's comments of 11/18 (larger type, no abstract).
+require(`./poster_layout_${process.env.POSTER_LAYOUT || "v2"}_${LANG}.js`)({ FONT, LANG, s, pres, path, text, section, chart, caption, flowDiagram, M, W, COL, LX, RX, BLUE, BLUE_DARK, GREY, INK, SUB, GRID,
   cases, LIMITS, SE, SEASON_OF, lab, val, pairOf, iceWins, bevWins, rngTxt, man, fmt, pb90, pi90, eqSize, maxTimeouts, versions });
 
 (async () => {
