@@ -35,7 +35,10 @@
 
 ## 運用者（劉）の手順
 
-1. **起動**：`output\lab-gateway\START_LAB_GATEWAY.cmd [ホスト] [ポート]`。既定は `127.0.0.1:8899`（このPCだけ）。
+1. **起動**：`output\lab-gateway\START_LAB_GATEWAY.cmd [ホスト] [ポート]`。既定は `127.0.0.1:8899`（このPCだけ）。後輩へ配る接続情報は
+   Tailscale（100.74.254.53）と学内LAN（133.78.186.228）の両方を書いてあるので、`START_LAB_GATEWAY.cmd 0.0.0.0` で起動します。
+   後輩4人分（junior1〜junior4）のトークンと個人フォルダは `output\lab-gateway\handouts\juniorN\`（`指示書.md` に接続情報つき、`lab_client.py`）。
+   フォルダごと本人にだけ渡します。名前を変えたいときは `token-revoke` で失効して `token-add` で発行し直します。
    後輩から届かせるには、このPCのLANまたはTailscaleのアドレスを第1引数に渡します。
 2. **届く経路（あなたが行う設定変更）**：ポートを開けるWindowsファイアウォールの許可と、後輩のPCから親機へ届くネットワーク。
    通信はHTTPのため、LANの外へは出さず、できればTailscale（暗号化）経由にします。例（管理者PowerShell、サブネットは実環境に合わせる）：
