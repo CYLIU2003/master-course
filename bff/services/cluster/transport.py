@@ -73,6 +73,8 @@ def command(worker: Worker) -> list[str]:
     args = [worker.python, "-m", "bff.services.cluster.runner", "--workspace", worker.workspace]
     if worker.gurobi_license_file:
         args += ["--license-file", worker.gurobi_license_file]
+    if worker.gurobi_minimum_installed_ram_gb is not None:
+        args += ["--gurobi-min-ram-gb", f"{worker.gurobi_minimum_installed_ram_gb:g}"]
     if worker.transport == "local":
         return args
     if worker.shell == "powershell":

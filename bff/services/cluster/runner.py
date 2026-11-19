@@ -481,10 +481,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--license-file", type=Path)
+    parser.add_argument("--gurobi-min-ram-gb", type=float)
     parser.add_argument("--request-file", type=Path)
     args = parser.parse_args()
     if args.license_file:
         os.environ["GRB_LICENSE_FILE"] = str(args.license_file)
+    if args.gurobi_min_ram_gb is not None:
+        from .resource_policy import GUROBI_MINIMUM_RAM_ENV
+        os.environ[GUROBI_MINIMUM_RAM_ENV] = f"{args.gurobi_min_ram_gb:g}"
     request = json.loads(args.request_file.read_bytes() if args.request_file else sys.stdin.buffer.read())
     if request.get("operation") == "archive":
         path = args.workspace.resolve() / (segment(request["id"]) + ".zip")

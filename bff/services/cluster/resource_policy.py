@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from statistics import median
 import math
 
@@ -13,11 +14,28 @@ from .contracts import RESERVED, Worker
 GUROBI_MINIMUM_INSTALLED_RAM_GB = 24
 
 
-def gurobi_ram_eligible(capability: dict) -> bool:
+GUROBI_MINIMUM_RAM_ENV = "MC_GUROBI_MIN_INSTALLED_RAM_GB"
+
+
+def gurobi_ram_floor(minimum_gb: float | None = None) -> float:
+    """Controller passes the worker's own floor; a worker process receives it through the environment."""
+    if minimum_gb is None:
+        minimum_gb = finite_number(_env_float(os.environ.get(GUROBI_MINIMUM_RAM_ENV)))
+    return minimum_gb if minimum_gb is not None and minimum_gb > 0 else GUROBI_MINIMUM_INSTALLED_RAM_GB
+
+
+def _env_float(value: str | None) -> float | None:
+    try:
+        return float(value) if value else None
+    except ValueError:
+        return None
+
+
+def gurobi_ram_eligible(capability: dict, minimum_gb: float | None = None) -> bool:
     installed = finite_number(capability.get("installed_ram_gb"))
     # Old probes may establish a conservative lower bound, never round 31.x up.
     capacity = installed if installed is not None else finite_number(capability.get("ram_gb"))
-    return capacity is not None and capacity >= GUROBI_MINIMUM_INSTALLED_RAM_GB
+    return capacity is not None and capacity >= gurobi_ram_floor(minimum_gb)
 
 
 def finite_number(value: object) -> float | None:
@@ -79,7 +97,7 @@ def resource_fit(worker: Worker, capability: dict, manifest: dict, jobs: list[di
     commit_error = commit_capacity_error(capability, required_ram + reserved_ram + worker.reserved_system_ram_gb)
     if commit_error:
         reasons.append(commit_error)
-    if manifest.get("requires_gurobi") and not gurobi_ram_eligible(capability):
+    if manifest.get("requires_gurobi") and not gurobi_ram_eligible(capability, worker.gurobi_minimum_installed_ram_gb):
         reasons.append("GUROBI_REQUIRES_24GB_INSTALLED_RAM")
     if len(active) >= worker.slots:
         reasons.append("WORKER_SLOTS_RESERVED")

@@ -84,6 +84,9 @@ class Worker(BaseModel):
     enabled: bool = True
     slots: int = Field(default=1, ge=1, le=16)
     gurobi: bool = False
+    # Per-PC override of the installed-RAM floor for Gurobi jobs (None = the global default, 24 GiB).
+    # Lab-open low-memory PCs only; the per-task memory budget (installed - 8 GiB) still applies.
+    gurobi_minimum_installed_ram_gb: float | None = Field(default=None, ge=1, allow_inf_nan=False)
     ram_gb: float = Field(default=0, ge=0)
     reserved_system_ram_gb: float = Field(default=4, ge=0, allow_inf_nan=False)
     maximum_cpu_load_percent: float = Field(default=90, gt=0, le=100)

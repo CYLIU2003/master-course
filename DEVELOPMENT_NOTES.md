@@ -12988,3 +12988,11 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
 - 注記に書いたこと：MEM24 の出し直し3件、時間切れの最大回数（A 44・B 39）。
 - カンペ：`ポスター説明カンペ_rc42.md`、`presentation_script_rc42_EN.md`。
 - 6枚とも validate を通過し、PowerPoint で画像に書き出して確認した。v4 は変更していない。
+
+## 2026-11-19 台ごとの Gurobi 搭載 RAM 下限（後輩向けに低 RAM 台を使うための土台。本人の指示「低い台を使えるようにして」）
+
+- **変更**：`Worker.gurobi_minimum_installed_ram_gb`（既定 None）。None のときは従来の 24 GB（`GUROBI_MINIMUM_INSTALLED_RAM_GB`）。値を入れた台だけ、その値を下限にする。親機側（`resource_fit`・割当前の確認・台の画面）は台の設定値を使い、子機側は起動引数 `--gurobi-min-ram-gb`（値があるときだけ付く）から環境変数 `MC_GUROBI_MIN_INSTALLED_RAM_GB` を作って使う。
+- **変えていないもの**：タスクごとのメモリ上限（搭載−8 GiB、半分を下回らない）、空きRAM・コミット余裕・予約RAMの検査。16 GiB の研究タスクは、15.9 GiB の台では `EXCEEDS_MACHINE_MEMORY_BUDGET` で今までどおり弾かれる。搭載RAMが不明の台は下限を入れても弾く。
+- **効果の範囲**：値を設定した台の台帳を使う親機と、そのコードを配置した子機にだけ効く。設定していない台、設定していない固定版の動作は変わらない（引数は値があるときだけ渡す。古い子機のrunnerに新引数を渡すと失敗するため、子機を配り直すまで台帳には入れない）。数理モデル・コスト・制約・入力は不変。
+- **未実施**：後輩のタスクと修論のタスクを区別する印、後輩のタスクを修論に使っていない台へ優先して割り当てる並べ替え、修論の計算が来たときに後輩のタスクを止める割込み。印を付ける入口（受付口）がまだ無く、今入れても使われない死んだコードになるため。
+- **テスト**：`tests/test_cluster_low_ram_gurobi.py` 12件合格。クラスタ関係の既存テスト（`-k "cluster or license or solver_policy or worker"`）は、変更前の main と変更後で同じ15件が失敗する（親機のライセンス権限ファイルが実キューを指す環境依存。今回の変更とは無関係）。
