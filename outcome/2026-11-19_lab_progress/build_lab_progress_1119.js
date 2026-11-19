@@ -91,7 +91,7 @@ const flow = [["ebus", "電気バス 35台"], ["dbus", "燃料バス 25台"], ["
 flow.forEach(([n, l], i) => { const x = 0.75 + i * 2.45; card(s, x, 1.6, 2.2, 2.0, "FFFFFF"); icon(s, n, x + 0.6, 1.75, 1.0); text(s, l, { x: x + 0.1, y: 2.85, w: 2.0, h: 0.6, fontSize: 14, align: "center", bold: true }); });
 card(s, 0.6, 3.9, 12.1, 1.55, "DCEBF7");
 text(s, [{ text: "計算で決めること　", options: { bold: true, color: BLUE_DARK } },
-  { text: "1週間の時刻表（1,704便）を、どのバスが走るか。電気バスを、いつ・どれだけ充電するか。", options: { breakLine: true } },
+  { text: "1週間の時刻表（1,704便）をどのバスが走るか、電気バスをいつ・どれだけ充電するか。", options: { breakLine: true } },
   { text: "目標　", options: { bold: true, color: BLUE_DARK } }, { text: "時刻表どおりに全部の便を走らせたうえで、1週間の費用をいちばん安くする。" }],
   { x: 0.85, y: 4.0, w: 11.6, h: 1.35, fontSize: 17, valign: "middle" });
 bullets(s, ["対象：東急バス 渋21〜23系統（弦巻営業所）。時刻表は公共交通オープンデータ（ODPT）",
@@ -106,8 +106,8 @@ s.addTable([
   [H("柱"), H("内容"), H("予定")],
   [{ text: "A", options: { bold: true, align: "center", ...hiA } }, { text: "受電上限と、電気バスの担当便・費用・CO₂（今月はここ）", options: { bold: true, color: BLUE_DARK, ...hiA } }, { text: "11/28 中間発表\n2027年3月 電気学会全国大会", options: hiA }],
   [{ text: "B", options: { bold: true, align: "center" } }, "1日ずつと数日まとめての計画の比較、蓄電池の使い方", "2027年度 学会発表\n2027年11月 修士2年中間発表"],
-  [{ text: "C", options: { bold: true, align: "center" } }, "利用者・地域・事業者にとっての価値（都市生活学部の西山先生にご相談）", "2028年2月 修士最終発表"]],
-  tableOpts({ x: 0.6, y: 1.6, w: 12.1, colW: [0.9, 7.0, 4.2], fontSize: 17, rowH: [0.55, 1.15, 1.15, 1.15] }));
+  [{ text: "C", options: { bold: true, align: "center" } }, "利用者・地域・事業者にとっての価値（西山先生にご相談）", "2028年2月 修士最終発表"]],
+  tableOpts({ x: 0.6, y: 1.6, w: 12.1, colW: [0.9, 7.7, 3.5], fontSize: 17, rowH: [0.55, 1.15, 1.15, 1.15] }));
 caption(s, "柱Aは中間発表と電気学会全国大会、柱Bと柱Cは修士2年に向けて進めます。", 0.6, 6.0, 12.1);
 s.addNotes("研究は3本の柱で進めています。今月は柱Aの計算と発表準備が中心でした。柱Cについては西山先生にご相談しました。");
 
@@ -125,14 +125,30 @@ DID.forEach(([n, h, t], i) => {
   text(s, h, { x: x + 1.15, y: y + 0.2, w: 4.6, h: 0.8, fontSize: 19, bold: true, color: BLUE_DARK, valign: "middle" });
   text(s, t, { x: x + 0.25, y: y + 1.1, w: 5.45, h: 1.2, fontSize: 15 });
 });
-s.addNotes("今月やったことは4つです。1つ目は計算のやり直しで、48通りの計算が全部、検証を通りました。計算の出発点として、電気バスを優先する割り当てと燃料バスを優先する割り当ての2通りから始め、安かった方を使っています。2つ目は電気料金の扱いを2通りで比べたことで、くわしくは次のページで説明します。3つ目は中間発表のポスター、4つ目は西山先生へのご相談です。");
+s.addNotes("今月やったことは4つです。1つ目は計算のやり直しで、48通りの計算が全部、検証を通りました。計算の出発点として、電気バスを優先する割り当てと燃料バスを優先する割り当ての2通りから始め、安かった方を使っています。2つ目は電気料金の扱いを2通りで比べたことで、くわしい仕組みは6ページで説明します。3つ目は中間発表のポスター、4つ目は西山先生へのご相談です。");
+
+// ---- 4b. What I devised this month (2026-11-19, user)
+s = page("今月工夫したこと");
+const KUFU = [
+  ["plan", "計算の出発点は2通り", "便割当の探索は、最初の割り当てに近い解にとどまりやすい。そこで「電気バス優先」と「燃料バス優先」の2通りから計算し、安い方を使った"],
+  ["calendar", "限られた時間で少しずつ改善", "1週間分の便割当は大きすぎて一度に解けないので、一部の便だけを組み直す計算を、決めた時間（9,000秒）の中でくり返した"],
+  ["power", "電気代を実際の料金の形に", "使った分の料金に加えて、受電上限で決まる基本料金を月額から週に直して足した（次のページ）。30円/kWh一律の計算とも比べた"],
+  ["check", "打ち切った計算の中身を確認", "時間で止めた計算について、計算ソフトの記録から、止める前に目的関数がどう下がっていたかを取り出した（後のページ）"]];
+KUFU.forEach(([n, h, t], i) => {
+  const x = 0.6 + (i % 2) * 6.15, y = 1.55 + Math.floor(i / 2) * 2.6;
+  card(s, x, y, 5.95, 2.4);
+  icon(s, n, x + 0.2, y + 0.2, 0.8);
+  text(s, h, { x: x + 1.15, y: y + 0.2, w: 4.6, h: 0.8, fontSize: 19, bold: true, color: BLUE_DARK, valign: "middle" });
+  text(s, t, { x: x + 0.25, y: y + 1.1, w: 5.45, h: 1.2, fontSize: 14.5 });
+});
+s.addNotes("今月やったことの中から、計算を解くうえで工夫した点を4つ紹介します。最初の割り当てに引っぱられて似た案ばかり探してしまうのを避けるため、正反対の2つの出発点から計算しました。また、1週間分を一度に解き直すのは大きすぎるので、一部の便だけを組み直す作業を、決めた時間の中でくり返しています。まとめると、1つ目は計算の出発点を2通りにしたこと、2つ目は大きな問題を一部ずつ組み直して時間内に少しずつ良くしたこと、3つ目は電気代を実際の料金の形に近づけたこと、4つ目は時間で止めた計算の中身を記録から確かめたことです。");
 
 // ---- 5. How the electricity bill works (plain words)
 s = page("電気代のしくみ（料金A）");
 text(s, "電気代は、3つの部分の足し算です。スマホの料金で言うと「使った分」と「基本料金」に近いです。", { x: 0.6, y: 1.5, w: 12.1, h: 0.5, fontSize: 17 });
 const PARTS = [
   ["grid", "使った分", "電力量料金", "買った電力量 × 17.43円/kWh", "7AB8E8"],
-  ["calendar", "契約で決まる分", "基本料金", "受電上限 × 2,530円/kW・月 × 0.85\n（0.85は力率割引。使わなくても毎月かかる）", BLUE_DARK],
+  ["calendar", "契約で決まる分", "基本料金", "受電上限 × 2,530円/kW・月 × 0.85\n（0.85は力率割引。\n使わなくても毎月かかる）", BLUE_DARK],
   ["power", "上限を超えた分", "上限超過の費用", "超えた電力量 × 500円/kWh\n（計算上の仮のペナルティ）", ORANGE]];
 PARTS.forEach(([n, h, k, f, col], i) => {
   const x = 0.6 + i * 4.1;
@@ -166,38 +182,42 @@ bullets(s, [`12ケース中${bevCases.length}ケースで、電気バスが${rng
   `ただし冬の90 kWで燃料バスを多く使うと、CO₂は電気バス中心の約${(p90i.total_co2_kg / p90b.total_co2_kg).toFixed(1)}倍になる`],
   { x: 7.75, y: 1.85, w: 4.75, h: 4.2, fontSize: 16, paraSpaceAfter: 10 });
 caption(s, DIAG, 7.5, 6.3, 5.2, 0.6);
-s.addNotes("1つ目の結果です。受電上限が200 kW以上なら、季節にかかわらず電気バスが9割以上の便を担当できました。冬の90 kWだけは電力が足りず、燃料バス中心の方が安くなりましたが、CO₂は3倍以上になります。");
+s.addNotes("下に書いてある「診断用（DIAGNOSTIC）」は、条件や検証がそろうまで、研究の結論としては使わないという意味です。1つ目の結果です。受電上限が200 kW以上なら、季節にかかわらず電気バスが9割以上の便を担当できました。冬の90 kWだけは電力が足りず、燃料バス中心の方が安くなりましたが、CO₂は3倍以上になります。");
 
 // ---- 7. Result 2: a higher limit is not cheaper
 s = page("結果②：受電上限が大きいほど安い、とは限らない");
 const rows5 = SE.flatMap(([w, n]) => LIMITS.map((g) => ({ r: get(g, w), l: `${g}${n}` })));
 const u = (v) => Math.round(v / 1e3) / 10;
 s.addChart(pres.charts.BAR, [
+  { name: "車両使用費", labels: rows5.map((x) => x.l), values: rows5.map((x) => u(x.r.vehicle_usage_cost)) },
   { name: "電力量料金", labels: rows5.map((x) => x.l), values: rows5.map((x) => u(x.r.electricity_cost)) },
   { name: "基本料金", labels: rows5.map((x) => x.l), values: rows5.map((x) => u(x.r.basic_charge_week_jpy)) },
   { name: "燃料代", labels: rows5.map((x) => x.l), values: rows5.map((x) => u(fuelOf(x.r))) },
   { name: "上限超過", labels: rows5.map((x) => x.l), values: rows5.map((x) => u(x.r.contract_overage_cost)) }],
-  { ...chartBase(), x: 0.6, y: 1.5, w: 7.3, h: 4.75, barDir: "col", barGrouping: "stacked", barGapWidthPct: 45, chartColors: ["7AB8E8", BLUE_DARK, GREY, ORANGE],
-    catAxisLabelFontSize: 10, valAxisMinVal: 0, valAxisMaxVal: 60, valAxisMajorUnit: 10, showValAxisTitle: true, valAxisTitle: "万円/週", valAxisTitleFontSize: 12, valAxisTitleColor: SUB });
+  { ...chartBase(), x: 0.6, y: 1.75, w: 7.3, h: 4.5, barDir: "col", barGrouping: "stacked", barGapWidthPct: 45, chartColors: ["D9D9D9", "7AB8E8", BLUE_DARK, GREY, ORANGE],
+    catAxisLabelFontSize: 10, valAxisMinVal: 0, valAxisMaxVal: 500, valAxisMajorUnit: 100 });
+if (Math.max(...D.cases.map((r) => tc(r))) / 1e4 > 500) throw new Error("slide 7 axis too short");
+text(s, "［万円/週］", { x: 0.6, y: 1.45, w: 2.0, h: 0.3, fontSize: 11, color: SUB });
 const vR = D.cases.map((r) => r.vehicle_usage_cost / 1e4);
-caption(s, `費用の内訳（料金A、1週間）。どのケースでもほぼ同じ車両使用費（${Math.min(...vR).toFixed(0)}〜${Math.max(...vR).toFixed(0)}万円/週）を除き、差が出る部分だけを拡大しています。右の表は車両使用費を含む総額です`, 0.6, 6.25, 7.3, 0.7);
+caption(s, `1週間の総費用の内訳（料金A、採用した解、CO₂の費用は除く）。車両使用費は${Math.min(...vR).toFixed(0)}〜${Math.max(...vR).toFixed(0)}万円/週でどれもほぼ同じ。差は主に基本料金・上限超過・燃料代`, 0.6, 6.25, 7.3, 0.7);
 s.addTable([[H("受電上限"), ...SE.map(([, n]) => H(n))],
   ...LIMITS.map((g) => [{ text: `${g} kW`, options: { bold: true, align: "center" } }, ...SE.map(([w]) => {
     const r = get(g, w), b = best.find((x) => x.w === w).r === r;
     return { text: man(tc(r)), options: { align: "center", bold: b, color: b ? BLUE_DARK : INK, fill: b ? { color: "DCEBF7" } : undefined } }; })])],
   tableOpts({ x: 8.2, y: 1.6, w: 4.5, colW: [1.35, 1.05, 1.05, 1.05], fontSize: 14, rowH: 0.48 }));
 caption(s, "1週間の総費用［万円］（車両使用費を含む。CO₂の費用は含めない）。青が各季節でいちばん安い", 8.2, 4.1, 4.5, 0.6);
-card(s, 8.2, 4.72, 4.5, 1.3, "F4F7FA");
+card(s, 8.2, 4.72, 4.5, 1.33, "F4F7FA");
 text(s, [{ text: "グラフの見るところ", options: { bold: true, color: BLUE_DARK, breakLine: true } },
-  { text: `濃い青（基本料金）：900 kWで約${man(basic[900])}万円/週と大きい`, options: { bullet: { indent: 14 }, breakLine: true } },
-  { text: "オレンジ（上限超過）：上限が小さいときだけ出る", options: { bullet: { indent: 14 } } }], { x: 8.35, y: 4.75, w: 4.2, h: 1.24, fontSize: 13, valign: "middle" });
+  { text: "まず薄い灰色（車両使用費）：どれもほぼ同じ", options: { bullet: { indent: 14 }, breakLine: true } },
+  { text: `次に上の色の部分。濃い青（基本料金）：900 kWで約${man(basic[900])}万円/週`, options: { bullet: { indent: 14 }, breakLine: true } },
+  { text: "オレンジ（上限超過）：上限が小さいときだけ出る", options: { bullet: { indent: 14 } } }], { x: 8.35, y: 4.74, w: 4.2, h: 1.29, fontSize: 12, valign: "middle" });
 caption(s, "数値は rc42 の診断用（DIAGNOSTIC）で、研究の結論にはまだ使っていません。", 8.2, 6.1, 4.5, 0.75);
-s.addNotes("2つ目の結果で、今月いちばん面白かったところです。受電上限を大きくすれば電気が自由に使えるので安くなりそうですが、実際には900 kWがどの季節でもいちばん高くなりました。右の表は総額で400万円台ですが、左のグラフはどのケースでもほぼ同じ車両使用費を除いて、差が出る部分だけを拡大しています。まず冬の4本を見てください。濃い青が基本料金で、上限に比例して増えています。オレンジは上限を超えた費用で、上限が小さいときだけ出ます。電力量料金や燃料代は、上限が足りていればほとんど変わりません。");
+s.addNotes("2つ目の結果で、今月いちばん面白かったところです。受電上限を大きくすれば電気が自由に使えるので安くなりそうですが、実際には900 kWがどの季節でもいちばん高くなりました。左のグラフは1週間の総費用の内訳です。いちばん下の薄い灰色が車両使用費で、どのケースでもほぼ同じです。まず冬の4本を見てください。濃い青が基本料金で、上限に比例して増えています。オレンジは上限を超えた費用で、上限が小さいときだけ出ます。電力量料金や燃料代は、上限が足りていればほとんど変わりません。");
 
 // ---- 8. Discussion: the right-sized limit
 s = page("考察：ちょうどよい受電上限がある");
 const ZONES = [
-  ["小さすぎる", `冬の200 kWでは上限を${Math.round(w200.contract_over_limit_kwh)} kWh超え、超過の費用が約${man(w200.contract_overage_cost)}万円/週。冬の90 kWでは燃料バスが増える`, "F4F7FA", INK],
+  ["小さすぎる", `冬の200 kWでは上限を${Math.round(w200.contract_over_limit_kwh)} kWh超えて、その費用が約${man(w200.contract_overage_cost)}万円/週。冬の90 kWでは燃料バスが増える`, "F4F7FA", INK],
   ["ちょうどよい", "冬は400 kW、春と夏は200 kWで総費用がいちばん安い。電気バスも9割以上の便を担当できる", "DCEBF7", BLUE_DARK],
   ["大きすぎる", `電力量料金や燃料代はほとんど下がらないのに、基本料金だけが増える（900 kWで約${man(basic[900])}万円/週）`, "F4F7FA", INK]];
 ZONES.forEach(([h, t, fill, col], i) => {
@@ -209,7 +229,7 @@ ZONES.forEach(([h, t, fill, col], i) => {
 });
 heading(s, "運用の目安（今回の条件で）", 0.6, 4.7, 12.1);
 bullets(s, [`受電上限は大きく取りすぎない：充電の時間をずらせば冬も400 kWで足り、900 kWより約${man(avgAt(900) - avgAt(400))}万円/週安い（3季節平均）`,
-  `200 kWと400 kWの差は言い切れない：今の答えと「理論上これ以上安くならない値」との差を5%まで許して計算を止めている（ギャップ、約${man(gapMin)}万円/週）。差がそれより小さい`,
+  `200 kWと400 kWの差は言い切れない：差が、計算を止めてよいとした幅（ギャップ5%、約${man(gapMin)}万円/週）より小さいため`,
   "次の課題：いまは基本料金を後から足しているだけ。受電上限そのものも計算で決められるようにする"],
   { x: 0.6, y: 5.15, w: 12.1, h: 1.8, fontSize: 14, paraSpaceAfter: 4 });
 s.addNotes("考察です。受電上限は、小さすぎると超過や燃料バスが増え、大きすぎると基本料金だけが増えます。今回の条件では、冬は400 kW、春と夏は200 kWがちょうどよいという結果でした。ただ、200 kWと400 kWの差は言い切れません。計算は、今の答えと理論上これ以上安くならない値との差が5%以内になったら止めているので、それより小さい差は、もっと計算すれば入れ替わるかもしれないからです。基本料金を最初から計算に入れて、上限も一緒に決めるのが次の課題です。");
@@ -219,8 +239,8 @@ s.addNotes("考察です。受電上限は、小さすぎると超過や燃料�
 // and the Stage 1 LNS record of each rc42 run). Same derivation as the poster's fig. 6.
 {
   const CUT = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "2026-11-12_three_party", "cutoff_trajectory_rc42_et.json"), "utf8"));
-  const runs = CUT.runs.filter((r) => get(r.grid_limit_kw, r.week).selected_start === r.start);
-  if (runs.length !== 12) throw new Error("expected 12 adopted runs");
+  const runs = CUT.runs; // all 24 tariff-A runs (12 cases x 2 initial assignments), 2026-11-19 (user: whole results)
+  if (runs.length !== 24) throw new Error("expected 24 runs");
   const med = (a) => { const b = [...a].sort((x, y) => x - y), n = b.length; return n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2; };
   const exc = (r, m) => { const tr = r.stage1.trajectory_sec_objective, fin = r.stage1.best_objective;
     const cur = tr.filter(([t]) => t <= m * 60); return ((cur.length ? cur[cur.length - 1][1] : tr[0][1]) - fin) / fin * 100; };
@@ -230,41 +250,48 @@ s.addNotes("考察です。受電上限は、小さすぎると超過や燃料�
   const pct = (f) => SECS.map((t) => Math.round(HL.filter((h) => f(h) !== null && f(h) <= t).length / HL.length * 1000) / 10);
   const late30 = Math.max(...runs.map((r) => exc(r, r.stage1.elapsed_sec / 60 - 30)));
   const by240 = HL.filter((h) => h.t_final_incumbent_s <= 240).length, gapMed = med(HL.map((h) => h.final_gap_pct));
-  const tlRuns = runs.filter((r) => r.hourly.time_limit_steps > 0).map((r) => `${r.grid_limit_kw} kW${SE.find(([w]) => w === r.week)[1]} ${r.hourly.time_limit_steps}回`);
+  const tlRuns = runs.filter((r) => r.hourly.time_limit_steps > 0).map((r) => `${r.grid_limit_kw} kW${SE.find(([w]) => w === r.week)[1]}${r.start === "bev" ? "（電気バス優先）" : "（燃料バス優先）"}${r.hourly.time_limit_steps}回`);
+  if (runs.some((r) => r.start === "ice" && r.hourly.time_limit_steps > 0)) throw new Error("diesel-first runs now time out; reword slide 9");
   s = page("計算を時間で打ち切ったとき、目的関数はどう減っていたか");
-  text(s, "占部先生から「打ち切り前に目的関数（費用）がどう減っていたか分かるか」と質問をいただき、計算ソフトの記録から取り出しました（料金A、採用した解）。",
+  text(s, "占部先生から「打ち切り前に目的関数（費用）がどう減っていたか分かるか」と質問をいただき、計算ソフトの記録から取り出しました（料金Aの全24計算＝12ケース×出発点2通り）。",
     { x: 0.6, y: 1.45, w: 12.1, h: 0.6, fontSize: 15 });
-  const lo = { ...chartBase(), y: 2.15, w: 5.9, h: 3.2, lineDataSymbol: "none", lineSize: 2, showCatAxisTitle: true, catAxisTitleFontSize: 11, catAxisTitleColor: SUB,
+  const lo = { ...chartBase(), y: 2.1, w: 5.9, h: 2.95, lineDataSymbol: "none", lineSize: 2, showCatAxisTitle: true, catAxisTitleFontSize: 11, catAxisTitleColor: SUB,
     showValAxisTitle: true, valAxisTitleFontSize: 11, valAxisTitleColor: SUB, catAxisLabelFrequency: 6 };
   s.addChart(pres.charts.LINE, [{ name: "中央値", labels: MINS.map(String), values: MINS.map((m) => r2(med(runs.map((r) => exc(r, m))))) },
     { name: "最大", labels: MINS.map(String), values: MINS.map((m) => r2(Math.max(...runs.map((r) => exc(r, m))))) }],
     { ...lo, x: 0.6, chartColors: [BLUE_DARK, GREY], valAxisMinVal: 0, valAxisTitle: "最終の値との差 [%]", catAxisTitle: "便割当の探索時間 [分]" });
-  s.addChart(pres.charts.LINE, [{ name: "解が見つかっていた", labels: SECS.map(String), values: pct((h) => h.t_first_incumbent_s) },
-    { name: "最終の解が見つかっていた", labels: SECS.map(String), values: pct((h) => h.t_final_incumbent_s) }],
+  s.addChart(pres.charts.LINE, [{ name: "使える解があった", labels: SECS.map(String), values: pct((h) => h.t_first_incumbent_s) },
+    { name: "打ち切り時の解に着いていた", labels: SECS.map(String), values: pct((h) => h.t_final_incumbent_s) }],
     { ...lo, x: 6.8, chartColors: ["7AB8E8", BLUE_DARK], valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 25, valAxisTitle: "割合 [%]", catAxisTitle: "毎時の再計画の計算時間 [秒]" });
-  caption(s, `左：1週間の便割当（${Math.round(runs[0].stage1.time_budget_sec).toLocaleString("en-US")}秒で打ち切り）。12ケースの目的関数が最後の値よりどれだけ高かったか`, 0.6, 5.4, 5.9, 0.6);
-  caption(s, `右：毎時の再計画（300秒で打ち切り）で時間切れの${HL.length}回。${tlRuns.join("・")}`, 6.8, 5.4, 5.9, 0.6);
-  card(s, 0.6, 6.05, 12.1, 0.85, "DCEBF7");
-  text(s, `打ち切る前に、ほぼ下げ止まっていた：便割当は最後の30分で${late30.toFixed(2)}%以下しか下がらず、再計画は${HL.length}回中${by240}回が240秒までに最終の解に着いた。ただし下限との差（ギャップ、中央値${Math.round(gapMed)}%）は残るので、最適とは言えない。`,
-    { x: 0.8, y: 6.08, w: 11.7, h: 0.8, fontSize: 13.5, valign: "middle" });
-  s.addNotes("占部先生からの質問への答えです。左は1週間の便割当で、9,000秒の上限で止まっていますが、目的関数は始めの30分ほどで大きく下がり、最後の30分はほとんど変わっていません。右は1時間ごとの再計画で、300秒で打ち切られた回のうち、どの時点で最終の解が見つかっていたかの割合です。多くは早い段階で最終の解が見つかっていました。ただ、下限との差であるギャップは大きいままなので、これで最適だとは言えません。");
+  caption(s, `左：1週間の便割当（${Math.round(runs[0].stage1.time_budget_sec).toLocaleString("en-US")}秒で打ち切り）。打ち切り時の値を0として、それまで何%高かったか`, 0.6, 5.1, 5.9, 0.75);
+  caption(s, `右：毎時の再計画（1時間ごとに立て直す計算、300秒で打ち切り）で時間切れの${HL.length}回。すべて電気バス優先の${[...new Set(runs.filter((r) => r.hourly.time_limit_steps > 0).map((r) => r.grid_limit_kw))].join("・")} kWのケース`, 6.8, 5.1, 5.9, 0.75);
+  card(s, 0.6, 5.9, 12.1, 1.0, "DCEBF7");
+  text(s, `打ち切る前に、ほぼ下げ止まっていた：便割当の改善は最後の30分で${late30.toFixed(2)}%以下、再計画は${HL.length}回中${by240}回が240秒までに打ち切り時の解に着いていた。ただし「これ以上は安くならない」という理論上の値（下限）との差（ギャップ、中央値${Math.round(gapMed)}%）が残るので、最適とは言い切れない。`,
+    { x: 0.8, y: 5.93, w: 11.7, h: 0.94, fontSize: 13, valign: "middle" });
+  s.addNotes("占部先生からの質問への答えです。左のグラフは、打ち切った時点の値を0として、それまでの値が何%高かったかを表しています。右の「使える解があった」はとりあえず動かせる充電計画ができていた割合、「打ち切り時の解に着いていた」は最後に使った解にすでに着いていた割合です。料金Aの24計算すべてをまとめています。左は1週間の便割当で、9,000秒の上限で止まっていますが、目的関数は始めの30分ほどで大きく下がり、最後の30分はほとんど変わっていません。右は1時間ごとの再計画で、300秒で打ち切られた回のうち、どの時点で最終の解が見つかっていたかの割合です。多くは早い段階で最終の解が見つかっていました。ただ、下限との差であるギャップは大きいままなので、これで最適だとは言えません。");
 }
 
-// ---- 9. What I learned (tips for juniors)
-s = page("今月学んだこと（後輩のみなさんへ）");
-const TIPS = [
-  ["clipboard", "ポスターは文字を大きく", "A0のポスターでは、本文は30pt以上が目安。占部先生から、まず文字サイズを適切にしてから、書ける分量を考えるようにとご指導いただいた"],
-  ["check", "概要は要らないこともある", "ポスター自体が要約なので、タイトルの下の長い概要は削った。文章より図で見せる"],
-  ["talk", "計算結果だけでは伝わらない", "西山先生から「計算の結果だけでは、バス会社としても受け入れにくい」とのご意見。利用者や運用者の視点も入れる"],
-  ["plan", "数値の状態を正直に書く", "まだ研究の結論に使えない数値は「診断用」と書き、打ち切りの幅（ギャップ）より小さい差は言い切らない"]];
-TIPS.forEach(([n, h, t], i) => {
-  const x = 0.6 + (i % 2) * 6.15, y = 1.55 + Math.floor(i / 2) * 2.6;
-  card(s, x, y, 5.95, 2.4);
-  icon(s, n, x + 0.2, y + 0.2, 0.8);
-  text(s, h, { x: x + 1.15, y: y + 0.2, w: 4.6, h: 0.8, fontSize: 19, bold: true, color: BLUE_DARK, valign: "middle" });
-  text(s, t, { x: x + 0.25, y: y + 1.1, w: 5.45, h: 1.2, fontSize: 15 });
+// ---- 9. Consultation with Prof. Nishiyama (summary of the student's notes, 2026-11-17; replaces the tips slide, 2026-11-19)
+s = page("西山先生（都市生活学部）へのご相談の結果");
+text(s, "柱C（利用者・地域にとっての価値）についてご相談しました。研究の内容には前向きで、東急バスへの相談も十分に可能とのことでした。",
+  { x: 0.6, y: 1.45, w: 12.1, h: 0.6, fontSize: 15 });
+const NS = [
+  ["driver", "運転士が足りない", "人の拘束時間まで含めて考える必要がある。大型免許の人が減り、小さいバスも考える"],
+  ["thermo", "冷暖房の費用が増える", "気候変動で、冷房を使う期間が長く、強くなっている"],
+  ["people", "バスを移動以外にも使う", "地域の場、荷物との混載、救急、窓口サービスなどに使う案"],
+  ["talk", "事業者の意見で確かめる", "モデルが妥当かはバス会社の意見が必要。数学をやりすぎると現実から離れる"]];
+NS.forEach(([n, h, t], i) => {
+  const x = 0.6 + (i % 2) * 6.15, y = 2.2 + Math.floor(i / 2) * 1.75;
+  card(s, x, y, 5.95, 1.6);
+  icon(s, n, x + 0.2, y + 0.25, 0.7);
+  text(s, h, { x: x + 1.05, y: y + 0.12, w: 4.7, h: 0.5, fontSize: 17, bold: true, color: BLUE_DARK, valign: "middle" });
+  text(s, t, { x: x + 1.05, y: y + 0.65, w: 4.75, h: 0.9, fontSize: 13.5 });
 });
-s.addNotes("今月、資料づくりや相談で学んだことを4つ共有します。ポスターの文字サイズ、概要の要否、計算結果だけでは現場に伝わらないこと、数値の状態を正直に書くこと、です。みなさんの発表準備にも役立てばうれしいです。");
+card(s, 0.6, 5.8, 12.1, 1.05, "DCEBF7");
+text(s, [{ text: "これから　", options: { bold: true, color: BLUE_DARK } },
+  { text: "計算の結果だけでは、バス会社も受け入れにくい。利用者や運用者の視点も入れた最適化を目指し、電気学会全国大会の講演論文集（冊子）ができたら、それを持って東急バスに聞き取りに伺いたい。" }],
+  { x: 0.85, y: 5.85, w: 11.6, h: 0.95, fontSize: 14, valign: "middle" });
+s.addNotes("ここまでが柱Aの話でした。ここからは3ページで触れた柱Cに向けた話です。柱Cについて、都市生活学部の西山先生にご相談しました。ご意見は大きく4つで、運転士不足、冷暖房費の増加、バスの移動以外の使い方、事業者の意見で確かめることでした。計算の結果だけではバス会社も受け入れにくいというご意見は、私の、研究が実社会で使われないのではという心配とも重なりました。全国大会の講演論文集ができたら、それを持って東急バスに聞き取りに伺いたいと考えています。");
 
 // ---- 10. Next steps
 s = page("これからの予定");
