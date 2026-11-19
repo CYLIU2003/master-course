@@ -115,7 +115,7 @@ s.addNotes("研究は3本の柱で進めています。今月は柱Aの計算と
 s = page("今月やったこと");
 const DID = [
   ["plan", "計算をすべてやり直した", "条件をそろえて全48通りを計算し直し、すべてチェックを通った。電気料金2通り×12ケース×計算の出発点2通り（電気バス優先・燃料バス優先）"],
-  ["power", "電気料金を2通りで比べた", "A：基本料金を別に払う料金、B：基本料金を使った分の単価に含めた料金。ポスターはAを使い、Bは比べるために使う（くわしくは次のページ）"],
+  ["power", "電気料金を2通りで比べた", "A：基本料金を別に払う料金、B：基本料金を使った分の単価に含めた料金。紙面が限られるので、ポスターにはAだけを載せる（占部先生のご助言）"],
   ["clipboard", "中間発表のポスターを作った", "占部先生の添削で、文字サイズを大きくし、概要を削って中身を絞った"],
   ["talk", "西山先生にご相談した", "都市生活学部の先生に、柱Cの方向性と、バス会社への聞き取りについて伺った"]];
 DID.forEach(([n, h, t], i) => {
@@ -213,6 +213,42 @@ bullets(s, [`受電上限は大きく取りすぎない：充電の時間をず�
   "次の課題：いまは基本料金を後から足しているだけ。受電上限そのものも計算で決められるようにする"],
   { x: 0.6, y: 5.15, w: 12.1, h: 1.8, fontSize: 14, paraSpaceAfter: 4 });
 s.addNotes("考察です。受電上限は、小さすぎると超過や燃料バスが増え、大きすぎると基本料金だけが増えます。今回の条件では、冬は400 kW、春と夏は200 kWがちょうどよいという結果でした。ただ、200 kWと400 kWの差は言い切れません。計算は、今の答えと理論上これ以上安くならない値との差が5%以内になったら止めているので、それより小さい差は、もっと計算すれば入れ替わるかもしれないからです。基本料金を最初から計算に入れて、上限も一緒に決めるのが次の課題です。");
+
+// ---- 8b. Objective before the time limit (Prof. Urabe's Slack reply, 2026-11-19; tariff A, adopted solutions)
+// Data: ../2026-11-12_three_party/cutoff_trajectory_rc42_et.json (prepare_cutoff_trajectory_rc42.py, from the Gurobi logs
+// and the Stage 1 LNS record of each rc42 run). Same derivation as the poster's fig. 6.
+{
+  const CUT = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "2026-11-12_three_party", "cutoff_trajectory_rc42_et.json"), "utf8"));
+  const runs = CUT.runs.filter((r) => get(r.grid_limit_kw, r.week).selected_start === r.start);
+  if (runs.length !== 12) throw new Error("expected 12 adopted runs");
+  const med = (a) => { const b = [...a].sort((x, y) => x - y), n = b.length; return n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2; };
+  const exc = (r, m) => { const tr = r.stage1.trajectory_sec_objective, fin = r.stage1.best_objective;
+    const cur = tr.filter(([t]) => t <= m * 60); return ((cur.length ? cur[cur.length - 1][1] : tr[0][1]) - fin) / fin * 100; };
+  const MINS = Array.from({ length: 31 }, (_, i) => i * 5), r2 = (v) => Math.round(v * 100) / 100;
+  const HL = runs.flatMap((r) => r.hourly.time_limited_steps);
+  const SECS = Array.from({ length: 31 }, (_, i) => i * 10);
+  const pct = (f) => SECS.map((t) => Math.round(HL.filter((h) => f(h) !== null && f(h) <= t).length / HL.length * 1000) / 10);
+  const late30 = Math.max(...runs.map((r) => exc(r, r.stage1.elapsed_sec / 60 - 30)));
+  const by240 = HL.filter((h) => h.t_final_incumbent_s <= 240).length, gapMed = med(HL.map((h) => h.final_gap_pct));
+  const tlRuns = runs.filter((r) => r.hourly.time_limit_steps > 0).map((r) => `${r.grid_limit_kw} kW${SE.find(([w]) => w === r.week)[1]} ${r.hourly.time_limit_steps}回`);
+  s = page("計算を時間で打ち切ったとき、目的関数はどう減っていたか");
+  text(s, "占部先生から「打ち切り前に目的関数（費用）がどう減っていたか分かるか」と質問をいただき、計算ソフトの記録から取り出しました（料金A、採用した解）。",
+    { x: 0.6, y: 1.45, w: 12.1, h: 0.6, fontSize: 15 });
+  const lo = { ...chartBase(), y: 2.15, w: 5.9, h: 3.2, lineDataSymbol: "none", lineSize: 2, showCatAxisTitle: true, catAxisTitleFontSize: 11, catAxisTitleColor: SUB,
+    showValAxisTitle: true, valAxisTitleFontSize: 11, valAxisTitleColor: SUB, catAxisLabelFrequency: 6 };
+  s.addChart(pres.charts.LINE, [{ name: "中央値", labels: MINS.map(String), values: MINS.map((m) => r2(med(runs.map((r) => exc(r, m))))) },
+    { name: "最大", labels: MINS.map(String), values: MINS.map((m) => r2(Math.max(...runs.map((r) => exc(r, m))))) }],
+    { ...lo, x: 0.6, chartColors: [BLUE_DARK, GREY], valAxisMinVal: 0, valAxisTitle: "最終の値との差 [%]", catAxisTitle: "便割当の探索時間 [分]" });
+  s.addChart(pres.charts.LINE, [{ name: "解が見つかっていた", labels: SECS.map(String), values: pct((h) => h.t_first_incumbent_s) },
+    { name: "最終の解が見つかっていた", labels: SECS.map(String), values: pct((h) => h.t_final_incumbent_s) }],
+    { ...lo, x: 6.8, chartColors: ["7AB8E8", BLUE_DARK], valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 25, valAxisTitle: "割合 [%]", catAxisTitle: "毎時の再計画の計算時間 [秒]" });
+  caption(s, `左：1週間の便割当（${Math.round(runs[0].stage1.time_budget_sec).toLocaleString("en-US")}秒で打ち切り）。12ケースの目的関数が最後の値よりどれだけ高かったか`, 0.6, 5.4, 5.9, 0.6);
+  caption(s, `右：毎時の再計画（300秒で打ち切り）で時間切れの${HL.length}回。${tlRuns.join("・")}`, 6.8, 5.4, 5.9, 0.6);
+  card(s, 0.6, 6.05, 12.1, 0.85, "DCEBF7");
+  text(s, `打ち切る前に、ほぼ下げ止まっていた：便割当は最後の30分で${late30.toFixed(2)}%以下しか下がらず、再計画は${HL.length}回中${by240}回が240秒までに最終の解に着いた。ただし下限との差（ギャップ、中央値${Math.round(gapMed)}%）は残るので、最適とは言えない。`,
+    { x: 0.8, y: 6.08, w: 11.7, h: 0.8, fontSize: 13.5, valign: "middle" });
+  s.addNotes("占部先生からの質問への答えです。左は1週間の便割当で、9,000秒の上限で止まっていますが、目的関数は始めの30分ほどで大きく下がり、最後の30分はほとんど変わっていません。右は1時間ごとの再計画で、300秒で打ち切られた回のうち、どの時点で最終の解が見つかっていたかの割合です。多くは早い段階で最終の解が見つかっていました。ただ、下限との差であるギャップは大きいままなので、これで最適だとは言えません。");
+}
 
 // ---- 9. What I learned (tips for juniors)
 s = page("今月学んだこと（後輩のみなさんへ）");
