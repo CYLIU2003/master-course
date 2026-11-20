@@ -259,6 +259,9 @@ class DepotEnergyAsset:
     bess_terminal_soc_policy: str = ""
     bess_terminal_soc_target_kwh: float = 0.0
     bess_terminal_soc_deviation_penalty_yen_per_kwh: float = 20.0
+    # Price of BESS energy left at the window end (pillar B, 2026-11-20).
+    # 0 keeps the previous objective; see bess_terminal_value.py.
+    bess_terminal_energy_value_yen_per_kwh: float = 0.0
     provisional_energy_cost_yen_per_kwh: float = 0.0
     # Gross PV can only enter the current transport-energy balance when the
     # nontraction load is explicitly declared zero; nonzero loads need a

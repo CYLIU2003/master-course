@@ -82,6 +82,12 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
         if "bess_priority_mode" in design:
             if asset.bess_priority_mode != design["bess_priority_mode"]:
                 raise ValueError(f"BESS {depot_id} priority mode differs from the declared evaluation")
+        if "bess_terminal_energy_value_yen_per_kwh" in design:
+            if (float(asset.bess_terminal_energy_value_yen_per_kwh)
+                    != float(design["bess_terminal_energy_value_yen_per_kwh"])):
+                raise ValueError(f"BESS {depot_id} terminal energy value differs from the declared evaluation")
+        if "allow_grid_to_bess" in design and bool(asset.allow_grid_to_bess) != bool(design["allow_grid_to_bess"]):
+            raise ValueError(f"BESS {depot_id} grid charging permission differs from the declared evaluation")
             validate_auxiliary_bess(asset)
         if not asset.bess_enabled:
             continue

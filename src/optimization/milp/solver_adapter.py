@@ -36,6 +36,7 @@ from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.seed_fingerprint import (
     phase4_seed_plan_fingerprint,
 )
+from src.optimization.common.bess_terminal_value import terminal_energy_value, terminal_value_term
 from src.optimization.common.bess_terminal_policy import (
     resolve_bess_terminal_soc_target_kwh,
 )
@@ -8784,6 +8785,7 @@ class GurobiMILPAdapter:
         bess2bus_var: Dict[Tuple[str, int], Any] = {}
         pv_curt_var: Dict[Tuple[str, int], Any] = {}
         bess_soc_var: Dict[Tuple[str, int], Any] = {}
+        integrated_bess_terminal_value_exprs: Dict[str, Tuple[Any, Any]] = {}
         grid_import_var: Dict[Tuple[str, int], Any] = {}
         contract_over_limit_var: Dict[Tuple[str, int], Any] = {}
         p_avg_depot_var: Dict[Tuple[str, int], Any] = {}
@@ -9964,6 +9966,7 @@ class GurobiMILPAdapter:
                         + eta_ch * (pv2bess_var[last_key] + g2bess_var[last_key])
                         - (bess2bus_var[last_key] / eta_dis)
                     )
+                    integrated_bess_terminal_value_exprs[depot_id] = (asset, final_soc_expr)
                     model.addConstr(
                         final_soc_expr >= terminal_soc_floor
                     )
@@ -10046,6 +10049,8 @@ class GurobiMILPAdapter:
             opportunistic_topup_deficit_penalty_per_kwh = 0.0
 
         objective = gp.LinExpr()
+        for asset, final_soc_expr in integrated_bess_terminal_value_exprs.values():
+            objective += energy_weight * terminal_value_term(asset, final_soc_expr)
         ice_fuel_l_objective = gp.LinExpr()
         co2_emissions_objective = gp.LinExpr()
         deadhead_distance_objective = gp.LinExpr()
@@ -22693,6 +22698,7 @@ class GurobiMILPAdapter:
         bess_soc_var: Dict[Tuple[str, int], Any] = {}
         bess_charge_mode_var: Dict[Tuple[str, int], Any] = {}
         bess_discharge_mode_var: Dict[Tuple[str, int], Any] = {}
+        bess_terminal_value_exprs: Dict[str, Tuple[Any, Any]] = {}
         w_on_depot_var: Dict[str, Any] = {}
         w_off_depot_var: Dict[str, Any] = {}
         w_on_var = None
@@ -23480,6 +23486,7 @@ class GurobiMILPAdapter:
                     stage2.addConstr(bess_soc_var[nxt_key] == bess_soc_var[cur_key] + eta_ch * (pv2bess_var[cur_key] + g2bess_var[cur_key]) - (bess2bus_var[cur_key] / eta_dis))
                 last_key = (depot_id, slot_indices[-1])
                 terminal_expr = bess_soc_var[last_key] + eta_ch * (pv2bess_var[last_key] + g2bess_var[last_key]) - (bess2bus_var[last_key] / eta_dis)
+                bess_terminal_value_exprs[depot_id] = (asset, terminal_expr)
                 terminal_floor = max(float(asset.bess_terminal_soc_min_kwh or 0.0), soc_lb)
                 stage2.addConstr(terminal_expr >= terminal_floor)
                 stage2.addConstr(terminal_expr <= soc_ub)
@@ -23568,6 +23575,11 @@ class GurobiMILPAdapter:
         # and never entered in the ledger, which only counts purchased energy.
         for var in next_morning_shortfall_var.values():
             objective2 += next_morning_shortfall_penalty * var
+        # Inventory price of the BESS energy left at the window end; removed
+        # from the reported Stage 2 energy objective like the penalties above.
+        if electricity_cost_enabled:
+            for asset, terminal_expr in bess_terminal_value_exprs.values():
+                objective2 += terminal_value_term(asset, terminal_expr)
         stage2.setObjective(objective2, GRB.MINIMIZE)
         start_source, start_slots, start_source_audit = (
             FIXED_ASSIGNMENT_SOURCE, stage1_plan.charging_slots, None
@@ -24257,12 +24269,30 @@ class GurobiMILPAdapter:
                 contract_overage_slack_penalty_jpy
             )
         stage2_energy_objective -= contract_overage_slack_penalty_jpy
+        bess_terminal_value_jpy = 0.0
+        bess_terminal_value_audit: Dict[str, Any] = {}
+        if electricity_cost_enabled:
+            for depot_id, (asset, terminal_expr) in bess_terminal_value_exprs.items():
+                price = terminal_energy_value(asset)
+                if price == 0.0:
+                    continue
+                end_kwh = float(terminal_expr.getValue())
+                start_kwh = float(asset.bess_initial_soc_kwh or 0.0)
+                value_jpy = price * (start_kwh - end_kwh)
+                bess_terminal_value_jpy += value_jpy
+                bess_terminal_value_audit[str(depot_id)] = {
+                    "price_yen_per_kwh": price, "start_kwh": start_kwh,
+                    "end_kwh": end_kwh, "value_jpy": value_jpy,
+                }
+        stage2_energy_objective -= bess_terminal_value_jpy
         metadata = {
             **dict(stage1_plan.metadata or {}),
             "status": solver_status,
             "stage2_solver_status": stage2_status,
             "stage2_next_morning_shortfall_kwh": next_morning_shortfall_kwh,
             "stage2_next_morning_shortfall_penalty_jpy": next_morning_shortfall_penalty_jpy,
+            "stage2_bess_terminal_value_jpy": bess_terminal_value_jpy,
+            "stage2_bess_terminal_value_by_depot": bess_terminal_value_audit,
             "stage2_charging_start": charging_start_audit,
             "stage2_exact_optimality_certified": stage2_exact_optimality_certified,
             "stage1_mip_gap": stage1_gap,
@@ -27473,6 +27503,9 @@ class GurobiMILPAdapter:
                 model.addConstr(terminal_soc >= terminal_floor)
                 model.addConstr(terminal_soc <= soc_ceiling)
                 constraint_count += 2
+                # Same inventory price as Stage 2, so the assignment does not
+                # treat the initial BESS energy as free.
+                objective += energy_weight * terminal_value_term(asset, terminal_soc)
                 terminal_target = _bess_terminal_soc_target_kwh(
                     asset,
                     terminal_soc_floor=terminal_floor,
@@ -27537,7 +27570,8 @@ class GurobiMILPAdapter:
             "bess_planning_reserve": planning_reserve,
             "bess_dispatch_policy_by_depot": {
                 depot_id: {"priority_mode": asset.bess_priority_mode,
-                           "auxiliary_rule_relaxed_in_stage1": asset.bess_priority_mode == "pv_self_consumption"}
+                           "auxiliary_rule_relaxed_in_stage1": asset.bess_priority_mode == "pv_self_consumption",
+                           "terminal_energy_value_yen_per_kwh": terminal_energy_value(asset)}
                 for depot_id, asset in assets_by_depot.items()
             },
             "timestep_min": int(problem.scenario.timestep_min),

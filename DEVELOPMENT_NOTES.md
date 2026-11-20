@@ -13034,3 +13034,16 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
 - 蓄電池：週の終わりは下限だけ。取り崩しは費用 v×(E₀−E_T) として目的関数（Stage 2・毎時の立て直しの窓の終わり）に入れ、結果の総費用には基本料金と同じく実行結果から足す（両方式とも）。系統→蓄電池はまず使わない。1時間の中の放電はその時間の初めの残量からだけ出す予備（`physical_floor_every_prefix`、新設）。設計：`outcome/2026-11-20_pillarB_bess/柱B_蓄電池最適化_設計.md`。コードは未変更。
 - 確認した事実：`cost_driven` は今もコードの既定で、9/21 に本人の指定で規則方式（`pv_self_consumption`）へ切り替えた。残量の価値を目的関数に入れる仕組みはない。既存の予備 `evaluation_target_every_prefix` は初期残量を守る値にしていて、1時間ブロックの開始残量からの放電だけを許す。
 - 原稿の書式：申込サイト（gakkai-web.net/gakkai/iee/ippan/template/）の作成見本とテンプレートを 11/20 に取得し、`outcome/2026-12-20_ieej_manuscript/template/` に置いた。SHA-256：iee_size.pdf e38adde2…dcdb、iee_sample.pdf b97ccc4e…d9d98、iee_sample.doc 77fdc698…8eb7。構成案：`outcome/2026-12-20_ieej_manuscript/原稿の構成.md`。
+
+### 蓄電池の残量の価格（柱B①の実装、2026-11-20）
+
+- 本人の決定：単価 v＝17.43 円/kWh（料金Aの電力量料金）。
+- 数式：各計画の窓で、目的関数に v×(E_start − E_end) を足す。E_start は窓の最初の残量（毎時の立て直しでは実測の残量）、E_end は最後のスロットのあとの残量。取り崩しは費用、増えた分は同じ単価で差し引く。
+  - 放電1 kWh でバスに渡るのは 0.95 kWh なので、満たし直せない放電は損になる。捨てるはずの太陽光で満たし直せるときだけ、放電（朝・夜）→太陽光で充電、の動きになる。小さな例で確認：満杯から始めると夜に 5.4 kWh 放電し、昼の太陽光 6 kWh で 80 kWh に戻した（`tests/test_bess_terminal_value.py`）。
+  - 時間帯で単価が違う料金で v が昼の高い単価以上だと、夜に買電して太陽光を蓄電池に貯める方が得になりうる（例題の 10/30 円で確認）。料金Aは単価が一定なので起きない。
+- 入れた場所：`DepotEnergyAsset.bess_terminal_energy_value_yen_per_kwh`（既定0で従来と同じ）、`src/optimization/common/bess_terminal_value.py`。Stage 2（前日計画と毎時の立て直しで共通）、Stage 1 の連続近似（便割当が蓄電池を「ただ」で使わないため）、統合モデル。規則方式（`pv_self_consumption`）や無効な蓄電池で v>0 なら拒否する。
+- 報告：Stage 2 の目的値（`stage2_objective`）からこの項を引き、`stage2_bess_terminal_value_jpy` と窓ごとの内訳に別に記録する。`executed_day_accounting.json` は変えない。総費用には、基本料金と同じく実行結果の週の最初と最後の残量から足す（集計の道具で、両方式とも）。
+- 設定：`tools/research/weekly_campaign.py` の `prepare_week(bess_mode=...)`。`rule`（柱A、既定）と `optimized`（`cost_driven`、系統→蓄電池なし、v＝17.43、週の終わりは下限だけ）。operation ファイルの `bess_mode` を `prepare_ahead.py` が渡し、`prepared.json` に記録する。Prepare の事前検査（`verify_evaluation_contract`）で方式・単価・系統充電の許可がずれていたら止める。
+- 毎時の実行での守り：最適化方式の蓄電池には、実行する1時間の放電をその時間の初めの残量と下限で制限する仕組み（`pv_execution_reserve.py`）がもとからある。設計で考えた新しい予備の設定は作らなかった。
+- 比較できる範囲：Stage 1 の連続近似の目的関数も変わるので、便割当も変わりうる。規則方式も新しい固定版で計算し直し、rc42 の数値とは並べない。
+- テスト：新規5件（`tests/test_bess_terminal_value.py`）。関連628件中、2件の失敗（`test_bess_continuous_campaign.py::test_campaign_passes_verified_terminal_only_to_next_prepare`、`test_contract_overage_accounting.py::test_executed_pv_prefix_accounts_only_target_slots_and_daily_ledger`）は変更前のコードでも同じく失敗する。

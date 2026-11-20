@@ -26,6 +26,7 @@ from src.optimization.common.cost_components import (
 )
 from src.optimization.common.bess_terminal_policy import normalize_bess_terminal_policy
 from src.optimization.common.bess_dispatch_policy import validate_auxiliary_bess
+from src.optimization.common.bess_terminal_value import terminal_energy_value
 from src.optimization.common.bev_terminal_policy import (
     validate_next_morning_tolerance,
     BevTerminalSocPolicy,
@@ -2196,8 +2197,12 @@ class ProblemBuilder:
                     0.0,
                 ),
                 provisional_energy_cost_yen_per_kwh=float(raw.get("provisional_energy_cost_yen_per_kwh") or 0.0),
+                bess_terminal_energy_value_yen_per_kwh=float(
+                    raw.get("bess_terminal_energy_value_yen_per_kwh") or 0.0
+                ),
             )
             validate_auxiliary_bess(asset)
+            terminal_energy_value(asset)
             assets[depot.depot_id] = asset
         return assets
 

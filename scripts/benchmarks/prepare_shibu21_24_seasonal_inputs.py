@@ -133,6 +133,13 @@ def apply_seasonal_bess_policy(asset: dict, *, design: dict | None = None) -> di
         configured["bess_priority_mode"] = design["bess_priority_mode"]
     if configured.get("bess_priority_mode") == "pv_self_consumption":
         configured["allow_grid_to_bess"] = False
+    # Pillar B (2026-11-20): an optimized BESS declares the grid-charging
+    # permission and the price of the energy left at the window end.
+    if design and "allow_grid_to_bess" in design:
+        configured["allow_grid_to_bess"] = bool(design["allow_grid_to_bess"])
+    if design and "bess_terminal_energy_value_yen_per_kwh" in design:
+        configured["bess_terminal_energy_value_yen_per_kwh"] = float(
+            design["bess_terminal_energy_value_yen_per_kwh"])
     return configured
 
 

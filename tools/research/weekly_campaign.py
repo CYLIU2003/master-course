@@ -122,9 +122,20 @@ def validate_rolling_fleet(scenario: dict, payload: dict) -> dict:
             "status": "INPUT_HANDOFF_VALIDATED_NOT_RESEARCH_APPROVAL"}
 
 
+# Pillar B (2026-11-20, user decision): "rule" is the pillar-A battery
+# (pv_self_consumption). "optimized" lets Stage 2 and the hourly re-plans
+# dispatch the battery, PV-only charging, minimum-only end state, with the
+# energy left at each window end priced at the tariff-A energy charge.
+BESS_MODES = {
+    "rule": {},
+    "optimized": {"bess_priority_mode": "cost_driven", "allow_grid_to_bess": False,
+                  "bess_terminal_energy_value_yen_per_kwh": 17.43},
+}
+
+
 def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_hash: str, planning_days: int = 7,
                  morning_tolerance_percent: float = 0.0, morning_shortfall_penalty_yen_per_kwh: float = 0.0,
-                 planning_pv_source: str = "forecast") -> dict:
+                 planning_pv_source: str = "forecast", bess_mode: str = "rule") -> dict:
     parent = scenario_store._load(parent_id, skip_graph_arcs=True)
     before = parent_hash(parent)
     if before != expected_parent_hash:
@@ -147,6 +158,9 @@ def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_has
         raise ValueError("Week is outside the existing predeclared selection")
     design.update(bess_priority_mode="pv_self_consumption", bess_terminal_soc_policy="minimum_only",
                   rolling_bess_terminal_policy="minimum_only", bess_forecast_reserve_policy="physical_floor_only")
+    if bess_mode not in BESS_MODES:
+        raise ValueError(f"Unknown bess_mode: {bess_mode}")
+    design.update(BESS_MODES[bess_mode])
     # Immutable run instances stay in the campaign's private store; no monthly
     # replacement of the user's base scenario or automatic ODPT retrieval.
     state_file = directory / "instance.json"
@@ -196,7 +210,8 @@ def prepare_week(week: str, directory: Path, parent_id: str, expected_parent_has
               "prepared_input_id": prepared.prepared_input_id, "prepared_path": str(prepared.solver_input_path),
               "prepared_sha256": sha(prepared.solver_input_path), "trips": len(payload["trips"]),
               "overnight": extension, "fleet_handoff": fleet_handoff,
-              "source_git": git_state(ROOT), "request": request(prepared.prepared_input_id)}
+              "source_git": git_state(ROOT), "request": request(prepared.prepared_input_id),
+              "bess_mode": bess_mode, "bess_design": BESS_MODES[bess_mode]}
     write_json(path, result)
     return result
 

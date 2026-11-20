@@ -57,6 +57,13 @@ def seasonal_bess_controls(design: dict | None = None) -> dict:
         raise ValueError("Unsupported seasonal BESS priority mode")
     if priority == "pv_self_consumption" and (reserve != "physical_floor_only" or policy != "minimum_only"):
         raise ValueError("Auxiliary BESS requires minimum_only/physical_floor_only")
+    value = float(source.get("bess_terminal_energy_value_yen_per_kwh", 0.0) or 0.0)
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError("bess_terminal_energy_value_yen_per_kwh must be finite and nonnegative")
+    if value > 0.0 and priority == "pv_self_consumption":
+        raise ValueError("A BESS terminal energy value requires an optimized BESS, not pv_self_consumption")
+    if value > 0.0 and policy != "minimum_only":
+        raise ValueError("A BESS terminal energy value replaces a terminal target; use minimum_only")
     return controls
 
 
