@@ -45,7 +45,7 @@ Every timetabled trip is run.
 
 **[Point: objective]**
 
-The objective is the total cost of one week. It adds up vehicle use, electricity, diesel, and a small CO₂ cost. The CO₂ cost only steers the plan. It is not part of any cost I report.
+The objective is the total cost of one week. It adds up vehicle use, the energy charge and excess, diesel, and a small CO₂ cost. The CO₂ cost only steers the plan. It is not part of any cost I report.
 
 **[Point: electricity formula]**
 
@@ -76,7 +76,7 @@ The battery follows a rule: it charges only from surplus PV, never from the grid
 
 The case is Tokyu Bus routes Shibu 21 to 23, run from the Tsurumaki depot, with 1,704 trips a week.
 - The fleet has 35 electric and 25 diesel buses.
-- The depot has ten 90 kW chargers, 1,000 kW of PV and a 6,000 kWh battery.
+- The depot has ten 90 kW chargers, 1,000 kW of PV and a 6,000 kWh battery. These are assumed values, not the depot's actual equipment.
 
 I tried four grid limits, 90, 200, 400 and 900 kW, in a winter, a spring and a summer week. That makes 12 cases.
 
@@ -112,9 +112,9 @@ First, the total of the 12 adopted solutions is 4,199 to 4,574 thousand yen a we
 Under these conditions, my operating guidance is this:
 - Do not take a large grid limit.
 - Spread the charging over time.
-- Aim for about 400 kW.
+- Aim for about 400 kW, which is almost never exceeded.
 
-At 400 kW, the peak grid power was 400.0 to 400.5 kW, against 570 to 794 kW at 900 kW; the only excess was 0.1 kWh in spring. Electric buses still run 93.7 to 96.0 percent of the trips, and the week costs about 244 thousand yen less than at 900 kW, on average over the three seasons. Against 200 kW the order changes with the season: 400 kW is 165 thousand yen a week cheaper in winter, and 200 kW is 131 and 100 thousand cheaper in spring and summer. Also, 200 kW drew up to 690 kW in winter. So I cannot say which of those two is better.
+At 400 kW, the peak grid power was 400.0 to 400.5 kW, against 570 to 794 kW at 900 kW; the only excess was 0.1 kWh in spring. Electric buses still run 93.7 to 96.0 percent of the trips, and the week costs about 244 thousand yen less than at 900 kW, on average over the three seasons. Against 200 kW the cost order changes with the season: 400 kW is about 165 thousand yen a week cheaper in winter, and 200 kW is 131 and 100 thousand cheaper in spring and summer. But 200 kW drew up to 690 kW in winter and 227 kW in spring, and contract revision is not modelled. So I do not rank the two on cost.
 
 **[Point: Fig. 5]**
 
