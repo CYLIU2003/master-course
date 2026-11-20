@@ -1,4 +1,4 @@
-"""Pillar B (rc43): rule vs optimized battery, tariff A. DIAGNOSTIC.
+"""Pillar B (rc43/rc44): rule vs optimized battery, tariff A. DIAGNOSTIC.
 
 Reads each collected case (weekly_operator collect) of
 output/midterm_20261128/rc43/<e{o,r}{b,i}NNN>/<week>/ and writes
@@ -6,9 +6,10 @@ rc43_comparison.json and rc43_comparison.md next to this script.
 
 Reported total (same as the pillar-A deck, plus the battery term):
   total_cost_fuel_consumed - CO2 kg x 1 JPY/kg + weekly basic charge
-  + 17.43 x (BESS energy at the start - at the end of the executed week)
-The last term is added to both modes, so a battery drawn down is not free
-energy. It is computed here from the executed plan; the executed accounting
+  + PRICE x (BESS energy at the start - at the end of the executed week)
+2026-11-21 (researcher): stored energy (initial inventory and PV charging) is
+valued at the PV unit cost, 0 JPY/kWh, so PRICE = 0 for every mode; the start
+and end inventories are still reported. It is computed here from the executed plan; the executed accounting
 JSON is not changed.
 """
 import collections
@@ -16,9 +17,9 @@ import glob
 import json
 from pathlib import Path
 
-OPS = Path("C:/master-course/output/midterm_20261128/rc43")
+OPS = Path("C:/master-course/output/midterm_20261128")
 HERE = Path(__file__).resolve().parent
-PRICE = 17.43
+PRICE = 0.0  # PV unit cost
 SEASON = {"2025-01-06": "winter", "2025-04-07": "spring", "2025-07-07": "summer"}
 BASIC = lambda kw: kw * 2530 * 0.85 * 12 / 52  # noqa: E731  JPY/week, as in the pillar-A deck
 
@@ -45,8 +46,8 @@ def bess_start_end(run):
 
 def read_case(case_dir):
     name, week = case_dir.parent.name, case_dir.name
-    mode = {"o": "optimized", "r": "rule"}[name[1]]
-    row = {"case": f"{name}/{week}", "mode": mode, "grid_limit_kw": int(name[3:]), "week": week,
+    mode = {"o": "optimized_17.43", "r": "rule", "p": "optimized_pv_cost"}[name[1]]
+    row = {"case": f"{case_dir.parent.parent.name}/{name}/{week}", "campaign": case_dir.parent.parent.name, "mode": mode, "grid_limit_kw": int(name[3:]), "week": week,
            "season": SEASON[week], "start": {"b": "bev", "i": "ice"}[name[2]], "status": "NOT_COLLECTED"}
     summary, run = case_dir / "results/weekly_summary.json", run_dir(case_dir)
     if not summary.exists() or run is None:
@@ -80,18 +81,18 @@ def read_case(case_dir):
 
 
 def main():
-    rows = [read_case(Path(p)) for p in sorted(glob.glob(str(OPS / "e[or][bi][0-9][0-9][0-9]" / "20*")))]
-    (HERE / "rc43_comparison.json").write_text(json.dumps({"label": "DIAGNOSTIC rc43 1b8e663d tariff A",
+    rows = [read_case(Path(p)) for p in sorted(glob.glob(str(OPS / "rc4[34]" / "e[orp][bi][0-9][0-9][0-9]" / "20*")))]
+    (HERE / "rc43_comparison.json").write_text(json.dumps({"label": "DIAGNOSTIC rc43 (1b8e663d) / rc44 tariff A; versions differ, see campaign",
                                                            "cases": rows}, ensure_ascii=False, indent=1) + "\n",
                                                encoding="utf-8")
     by = {(r["grid_limit_kw"], r["week"], r["mode"]): r for r in rows}
-    lines = ["# 柱B① 蓄電池：規則と最適化（rc43、料金A、DIAGNOSTIC）", "",
-             "総費用＝燃料は使った量×150円、CO₂の費用を除き、基本料金と蓄電池の残量の費用（17.43円×(最初−最後)）を足す。単位：万円/週。", "",
+    lines = ["# 柱B① 蓄電池：規則（rc43）と最適化（rc44、残量は太陽光の単価0円で評価）（料金A、DIAGNOSTIC、版が違う）", "",
+             "総費用＝燃料は使った量×150円、CO₂の費用を除き、基本料金を足す。蓄電池の残量は太陽光の単価（0円/kWh）で評価する。単位：万円/週。", "",
              "| 上限 | 季節 | 規則：総費用 | 最適化：総費用 | 差（最適化−規則） | 規則：買電 kWh | 最適化：買電 kWh | 規則：捨てた太陽光 | 最適化：捨てた太陽光 | 規則：残量 最初→最後 | 最適化：残量 最初→最後 | 状態 |",
              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for g in (90, 200, 400, 900):
         for w in SEASON:
-            r, o = by.get((g, w, "rule")), by.get((g, w, "optimized"))
+            r, o = by.get((g, w, "rule")), by.get((g, w, "optimized_pv_cost"))
             def f(x, k, s=1e4, d=1):
                 return f"{x[k] / s:,.{d}f}" if x and k in x else "—"
             diff = (f"{(o['total_cost_reported'] - r['total_cost_reported']) / 1e4:+.1f}"

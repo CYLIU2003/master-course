@@ -130,6 +130,11 @@ BESS_MODES = {
     "rule": {},
     "optimized": {"bess_priority_mode": "cost_driven", "allow_grid_to_bess": False,
                   "bess_terminal_energy_value_yen_per_kwh": 17.43},
+    # 2026-11-21 (researcher): stored energy (the initial inventory and PV
+    # charging) is valued at the PV unit cost, 0 JPY/kWh here. rc43 showed that
+    # 17.43 (the grid price) makes discharge 17.43/0.95 dearer than buying.
+    "optimized_pv_cost": {"bess_priority_mode": "cost_driven", "allow_grid_to_bess": False,
+                          "bess_terminal_energy_value_yen_per_kwh": 0.0},
 }
 
 

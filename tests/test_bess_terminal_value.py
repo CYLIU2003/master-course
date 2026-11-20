@@ -103,3 +103,19 @@ def test_optimized_design_reaches_the_prepared_asset_and_is_checked():
     with pytest.raises(ValueError):
         seasonal_bess_controls({**design, "bess_terminal_soc_policy": "return_to_initial",
                                 "rolling_bess_terminal_policy": "scenario"})
+
+
+def test_pv_cost_mode_prices_storage_at_the_pv_unit_cost():
+    from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import apply_seasonal_bess_policy
+    from scripts.benchmarks.seasonal_design_contract import seasonal_bess_controls
+    from tools.research.weekly_campaign import BESS_MODES
+
+    parent = {"bess_energy_kwh": 6000.0, "bess_initial_soc_kwh": 3000.0, "allow_grid_to_bess": True,
+              "bess_priority_mode": "pv_self_consumption"}
+    design = {"bess_terminal_soc_policy": "minimum_only", "rolling_bess_terminal_policy": "minimum_only",
+              "bess_forecast_reserve_policy": "physical_floor_only", **BESS_MODES["optimized_pv_cost"]}
+    seasonal_bess_controls(design)
+    configured = apply_seasonal_bess_policy(parent, design=design)
+    assert configured["bess_priority_mode"] == "cost_driven"
+    assert configured["allow_grid_to_bess"] is False
+    assert configured["bess_terminal_energy_value_yen_per_kwh"] == 0.0
