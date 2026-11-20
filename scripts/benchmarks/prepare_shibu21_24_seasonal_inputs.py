@@ -365,9 +365,27 @@ def planning_pv_profiles(forecast: dict, actual: dict, planning_pv_source: str) 
     raise ValueError("Unknown planning PV source")
 
 
+def permute_actual_pv_days(profiles: list[dict], order: list[int] | None) -> list[dict]:
+    """Reorder the first len(order) days of actual PV (2026-11-21 sequence counterfactual).
+
+    Day i of the case receives the actual curve of day order[i]; the total PV,
+    the timetable and every other input stay the same. Later days (the next
+    morning) are not moved. ``None`` keeps the measured order.
+    """
+    if order is None:
+        return profiles
+    if (not isinstance(order, list) or sorted(order) != list(range(len(order)))
+            or len(order) > len(profiles)):
+        raise ValueError("pv_day_order must be a permutation of the first case days")
+    moved = [{**profiles[j], "date": profiles[i]["date"], "pv_source_date": profiles[j]["date"]}
+             for i, j in enumerate(order)]
+    return moved + profiles[len(order):]
+
+
 def configure_doc(
     doc: dict, start_date: str, source: dict, *, design: dict | None = None,
     planning_days: int = 7, planning_pv_source: str = "forecast",
+    pv_day_order: list[int] | None = None,
 ) -> dict:
     """Materialize a declared dated case from the immutable candidate source."""
     if isinstance(planning_days, bool) or not isinstance(planning_days, int) or not 1 <= planning_days <= 7:
@@ -472,6 +490,7 @@ def configure_doc(
     profiles, actual_sources = _date_pv_rows(ROOT / "data/external/solcast_raw/tsurumaki_2025_2026",
                                                dates, step, float(asset.get("performance_ratio") or .85),
                                                plane)
+    profiles = permute_actual_pv_days(profiles, pv_day_order)
     execution_input = _persist_actual_profiles(ROOT, profiles, actual_sources, dates, step)
     forecast_directory = None
     if design and design.get("require_balanced_monthly_weeks"):
@@ -506,6 +525,7 @@ def configure_doc(
                     pv_capacity_factor_rows_sha256=content_hash(profiles),
                     pv_information_mode="training_only_forecast_proxy", forecast_audit=forecast_audit,
                     planning_pv_source=planning_pv_source,
+                    pv_day_order=pv_day_order,
                     pv_execution_input=execution_input,
                     pv_irradiance_plane=None if plane is None else plane.describe(),
                     bev_terminal_soc_policy="return_to_initial", final_soc_target_tolerance_percent=0.0,

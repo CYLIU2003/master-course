@@ -132,3 +132,19 @@ def phase_from_solver_mode(solver_mode: str) -> str:
     if normalized in _LEGACY_PHASE_MAP:
         return _LEGACY_PHASE_MAP[normalized]
     return ""
+
+
+def apply_stage1_seed_plan(config, phase_token: str, seed_plan):
+    """Attach a restored ``stage1_seed_plan`` to the solve configuration.
+
+    Phase 3 uses it only as the Stage 1 starting point. The charging-only
+    phase (2026-11-21 controlled experiments) holds it fixed instead: no
+    Stage 1 runs, so every compared case shares the same trips, vehicles and
+    vehicle-days and only the charging/PV/BESS problem differs.
+    """
+    from dataclasses import replace
+
+    config = replace(config, stage1_seed_plan=seed_plan)
+    if phase_token == "phase1_charging_only":
+        config = replace(config, fixed_assignment=seed_plan)
+    return config

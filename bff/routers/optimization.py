@@ -12131,9 +12131,9 @@ def _run_optimization(
             stage1_seed_payload = raw_frontend_request_payload.get("stage1_seed_plan")
             if stage1_seed_payload:
                 from src.optimization.milp.seed_snapshot import restore_stage1_seed_plan
-                opt_config = replace(
-                    opt_config,
-                    stage1_seed_plan=restore_stage1_seed_plan(problem, stage1_seed_payload),
+                from bff.services.optimization_run.execute import apply_stage1_seed_plan
+                opt_config = apply_stage1_seed_plan(
+                    opt_config, phase_token, restore_stage1_seed_plan(problem, stage1_seed_payload)
                 )
             engine_result = OptimizationEngine().solve(problem, opt_config)
             solve_elapsed = time.perf_counter() - solve_started_at
