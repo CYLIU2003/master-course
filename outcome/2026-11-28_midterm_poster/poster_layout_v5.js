@@ -156,7 +156,7 @@ module.exports = function layout(c) {
       ["比べるケース", "受電上限 90・200・400・900 kW × 冬・春・夏の代表週（2025年1/6・4/7・7/7から、実際の日射）＝12ケース"]];
   tbl(study, LX, y, COL, 3.4, EN ? 26 : CAP, [1.15, 1.15, 1.15]);
   y += 3 * 1.15 + 0.15;
-  caption(L("表2　ケーススタディの条件", "Table 2  Case-study conditions"), LX, y, COL, 0.65, CAP);
+  caption(COSTA ? L("表2　ケーススタディの条件。季節は代表1週ずつ（秋は今後）", "Table 2  Case-study conditions (one week per season; autumn later)") : L("表2　ケーススタディの条件", "Table 2  Case-study conditions"), LX, y, COL, 0.65, CAP);
   y += 0.7;
   if (y > FOOT) throw new Error(`left column overflows: ${y}`);
 
@@ -247,8 +247,10 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
         showValAxisTitle: true, valAxisTitle: L("万円/週", "thousand JPY/week"), valAxisTitleFontSize: 24, valAxisTitleColor: SUB });
     if (Math.max(...rows5.map((r) => u(r.electricity_cost) + u(r.basic_charge_week_jpy) + u(fuelOf(r)) + u(r.contract_overage_cost))) > (EN ? 600 : 60)) throw new Error("fig. 5 axis too short");
     y += CH5 + 0.05;
-    caption(L(`図4　総費用の内訳（料金A、採用した解）。車両使用費（${vehR}万円/週、ほぼ一定）は除く。基本料金は受電上限に比例して増える`,
-      `Fig. 4  Total cost without vehicle use (${vehR} million JPY/week, nearly constant); tariff A, adopted solutions. The basic charge grows with the limit`),
+    const winterMost = LIMITS.filter((g) => g >= 200).every((g) => SE.every(([w]) => X.get(g, W90).electricity_cost >= X.get(g, w).electricity_cost));
+    if (!winterMost) throw new Error("winter no longer has the largest energy charge; rewrite the fig. 4 caption");
+    caption(L(`図4　総費用の内訳（料金A、採用した解。車両使用費${vehR}万円/週は除く）。基本料金は上限に比例し、電力量料金は日射の少ない冬が大きい`,
+      `Fig. 4  Cost breakdown without vehicle use (${vehR} million JPY/week); tariff A, adopted. Basic charge grows with the limit; energy is highest in winter`),
       RX, y, COL, 1.4, CAP);
     y += 1.5;
     // Fig. 5 (2026-11-19, Prof. Urabe): how the objective decreased before the time limit, adopted tariff-A solutions.
@@ -433,16 +435,16 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
   const retryTxt = (EN ? retries.map((r) => `${r.k} ${r.g} kW ${SEASON[r.w]}`).join(", ") : retries.map((r) => `${r.k} ${r.g} kW${SEASON[r.w]}`).join("、"))
     + (sts.length === 1 ? L(`（いずれも${sel(sts[0])}）`, ` (all ${sel(sts[0])})`) : "");
   const steps0 = Math.min(ET.steps[0], CT.steps[0]), steps1 = Math.max(ET.steps[1], CT.steps[1]);
-  if (COSTA) caption(L(`注：数値はいずれも診断用（DIAGNOSTIC）で、研究の結論にはまだ用いない。便割当は最適解と確かめられておらず、2段階で解くため全体としての最適解でもない。蓄電池は規則で充放電し、最適化していない。数値は rc42（19dc0780）の料金Aの24計算（12ケース×初期割当2通り）で、すべて検証を通過。${retries.map((r) => `${r.g} kW${SEASON[r.w]}・${sel(r.st)}`).join("、")}は1回目が前日計画のメモリ上限（14 GiB）で止まり、24 GiBで1回だけ計算し直した。毎時の再計画は最大${ET.maxTimeouts}回（${ET.steps[0]}〜${ET.steps[1]}回中）が時間切れ。`,
-    `Note: all figures are DIAGNOSTIC and not yet used for research conclusions. The assignment is not proven optimal, and solving in two stages does not give a global optimum. The battery follows a rule and is not optimized. Numbers are from rc42 (19dc0780): the 24 tariff-A runs (12 cases × 2 initial assignments), all passing verification. ${retries.map((r) => `${r.g} kW ${SEASON[r.w]} ${sel(r.st)}`).join(", ")} stopped at the day-ahead memory limit (14 GiB) on the first attempt and was rerun once at 24 GiB. Up to ${ET.maxTimeouts} of the ${ET.steps[0]}–${ET.steps[1]} hourly re-plans timed out.`),
-    M, FOOT + 0.2, W, 1.15, 20);
+  if (COSTA) caption(L(`注：数値はいずれも診断用（DIAGNOSTIC）で、研究の結論にはまだ用いない。便割当は最適解と確かめられておらず、2段階で解くため全体としての最適解でもない。蓄電池は規則で充放電し、最適化していない。数値は rc42（19dc0780）の料金Aの24計算（12ケース×初期割当2通り）で、すべて検証を通過。${retries.map((r) => `${r.g} kW${SEASON[r.w]}・${sel(r.st)}`).join("、")}は1回目が前日計画のメモリ上限（14 GiB）で止まり、24 GiBで1回だけ計算し直した。毎時の再計画は最大${ET.maxTimeouts}回（${ET.steps[0]}〜${ET.steps[1]}回中）が時間切れ。季節は代表1週ずつ・各1回の計算で、季節差の統計的な有意性は確かめていない（秋は未計算）。電費は距離×平均の値で、冷暖房の季節変化は入れていない。`,
+    `Note: all figures are DIAGNOSTIC and not yet used for research conclusions. The assignment is not proven optimal, and solving in two stages does not give a global optimum. The battery follows a rule and is not optimized. Numbers are from rc42 (19dc0780): the 24 tariff-A runs (12 cases × 2 initial assignments), all passing verification. ${retries.map((r) => `${r.g} kW ${SEASON[r.w]} ${sel(r.st)}`).join(", ")} stopped at the day-ahead memory limit (14 GiB) on the first attempt and was rerun once at 24 GiB. Up to ${ET.maxTimeouts} of the ${ET.steps[0]}–${ET.steps[1]} hourly re-plans timed out. One week per season, solved once (no significance test; autumn not computed); energy use is distance × an average rate, without seasonal heating or cooling.`),
+    M, FOOT + 0.2, W, 1.5, 20);
   else caption(L(`注：数値はいずれも診断用（DIAGNOSTIC）で、研究の結論にはまだ用いない。便割当は最適解と確かめられておらず、2段階で解くため全体としての最適解でもない。蓄電池は規則で充放電し、最適化していない。数値は rc42（19dc0780）の48計算（電気料金2通り×12ケース×初期割当2通り）で、すべて検証を通過。${retryTxt}の${retries.length}計算は1回目が前日計画のメモリ上限（14 GiB）で止まり、24 GiBで1回だけ計算し直した。毎時の再計画は最大${ET.maxTimeouts}回（A）・${CT.maxTimeouts}回（B）（${steps0}〜${steps1}回中）が時間切れ。`,
     `Note: all figures are DIAGNOSTIC and not yet used for research conclusions. The assignment is not proven optimal, and solving in two stages does not give a global optimum. The battery follows a rule and is not optimized. Numbers are from rc42 (19dc0780): 48 runs (2 tariffs × 12 cases × 2 initial assignments), all passing verification. ${retryTxt} stopped at the day-ahead memory limit (14 GiB) on the first attempt and were rerun once at 24 GiB. Up to ${ET.maxTimeouts} (A) and ${CT.maxTimeouts} (B) of the ${steps0}–${steps1} hourly re-plans timed out.`),
     M, FOOT + 0.2, W, 1.15, 20);
   text([{ text: L("参考文献　", "References  "), options: { bold: true } },
     { text: L("［1］環境省・経済産業省：算定方法及び排出係数一覧（2025年版）　［2］W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018　［3］公共交通オープンデータセンター：東急バス 時刻表データ（ODPT）　［4］Gurobi Optimization, LLC: Gurobi Optimizer Reference Manual, Version 13.0　［5］P. Shaw: Using constraint programming and local search methods to solve vehicle routing problems, CP-98, LNCS 1520, 1998　［6］東京電力エナジーパートナー：高圧の電気料金（ベーシックプラン、2026年4月1日実施）　［7］首相官邸：第203回国会における菅内閣総理大臣所信表明演説（2020年10月26日）　［8］国土交通省：運輸部門における二酸化炭素排出量",
       "[1] Ministry of the Environment and METI: Calculation methods and emission factors (2025)  [2] W. F. Holmgren et al.: pvlib python, JOSS 3(29), 884, 2018  [3] Open Data Challenge for Public Transportation: Tokyu Bus timetable (ODPT)  [4] Gurobi Optimization, LLC: Gurobi Optimizer Reference Manual, Version 13.0  [5] P. Shaw: Using constraint programming and local search methods to solve vehicle routing problems, CP-98, LNCS 1520, 1998  [6] TEPCO Energy Partner: high-voltage electricity rates (Basic plan, from 1 Apr 2026)  [7] Prime Minister's Office of Japan: policy speech to the 203rd Diet session (26 Oct 2020)  [8] MLIT: CO₂ emissions in the transport sector") }],
-    { x: M, y: FOOT + 1.45, w: W, h: 45.55 - FOOT - 1.45, fontSize: 18, color: SUB });
+    { x: M, y: FOOT + (COSTA ? 1.75 : 1.45), w: W, h: 45.55 - FOOT - (COSTA ? 1.75 : 1.45), fontSize: 18, color: SUB });
 
   // Numbers for the talk scripts (printed by the build so the scripts can be checked against the poster).
 };
