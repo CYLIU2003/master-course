@@ -138,8 +138,14 @@ def _overnight_contract(doc: dict, templates: list[dict]) -> dict:
     performance_ratio = float(asset.get("performance_ratio") or .85)
     # The following morning must use the same module plane as the service days.
     plane = plane_from_config(asset)
+    # F1 (2026-11-21): the following morning is conditioned on its own 2025 class like the service days.
+    known_classes = None
+    if config["date_series_contract"].get("planning_pv_source") == "weather_class_known":
+        from scripts.benchmarks.prepare_shibu21_24_seasonal_inputs import weather_classes_2025
+        known_classes, _ = weather_classes_2025(extended_dates)
     predicted, forecast_audit = _date_forecast_rows(
-        ROOT, extended_dates, step, performance_ratio, plane=plane
+        ROOT, extended_dates, step, performance_ratio, plane=plane,
+        known_weather_classes=known_classes,
     )
     actual, actual_sources = _date_pv_rows(
         ROOT / "data/external/solcast_raw/tsurumaki_2025_2026",

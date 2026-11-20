@@ -25,6 +25,17 @@ def test_known_class_forecast_uses_the_same_model_and_orders_days_by_class():
     assert all(row["data_kind"] == "known_class_oracle_reference" for row in f1)
 
 
+def test_known_class_next_morning_keeps_the_service_days_unchanged():
+    """The next-morning check rebuilds F1 over the week plus one day; the week must be identical."""
+    extended = DATES + ["2025-01-13"]
+    week, _ = _date_forecast_rows(ROOT, DATES, 15, 0.85, known_weather_classes=weather_classes_2025(DATES)[0])
+    longer, _ = _date_forecast_rows(ROOT, extended, 15, 0.85,
+                                    known_weather_classes=weather_classes_2025(extended)[0])
+    unconditioned, _ = _date_forecast_rows(ROOT, extended, 15, 0.85)
+    assert longer[:len(DATES)] == week
+    assert unconditioned[:len(DATES)] != week
+
+
 def test_weather_class_source_plans_on_the_forecast_rows():
     assert planning_pv_profiles({"f": 1}, {"a": 1}, "weather_class_known") == {"f": 1}
     with pytest.raises(ValueError):
