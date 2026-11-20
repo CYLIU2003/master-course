@@ -356,9 +356,23 @@ def load_source_candidate(
     return {**manifest, "source_directory": relative_directory}
 
 
+WEATHER_LABELS_2025 = "data/derived/seasonal_irradiance/tsurumaki/cy2025/weather_labels.csv"
+
+
+def weather_classes_2025(dates: list[str]) -> tuple[dict, str]:
+    """Daily sunny/cloudy/rainy labels of the 2025 actuals (F1 oracle, 2026-11-21)."""
+    import csv
+    path = ROOT / WEATHER_LABELS_2025
+    rows = {row["date"]: row["weather_class"] for row in csv.DictReader(path.open(encoding="utf-8"))}
+    missing = [day for day in dates if day not in rows]
+    if missing:
+        raise ValueError(f"No 2025 weather label for {missing}")
+    return {day: rows[day] for day in dates}, sha256(path)
+
+
 def planning_pv_profiles(forecast: dict, actual: dict, planning_pv_source: str) -> dict:
     """Select the PV the plan sees; execution always uses the separate actuals."""
-    if planning_pv_source == "forecast":
+    if planning_pv_source in ("forecast", "weather_class_known"):
         return forecast
     if planning_pv_source == "actual_hindsight":
         return actual
@@ -495,17 +509,23 @@ def configure_doc(
     forecast_directory = None
     if design and design.get("require_balanced_monthly_weeks"):
         forecast_directory = ROOT / design["forecast_holdouts_directory"]
+    known_classes = None
+    if planning_pv_source == "weather_class_known":
+        known_classes, labels_sha = weather_classes_2025(dates)
     forecast_profiles, forecast_audit = _date_forecast_rows(
         ROOT, dates, step, float(asset.get("performance_ratio") or .85),
-        forecast_directory=forecast_directory, plane=plane,
+        forecast_directory=forecast_directory, plane=plane, known_weather_classes=known_classes,
     )
+    if known_classes is not None:
+        forecast_audit.update(weather_labels=WEATHER_LABELS_2025, weather_labels_sha256=labels_sha)
     profiles = planning_pv_profiles(forecast_profiles, profiles, planning_pv_source)
     for key in ("capacity_factor_by_slot", "pv_generation_kwh_by_slot", "pv_generation_kwh_by_date",
                 "pv_case_id", "pv_source_date"):
         asset.pop(key, None)
     asset.update(pv_capacity_factor_by_date=profiles,
-                 pv_profile_source=("training_only_climatology_proxy" if plane is None
-                                    else f"training_only_climatology_proxy_{plane.label()}"),
+                 pv_profile_source=(("known_class_oracle_reference" if known_classes is not None
+                                     else "training_only_climatology_proxy")
+                                    + ("" if plane is None else f"_{plane.label()}")),
                  pv_profile_dates=dates, pv_slot_minutes=step,
                  pv_input_semantics="gross_generation_before_depot_load",
                  depot_load_model="explicit_zero_nontraction_load",

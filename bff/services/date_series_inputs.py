@@ -108,8 +108,15 @@ def _date_pv_rows(raw_directory: Path, dates: list[str], timestep_min: int, perf
 def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
                         performance_ratio: float, *,
                         forecast_directory: Path | None = None,
-                        plane: SurfacePlane | None = None) -> tuple[list[dict], dict]:
-    """Build predictions without accepting any evaluation-period weather."""
+                        plane: SurfacePlane | None = None,
+                        known_weather_classes: dict[str, str] | None = None) -> tuple[list[dict], dict]:
+    """Build predictions without accepting any evaluation-period weather.
+
+    ``known_weather_classes`` (date -> sunny/cloudy/rainy, 2026-11-21 F1) uses
+    the same training model and method but conditions each day on its class:
+    an oracle reference for a perfect three-class weather forecast, recorded
+    as ``known_class_oracle_reference``. Without it the output is unchanged.
+    """
     directory = forecast_directory or repo_root / 'data/derived/seasonal_irradiance/tsurumaki/forecast_holdouts'
     manifest = _read(directory / 'manifest.json')
     model_path = directory / 'training_model.json'
@@ -119,7 +126,14 @@ def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
     model_step = int(model['slot_minutes'])
     starts = [datetime.fromisoformat(day).replace(tzinfo=JST) + timedelta(minutes=i * model_step)
               for day in dates for i in range(1440 // model_step)]
-    predictions = predict_climatology_ghi(model, starts, issued_at=starts[0])
+    unconditioned = predict_climatology_ghi(model, starts, issued_at=starts[0])
+    predictions = unconditioned
+    if known_weather_classes is not None:
+        if set(known_weather_classes) != set(dates):
+            raise ValueError('Known weather classes must cover exactly the planned dates')
+        predictions = [row for day in dates for row in predict_climatology_ghi(
+            model, [stamp for stamp in starts if stamp.date().isoformat() == day], issued_at=starts[0],
+            known_weather_class=known_weather_classes[day])]
     holdout_audit = {}
     if forecast_directory is not None:
         # Explicit campaign inputs must match the frozen weekly forecast artifact,
@@ -136,7 +150,7 @@ def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
                 # A shorter plan from the week start uses the leading part of the
                 # same frozen forecast; every requested slot must still match.
                 or profile['valid_starts'][:len(starts)] != [stamp.isoformat() for stamp in starts]
-                or profile['ghi_w_m2'][:len(starts)] != [row['ghi_w_m2'] for row in predictions]):
+                or profile['ghi_w_m2'][:len(starts)] != [row['ghi_w_m2'] for row in unconditioned]):
             raise ValueError('Declared weekly forecast differs from planning predictions')
         holdout_audit = {'holdout_directory': str(directory.relative_to(repo_root)),
                          'manifest_sha256': _digest(directory / 'manifest.json'),
@@ -160,13 +174,15 @@ def _date_forecast_rows(repo_root: Path, dates: list[str], timestep_min: int,
         profiles.append({'date': day, 'slot_minutes': timestep_min,
                          'capacity_factor_by_slot': profile['capacity_factor_by_slot'],
                          'performance_ratio': performance_ratio,
-                         'data_kind': 'training_only_climatology_proxy',
+                         'data_kind': ('known_class_oracle_reference' if known_weather_classes is not None
+                                       else 'training_only_climatology_proxy'),
                          **_conversion_metadata(plane, decomposition='pvlib_erbs_from_climatology_ghi' if plane else None)})
     return profiles, {'model_sha256': _digest(model_path),
                       'training_end_exclusive': model['training_end_exclusive'],
                       'issued_at': starts[0].isoformat(),
                       'update_policy': 'unchanged_climatology_reissued_hourly',
-                      'future_weather_class_known': False, **holdout_audit}
+                      'future_weather_class_known': known_weather_classes is not None,
+                      'known_weather_classes': known_weather_classes, **holdout_audit}
 
 
 def _persist_actual_profiles(repo_root: Path, profiles: list[dict], sources: list[dict],
