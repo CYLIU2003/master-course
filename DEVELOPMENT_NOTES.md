@@ -13047,3 +13047,6 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
 - 毎時の実行での守り：最適化方式の蓄電池には、実行する1時間の放電をその時間の初めの残量と下限で制限する仕組み（`pv_execution_reserve.py`）がもとからある。設計で考えた新しい予備の設定は作らなかった。
 - 比較できる範囲：Stage 1 の連続近似の目的関数も変わるので、便割当も変わりうる。規則方式も新しい固定版で計算し直し、rc42 の数値とは並べない。
 - テスト：新規5件（`tests/test_bess_terminal_value.py`）。関連628件中、2件の失敗（`test_bess_continuous_campaign.py::test_campaign_passes_verified_terminal_only_to_next_prepare`、`test_contract_overage_accounting.py::test_executed_pv_prefix_accounts_only_target_slots_and_daily_ledger`）は変更前のコードでも同じく失敗する。
+- **rc43 の版と投入（2026-11-20）**：`release-midterm-1b8e663d`（固定クローン、clean、データ5か所は rc42 の版とハッシュ一致）。`package_rc43`、`release.py stage` は laptop-a709una0（オフライン）が届かず、外して11台 VERIFIED（`stage-checks-v63b`、`workers.deployed.v63.json`）。動いている計算0件を確かめてから 8891 を `controller-settings.rc43.json` で起動し直した。keepalive は `watchdog_settings.txt`・`watchdog_campaigns.txt` を rc43 に向けた（rc42 の分は `.rc42.bak.txt`）。
+  - 計算：rc42 料金Aの12ケースそれぞれで採用した初期割当について、規則（`erX`）と最適化（`eoX`）の24件（`operation.rc43_*`、`run_rc43_chain.sh`。最適化の400 kW 冬を最初に）。親・種・設定・メモリは rc42 と同じ。数値は DIAGNOSTIC。
+  - 集計：`outcome/2026-11-20_pillarB_bess/summarize_rc43.py`。両方式とも総費用に 17.43×(週の最初の残量−最後の残量) を足す。rc42 の規則方式 400 kW 冬は 3,000→1,200 kWh（約3.1万円分を費用に入れずに使っていた）。
