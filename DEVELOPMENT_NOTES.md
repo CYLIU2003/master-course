@@ -12988,3 +12988,20 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
 - 注記に書いたこと：MEM24 の出し直し3件、時間切れの最大回数（A 44・B 39）。
 - カンペ：`ポスター説明カンペ_rc42.md`、`presentation_script_rc42_EN.md`。
 - 6枚とも validate を通過し、PowerPoint で画像に書き出して確認した。v4 は変更していない。
+
+### 外部スキルの取り込みとポスター案a の監査（2026-11-20）
+
+- 利用者の依頼で、GitHub の11リポジトリのスキルを調べた。
+  - 文章だけのスキル8つを `.codex/skills/` に取り込んだ（スクリプト・テストは除いた）。上流の LICENSE を同梱している。
+  - Claude Code からは `.claude/skills/<name>/SKILL.md` の案内ファイル経由で読む。
+  - 取り込んだもの・取り込まなかったもの・理由・ライセンス（Apache-2.0、MIT、CC BY-NC-SA）は `.codex/skills/THIRD_PARTY_SKILLS.md` に書いた。
+  - 外部の API キーや外部コードの実行が要るもの（paperbanana、FAROS など）は入れていない。
+- そのスキルの観点でポスター案a（日英）を監査し、直した。詳細は `outcome/2026-11-28_midterm_poster/監査_ポスター案a_20261120.md`。
+  - 数値はすべて rc42 のデータと一致した。
+  - 直したこと：
+    - 図5（打ち切り）の文字を20→24 pt にした。
+    - CO₂ 3.3倍の比較相手を明記した。
+    - 総費用の表を「表3」とし、図番号を繰り上げた。
+    - 図3のキャプションに結論を入れた。
+    - 「それ以外の費用」に車両使用費が入ることを明記した。
+  - カンペの図番号も合わせた。案b・c は今は使っていないので、見た目は確認していない（ビルドは通る）。

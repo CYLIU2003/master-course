@@ -198,9 +198,9 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
   s.addTable(rows4, { x: RX + halfR + 0.5, y: y + 0.3, w: halfR, colW: colW4, fontSize: BOTH ? 26 : (EN ? 28 : 30), fontFace: FONT, color: INK,
     rowH: rh4, valign: "middle", border: { type: "solid", pt: 1, color: GRID } });
   caption(BOTH ? L("図3　電気バスの担当便の割合（全1,704便/週）。A・Bは電気料金（表1）", "Fig. 3  Electric-bus share of the 1,704 weekly trips (A, B: tariff)")
-    : L("図3　受電上限と電気バスの担当便の割合（全1,704便/週）", "Fig. 3  Share of the 1,704 weekly trips run by electric buses"), RX, y + CH3 + 0.05, halfR, 1.3, CAP);
+    : COSTA ? L(`図3　電気バスの担当便の割合（1,704便/週）。${list(iceW(MAIN).map(lab))}以外は9割超`, `Fig. 3  Electric-bus share of 1,704 weekly trips; over 90% except ${list(iceW(MAIN).map(lab))}`) : L("図3　受電上限と電気バスの担当便の割合（全1,704便/週）", "Fig. 3  Share of the 1,704 weekly trips run by electric buses"), RX, y + CH3 + 0.05, halfR, 1.3, COSTA ? CAP - 2 : CAP);
   const y4 = y + 0.3 + rh4 * (rows4.length) + 0.15;
-  caption(L("図4　1週間の総費用［万円］（CO₂の費用は含めない）。*は燃料バス優先の解", "Fig. 4  Total weekly cost [million JPY] (no CO₂ cost). * = diesel-first solution"),
+  caption(COSTA ? L("表3　1週間の総費用［万円］（CO₂の費用は含めない）。*は燃料バス優先の解", "Table 3  Total weekly cost [million JPY] (no CO₂ cost). * = diesel-first solution") : L("図4　1週間の総費用［万円］（CO₂の費用は含めない）。*は燃料バス優先の解", "Fig. 4  Total weekly cost [million JPY] (no CO₂ cost). * = diesel-first solution"),
     RX + halfR + 0.5, y4, halfR, y + CH3 + 1.4 - y4, CAP);
   if (y + CH3 + 1.4 - y4 < 1.2) throw new Error(`fig. 4 caption too short: ${y + CH3 + 1.4 - y4}`);
   y += CH3 + 1.5;
@@ -226,8 +226,8 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
     bullets([
       L(`電気バスの担当は、燃料バス優先が採用された${list(iw.map(lab))}（${rngTxt(iw.map((r) => r.bev_trip_share_pct))}%）を除く${bw.length}ケースで${rngTxt(bw.map((r) => r.bev_trip_share_pct), 1)}%（図3）`,
         `Electric buses ran ${rngTxt(bw.map((r) => r.bev_trip_share_pct), 1)}% of trips in ${bw.length} cases; at ${list(iw.map(lab))} (diesel-first adopted) ${rngTxt(iw.map((r) => r.bev_trip_share_pct))}% (Fig. 3)`),
-      L(`受電上限が高いほど安いわけではない。総費用が最も小さいのは${bestTxt}で、${gTop} kWは全季節で最も大きい（図4）`,
-        `A higher grid limit is not cheaper: the lowest total cost was at ${bestTxt}, and ${gTop} kW was the most expensive in every season (Fig. 4)`)],
+      L(`受電上限が高いほど安いわけではない。総費用が最も小さいのは${bestTxt}で、${gTop} kWは全季節で最も大きい（表3）`,
+        `A higher grid limit is not cheaper: the lowest total cost was at ${bestTxt}, and ${gTop} kW was the most expensive in every season (Table 3)`)],
       { x: RX, y, w: COL, h: 2.9, fontSize: EN ? 27 : 30, paraSpaceAfter: 4 });
     y += 3.0;
     void cheapN; void co2N; void allTxt;
@@ -236,7 +236,7 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
     const u = (v) => (EN ? Math.round(v / 1e3) : Math.round(v / 1e3) / 10);
     const cats5 = SE.flatMap(([w]) => LIMITS.map((g) => (EN ? `${g} ${SHORT[w]}` : `${g}${SHORT[w]}`)));
     const rows5 = SE.flatMap(([w]) => LIMITS.map((g) => X.get(g, w)));
-    const CH5 = 5.0;
+    const CH5 = 4.75;
     s.addChart(pres.charts.BAR, [
       { name: L("電力量料金", "Energy"), labels: cats5, values: rows5.map((r) => u(r.electricity_cost)) },
       { name: L("基本料金", "Basic charge"), labels: cats5, values: rows5.map((r) => u(r.basic_charge_week_jpy)) },
@@ -247,11 +247,11 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
         showValAxisTitle: true, valAxisTitle: L("万円/週", "thousand JPY/week"), valAxisTitleFontSize: 24, valAxisTitleColor: SUB });
     if (Math.max(...rows5.map((r) => u(r.electricity_cost) + u(r.basic_charge_week_jpy) + u(fuelOf(r)) + u(r.contract_overage_cost))) > (EN ? 600 : 60)) throw new Error("fig. 5 axis too short");
     y += CH5 + 0.05;
-    caption(L(`図5　総費用の内訳（料金A、採用した解）。車両使用費（${vehR}万円/週、ほぼ一定）は除く。基本料金は受電上限に比例して増える`,
-      `Fig. 5  Total cost without vehicle use (${vehR} million JPY/week, nearly constant); tariff A, adopted solutions. The basic charge grows with the limit`),
+    caption(L(`図4　総費用の内訳（料金A、採用した解）。車両使用費（${vehR}万円/週、ほぼ一定）は除く。基本料金は受電上限に比例して増える`,
+      `Fig. 4  Total cost without vehicle use (${vehR} million JPY/week, nearly constant); tariff A, adopted solutions. The basic charge grows with the limit`),
       RX, y, COL, 1.4, CAP);
     y += 1.5;
-    // Fig. 6 (2026-11-19, Prof. Urabe): how the objective decreased before the time limit, adopted tariff-A solutions.
+    // Fig. 5 (2026-11-19, Prof. Urabe): how the objective decreased before the time limit, adopted tariff-A solutions.
     // Left: Stage 1 LNS best weekly objective vs time (step function on a 5-min grid), excess over its final value,
     // median and maximum over the 12 adopted runs. Right: hourly re-plans that hit the 300 s limit - share that already
     // had a solution / their final solution at each time. Source: outcome/2026-11-12_three_party/cutoff_trajectory_rc42_et.json.
@@ -269,17 +269,17 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
     const SECS = Array.from({ length: 31 }, (_, i) => i * 10);
     const pct = (f) => SECS.map((t) => Math.round(HL.filter((h) => f(h) !== null && f(h) <= t).length / HL.length * 1000) / 10);
     const by240 = HL.filter((h) => h.t_final_incumbent_s <= 240).length, gapMed = med(HL.map((h) => h.final_gap_pct));
-    const half6 = (COL - 0.6) / 2, CH6 = 3.6;
-    const lineOpt = (o) => ({ ...chart(), y, w: half6, h: CH6, lineDataSymbol: "none", lineSize: 3, catAxisLabelFontSize: 20, valAxisLabelFontSize: 20,
-      legendFontSize: 20, showValAxisTitle: true, valAxisTitleFontSize: 20, valAxisTitleColor: SUB, showCatAxisTitle: true, catAxisTitleFontSize: 20, catAxisTitleColor: SUB, ...o });
+    const half6 = (COL - 0.6) / 2, CH6 = 4.0;
+    const lineOpt = (o) => ({ ...chart(), y, w: half6, h: CH6, lineDataSymbol: "none", lineSize: 3, catAxisLabelFontSize: 24, valAxisLabelFontSize: 24,
+      legendFontSize: 24, showValAxisTitle: true, valAxisTitleFontSize: 22, valAxisTitleColor: SUB, showCatAxisTitle: true, catAxisTitleFontSize: 22, catAxisTitleColor: SUB, ...o });
     s.addChart(pres.charts.LINE, [{ name: L("中央値", "median"), labels: MINS.map(String), values: s1Med }, { name: L("最大", "max"), labels: MINS.map(String), values: s1Max }],
       lineOpt({ x: RX, chartColors: [BLUE_DARK, GREY], catAxisLabelFrequency: 6, valAxisMinVal: 0, valAxisTitle: L("最終値との差 [%]", "above final [%]"), catAxisTitle: L("便割当の探索時間 [分]", "assignment search [min]") }));
     s.addChart(pres.charts.LINE, [{ name: L("解あり", "any solution"), labels: SECS.map(String), values: pct((h) => h.t_first_incumbent_s) },
       { name: L("最終の解", "final solution"), labels: SECS.map(String), values: pct((h) => h.t_final_incumbent_s) }],
-      lineOpt({ x: RX + half6 + 0.6, chartColors: ["7AB8E8", BLUE_DARK], catAxisLabelFrequency: 6, valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 25, valAxisTitle: L("見つかっていた割合 [%]", "share found [%]"), catAxisTitle: L("毎時の再計画の計算時間 [秒]", "hourly re-plan [s]") }));
+      lineOpt({ x: RX + half6 + 0.6, chartColors: ["7AB8E8", BLUE_DARK], catAxisLabelFrequency: 6, valAxisMinVal: 0, valAxisMaxVal: 100, valAxisMajorUnit: 25, valAxisTitle: L("割合 [%]", "share [%]"), catAxisTitle: L("毎時の再計画の計算時間 [秒]", "hourly re-plan [s]") }));
     y += CH6 + 0.05;
-    caption(L(`図6　時間で打ち切った計算の目的関数（料金A、採用した解）。左：便割当（${Math.round(adoptedRuns[0].stage1.time_budget_sec).toLocaleString("en-US")}秒で打ち切り）の1週間の目的関数の、最終値との差（12ケース）。右：毎時の再計画で時間切れになった${HL.length}回のうち、解と最終の解が見つかっていた割合`,
-      `Fig. 6  Objective before the time limit (tariff A, adopted). Left: weekly assignment objective above its final value (12 cases, ${Math.round(adoptedRuns[0].stage1.time_budget_sec).toLocaleString("en-US")} s budget). Right: of the ${HL.length} hourly re-plans that hit the time limit, share with a solution and with their final solution`),
+    caption(L(`図5　時間で打ち切った計算の目的関数（料金A、採用した解）。左：便割当（${Math.round(adoptedRuns[0].stage1.time_budget_sec).toLocaleString("en-US")}秒で打ち切り）の1週間の目的関数の、最終値との差（12ケース）。右：毎時の再計画で時間切れになった${HL.length}回のうち、解と最終の解が見つかっていた割合`,
+      `Fig. 5  Objective before the time limit (tariff A, adopted). Left: weekly assignment objective above its final value (12 cases, ${Math.round(adoptedRuns[0].stage1.time_budget_sec).toLocaleString("en-US")} s budget). Right: of the ${HL.length} hourly re-plans that hit the time limit, share with a solution and with their final solution`),
       RX, y, COL, 1.6, CAP - 2);
     y += 1.8;
 
@@ -294,12 +294,12 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
     const nearIn = near.every((d) => d < gapMin);
     const DH = 6.7;
     bullets([
-      L(`基本料金は受電上限に比例し（${LIMITS[0]} kW ${money(bmin)}万〜${gTop} kW ${money(bmax)}万円/週）、それ以外の費用は上限が足りれば${flatR}万円/週でほぼ同じ。足りないと、冬200 kWは超過${fmtN(w200.contract_over_limit_kwh)} kWh（${money(w200.contract_overage_cost)}万円/週）、冬90 kWは燃料バスが増えCO₂が約${(i90.total_co2_kg / b90.total_co2_kg).toFixed(1)}倍`,
-        `The basic charge grows with the limit (${money(bmin)} at ${LIMITS[0]} kW to ${money(bmax)} thousand JPY/week at ${gTop} kW); other costs stay at ${flatR} million JPY/week once the limit suffices. Too low a limit adds ${fmtN(w200.contract_over_limit_kwh)} kWh of excess at 200 kW in winter (${money(w200.contract_overage_cost)} thousand JPY/week), or diesel and about ${(i90.total_co2_kg / b90.total_co2_kg).toFixed(1)} times the CO₂ at 90 kW in winter`),
+      L(`基本料金は受電上限に比例し（${LIMITS[0]} kW ${money(bmin)}万〜${gTop} kW ${money(bmax)}万円/週）、車両使用費などそれ以外の費用は上限が足りれば${flatR}万円/週でほぼ同じ。足りないと、冬200 kWは超過${fmtN(w200.contract_over_limit_kwh)} kWh（${money(w200.contract_overage_cost)}万円/週）、冬90 kWは燃料バスが増え、CO₂は電気バス優先の解の約${(i90.total_co2_kg / b90.total_co2_kg).toFixed(1)}倍`,
+        `The basic charge grows with the limit (${money(bmin)} at ${LIMITS[0]} kW to ${money(bmax)} thousand JPY/week at ${gTop} kW); other costs, including vehicle use, stay at ${flatR} million JPY/week once the limit suffices. Too low a limit adds ${fmtN(w200.contract_over_limit_kwh)} kWh of excess at 200 kW in winter (${money(w200.contract_overage_cost)} thousand JPY/week), or, at 90 kW in winter, more diesel and about ${(i90.total_co2_kg / b90.total_co2_kg).toFixed(1)} times the CO₂ of the electric-first solution`),
       L(`運用の目安（今回の条件）：受電上限は大きく取らず、充電の時間をずらして、冬に超過が出ない${bestW} kWに抑える。電気バスは全季節で${sh}%の便を担当でき、${gTop} kWより約${money(save)}万円/週安い（3季節平均）${nearIn ? `。200 kWとの差はギャップ5%（約${money(gapMin)}万円/週）より小さい` : ""}`,
         `Operating guidance (these conditions): keep the limit small and spread charging, at ${bestW} kW where winter has no excess; electric buses still ran ${sh}% of trips, about ${money(save)} thousand JPY/week cheaper than ${gTop} kW${nearIn ? `. The difference from 200 kW is below the 5% gap (about ${money(gapMin)} thousand JPY/week)` : ""}`),
-      L(`時間で打ち切った計算も、目的関数は打ち切り前にほぼ下げ止まった（図6）。便割当は最後の30分の改善が${late30.toFixed(2)}%以下、毎時の再計画は${HL.length}回中${by240}回が240秒までに最終の解に達した。ただし下限との差（ギャップ、中央値${Math.round(gapMed)}%）は残り、最適とは言えない。基本料金と受電上限も一緒に最適化するのが今後の課題`,
-        `Runs cut by the time limit had nearly stopped improving (Fig. 6): the assignment improved by at most ${late30.toFixed(2)}% in its last 30 min, and ${by240} of ${HL.length} timed-out re-plans had their final solution by 240 s. The gap to the bound remains (median ${Math.round(gapMed)}%), so this is not optimality. Optimizing the basic charge and the limit together is next`)],
+      L(`時間で打ち切った計算も、目的関数は打ち切り前にほぼ下げ止まった（図5）。便割当は最後の30分の改善が${late30.toFixed(2)}%以下、毎時の再計画は${HL.length}回中${by240}回が240秒までに最終の解に達した。ただし下限との差（ギャップ、中央値${Math.round(gapMed)}%）は残り、最適とは言えない。基本料金と受電上限も一緒に最適化するのが今後の課題`,
+        `Runs cut by the time limit had nearly stopped improving (Fig. 5): the assignment improved by at most ${late30.toFixed(2)}% in its last 30 min, and ${by240} of ${HL.length} timed-out re-plans had their final solution by 240 s. The gap to the bound remains (median ${Math.round(gapMed)}%), so this is not optimality. Optimizing the basic charge and the limit together is next`)],
       { x: RX, y, w: COL, h: DH, fontSize: EN ? 25 : 28, paraSpaceAfter: 4 });
     y += DH + 0.1;
   } else {
@@ -421,7 +421,7 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
     text([{ text: when, options: { bold: true, color: BLUE_DARK, breakLine: true } }, { text: where, options: { bold: true, breakLine: true } },
       { text: what, options: { fontSize: EN ? 22 : 24, color: SUB } }], { x: x + 0.12, y: y + 0.08, w: sw - 0.24, h: bh - 0.12, fontSize: EN ? 24 : 26, align: "center", lineSpacingMultiple: 1.0 });
   });
-  caption(COSTA ? L("図7　修士最終発表までの予定と、それぞれで目指す成果", "Fig. 7  Road to the master's final and the planned outcome of each step")
+  caption(COSTA ? L("図6　修士最終発表までの予定と、それぞれで目指す成果", "Fig. 6  Road to the master's final and the planned outcome of each step")
     : L("図6　修士最終発表までの予定と、それぞれで目指す成果", "Fig. 6  Road to the master's final and the planned outcome of each step"), RX, y + bh + 0.05, COL, 0.65, CAP);
 
   // ---------------- footer (full width)

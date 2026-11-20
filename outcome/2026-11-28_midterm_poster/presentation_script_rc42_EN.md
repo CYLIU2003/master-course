@@ -84,13 +84,13 @@ I tried four grid limits, 90, 200, 400 and 900 kW, in a winter, a spring and a s
 
 In 11 of the 12 cases, electric buses ran 93 to 97.5 percent of the trips. The exception is 90 kW in winter. There, a diesel-heavy solution was cheaper, and electric buses ran only 22 percent of the trips.
 
-**[Point: Fig. 4]**
+**[Point: Table 3]**
 
 Here is the main finding: **a higher grid limit is not cheaper.**
 - The lowest total cost was at 200 kW in spring and summer, and at 400 kW in winter.
 - 900 kW was the most expensive in every season.
 
-**[Point: Fig. 5]**
+**[Point: Fig. 4]**
 
 The breakdown shows why. I removed vehicle use, which is almost constant at about 4 million yen a week.
 - The basic charge grows with the limit: from 45 thousand yen a week at 90 kW to 447 thousand at 900 kW.
@@ -112,7 +112,7 @@ Under these conditions, my operating guidance is this:
 
 At 400 kW, electric buses still run 94 to 96 percent of the trips, and the week costs about 244 thousand yen less than at 900 kW. The difference from 200 kW is smaller than the 5 percent gap, so I cannot say which of those two is cheaper.
 
-**[Point: Fig. 6]**
+**[Point: Fig. 5]**
 
 The runs were stopped at a time limit, but the objective had almost stopped improving before that point.
 - In the trip assignment, the last 30 minutes improved the result by at most 0.11 percent.
@@ -120,7 +120,7 @@ The runs were stopped at a time limit, but the objective had almost stopped impr
 
 However, a gap to the lower bound remains, with a median of 25 percent. So these are good solutions, not proven optimal ones. Optimizing the basic charge and the limit together is the next step.
 
-**[Point: Fig. 7]**
+**[Point: Fig. 6]**
 
 My plan:
 - **March 2027:** present this work at the IEEJ National Convention.
@@ -146,6 +146,6 @@ Thank you. I am happy to take questions.
 |---|---|
 | Why is 900 kW the most expensive? | The basic charge grows with the limit: 447 thousand yen a week at 900 kW, about 250 thousand more than at 400 kW. Energy and diesel barely change. |
 | So which limit is best? | Under these conditions, 400 kW, because it avoids excess even in winter. The difference from 200 kW is within the gap, so I cannot rank those two. |
-| Is this optimal? | No. The runs stop at a 5 percent gap, and the two-stage method is not a global optimum. Fig. 6 shows the objective had almost stopped improving before the cut-off. |
+| Is this optimal? | No. The runs stop at a 5 percent gap, and the two-stage method is not a global optimum. Fig. 5 shows the objective had almost stopped improving before the cut-off. |
 | Why is the basic charge not optimized? | The limit P is fixed in each case, so the basic charge is a constant. Choosing P together with the schedule is future work. |
 | Why two initial assignments? | The search tends to stay near its start. Starting from two very different assignments and keeping the cheaper one gives a better result in limited time. |
