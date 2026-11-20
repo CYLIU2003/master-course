@@ -92,7 +92,7 @@ Here is the main finding: **a higher grid limit is not cheaper.**
 
 **[Point: Fig. 4]**
 
-The breakdown shows why. I removed vehicle use, which is almost constant at about 4 million yen a week.
+First, the total is 4.20 to 4.57 million yen a week in every case; the box above the chart says so. The bars show what remains after vehicle use, which is almost constant at about 4 million yen a week. The breakdown shows why.
 - The basic charge grows with the limit: from 45 thousand yen a week at 90 kW to 447 thousand at 900 kW.
 - Once the limit is large enough, energy and diesel hardly change.
 - If the limit is too small, other costs grow instead. At 200 kW in winter, the excess costs 267 thousand yen a week. At 90 kW in winter, diesel rises to 411 thousand yen a week.

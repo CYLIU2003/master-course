@@ -236,7 +236,16 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
     const u = (v) => (EN ? Math.round(v / 1e3) : Math.round(v / 1e3) / 10);
     const cats5 = SE.flatMap(([w]) => LIMITS.map((g) => (EN ? `${g} ${SHORT[w]}` : `${g}${SHORT[w]}`)));
     const rows5 = SE.flatMap(([w]) => LIMITS.map((g) => X.get(g, w)));
-    const CH5 = 4.75;
+    // banner above fig. 4 (2026-11-20, author): the bars leave out vehicle use, so state the full weekly total (4 million JPY range) right above them
+    const totR = rngTxt(X.cases.map((r) => tc(r) / (EN ? 1e6 : 1e4)), EN ? 2 : 1);
+    if (!X.cases.every((r) => tc(r) >= 4e6 && tc(r) < 5e6)) throw new Error("total cost left the 4-million-JPY range; rewrite the fig. 4 banner");
+    s.addShape(pres.shapes.RECTANGLE, { x: RX, y: y - 0.1, w: COL, h: 1.05, fill: { color: "FFF4E0" }, line: { color: "E08A00", width: 2 } });
+    text([{ text: L("総費用は全ケース", "Total cost in every case: "), options: {} },
+      { text: L(`${totR}万円/週`, `${totR} million JPY/week`), options: { bold: true, color: "B35C00" } },
+      { text: L(`（表3）。下の図は、そのうち車両使用費（${vehR}万円/週、ほぼ一定）を除いた残り`, ` (Table 3). The chart shows what remains after vehicle use (${vehR} million JPY/week, nearly constant)`), options: {} }],
+      { x: RX + 0.15, y: y - 0.1, w: COL - 0.3, h: 1.05, fontSize: EN ? 24 : 25, valign: "middle", margin: 0 });
+    y += 1.0;
+    const CH5 = 3.8;
     s.addChart(pres.charts.BAR, [
       { name: L("電力量料金", "Energy"), labels: cats5, values: rows5.map((r) => u(r.electricity_cost)) },
       { name: L("基本料金", "Basic charge"), labels: cats5, values: rows5.map((r) => u(r.basic_charge_week_jpy)) },
@@ -249,8 +258,8 @@ ${TAR[X.series].k}`)) : LIMITS.map((g) => `${g}`);
     y += CH5 + 0.05;
     const winterMost = LIMITS.filter((g) => g >= 200).every((g) => SE.every(([w]) => X.get(g, W90).electricity_cost >= X.get(g, w).electricity_cost));
     if (!winterMost) throw new Error("winter no longer has the largest energy charge; rewrite the fig. 4 caption");
-    caption(L(`図4　総費用の内訳（料金A、採用した解。車両使用費${vehR}万円/週は除く）。基本料金は上限に比例し、電力量料金は日射の少ない冬が大きい`,
-      `Fig. 4  Cost breakdown without vehicle use (${vehR} million JPY/week); tariff A, adopted. Basic charge grows with the limit; energy is highest in winter`),
+    caption(L(`図4　車両使用費を除いた費用の内訳（料金A、採用した解）。基本料金は上限に比例し、電力量料金は日射の少ない冬が大きい`,
+      `Fig. 4  Costs other than vehicle use (tariff A, adopted). Basic charge grows with the limit; energy is highest in winter`),
       RX, y, COL, 1.4, CAP);
     y += 1.5;
     // Fig. 5 (2026-11-19, Prof. Urabe): how the objective decreased before the time limit, adopted tariff-A solutions.
