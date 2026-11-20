@@ -242,7 +242,11 @@
       4063399.5398081504
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 44.87374480271365,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 175,
@@ -1101,7 +1105,11 @@
       4437929.907439061
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 49.526016707807635,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 175,
@@ -1319,7 +1327,11 @@
       4071392.7705142167
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 44.98197235544317,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -2071,7 +2083,11 @@
       4508364.136295969
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 50.31457237523933,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -2237,7 +2253,11 @@
       4058689.962288936
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 44.80977801180135,
+    "termination_reason": "time_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -2822,7 +2842,11 @@
       4516517.433371637
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 50.40426538710796,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -3048,7 +3072,11 @@
       4066368.2771328883
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 44.91399087985761,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 175,
@@ -3662,7 +3690,11 @@
       4435360.928013809
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 49.496781967570556,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 175,
@@ -3836,7 +3868,11 @@
       4073975.915489824
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 45.01685708344009,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -4162,7 +4198,11 @@
       4485503.7244055
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 50.061350126358775,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -4336,7 +4376,11 @@
       4062600.9914690945
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 44.86290913866035,
+    "termination_reason": "time_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -4693,7 +4737,11 @@
       4507191.538264952
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 50.30164613633681,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -4947,7 +4995,11 @@
       4063666.5856100037
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 44.87736745105652,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 175,
@@ -5237,7 +5289,11 @@
       4411987.68217142
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 49.22923268685208,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 175,
@@ -5447,7 +5503,11 @@
       4111449.7221040195
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 45.51800091443929,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -5613,7 +5673,11 @@
       4541029.219686858
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 50.67197563299391,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -5779,7 +5843,11 @@
       4061933.659145509
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 44.85385070343027,
+    "termination_reason": "time_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -6061,7 +6129,11 @@
       4513537.976775345
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 50.371526471560855,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -6255,7 +6327,11 @@
       4083398.086913739
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 45.14372705471369,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 175,
@@ -6501,7 +6577,11 @@
       4411446.118129168
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 49.222999895781285,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 175,
@@ -6695,7 +6775,11 @@
       4073728.6581863444
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 45.013519849963075,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -6957,7 +7041,11 @@
       4483445.586380141
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 50.03842565180905,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -7131,7 +7219,11 @@
       4056980.0489004264
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 44.786516743972825,
+    "termination_reason": "time_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,
@@ -7289,7 +7381,11 @@
       4530177.666718827
      ]
     ],
-    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate"
+    "semantics": "heuristic incumbent improvement; bounds tightened temporarily, model unchanged; never an optimality certificate",
+    "certified_gap_pct": 50.553815660337776,
+    "termination_reason": "memory_limit",
+    "mip_gap_target_pct": 5.0,
+    "mip_gap_target_met": false
    },
    "hourly": {
     "steps": 174,

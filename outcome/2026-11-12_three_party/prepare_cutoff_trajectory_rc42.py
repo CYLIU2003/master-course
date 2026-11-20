@@ -11,6 +11,10 @@ Two time-limited searches are summarized for every one of the 24 tariff-A runs (
    "Time limit reached". The Gurobi progress table gives (time, incumbent, best bound, gap). The earliest stage2 log of a
    run is the day-ahead plan; the others are the rolling steps, and their time-limit count is checked against the
    step summaries (stage2_solver_status == "time_limit").
+3. Stage 1 bound (added 2026-11-20 for the poster review): solver_settings.json stage1_certified_mip_gap_percent (the
+   gap of the Stage 1 incumbent against the larger of the Gurobi bound and an analytical lower bound; see
+   certified_mip_gap_semantics) and stage1_termination_reason (time_limit / memory_limit). The 5% MIP gap is a target,
+   not met by Stage 1 (mip_gap_target_met).
 Output: cutoff_trajectory_rc42_et.json (no numbers are changed; ratios are computed from the logged values).
 """
 import collections
@@ -80,6 +84,7 @@ for limit in LIMITS:
         for start in ("bev", "ice"):
             run = run_dir(limit, week, start)
             lns = json.loads((run / "diagnostics/stage1_lns.json").read_text(encoding="utf-8"))
+            ss = json.loads((run / "solver_settings.json").read_text(encoding="utf-8"))
             t, traj = lns["initial_load_sec"], [[0.0, lns["initial_objective"]]]
             for it in lns["iterations"]:
                 t += it["sec"]
@@ -105,7 +110,10 @@ for limit in LIMITS:
                 "stage1": {"time_budget_sec": lns["settings"]["time_budget_sec"], "elapsed_sec": lns["elapsed_sec"],
                            "iterations": len(lns["iterations"]), "initial_objective": lns["initial_objective"],
                            "best_objective": lns["best_objective"], "trajectory_sec_objective": traj,
-                           "semantics": lns["semantics"]},
+                           "semantics": lns["semantics"],
+                           "certified_gap_pct": ss["stage1_certified_mip_gap_percent"],
+                           "termination_reason": ss["stage1_termination_reason"],
+                           "mip_gap_target_pct": ss["mip_gap_requested_percent"], "mip_gap_target_met": ss["mip_gap_target_met"]},
                 "hourly": {"steps": sum(steps.values()), "time_limit_steps": len(limited),
                            "day_ahead_stage2_time_limited": day_ahead_limited, "time_limited_steps": limited}})
 Path("outcome/2026-11-12_three_party/cutoff_trajectory_rc42_et.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")

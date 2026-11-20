@@ -49,12 +49,12 @@ The objective is the total cost of one week. It adds up vehicle use, electricity
 
 **[Point: electricity formula]**
 
-The electricity cost follows TEPCO's high-voltage tariff. It has three terms:
+The electricity cost follows TEPCO's high-voltage tariff. g and s are energies per 15 minutes, in kilowatt-hours. It has three terms:
 1. **Energy**: 17.43 yen per kilowatt-hour.
 2. **Basic charge**: 2,530 yen per kilowatt per month, times a power-factor discount of 0.85, times the grid limit P. I convert this monthly charge to a weekly one.
 3. **Excess**: a tentative 500 yen for each kilowatt-hour above the limit.
 
-The second term depends only on P, so it is a constant within each case. I add it to the result instead of optimizing it.
+The second term depends only on P, so it is a constant within each case. I add it to the result instead of optimizing it. The limit is a target kept by pricing the excess, so it can be exceeded: at 200 kW in winter the peak was 690 kW.
 
 **[Point: Fig. 1]** *(short version: skip the details)*
 
@@ -63,6 +63,8 @@ The calculation has four steps:
 2. Plan the charging the day before, every 15 minutes.
 3. Re-plan every hour with the actual sunshine.
 4. Count cost and CO₂ from what was actually run.
+
+Step 1 is solved from two starts, electric-first and diesel-first, and the cheaper result is adopted. I call these the adopted solutions.
 
 ---
 
@@ -82,22 +84,22 @@ I tried four grid limits, 90, 200, 400 and 900 kW, in a winter, a spring and a s
 
 **[Point: Fig. 3]**
 
-In 11 of the 12 cases, electric buses ran 93 to 97.5 percent of the trips. The exception is 90 kW in winter. There, a diesel-heavy solution was cheaper, and electric buses ran only 22 percent of the trips.
+In 11 of the 12 cases, electric buses ran 93.4 to 97.5 percent of the trips. The exception is 90 kW in winter. There, a diesel-heavy solution was cheaper, and electric buses ran only 22 percent of the trips. CO₂ was 1.1 to 2.3 tonnes a week in the 11 cases and 7.2 tonnes at 90 kW in winter.
 
 **[Point: Table 3]**
 
 Here is the main finding: **a higher grid limit is not cheaper.**
-- The lowest total cost was at 200 kW in spring and summer, and at 400 kW in winter.
+- The lowest total cost, shaded blue, was at 200 kW in spring and summer, and at 400 kW in winter.
 - 900 kW was the most expensive in every season.
 
 **[Point: Fig. 4]**
 
-First, the total is 4.20 to 4.57 million yen a week in every case; the box above the chart says so. The bars show what remains after vehicle use, which is almost constant at about 4 million yen a week. The breakdown shows why.
+First, the total of the 12 adopted solutions is 4,199 to 4,574 thousand yen a week; the box above the chart says so. The bars show what remains after vehicle use, which is 4,020 to 4,080 thousand yen a week. The breakdown shows why.
 - The basic charge grows with the limit: from 45 thousand yen a week at 90 kW to 447 thousand at 900 kW.
 - Once the limit is large enough, energy and diesel hardly change.
 - If the limit is too small, other costs grow instead. At 200 kW in winter, the excess costs 267 thousand yen a week. At 90 kW in winter, diesel rises to 411 thousand yen a week.
+- At 400 kW, spring costs more than winter in Table 3 but less in Fig. 4, because spring has 60 thousand yen a week more vehicle use.
 
-*(short version: skip)* The assignment cannot be proven optimal. So I solve each case from two starts, electric-first and diesel-first, and keep the cheaper result.
 
 ---
 
@@ -110,15 +112,15 @@ Under these conditions, my operating guidance is this:
 - Spread the charging over time.
 - Keep the limit at 400 kW, which avoids excess even in winter.
 
-At 400 kW, electric buses still run 94 to 96 percent of the trips, and the week costs about 244 thousand yen less than at 900 kW. The difference from 200 kW is smaller than the 5 percent gap, so I cannot say which of those two is cheaper.
+At 400 kW, the peak grid power stayed at 400.0 to 400.5 kW, against 570 to 794 kW at 900 kW. Electric buses still run 93.7 to 96.0 percent of the trips, and the week costs about 244 thousand yen less than at 900 kW, on average over the three seasons. Against 200 kW the order changes with the season: 400 kW is 165 thousand yen a week cheaper in winter, and 200 kW is 131 and 100 thousand cheaper in spring and summer. So I cannot say which of those two is better.
 
 **[Point: Fig. 5]**
 
 The runs were stopped at a time limit, but the objective had almost stopped improving before that point.
 - In the trip assignment, the last 30 minutes improved the result by at most 0.11 percent.
-- Of the 100 hourly re-plans that hit the time limit, 91 had already found their final solution by 240 seconds.
+- Of the 100 hourly re-plans that hit the time limit, out of 2,092, 91 had already reached their final solution by 240 seconds.
 
-However, a gap to the lower bound remains, with a median of 25 percent. So these are good solutions, not proven optimal ones. Optimizing the basic charge and the limit together is the next step.
+However, a gap to the lower bound remains: 45 to 50 percent for the assignment, and a median of 25 percent for the timed-out re-plans. So these are good solutions, not proven optimal ones. Optimizing the basic charge and the limit together is the next step.
 
 **[Point: Fig. 6]**
 
@@ -134,10 +136,10 @@ Thank you. I am happy to take questions.
 ## If asked: be honest
 
 - All numbers are diagnostic and not yet used for research conclusions.
-- The assignment is not proven optimal. Solving in two stages also means the result is not a global optimum.
+- The assignment stops at its time or memory limit and does not reach the 5 percent target gap; its gap to the lower bound is 45 to 50 percent. Solving in two stages also means the result is not a global optimum.
 - The battery follows a fixed rule; it is not optimized.
 - The 200 kW summer, electric-first run hit the 14 GiB memory limit on its first try. It was rerun once at 24 GiB.
-- At most 44 of the 174–175 hourly re-plans timed out.
+- Of the 174–175 hourly re-plans per run, at most 44 timed out over all 24 runs, and at most 35, 100 in total, in the 12 adopted ones.
 - The excess price of 500 yen per kWh and the grid CO₂ factor of 0.5 kg per kWh are tentative values.
 
 ## Short answers to likely questions
@@ -145,7 +147,7 @@ Thank you. I am happy to take questions.
 | Question | Answer |
 |---|---|
 | Why is 900 kW the most expensive? | The basic charge grows with the limit: 447 thousand yen a week at 900 kW, about 250 thousand more than at 400 kW. Energy and diesel barely change. |
-| So which limit is best? | Under these conditions, 400 kW, because it avoids excess even in winter. The difference from 200 kW is within the gap, so I cannot rank those two. |
-| Is this optimal? | No. The runs stop at a 5 percent gap, and the two-stage method is not a global optimum. Fig. 5 shows the objective had almost stopped improving before the cut-off. |
+| So which limit is best? | Under these conditions, 400 kW, because it avoids excess even in winter. Against 200 kW the order changes with the season and optimality is not shown, so I cannot rank those two. |
+| Is this optimal? | No. The target gap is 5 percent, but the assignment stops at its time or memory limit with a 45 to 50 percent gap, and the two-stage method is not a global optimum. Fig. 5 shows the objective had almost stopped improving before the cut-off. |
 | Why is the basic charge not optimized? | The limit P is fixed in each case, so the basic charge is a constant. Choosing P together with the schedule is future work. |
 | Why two initial assignments? | The search tends to stay near its start. Starting from two very different assignments and keeping the cheaper one gives a better result in limited time. |
