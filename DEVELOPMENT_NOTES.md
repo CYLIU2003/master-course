@@ -13076,3 +13076,6 @@ Mathematical effect: only the plan-side PV input changes; formulas, costs and co
     - **訂正（18:30）**：「上限は効かない」は誤りだった。rc51 の 200 kW 夏・F2（job efa6440d、hp-desktop-2）は前日計画の Stage 2 が 451 秒で Gurobi の memory_limit（SoftMemLimit 11.6 GB）に達し、前日計画なし・毎時の立て直しも始まらず FAILED。前日計画の初期解は SUBMITTED だった。約45分時点の 3.0 GB は前日計画の山を捉えていなかった（Gurobi のログは残っておらず、山の大きさは不明）。
     - 一斉投入で、12件が SSH 送信の時間切れ（SSH_TIMEOUT）により起動前に打ち切られた（FENCED_BEFORE_LAUNCH、計算は始まっていない）。`retry_fenced.py rc51 --apply --max 3` を3分おきに回し、同じ凍結入力で再投入した（`retry_rc51_staggered.sh`、元の ID は batch-state の `fenced_attempts` に残る）。
     - 落ちたケースは申告 24 GiB（rc50 と同じ、上限 23.6 GB）で 64 GB 機に回し直す（`make_rc51_m24.py`、案件 `af2_200_c42m24`）。上限は達したときだけ効き、ほかの設定は同じ。集計では「m24（メモリ上限での再計算）」と明記する。ほかのケースも memory_limit で落ちたら同じ扱いにする。
+    - `retry_fenced.py` は再投入した行の状態を空（None）にするが、keepalive の終了判定は空を「終わった」と読むため、回収係（batch client）が起動しなかった。コントローラの現在の状態を書き入れて起動させた（計算自体は止まっていない）。
+    - 本人の指示「計算に使える台は全部使って」で desktop-gsfgtj2 を3枠に（`workers.stage-input.v70.json`、14台 VERIFIED、`controller-settings.rc51s.json`）。18:25 に再起動し、計算中の15件はすべて再接続した。baia67v（4コア < 6スレッド）と、この PC（空き 8〜9 GB）は条件に届かず使わない。
+    - 本人の指示「計算が終わればそのPCで結果をまとめて送って、こっち側で受け取れたらそっち側で消そう」で `prune_worker_outputs.py` を30分おきに回す（`prune_loop.sh`）。この PC の zip と計算機側の output のファイル一覧・サイズが一致した終了済みジョブだけ、計算機側の output を消す。
