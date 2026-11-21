@@ -13502,6 +13502,15 @@ class GurobiMILPAdapter:
                 fixed_assignment,
                 phase_label="phase1_charging_only",
             )
+        # A Stage 1 plan carries the slot clock; a supplied fixed assignment (a
+        # stage1_seed_plan) may not. Without it the serializer wrote refuelling
+        # times as "" and the artifact contract rejected the run (rc48
+        # 2026-11-21, 400 kW winter F2). Only fills keys that are absent.
+        fixed_assignment = replace(fixed_assignment, metadata={
+            "horizon_start": str(problem.scenario.horizon_start or "00:00"),
+            "timestep_min": int(problem.scenario.timestep_min),
+            **dict(fixed_assignment.metadata or {}),
+        })
         # Stage 2 helper expects a stage1_plan plus Stage 1 status metadata.
         # For Phase 1 the assignment is externally fixed, so we synthesize a
         # deterministic status that downstream KPI readers treat as non-MILP.
