@@ -1,12 +1,12 @@
-"""Experiment A (rc49, 8c5c39db, rc42 parents, hourly re-plan 300 s, day-ahead MIP start from rc42 etb400 charging): value of PV forecast information, assignment fixed. DIAGNOSTIC.
+"""Experiment A (rc50, c1f65621, rc42 parents, hourly re-plan 300 s, day-ahead MIP start from rc42 etb400 charging): value of PV forecast information, assignment fixed. DIAGNOSTIC.
 
 Each case holds the rc42 adopted 400 kW assignment of its season fixed (phase1_charging_only),
 uses the rule battery and tariff A, and changes only the PV the day-ahead plan and the hourly
 re-plans see: F0 climatology, F1 weather class known (oracle), F2 actual (hindsight).
 Execution always uses the Solcast actuals.
 
-Reads output/midterm_20261128/rc49/af{0,1,2}_{200,400}_c42/<week>/ (weekly_operator collect) and
-writes rc49_experimentA.json and rc49_experimentA.md next to this script.
+Reads output/midterm_20261128/rc50/af{0,1,2}_{200,400}_c42/<week>/ (weekly_operator collect) and
+writes rc50_experimentA.json and rc50_experimentA.md next to this script.
 
 Reported cost excludes vehicle usage (identical under a fixed assignment, checked per case):
   total_cost - vehicle_usage_cost - fuel_cost + fuel consumed x 150 - CO2 kg x 1 + basic charge
@@ -118,12 +118,12 @@ def read_case(case_dir):
 
 
 def main():
-    rows = [read_case(Path(p)) for p in sorted(glob.glob(str(OPS / "rc49" / "af[012]_[0-9][0-9][0-9]_c42" / "20*")))]
-    (HERE / "rc49_experimentA.json").write_text(
-        json.dumps({"label": "DIAGNOSTIC rc49 (8c5c39db, rc42 parents, hourly re-plan 300 s, day-ahead MIP start from rc42 etb400 charging) experiment A, tariff A, assignment fixed to rc42 etb400",
+    rows = [read_case(Path(p)) for p in sorted(glob.glob(str(OPS / "rc50" / "af[012]_[0-9][0-9][0-9]_c42" / "20*")))]
+    (HERE / "rc50_experimentA.json").write_text(
+        json.dumps({"label": "DIAGNOSTIC rc50 (c1f65621, rc42 parents, hourly re-plan 300 s, day-ahead MIP start from rc42 etb400 charging) experiment A, tariff A, assignment fixed to rc42 etb400",
                     "cases": rows}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     by = {(r["grid_limit_kw"], r["week"], r["info"][:2]): r for r in rows}
-    lines = ["# 実験A 太陽光の予報の情報の価値（rc49、8c5c39db、rc42 の親、毎時の立て直し300秒、前日計画は rc42 400 kW の充電計画から解き始め、料金A、便割当固定、DIAGNOSTIC）", "",
+    lines = ["# 実験A 太陽光の予報の情報の価値（rc50、c1f65621、rc42 の親、毎時の立て直し300秒、前日計画は rc42 400 kW の充電計画から解き始め、料金A、便割当固定、DIAGNOSTIC）", "",
              "費用は車両使用費を除く（燃料は使った量×150円、CO₂の費用を除き、基本料金を足す）。"
              "蓄電池の取り崩し（最初−最後）は0円と17.43円の両方で評価。単位：費用は万円/週、電力量は kWh。", "",
              "| 上限 | 季節 | 予報 | 費用(0円) | 費用(17.43円) | 買電 | 超過 | 最大受電 kW | 捨てた太陽光 | 蓄電池 最初→最後 | 朝の不足 | CO₂ kg | 状態 |",
@@ -141,7 +141,7 @@ def main():
                     f"{r['grid_import_kwh']:,.0f} | {r['contract_over_limit_kwh']:,.0f} | {r['peak_grid_kw']:,.0f} | "
                     f"{r['pv_curtailed_kwh']:,.0f} | {r['bess_start_kwh']:,.0f}→{r['bess_end_kwh']:,.0f} | "
                     f"{r['morning_shortfall_kwh']:,.1f} | {r['total_co2_kg']:,.0f} | {r['status']} |")
-    (HERE / "rc49_experimentA.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (HERE / "rc50_experimentA.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(collections.Counter(r["status"] for r in rows))
 
 
