@@ -1,5 +1,18 @@
 # 分散計算の使い方
 
+## 2026-11-21 更新: 全workerのスリープ無効化（AC・バッテリーとも）
+
+ユーザー指示で `tools/cluster/configure_no_sleep.ps1` を親機（local）と台帳のSSH worker 19台に適用した。
+AC・DC（バッテリー駆動）の両方で「スリープまでの時間」「休止状態までの時間」を0（なし）にする。
+停電・電源抜けでバッテリー駆動に切り替わっても、アイドルでスリープ・休止しない。
+バッテリー残量が「重大」になったときの動作（休止・シャットダウン）は、データ保護のため変更していない。
+ふたを閉じたときの動作は、ふたの設定が見える端末だけ「何もしない」にする作りだが、今回の全台でこの設定は非表示で、変更していない。
+変更前の値は各台の `C:/mc-worker/power-before-no-sleep.json` に1回だけ保存。結果は `output/cluster-deployment/no_sleep_20261121.json`。
+
+結果: 親機と18台で `verified=true`。CYLIU_THINKBOOK（100.124.152.124）はTailscaleオフライン（最終接続1日前）で未適用。
+変更前にバッテリー時のスリープ・休止が有効だったのは、desktop-6ae0mir、desktop-1800n4s、pslab-e490、powersystem、desktop-mr7177o、pslab-mouse、desktop-baia67v、desktop-gsfgtj2、desktop-0iigbo9、desktop-gj3okng、desktop-mheam24、親機。
+既存の `configure-ac-power.ps1`（AC側だけ）はこのスクリプトに含まれる。稼働中の計算は止めていない。
+
 ## 2026-11-21 追加: 新規worker 3台（割当停止で登録）
 
 下記11/04〜07と同じ手順（Taildrop→現地で `onboard_worker_machine.ps1`→`onboard_worker.py`→Named-User→AC電源）で導入した。
