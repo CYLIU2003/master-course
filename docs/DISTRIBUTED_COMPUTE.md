@@ -1,5 +1,16 @@
 # 分散計算の使い方
 
+## 2026-11-21 追加: 監視ページ（読み取り専用）
+
+`tools\fleet_monitor\START_FLEET_MONITOR.cmd` で起動し、親機で http://127.0.0.1:8897/ を開く（既定でこの親機からのみ見える）。
+台帳の全台・修論キューの台・後輩用ゲートウェイの台を1画面に出し、10秒ごとに自動更新する。
+
+- 各台：60秒ごとにSSHで固定のPowerShell読取（CPU型番・コア数・負荷、RAM、C:空き、電池・AC、起動時刻）。SSHの宛先がない台（台帳外）は修論の制御系の最終観測値を出す。
+- 修論：キューの `cluster.sqlite3` を読み取り専用URIで15秒ごとに短く読む（既定は `output/monthly_latest_20260925/controller/queue/cluster.sqlite3`、別キューは `--thesis-db`）。
+- 後輩：`output/lab-gateway/` の `jobs.sqlite3`・`config.json`・`overflow_claims.json` と、ゲートウェイの応答有無。
+- 警告：Tailscaleオフライン、SSH応答なし、バッテリー駆動（電源抜け）、電池5%以下、C:空き20 GB未満、計算中の空きRAM 1.5 GB未満、修論のLOST、ゲートウェイ停止。
+- 台・ジョブ・制御系は一切変更しない。役割表示（修論／後輩／借用中）は、実行中ジョブ・ゲートウェイのプール・修論キューの台の順で判定した表示用の分類。
+
 ## 2026-11-21 更新: 全workerのスリープ無効化（AC・バッテリーとも）
 
 ユーザー指示で `tools/cluster/configure_no_sleep.ps1` を親機（local）と台帳のSSH worker 19台に適用した。

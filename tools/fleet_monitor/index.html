@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>計算機の監視</title>
+<style>
+:root {
+  --bg: #f4f4f2; --surface: #fcfcfb; --ink: #1b1b1a; --ink-2: #55554f; --ink-3: #8a8a83; --line: #e3e3de;
+  --track: #ebebe6; --bar: #3b6fd4; --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --chip: #eeeeea;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --surface: #1a1a19; --ink: #ededea; --ink-2: #b4b4ad; --ink-3: #7c7c76; --line: #2d2d2b;
+    --track: #2a2a28; --bar: #6d97ea; --chip: #262624;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --surface: #1a1a19; --ink: #ededea; --ink-2: #b4b4ad; --ink-3: #7c7c76; --line: #2d2d2b;
+  --track: #2a2a28; --bar: #6d97ea; --chip: #262624;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif; }
+header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; padding: 16px 20px 8px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+.muted { color: var(--ink-3); }
+.sub { color: var(--ink-2); font-size: 12px; }
+main { padding: 0 20px 32px; display: grid; gap: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.tile .v { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .k { color: var(--ink-2); font-size: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; color: var(--ink-2); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.id { font-weight: 600; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--chip); font-size: 12px; white-space: nowrap; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.meter { width: 110px; }
+.meter .t { height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; margin-top: 3px; }
+.meter .f { height: 100%; border-radius: 3px; background: var(--bar); }
+.alert { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.alert:last-child { border-bottom: 0; }
+.alert .lv { font-size: 12px; font-weight: 600; white-space: nowrap; min-width: 64px; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.filters button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 12px; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.jobline { font-size: 12px; white-space: nowrap; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+@media (max-width: 520px) { header, main { padding-left: 16px; padding-right: 16px; } .two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>計算機の監視</h1>
+  <span class="sub" id="updated">読み込み中…</span>
+  <span class="sub muted">読み取り専用・この親機からのみ表示</span>
+</header>
+<main>
+  <section class="tiles" id="tiles"></section>
+  <section class="card"><h2>注意が必要なこと</h2><div id="alerts"></div></section>
+  <section class="card">
+    <h2>計算機</h2>
+    <div class="filters" id="filters"></div>
+    <table><thead><tr><th>台</th><th>役割</th><th>接続</th><th>CPU</th><th>RAM</th><th>C:空き</th><th>電源</th><th>計算中</th></tr></thead>
+      <tbody id="machines"></tbody></table>
+  </section>
+  <div class="two">
+    <section class="card"><h2>修論の計算（実行中・待ち）</h2>
+      <table><thead><tr><th>ケース</th><th>週</th><th>台</th><th>状態</th><th>進捗</th><th>経過</th></tr></thead><tbody id="thesis"></tbody></table></section>
+    <section class="card"><h2>後輩のタスク（実行中・待ち）</h2>
+      <table><thead><tr><th>利用者</th><th>名前</th><th>台</th><th>状態</th><th>RAM・上限</th><th>経過</th></tr></thead><tbody id="lab"></tbody></table></section>
+  </div>
+  <div class="two">
+    <section class="card"><h2>修論：最近終わったもの</h2>
+      <table><thead><tr><th>ケース</th><th>週</th><th>台</th><th>結果</th><th>終了</th></tr></thead><tbody id="thesisRecent"></tbody></table></section>
+    <section class="card"><h2>後輩：最近終わったもの</h2>
+      <table><thead><tr><th>利用者</th><th>名前</th><th>台</th><th>結果</th><th>終了</th></tr></thead><tbody id="labRecent"></tbody></table></section>
+  </div>
+</main>
+<script>
+const ROLE = { thesis: "修論", lab: "後輩", borrowed: "後輩が借用中", none: "なし" };
+const LEVEL = { critical: ["重大", "var(--critical)", "■"], serious: ["要対応", "var(--serious)", "▲"], warning: ["注意", "var(--warning)", "●"] };
+const STATE = { RUNNING: "実行中", QUEUED: "待ち", STAGING: "配置中", COLLECTING: "回収中", COMPLETED: "完了", FAILED: "失敗",
+  LOST: "LOST", BLOCKED: "未開始で停止", CANCELLED: "取消", TIMEOUT: "時間切れ", REJECTED: "受付不可", RESERVED: "予約" };
+let filter = "all", last = null;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ago = iso => { if (!iso) return "—"; const s = (Date.now() - new Date(iso)) / 1000; if (s < 90) return Math.round(s) + "秒"; if (s < 5400) return Math.round(s / 60) + "分"; if (s < 172800) return (s / 3600).toFixed(1) + "時間"; return Math.round(s / 86400) + "日"; };
+const clock = iso => iso ? new Date(iso).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+const caseName = b => { if (!b) return "—"; const m = String(b).match(/-([a-z0-9_]+)-\d{4}-\d{2}-\d{2}$/i); return m ? m[1] : b; };
+function meter(value, max, label, warnAt, critAt, invert) {
+  if (value == null || !max) return `<span class="muted">—</span>`;
+  const pct = Math.max(0, Math.min(100, value / max * 100));
+  const level = invert ? (pct <= critAt ? "var(--critical)" : pct <= warnAt ? "var(--warning)" : "var(--bar)")
+                       : (pct >= critAt ? "var(--critical)" : pct >= warnAt ? "var(--warning)" : "var(--bar)");
+  return `<div class="meter">${label}<div class="t"><div class="f" style="width:${pct}%;background:${level}"></div></div></div>`;
+}
+function conn(m) {
+  if (m.transport === "local") return `<span class="dot" style="background:var(--good)"></span>親機`;
+  const ts = m.tailscale;
+  if (ts && !ts.online) return `<span class="dot" style="background:var(--critical)"></span>オフライン<div class="sub">最終 ${esc(clock(ts.last_seen))}</div>`;
+  if (m.probe_ok) return `<span class="dot" style="background:var(--good)"></span>接続OK<div class="sub">${esc(ago(m.probed_at))}前に確認</div>`;
+  if (m.probe_error) return `<span class="dot" style="background:var(--serious)"></span>${esc(m.probe_error)}`;
+  if (!m.host) return `<span class="dot" style="background:var(--ink-3)"></span>修論側の記録のみ`;
+  return `<span class="dot" style="background:var(--ink-3)"></span>確認待ち`;
+}
+function power(s) {
+  if (!s || s.has_battery === undefined) return `<span class="muted">—</span>`;
+  if (!s.has_battery) return "電源のみ";
+  if (s.on_ac === false) return `<span style="color:var(--critical);font-weight:600">■ バッテリー駆動 ${esc(s.battery_pct)}%</span>`;
+  return `AC・電池${esc(s.battery_pct)}%`;
+}
+function render(st) {
+  last = st;
+  document.getElementById("updated").textContent = `最終更新 ${clock(st.collected_at)}（${Math.round(st.refresh_seconds)}秒ごとに集計、各台は${Math.round(st.probe_seconds)}秒ごとに確認）`;
+  const ms = st.machines, remote = ms.filter(m => m.transport !== "local");
+  const online = remote.filter(m => m.probe_ok).length;
+  const tc = st.thesis.counts, gc = st.gateway.counts;
+  const tRun = st.thesis.jobs.filter(j => j.state !== "QUEUED").length, tQ = st.thesis.jobs.filter(j => j.state === "QUEUED").length;
+  const gRun = st.gateway.jobs.filter(j => j.state !== "QUEUED").length, gQ = st.gateway.jobs.filter(j => j.state === "QUEUED").length;
+  const tiles = [["応答している台", `${online} / ${remote.length}`], ["修論 実行中", tRun], ["修論 待ち", tQ],
+    ["後輩 実行中", gRun], ["後輩 待ち", gQ], ["後輩が借用中の台", Object.keys(st.gateway.claims || {}).length],
+    ["ゲートウェイ", st.gateway.alive ? "稼働中" : "停止"], ["注意", st.alerts.length]];
+  document.getElementById("tiles").innerHTML = tiles.map(([k, v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join("");
+  document.getElementById("alerts").innerHTML = st.alerts.length ? st.alerts.map(a => { const [t, c, i] = LEVEL[a.level];
+    return `<div class="alert"><span class="lv" style="color:${c}">${i} ${t}</span><span><b>${esc(a.machine)}</b>　${esc(a.text)}</span></div>`; }).join("")
+    : `<div class="muted">いまは特にありません。</div>`;
+  const counts = { all: ms.length }; ms.forEach(m => counts[m.role] = (counts[m.role] || 0) + 1);
+  document.getElementById("filters").innerHTML = [["all", "すべて"], ["thesis", ROLE.thesis], ["lab", ROLE.lab], ["borrowed", ROLE.borrowed], ["none", ROLE.none]]
+    .filter(([k]) => counts[k]).map(([k, l]) => `<button data-f="${k}" aria-pressed="${filter === k}">${l} ${counts[k]}</button>`).join("");
+  const order = { thesis: 0, borrowed: 1, lab: 2, none: 3 };
+  const rows = ms.filter(m => filter === "all" || m.role === filter).sort((a, b) => (a.transport === "local" ? -1 : 0) - (b.transport === "local" ? -1 : 0) || order[a.role] - order[b.role] || a.id.localeCompare(b.id));
+  document.getElementById("machines").innerHTML = rows.map(m => {
+    const s = m.spec || {};
+    const cpu = s.cpu ? `<div class="sub">${esc(s.cpu.replace(/\(R\)|\(TM\)|CPU|@.*$/g, "").replace(/\s+/g, " ").trim())}・${esc(s.cores ?? "?")}コア/${esc(s.threads ?? "?")}</div>` : "";
+    const used = s.ram_total != null && s.ram_free != null ? s.ram_total - s.ram_free : null;
+    const jobs = [...m.thesis_jobs.map(j => `<div class="jobline">修論 ${esc(caseName(j.batch))} ${esc(j.task || "")} ${j.percent != null ? esc(j.percent) + "%" : ""}</div>`),
+                  ...m.lab_jobs.map(j => `<div class="jobline">後輩 ${esc(j.owner)}「${esc(j.name || j.id)}」</div>`)].join("") || `<span class="muted">なし</span>`;
+    const mode = m.thesis_mode && m.thesis_mode !== "active" ? `<div class="sub">修論側: ${esc(m.thesis_mode)}</div>` : "";
+    return `<tr><td><div class="id">${esc(m.id)}</div><div class="sub">${esc(m.host || "")}${m.user ? " · " + esc(m.user) : ""}</div></td>
+      <td><span class="chip">${ROLE[m.role]}</span>${mode}</td><td>${conn(m)}</td>
+      <td>${meter(s.cpu_load, 100, `${s.cpu_load ?? "—"}%`, 70, 90)}${cpu}</td>
+      <td>${meter(used, s.ram_total, `${used == null ? "—" : used.toFixed(1)} / ${s.ram_total ?? "—"} GB`, 80, 92)}</td>
+      <td>${s.disk_free == null ? `<span class="muted">—</span>` : esc(Math.round(s.disk_free)) + " GB"}</td>
+      <td>${power(m.probe_ok ? s : null)}</td><td>${jobs}</td></tr>`;
+  }).join("");
+  const tj = st.thesis.jobs;
+  document.getElementById("thesis").innerHTML = tj.length ? tj.map(j => `<tr><td>${esc(caseName(j.batch))}</td><td>${esc(j.task || "—")}</td><td>${esc(j.worker_id || "—")}</td>
+    <td>${esc(STATE[j.state] || j.state)}</td><td>${meter(j.percent, 100, `${j.percent ?? "—"}% <span class="sub">${esc(j.stage || "")}</span>`, 101, 101)}</td><td>${esc(ago(j.created_at))}</td></tr>`).join("")
+    : `<tr><td colspan="6" class="muted">ありません</td></tr>`;
+  const gj = st.gateway.jobs;
+  document.getElementById("lab").innerHTML = gj.length ? gj.map(j => `<tr><td>${esc(j.owner)}</td><td>${esc(j.name || j.id)}</td><td>${esc(j.machine || "—")}${st.gateway.claims && st.gateway.claims[j.machine] ? ' <span class="chip">借用</span>' : ""}</td>
+    <td>${esc(STATE[j.state] || j.state)}</td><td>${esc(j.ram_gb)} GB・${esc(j.time_limit_min)}分</td><td>${esc(ago(j.started_at || j.created_at))}</td></tr>`).join("")
+    : `<tr><td colspan="6" class="muted">ありません</td></tr>`;
+  const res = s => { const c = s === "COMPLETED" ? "var(--good)" : s === "LOST" || s === "FAILED" ? "var(--critical)" : "var(--serious)"; return `<span class="dot" style="background:${c}"></span>${esc(STATE[s] || s)}`; };
+  document.getElementById("thesisRecent").innerHTML = st.thesis.recent.map(j => `<tr><td>${esc(caseName(j.batch))}</td><td>${esc(j.task || "—")}</td><td>${esc(j.worker_id || "—")}</td><td>${res(j.state)}</td><td>${esc(clock(j.updated_at))}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">ありません</td></tr>`;
+  document.getElementById("labRecent").innerHTML = st.gateway.recent.map(j => `<tr><td>${esc(j.owner)}</td><td>${esc(j.name || j.id)}</td><td>${esc(j.machine || "—")}</td><td>${res(j.state)}</td><td>${esc(clock(j.finished_at))}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">ありません</td></tr>`;
+}
+document.getElementById("filters").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; filter = b.dataset.f; try { localStorage.setItem("fleet-filter", filter); } catch {} if (last) render(last); });
+try { filter = localStorage.getItem("fleet-filter") || "all"; } catch {}
+async function tick() {
+  try { const r = await fetch("/api/state", { cache: "no-store" }); const st = await r.json(); if (st.machines) render(st); else document.getElementById("updated").textContent = "最初の集計中…"; }
+  catch { document.getElementById("updated").textContent = "監視サーバーに接続できません"; }
+}
+tick(); setInterval(tick, 10000);
+</script>
+</body>
+</html>
