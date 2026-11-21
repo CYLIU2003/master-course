@@ -49,7 +49,7 @@ def load_overflow(directory: Path) -> ThesisOverflow | None:
     if not settings:
         return None
     return ThesisOverflow(directory, base_url=settings["controller"], max_minutes=int(settings.get("max_minutes", 360)),
-                          keep_idle=int(settings.get("keep_idle", 2)))
+                          keep_idle=int(settings.get("keep_idle", 2)), queue_db=settings.get("queue_db"))
 
 
 def main(argv: list[str] | None = None) -> int:

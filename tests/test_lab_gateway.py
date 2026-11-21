@@ -571,3 +571,14 @@ def test_release_does_not_reenable_a_pc_the_owner_disabled(env):
     overflow._save({"t1": {"job_id": "j", "claimed_at": "x", "view": {"id": "t1", "host": "h", "ssh_user": "u", "capability": {}}}})
     overflow.release("t1")
     assert controller.workers["t1"]["mode"] == "disabled" and overflow.claims() == {}
+
+
+def test_queued_thesis_jobs_are_counted_from_the_queue_database(env, tmp_path):
+    import sqlite3
+    db_path = tmp_path / "cluster.sqlite3"
+    with sqlite3.connect(db_path) as db:
+        db.execute("CREATE TABLE jobs (id TEXT, state TEXT)")
+        db.executemany("INSERT INTO jobs VALUES (?, ?)", [("a", "QUEUED"), ("b", "RUNNING"), ("c", "QUEUED")])
+    controller = FakeController([{"id": "t1"}])
+    overflow = make_overflow(env, controller, {}, queue_db=str(db_path))
+    assert overflow.queued_thesis_jobs() == 2 and ("GET", "/api/cluster/jobs") not in controller.calls

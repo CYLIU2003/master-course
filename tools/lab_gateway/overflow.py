@@ -9,6 +9,7 @@ Claims are kept in overflow_claims.json so a gateway restart can resume or relea
 from __future__ import annotations
 
 import json
+import sqlite3
 import threading
 import time
 import urllib.error
@@ -37,12 +38,13 @@ def controller_http(base_url: str, method: str, path: str, timeout: float = 20) 
 
 class ThesisOverflow:
     def __init__(self, data_dir: Path, *, base_url: str, max_minutes: int = 360, keep_idle: int = 2,
-                 http=controller_http, machine_factory=Machine, cache_seconds: float = 20):
+                 http=controller_http, machine_factory=Machine, cache_seconds: float = 20, queue_db: str | None = None):
         self.path = data_dir / "overflow_claims.json"
         self.base_url, self.max_minutes, self.keep_idle = base_url, max_minutes, keep_idle
         self.http, self.machine_factory, self.cache_seconds = http, machine_factory, cache_seconds
         self.lock = threading.RLock()
         self._cache: tuple[float, list[dict]] | None = None
+        self.queue_db = queue_db
 
     # ---- claims file
     def claims(self) -> dict[str, dict]:
@@ -64,7 +66,7 @@ class ThesisOverflow:
             idle_sorted = self._cache[1]
         else:
             workers = self.http(self.base_url, "GET", "/api/cluster/workers")["workers"]
-            queued = sum(1 for job in self.http(self.base_url, "GET", "/api/cluster/jobs") if job.get("state") == "QUEUED")
+            queued = self.queued_thesis_jobs()
             idle = [w for w in workers if w.get("transport") == "ssh" and w.get("host") and w.get("mode") == "active"
                     and w.get("status") == "READY" and not w.get("active_jobs") and not w.get("reserved")]
             idle.sort(key=lambda w: w.get("machine_memory_budget_gib") or 0, reverse=True)
@@ -72,6 +74,19 @@ class ThesisOverflow:
             self._cache = (time.monotonic(), idle_sorted)
         claimed = self.claims()
         return [w for w in idle_sorted if w["id"] not in exclude and w["id"] not in claimed]
+
+    def queued_thesis_jobs(self) -> int:
+        # /api/cluster/jobs returns every job with its full manifest (tens of MB); prefer one read-only COUNT.
+        if self.queue_db:
+            try:
+                db = sqlite3.connect(f"file:{Path(self.queue_db).as_posix()}?mode=ro", uri=True, timeout=3)
+                try:
+                    return db.execute("SELECT count(*) FROM jobs WHERE state='QUEUED'").fetchone()[0]
+                finally:
+                    db.close()
+            except sqlite3.Error as exc:
+                raise ControllerError(f"thesis queue database unreadable: {exc}") from exc
+        return sum(1 for job in self.http(self.base_url, "GET", "/api/cluster/jobs") if job.get("state") == "QUEUED")
 
     def machine(self, view: dict):
         capability = view.get("capability") or {}
