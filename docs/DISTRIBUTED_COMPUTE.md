@@ -1,5 +1,21 @@
 # 分散計算の使い方
 
+## 2026-11-21 追加: 新規worker 3台（割当停止で登録）
+
+下記11/04〜07と同じ手順（Taildrop→現地で `onboard_worker_machine.ps1`→`onboard_worker.py`→Named-User→AC電源）で導入した。
+3台とも Windows 11 Home、Tailscale所有者表示は `hiramekiproject2024@`、標準版OpenSSHを新規導入。
+
+| 子機ID | 実機名 | Tailscale IP | ユーザー | RAM | ライセンスID | 状態 |
+|---|---|---|---|---|---|---|
+| desktop-0iigbo9 | DESKTOP-0IIGBO9 | 100.121.123.46 | pslab | 31.8 GiB | 2887094 | SSH・Python 3.14.7/gurobipy 13.0.1・ライセンス・極小LPのOPTIMALを確認 |
+| desktop-gj3okng | DESKTOP-GJ3OKNG | 100.115.238.93 | pslab | 31.8 GiB | 2887104 | 同上 |
+| desktop-mheam24 | DESKTOP-MHEAM24 | 100.105.67.29 | pslab | 31.8 GiB | 2887105 | 同上 |
+
+3台とも `enabled=false`・`gurobi=false`、`gurobi_license_file=C:/Users/pslab/gurobi.lic` で元台帳に登録（台帳は20台）。
+AC電源のスリープ・休止は3台とも元から0で変更なし。研究コード未配置、`check_workers.py` 未実施。
+同日、ユーザー指示で3台を元台帳で `enabled=true`・`gurobi=true`（slots 1、cooldown 0）にした（DESKTOP-GSFGTJ2と同じ扱い、搭載24GB以上の受け入れ条件を満たす）。
+稼働中の計算の設定は変更していない。次回 `release.py stage` で固定版を配置した設定から対象になる。
+
 ## 2026-11-04〜07 追加: 新規worker 5台の導入（割当停止で登録）
 
 新しい台は次の順で導入する。研究計算への割当（`enabled`/`gurobi`）とコード固定版の配置は、この手順に含めない。

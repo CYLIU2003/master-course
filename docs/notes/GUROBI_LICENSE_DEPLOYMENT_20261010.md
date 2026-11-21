@@ -1,5 +1,17 @@
 # 2026-10-10 Gurobiライセンス導入の作業メモ
 
+## 2026-11-21 新規3台
+
+ユーザーの明示指示（EULA同意を含む）で各1件発行・導入した。手順・保護ACL・User環境変数は下記11/03〜07と同じ。
+既存 `gurobi.lic` は3台とも無く、バックアップは発生していない。ポータル一覧で新規IDは下表の3件だけ（重複発行なし）。
+3台とも venv の gurobipy 13.0.1、Threads=1 の極小LPがOPTIMAL（研究計算ではない）。研究計算への割当許可は意味しない。
+
+| 子機ID | 実機名 | ユーザー | ライセンスID | 期限 |
+|---|---|---|---|---|
+| desktop-0iigbo9 | DESKTOP-0IIGBO9 | pslab | 2887094 | 2027-11-21 |
+| desktop-gj3okng | DESKTOP-GJ3OKNG | pslab | 2887104 | 2027-11-21 |
+| desktop-mheam24 | DESKTOP-MHEAM24 | pslab | 2887105 | 2027-11-21 |
+
 ## 2026-11-03〜07 新規5台
 
 ユーザーの明示指示で、Free Academic Named-User（Gurobi 13）を各1件発行・導入した。
