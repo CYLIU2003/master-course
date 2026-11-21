@@ -47,4 +47,31 @@ def restore_stage1_seed_plan(problem, payload):
     from dataclasses import replace
     from src.optimization.rolling.reoptimizer import assignment_plan_from_serialized_result
     plan = assignment_plan_from_serialized_result(problem, payload)
-    return replace(plan, metadata={**dict(plan.metadata or {}), "source": "stage1_seed_from_prior_run"})
+    metadata = {**dict(plan.metadata or {}), "source": "stage1_seed_from_prior_run"}
+    raw_slots = payload.get("charging_slots")
+    if raw_slots:
+        # 2026-11-21 (experiment A): the anchor run's day-ahead charging, used only
+        # as a binary Stage 2 MIP start with stage2_charging_start_policy
+        # "fixed_assignment_binary". It is never a constraint and never accounting.
+        plan = replace(plan, charging_slots=_restore_charging_slots(problem, raw_slots))
+        metadata["charging_start_source"] = dict(payload.get("charging_start_source") or {})
+    return replace(plan, metadata=metadata)
+
+
+def _restore_charging_slots(problem, raw_slots):
+    import math
+    from src.optimization.common.problem import ChargingSlot
+    vehicles = {str(vehicle.vehicle_id) for vehicle in problem.vehicles}
+    chargers = {str(charger.charger_id) for charger in problem.chargers}
+    slots = []
+    for row in raw_slots:
+        vehicle_id, charger_id = str(row["vehicle_id"]), str(row["charger_id"])
+        charge_kw = float(row["charge_kw"])
+        if vehicle_id not in vehicles:
+            raise ValueError(f"Seed charging references unknown vehicle {vehicle_id!r}")
+        if charger_id not in chargers:
+            raise ValueError(f"Seed charging references unknown charger {charger_id!r}")
+        if not math.isfinite(charge_kw) or charge_kw < 0:
+            raise ValueError("Seed charging power must be finite and non-negative")
+        slots.append(ChargingSlot(vehicle_id, int(row["slot_index"]), charger_id, charge_kw=charge_kw))
+    return tuple(slots)

@@ -1000,7 +1000,11 @@ class RunOptimizationBody(BaseModel):
     stage1_gurobi_scale_flag: Literal[-1, 0, 1, 2, 3] = -1
     # Day-ahead Stage 2 binary MIP start (a proposal, never fixed charging).
     # Rolling windows keep their own policy; see charging_mip_start.py.
-    stage2_charging_start_policy: Literal["none", "stage1_recourse_binary", "stage1_recourse_hints"] = "none"
+    # "fixed_assignment_binary" starts from the fixed assignment's own charging
+    # (a stage1_seed_plan carrying charging_slots, 2026-11-21 experiment A).
+    stage2_charging_start_policy: Literal[
+        "none", "fixed_assignment_binary", "stage1_recourse_binary", "stage1_recourse_hints"
+    ] = "none"
     stage1_root_lp_diagnostic_enabled: bool = False
     stage1_root_lp_diagnostic_time_limit_seconds: int = Field(
         default=30,
