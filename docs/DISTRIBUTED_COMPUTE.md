@@ -4,6 +4,7 @@
 
 `tools\fleet_monitor\START_FLEET_MONITOR.cmd` で起動し、親機で http://127.0.0.1:8897/ を開く（既定でこの親機からのみ見える）。
 台帳の全台・修論キューの台・後輩用ゲートウェイの台を1画面に出し、10秒ごとに自動更新する。
+親機の RTDS_admin のスタートアップに `fleet-monitor.lnk`（最小化で起動）を置き、ログオン時に自動で立ち上がる。止めるときはそのウィンドウを閉じる。
 
 - 各台：60秒ごとにSSHで固定のPowerShell読取（CPU型番・コア数・負荷、RAM、C:空き、電池・AC、起動時刻）。SSHの宛先がない台（台帳外）は修論の制御系の最終観測値を出す。
 - 修論：キューの `cluster.sqlite3` を読み取り専用URIで15秒ごとに短く読む（既定は `output/monthly_latest_20260925/controller/queue/cluster.sqlite3`、別キューは `--thesis-db`）。
