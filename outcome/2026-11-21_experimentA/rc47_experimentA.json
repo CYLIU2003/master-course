@@ -1,0 +1,149 @@
+{
+ "label": "DIAGNOSTIC rc47 (ef1685c6, hourly re-plan 600 s) experiment A, tariff A, assignment fixed to rc42 etb400",
+ "cases": [
+  {
+   "case": "rc47/af0_200_r600/2025-01-06",
+   "info": "F0 climatology",
+   "grid_limit_kw": 200,
+   "week": "2025-01-06",
+   "season": "winter",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af0_200_r600/2025-04-07",
+   "info": "F0 climatology",
+   "grid_limit_kw": 200,
+   "week": "2025-04-07",
+   "season": "spring",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af0_200_r600/2025-07-07",
+   "info": "F0 climatology",
+   "grid_limit_kw": 200,
+   "week": "2025-07-07",
+   "season": "summer",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af0_400_r600/2025-01-06",
+   "info": "F0 climatology",
+   "grid_limit_kw": 400,
+   "week": "2025-01-06",
+   "season": "winter",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af0_400_r600/2025-04-07",
+   "info": "F0 climatology",
+   "grid_limit_kw": 400,
+   "week": "2025-04-07",
+   "season": "spring",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af0_400_r600/2025-07-07",
+   "info": "F0 climatology",
+   "grid_limit_kw": 400,
+   "week": "2025-07-07",
+   "season": "summer",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af1_200_r600/2025-01-06",
+   "info": "F1 class known (oracle)",
+   "grid_limit_kw": 200,
+   "week": "2025-01-06",
+   "season": "winter",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af1_200_r600/2025-04-07",
+   "info": "F1 class known (oracle)",
+   "grid_limit_kw": 200,
+   "week": "2025-04-07",
+   "season": "spring",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af1_200_r600/2025-07-07",
+   "info": "F1 class known (oracle)",
+   "grid_limit_kw": 200,
+   "week": "2025-07-07",
+   "season": "summer",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af1_400_r600/2025-01-06",
+   "info": "F1 class known (oracle)",
+   "grid_limit_kw": 400,
+   "week": "2025-01-06",
+   "season": "winter",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af1_400_r600/2025-04-07",
+   "info": "F1 class known (oracle)",
+   "grid_limit_kw": 400,
+   "week": "2025-04-07",
+   "season": "spring",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af1_400_r600/2025-07-07",
+   "info": "F1 class known (oracle)",
+   "grid_limit_kw": 400,
+   "week": "2025-07-07",
+   "season": "summer",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af2_200_r600/2025-01-06",
+   "info": "F2 actual (hindsight)",
+   "grid_limit_kw": 200,
+   "week": "2025-01-06",
+   "season": "winter",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af2_200_r600/2025-04-07",
+   "info": "F2 actual (hindsight)",
+   "grid_limit_kw": 200,
+   "week": "2025-04-07",
+   "season": "spring",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af2_200_r600/2025-07-07",
+   "info": "F2 actual (hindsight)",
+   "grid_limit_kw": 200,
+   "week": "2025-07-07",
+   "season": "summer",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af2_400_r600/2025-01-06",
+   "info": "F2 actual (hindsight)",
+   "grid_limit_kw": 400,
+   "week": "2025-01-06",
+   "season": "winter",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af2_400_r600/2025-04-07",
+   "info": "F2 actual (hindsight)",
+   "grid_limit_kw": 400,
+   "week": "2025-04-07",
+   "season": "spring",
+   "status": "NOT_COLLECTED"
+  },
+  {
+   "case": "rc47/af2_400_r600/2025-07-07",
+   "info": "F2 actual (hindsight)",
+   "grid_limit_kw": 400,
+   "week": "2025-07-07",
+   "season": "summer",
+   "status": "NOT_COLLECTED"
+  }
+ ]
+}

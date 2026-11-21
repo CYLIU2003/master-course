@@ -1,12 +1,12 @@
-"""Experiment A (rc47, ef1685c6, hourly re-plan 600 s): value of PV forecast information, assignment fixed. DIAGNOSTIC.
+"""Experiment A (rc48, ef1685c6, rc42 parents, hourly re-plan 300 s): value of PV forecast information, assignment fixed. DIAGNOSTIC.
 
 Each case holds the rc42 adopted 400 kW assignment of its season fixed (phase1_charging_only),
 uses the rule battery and tariff A, and changes only the PV the day-ahead plan and the hourly
 re-plans see: F0 climatology, F1 weather class known (oracle), F2 actual (hindsight).
 Execution always uses the Solcast actuals.
 
-Reads output/midterm_20261128/rc47/af{0,1,2}_{200,400}_r600/<week>/ (weekly_operator collect) and
-writes rc47_experimentA.json and rc47_experimentA.md next to this script.
+Reads output/midterm_20261128/rc48/af{0,1,2}_{200,400}_p42/<week>/ (weekly_operator collect) and
+writes rc48_experimentA.json and rc48_experimentA.md next to this script.
 
 Reported cost excludes vehicle usage (identical under a fixed assignment, checked per case):
   total_cost - vehicle_usage_cost - fuel_cost + fuel consumed x 150 - CO2 kg x 1 + basic charge
@@ -59,10 +59,26 @@ def shortfall_kwh(acct):
     return total
 
 
+def input_contract(case_dir):
+    """Tariff A and the rc42 grid-limit semantics, read from the prepared input (rc45-47 lesson)."""
+    prepared = json.loads((case_dir / "prepared.json").read_text(encoding="utf-8"))
+    doc = json.loads(Path(prepared["prepared_path"]).read_text(encoding="utf-8"))
+    overlay, sim = doc.get("scenario_overlay") or {}, doc.get("simulation_config") or {}
+    found = {"grid_flat_price_per_kwh": (overlay.get("cost_coefficients") or {}).get("grid_flat_price_per_kwh"),
+             "physical_grid_import_limit_kw": (overlay.get("charging_constraints") or {}).get("physical_grid_import_limit_kw"),
+             "enable_contract_overage_penalty": sim.get("enable_contract_overage_penalty"),
+             "contract_overage_penalty_yen_per_kwh": sim.get("contract_overage_penalty_yen_per_kwh")}
+    expected = {"grid_flat_price_per_kwh": 17.43, "physical_grid_import_limit_kw": None,
+                "enable_contract_overage_penalty": True, "contract_overage_penalty_yen_per_kwh": 500.0}
+    return found, [k for k in expected if found[k] != expected[k]]
+
+
 def read_case(case_dir):
     name, week = case_dir.parent.name, case_dir.name
     row = {"case": f"{case_dir.parent.parent.name}/{name}/{week}", "info": INFO[name[:3]], "grid_limit_kw": int(name[4:7]), "week": week,
            "season": SEASON[week], "status": "NOT_COLLECTED"}
+    if (case_dir / "prepared.json").exists():
+        row["input_contract"], row["input_contract_mismatch"] = input_contract(case_dir)
     summary, run = case_dir / "results/weekly_summary.json", run_dir(case_dir)
     if not summary.exists() or run is None:
         return row
@@ -85,6 +101,8 @@ def read_case(case_dir):
     blocking = [] if ok else ["evaluation/rolling/physical gate not passed"]
     if not fixed:
         blocking.append("executed assignment differs from the fixed rc42 seed")
+    if row.get("input_contract_mismatch"):
+        blocking.append(f"input differs from tariff A / rc42 grid-limit semantics: {row['input_contract_mismatch']}")
     row.update(status="VERIFIED" if not blocking else "DIAGNOSTIC", blocking=blocking, assignment_fixed=fixed,
                bess_start_kwh=start, bess_end_kwh=end, morning_shortfall_kwh=shortfall_kwh(acct),
                bess_to_bus_kwh=acct["cost_breakdown"]["bess_to_bus_kwh"],
@@ -97,12 +115,12 @@ def read_case(case_dir):
 
 
 def main():
-    rows = [read_case(Path(p)) for p in sorted(glob.glob(str(OPS / "rc47" / "af[012]_[0-9][0-9][0-9]_r600" / "20*")))]
-    (HERE / "rc47_experimentA.json").write_text(
-        json.dumps({"label": "DIAGNOSTIC rc47 (ef1685c6, hourly re-plan 600 s) experiment A, tariff A, assignment fixed to rc42 etb400",
+    rows = [read_case(Path(p)) for p in sorted(glob.glob(str(OPS / "rc48" / "af[012]_[0-9][0-9][0-9]_p42" / "20*")))]
+    (HERE / "rc48_experimentA.json").write_text(
+        json.dumps({"label": "DIAGNOSTIC rc48 (ef1685c6, rc42 parents, hourly re-plan 300 s) experiment A, tariff A, assignment fixed to rc42 etb400",
                     "cases": rows}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     by = {(r["grid_limit_kw"], r["week"], r["info"][:2]): r for r in rows}
-    lines = ["# 実験A 太陽光の予報の情報の価値（rc47、ef1685c6、毎時の立て直し600秒、料金A、便割当固定、DIAGNOSTIC）", "",
+    lines = ["# 実験A 太陽光の予報の情報の価値（rc48、ef1685c6、rc42 の親、毎時の立て直し300秒、料金A、便割当固定、DIAGNOSTIC）", "",
              "費用は車両使用費を除く（燃料は使った量×150円、CO₂の費用を除き、基本料金を足す）。"
              "蓄電池の取り崩し（最初−最後）は0円と17.43円の両方で評価。単位：費用は万円/週、電力量は kWh。", "",
              "| 上限 | 季節 | 予報 | 費用(0円) | 費用(17.43円) | 買電 | 超過 | 最大受電 kW | 捨てた太陽光 | 蓄電池 最初→最後 | 朝の不足 | CO₂ kg | 状態 |",
@@ -120,7 +138,7 @@ def main():
                     f"{r['grid_import_kwh']:,.0f} | {r['contract_over_limit_kwh']:,.0f} | {r['peak_grid_kw']:,.0f} | "
                     f"{r['pv_curtailed_kwh']:,.0f} | {r['bess_start_kwh']:,.0f}→{r['bess_end_kwh']:,.0f} | "
                     f"{r['morning_shortfall_kwh']:,.1f} | {r['total_co2_kg']:,.0f} | {r['status']} |")
-    (HERE / "rc47_experimentA.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (HERE / "rc48_experimentA.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(collections.Counter(r["status"] for r in rows))
 
 
