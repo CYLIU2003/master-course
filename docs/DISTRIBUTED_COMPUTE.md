@@ -20,7 +20,7 @@ AC・DC（バッテリー駆動）の両方で「スリープまでの時間」�
 ふたを閉じたときの動作は、ふたの設定が見える端末だけ「何もしない」にする作りだが、今回の全台でこの設定は非表示で、変更していない。
 変更前の値は各台の `C:/mc-worker/power-before-no-sleep.json` に1回だけ保存。結果は `output/cluster-deployment/no_sleep_20261121.json`。
 
-結果: 親機と18台で `verified=true`。CYLIU_THINKBOOK（100.124.152.124）はTailscaleオフライン（最終接続1日前）で未適用。
+結果: 親機と19台すべてで `verified=true`。CYLIU_THINKBOOK（100.124.152.124）は当初Tailscaleオフラインで、同日18時台の復帰後に適用した。
 変更前にバッテリー時のスリープ・休止が有効だったのは、desktop-6ae0mir、desktop-1800n4s、pslab-e490、powersystem、desktop-mr7177o、pslab-mouse、desktop-baia67v、desktop-gsfgtj2、desktop-0iigbo9、desktop-gj3okng、desktop-mheam24、親機。
 既存の `configure-ac-power.ps1`（AC側だけ）はこのスクリプトに含まれる。稼働中の計算は止めていない。
 
