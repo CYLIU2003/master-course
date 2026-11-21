@@ -10,6 +10,7 @@ import threading
 import time
 from pathlib import Path
 
+from .overflow import ControllerError
 from .remote import Machine, RemoteError
 from .store import ACTIVE, JobStore, now
 
@@ -25,7 +26,8 @@ def memory_budget(total_gb: float) -> float:
 class Dispatcher:
     def __init__(self, store: JobStore, machines: dict[str, Machine], data_dir: Path, *, per_owner_active: int = 2,
                  reserve_ram_gb: float = 1.5, max_cpu_load: float = 85, min_disk_gb: float = 5,
-                 poll_seconds: float = 15, tick_seconds: float = 5, start_grace_seconds: float = 180, sleep=time.sleep):
+                 poll_seconds: float = 15, tick_seconds: float = 5, start_grace_seconds: float = 180, sleep=time.sleep,
+                 overflow=None, overflow_max_ram_gb: float = 24):
         self.store, self.machines, self.data_dir = store, machines, data_dir
         self.per_owner_active, self.reserve_ram_gb = per_owner_active, reserve_ram_gb
         self.max_cpu_load, self.min_disk_gb = max_cpu_load, min_disk_gb
@@ -35,6 +37,10 @@ class Dispatcher:
         self.stop_event = threading.Event()
         self.recovered = False
         self.last_probe: dict[str, dict] = {}
+        # Thesis PCs borrowed while idle (see overflow.py); never part of the lab pool itself.
+        self.overflow, self.overflow_max_ram_gb = overflow, overflow_max_ram_gb
+        self.borrowed: dict[str, Machine] = {}
+        self.overflow_retry_seconds, self._overflow_retry_at = 60.0, 0.0
 
     # ---- scheduling
     def admits(self, job: dict, probe: dict) -> str | None:
@@ -54,15 +60,29 @@ class Dispatcher:
     def recover(self) -> None:
         for job in self.store.rows(states=ACTIVE):
             machine = self.machines.get(job["machine"])
+            if machine is None and self.overflow:
+                machine = self.overflow.machine_for(job["machine"])
+                if machine is not None:
+                    self.borrowed[job["machine"]] = machine
             if job["state"] == "STAGING" or machine is None:
                 self.store.update(job["id"], state="LOST", finished_at=now(), message="gateway restarted before the job was confirmed running")
             else:
                 self._spawn(job["id"], machine, resume=True)
+        self._reconcile_overflow()
         self.recovered = True
+
+    def _reconcile_overflow(self) -> None:
+        if self.overflow:
+            try:
+                self.overflow.reconcile({job["id"] for job in self.store.rows(states=ACTIVE)})
+            except ControllerError:
+                pass  # retried on the next tick
 
     def tick(self) -> None:
         if not self.recovered:
             self.recover()
+        else:
+            self._reconcile_overflow()
         queued = self.store.rows(states={"QUEUED"})
         if not queued:
             return
@@ -99,9 +119,48 @@ class Dispatcher:
                     self._spawn(job["id"], machine, resume=False)
                     break
             else:
-                if all_probed and all_too_big:
+                if self._place_on_thesis_pc(job, busy):
+                    per_owner[job["owner"]] = per_owner.get(job["owner"], 0) + 1
+                    continue
+                can_borrow = bool(self.overflow) and self.overflow.eligible(job) and job["ram_gb"] <= self.overflow_max_ram_gb
+                if all_probed and all_too_big and not can_borrow:
                     self.store.update(job["id"], expected={"QUEUED"}, state="REJECTED", finished_at=now(),
                                       message=f"requested {job['ram_gb']:g} GiB exceeds the memory budget of every lab PC")
+
+    def _place_on_thesis_pc(self, job: dict, busy: set[str]) -> bool:
+        """Lab pool is full or unsuitable: borrow an idle thesis PC, if the thesis controller has one to spare."""
+        if not self.overflow or not self.overflow.eligible(job) or time.monotonic() < self._overflow_retry_at:
+            return False
+        # A failed attempt probes thesis PCs over SSH, so do not repeat it every tick.
+        self._overflow_retry_at = time.monotonic() + self.overflow_retry_seconds
+        try:
+            views = self.overflow.candidates(exclude=set(self.machines) | busy)
+        except ControllerError:
+            return False
+        for view in views:
+            machine = self.overflow.machine(view)
+            try:
+                probe = machine.probe()
+            except (RemoteError, ValueError, KeyError):
+                continue
+            self.last_probe[view["id"]] = {**probe, "probed_at": now()}
+            if self.admits(job, probe) is not None:
+                continue
+            try:
+                if not self.overflow.claim(view, job["id"]):
+                    continue
+            except ControllerError:
+                continue
+            if not self.store.update(job["id"], expected={"QUEUED"}, state="STAGING", machine=view["id"],
+                                     message=f"placed on {view['id']} (thesis PC borrowed while idle)"):
+                self.overflow.release(view["id"])
+                return False
+            self.borrowed[view["id"]] = machine
+            busy.add(view["id"])
+            self._spawn(job["id"], machine, resume=False)
+            self._overflow_retry_at = 0.0
+            return True
+        return False
 
     def cancel(self, job_id: str) -> dict:
         job = self.store.get(job_id)
@@ -113,9 +172,18 @@ class Dispatcher:
 
     # ---- one job from staging to the collected result
     def _spawn(self, job_id: str, machine: Machine, *, resume: bool) -> None:
-        thread = threading.Thread(target=self._lifecycle, args=(job_id, machine, resume), daemon=True, name=f"lab-job-{job_id}")
+        thread = threading.Thread(target=self._run, args=(job_id, machine, resume), daemon=True, name=f"lab-job-{job_id}")
         self.threads[job_id] = thread
         thread.start()
+
+    def _run(self, job_id: str, machine: Machine, resume: bool) -> None:
+        try:
+            self._lifecycle(job_id, machine, resume)
+        finally:
+            # Give a borrowed thesis PC back once the lab job has ended (not when the gateway is merely stopping).
+            if self.overflow and machine.id in self.borrowed and self.store.get(job_id)["state"] not in ACTIVE:
+                self.borrowed.pop(machine.id, None)
+                self.overflow.release(machine.id)
 
     def _lifecycle(self, job_id: str, machine: Machine, resume: bool) -> None:
         try:

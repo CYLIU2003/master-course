@@ -435,3 +435,139 @@ def test_run_job_stops_a_program_at_the_time_limit(tmp_path):
     run_job.run(job_dir)
     status = json.loads((job_dir / "status.json").read_text())
     assert status["outcome"] == "TIMEOUT" and status["exit_code"] == -1 and time.monotonic() - started < 30
+
+
+# ---- borrowing idle thesis PCs
+class FakeController:
+    """Stands in for the thesis controller API (bff /api/cluster)."""
+
+    def __init__(self, workers, queued=0, slip_in=()):
+        self.workers = {w["id"]: {"transport": "ssh", "host": f"h-{w['id']}", "mode": "active", "status": "READY",
+                                  "active_jobs": [], "reserved": 0, "machine_memory_budget_gib": 24, **w} for w in workers}
+        self.queued, self.slip_in, self.calls = queued, set(slip_in), []
+
+    def __call__(self, base_url, method, path, timeout=20):
+        self.calls.append((method, path))
+        if path == "/api/cluster/workers":
+            return {"workers": [dict(w) for w in self.workers.values()]}
+        if path == "/api/cluster/jobs":
+            return [{"state": "QUEUED"}] * self.queued
+        parts = path.split("/")
+        worker = self.workers[parts[4]]
+        if method == "POST":
+            worker["mode"] = {"drain": "draining", "enable": "active"}[parts[5]]
+            if parts[5] == "drain" and worker["id"] in self.slip_in:
+                worker["active_jobs"] = ["thesis-job"]
+        return dict(worker)
+
+
+def make_overflow(env, controller, machines, **kw):
+    from tools.lab_gateway.overflow import ThesisOverflow
+    _, _, tmp_path = env
+    return ThesisOverflow(tmp_path, base_url="http://ctl", http=controller, machine_factory=lambda w: machines[w.id], cache_seconds=0, **kw)
+
+
+def test_full_pool_borrows_an_idle_thesis_pc_and_gives_it_back(env):
+    store, _, tmp_path = env
+    lab = FakeMachine("lab1", script=[{"state": "RUNNING", "pid": 1}])
+    thesis = FakeMachine("t1", total=32, free=28)
+    controller = FakeController([{"id": "t1"}])
+    dispatcher = make_dispatcher(env, {"lab1": lab}, per_owner_active=5, overflow=make_overflow(env, controller, {"t1": thesis}))
+    first, second = new_job(store, tmp_path, name="a"), new_job(store, tmp_path, name="b")
+    dispatcher.tick()
+    for _ in range(50):
+        if store.get(second["id"])["state"] == "COMPLETED":
+            break
+        dispatcher.threads[second["id"]].join(0.2)
+    assert store.get(first["id"])["machine"] == "lab1"
+    row = store.get(second["id"])
+    assert row["machine"] == "t1" and row["state"] == "COMPLETED"
+    assert ("POST", "/api/cluster/workers/t1/drain") in controller.calls
+    assert controller.workers["t1"]["mode"] == "active" and dispatcher.overflow.claims() == {}
+    dispatcher.stop_event.set()
+    settle(dispatcher)
+
+
+def test_thesis_pcs_kept_free_for_queued_thesis_jobs(env):
+    store, _, tmp_path = env
+    lab = FakeMachine("lab1", script=[{"state": "RUNNING", "pid": 1}])
+    controller = FakeController([{"id": "t1"}, {"id": "t2"}], queued=5)
+    machines = {"t1": FakeMachine("t1", total=32, free=28), "t2": FakeMachine("t2", total=32, free=28)}
+    dispatcher = make_dispatcher(env, {"lab1": lab}, per_owner_active=5, overflow=make_overflow(env, controller, machines, keep_idle=2))
+    new_job(store, tmp_path, name="a")
+    waiting = new_job(store, tmp_path, name="b")
+    dispatcher.tick()
+    assert store.get(waiting["id"])["state"] == "QUEUED"
+    assert not any(method == "POST" for method, _ in controller.calls)
+    dispatcher.stop_event.set()
+    settle(dispatcher)
+
+
+@pytest.mark.parametrize("change", [{"status": "BUSY"}, {"active_jobs": ["x"]}, {"reserved": 1}, {"mode": "draining"}, {"mode": "disabled"}])
+def test_busy_or_paused_thesis_pcs_are_never_borrowed(env, change):
+    store, _, tmp_path = env
+    lab = FakeMachine("lab1", script=[{"state": "RUNNING", "pid": 1}])
+    controller = FakeController([{"id": "t1", **change}])
+    dispatcher = make_dispatcher(env, {"lab1": lab}, per_owner_active=5,
+                                 overflow=make_overflow(env, controller, {"t1": FakeMachine("t1", total=32, free=28)}))
+    new_job(store, tmp_path, name="a")
+    waiting = new_job(store, tmp_path, name="b")
+    dispatcher.tick()
+    assert store.get(waiting["id"])["state"] == "QUEUED" and not any(m == "POST" for m, _ in controller.calls)
+    dispatcher.stop_event.set()
+    settle(dispatcher)
+
+
+def test_thesis_job_slipping_in_undoes_the_claim(env):
+    store, _, tmp_path = env
+    lab = FakeMachine("lab1", script=[{"state": "RUNNING", "pid": 1}])
+    controller = FakeController([{"id": "t1"}], slip_in={"t1"})
+    dispatcher = make_dispatcher(env, {"lab1": lab}, per_owner_active=5,
+                                 overflow=make_overflow(env, controller, {"t1": FakeMachine("t1", total=32, free=28)}))
+    new_job(store, tmp_path, name="a")
+    waiting = new_job(store, tmp_path, name="b")
+    dispatcher.tick()
+    assert store.get(waiting["id"])["state"] == "QUEUED"
+    assert controller.workers["t1"]["mode"] == "active" and dispatcher.overflow.claims() == {}
+    dispatcher.stop_event.set()
+    settle(dispatcher)
+
+
+def test_long_jobs_do_not_borrow_and_oversize_waits_for_a_thesis_pc(env):
+    store, _, tmp_path = env
+    lab = FakeMachine("lab1", total=16, script=[{"state": "RUNNING", "pid": 1}])
+    controller = FakeController([{"id": "t1"}])
+    overflow = make_overflow(env, controller, {"t1": FakeMachine("t1", total=32, free=28)}, max_minutes=60)
+    dispatcher = make_dispatcher(env, {"lab1": lab}, per_owner_active=5, overflow=overflow)
+    new_job(store, tmp_path, name="a")
+    long_job = store.create(owner="alice", name="long", entry="main.py", args=[], ram_gb=4, threads=1, time_limit_min=600,
+                            bundle_path=str(make_zip(tmp_path / "long.zip")), bundle_bytes=10)
+    dispatcher.tick()
+    assert store.get(long_job["id"])["state"] == "QUEUED" and not any(m == "POST" for m, _ in controller.calls)
+    dispatcher.stop_event.set()
+    settle(dispatcher)
+
+
+def test_restart_resumes_a_borrowed_job_and_releases_stale_claims(env):
+    store, _, tmp_path = env
+    thesis = FakeMachine("t1", total=32, free=28)
+    controller = FakeController([{"id": "t1", "mode": "draining"}, {"id": "t2", "mode": "draining"}])
+    overflow = make_overflow(env, controller, {"t1": thesis, "t2": FakeMachine("t2")})
+    running = new_job(store, tmp_path, name="r")
+    store.update(running["id"], state="RUNNING", machine="t1")
+    overflow._save({"t1": {"job_id": running["id"], "claimed_at": "x", "view": {"id": "t1", "host": "h", "ssh_user": "u", "capability": {}}},
+                    "t2": {"job_id": "gone", "claimed_at": "x", "view": {"id": "t2", "host": "h", "ssh_user": "u", "capability": {}}}})
+    dispatcher = make_dispatcher(env, {}, overflow=overflow)
+    dispatcher.recover()
+    settle(dispatcher)
+    assert store.get(running["id"])["state"] == "COMPLETED" and thesis.staged == []
+    assert controller.workers["t1"]["mode"] == "active" and controller.workers["t2"]["mode"] == "active"
+    assert overflow.claims() == {}
+
+
+def test_release_does_not_reenable_a_pc_the_owner_disabled(env):
+    controller = FakeController([{"id": "t1", "mode": "disabled"}])
+    overflow = make_overflow(env, controller, {})
+    overflow._save({"t1": {"job_id": "j", "claimed_at": "x", "view": {"id": "t1", "host": "h", "ssh_user": "u", "capability": {}}}})
+    overflow.release("t1")
+    assert controller.workers["t1"]["mode"] == "disabled" and overflow.claims() == {}

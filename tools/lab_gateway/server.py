@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import sys
 import threading
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -32,6 +33,11 @@ class Gateway(ThreadingHTTPServer):
         self.audit_lock = threading.Lock()
         (data_dir / "bundles").mkdir(parents=True, exist_ok=True)
         (data_dir / "results").mkdir(parents=True, exist_ok=True)
+
+    def handle_error(self, request, client_address):  # a peer that connects and drops (port probe, browser, closed client) is not an error
+        if isinstance(sys.exc_info()[1], (ConnectionError, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -85,9 +91,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.fail(401, "missing or invalid token")
         if path == "/v1/pool":
             probes, active = self.server.dispatcher.last_probe, self.server.store.rows(states=ACTIVE)
+            borrowed = self.server.dispatcher.borrowed.copy()
             machines = [{"id": mid, "busy": any(j["machine"] == mid for j in active),
                          "free_ram_gb": probes.get(mid, {}).get("free_gb"), "total_ram_gb": probes.get(mid, {}).get("total_gb"),
-                         "probed_at": probes.get(mid, {}).get("probed_at")} for mid in self.server.dispatcher.machines]
+                         "probed_at": probes.get(mid, {}).get("probed_at"), "borrowed": mid in borrowed}
+                        for mid in [*self.server.dispatcher.machines, *borrowed]]
             return self.reply(200, {"machines": machines, "queued": len(self.server.store.rows(states={"QUEUED"}))})
         if path == "/v1/jobs":
             rows = self.server.store.rows(owner=None if who["admin"] else who["name"])
