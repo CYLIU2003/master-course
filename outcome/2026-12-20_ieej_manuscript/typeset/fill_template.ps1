@@ -3,11 +3,11 @@ param(
   [string]$OutName = 'manuscript_v1'
 )
 # Fill the official IEEJ template (template\iee_sample.doc, converted to work_template.docx) with
-# build\blocks.json (from md_to_blocks.py) and build\header.json. All text comes from UTF-8 JSON so
+# typeset\blocks.json (from md_to_blocks.py) and typeset\header.json. All text comes from UTF-8 JSON so
 # this file stays ASCII (Windows PowerShell 5.1 reads BOM-less scripts as ANSI).
 $ErrorActionPreference = 'Stop'
-$blocks = (Get-Content "$Dir\build\blocks.json" -Raw -Encoding UTF8 | ConvertFrom-Json).blocks
-$head = Get-Content "$Dir\build\header.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+$blocks = (Get-Content "$Dir\typeset\blocks.json" -Raw -Encoding UTF8 | ConvertFrom-Json).blocks
+$head = Get-Content "$Dir\typeset\header.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $w = New-Object -ComObject Word.Application
 $w.Visible = $false
 try {
