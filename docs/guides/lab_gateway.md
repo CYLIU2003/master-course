@@ -61,7 +61,8 @@
 
 ## 運用者（劉）の手順
 
-1. **起動**：`output\lab-gateway\START_LAB_GATEWAY.cmd [ホスト] [ポート]`。既定は `127.0.0.1:8899`（このPCだけ）。後輩へ配る接続情報は
+1. **起動**：2026-11-21から、親機の RTDS_admin のスタートアップの `lab-gateway.lnk` が、ログオン時に `START_LAB_GATEWAY.cmd 0.0.0.0` を最小化で起動します。
+   手動では `output\lab-gateway\START_LAB_GATEWAY.cmd [ホスト] [ポート]`。既定は `127.0.0.1:8899`（このPCだけ）。後輩へ配る接続情報は
    Tailscale（100.74.254.53）と学内LAN（133.78.186.228）の両方を書いてあるので、`START_LAB_GATEWAY.cmd 0.0.0.0` で起動します。
    後輩4人分（junior1〜junior4）のトークンと個人フォルダは `output\lab-gateway\handouts\juniorN\`（`指示書.md` に接続情報つき、`lab_client.py`）。
    フォルダごと本人にだけ渡します。名前を変えたいときは `token-revoke` で失効して `token-add` で発行し直します。
